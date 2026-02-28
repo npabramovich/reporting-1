@@ -28,6 +28,7 @@ interface EmailRow {
   processing_status: string
   metrics_extracted: number
   company: { id: string; name: string } | null
+  company_metrics_count: number
 }
 
 interface EmailsData {
@@ -359,21 +360,26 @@ export default function EmailsPage() {
                   {email.subject ?? <span className="italic">(no subject)</span>}
                 </td>
                 <td className="px-4 py-3">
-                  {email.company ? (
-                    <span>{email.company.name}</span>
-                  ) : email.processing_status === 'needs_review' ? (
-                    <button
-                      className="text-amber-600 hover:text-amber-700 font-medium text-sm underline underline-offset-2"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setReviewModalEmailId(email.id)
-                      }}
-                    >
-                      Review
-                    </button>
-                  ) : (
-                    <span className="text-muted-foreground italic">Unknown</span>
-                  )}
+                  {(() => {
+                    const needsSetup = email.processing_status === 'needs_review' &&
+                      (!email.company || email.company_metrics_count === 0)
+                    if (needsSetup) {
+                      return (
+                        <button
+                          className="text-amber-600 hover:text-amber-700 font-medium text-sm underline underline-offset-2"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setReviewModalEmailId(email.id)
+                          }}
+                        >
+                          {email.company ? `${email.company.name} · Setup` : 'Review'}
+                        </button>
+                      )
+                    }
+                    return email.company
+                      ? <span>{email.company.name}</span>
+                      : <span className="text-muted-foreground italic">Unknown</span>
+                  })()}
                 </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={email.processing_status} />

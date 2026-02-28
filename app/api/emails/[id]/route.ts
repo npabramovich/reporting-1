@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { InboundEmail, Metric, MetricValue, ParsingReview } from '@/lib/types/database'
 
 type MetricValueRow = Pick<
@@ -87,4 +88,37 @@ export async function GET(
     })),
     reviews,
   })
+}
+
+// PATCH — update email fields (e.g. assign company)
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await req.json()
+  const { companyId } = body as { companyId?: string }
+
+  const admin = createAdminClient()
+  const updates: Record<string, unknown> = {}
+
+  if (companyId !== undefined) {
+    updates.company_id = companyId || null
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+  }
+
+  const { error } = await admin
+    .from('inbound_emails')
+    .update(updates)
+    .eq('id', params.id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  return NextResponse.json({ ok: true })
 }

@@ -44,6 +44,26 @@ export async function GET(req: NextRequest) {
 
   const rows = (data ?? []) as unknown as EmailListRow[]
 
+  // For needs_review emails with a company, check if that company has metrics
+  const needsReviewCompanyIds = Array.from(new Set(
+    rows
+      .filter(e => e.processing_status === 'needs_review' && e.company_id)
+      .map(e => e.company_id as string)
+  ))
+
+  const companyMetricCounts = new Map<string, number>()
+  if (needsReviewCompanyIds.length > 0) {
+    const { data: metricRows } = await supabase
+      .from('metrics')
+      .select('company_id')
+      .in('company_id', needsReviewCompanyIds)
+      .eq('is_active', true)
+
+    for (const m of (metricRows ?? []) as unknown as { company_id: string }[]) {
+      companyMetricCounts.set(m.company_id, (companyMetricCounts.get(m.company_id) ?? 0) + 1)
+    }
+  }
+
   const items = rows.map(e => ({
     id: e.id,
     from_address: e.from_address,
@@ -52,6 +72,7 @@ export async function GET(req: NextRequest) {
     processing_status: e.processing_status,
     metrics_extracted: e.metrics_extracted,
     company: e.companies ?? null,
+    company_metrics_count: e.company_id ? (companyMetricCounts.get(e.company_id) ?? 0) : 0,
   }))
 
   return NextResponse.json({

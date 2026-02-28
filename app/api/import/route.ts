@@ -194,21 +194,32 @@ ${text}`,
     return NextResponse.json({ error: 'Invalid response structure' }, { status: 500 })
   }
 
-  // Get existing companies for dedup
+  // Get existing companies for matching
   const { data: existingCompanies } = await admin
     .from('companies')
     .select('id, name')
     .eq('fund_id', fundId)
 
-  const existingNames = new Set(
-    (existingCompanies ?? []).map(c => c.name.toLowerCase())
+  const companyByName = new Map(
+    (existingCompanies ?? []).map(c => [c.name.toLowerCase(), c.id])
+  )
+
+  // Get existing senders for dedup
+  const { data: existingSenders } = await admin
+    .from('authorized_senders')
+    .select('email')
+    .eq('fund_id', fundId)
+  const existingSenderEmails = new Set(
+    (existingSenders ?? []).map(s => (s.email as string).toLowerCase())
   )
 
   const results = {
     companiesCreated: 0,
-    companiesSkipped: 0,
+    companiesMatched: 0,
     metricsCreated: 0,
+    metricsMatched: 0,
     metricValuesCreated: 0,
+    metricValuesSkipped: 0,
     sendersCreated: 0,
     errors: [] as string[],
   }
@@ -219,96 +230,144 @@ ${text}`,
       continue
     }
 
-    // Skip if company already exists
-    if (existingNames.has(pc.name.trim().toLowerCase())) {
-      results.companiesSkipped++
-      continue
+    const companyName = pc.name.trim()
+    let companyId = companyByName.get(companyName.toLowerCase())
+
+    if (companyId) {
+      // Company already exists — use it
+      results.companiesMatched++
+    } else {
+      // Create company
+      const { data: newCompany, error: companyError } = await admin
+        .from('companies')
+        .insert({
+          fund_id: fundId,
+          name: companyName,
+          tags: pc.tags ?? [],
+          stage: pc.stage?.trim() || null,
+          sector: pc.sector?.trim() || null,
+          notes: pc.summary?.trim() || null,
+          status: 'active',
+        })
+        .select('id')
+        .single()
+
+      if (companyError || !newCompany) {
+        results.errors.push(`Failed to create company "${companyName}": ${companyError?.message}`)
+        continue
+      }
+
+      companyId = newCompany.id
+      results.companiesCreated++
+      companyByName.set(companyName.toLowerCase(), companyId)
     }
 
-    // Create company
-    const { data: company, error: companyError } = await admin
-      .from('companies')
-      .insert({
-        fund_id: fundId,
-        name: pc.name.trim(),
-        tags: pc.tags ?? [],
-        stage: pc.stage?.trim() || null,
-        sector: pc.sector?.trim() || null,
-        notes: pc.summary?.trim() || null,
-        status: 'active',
-      })
-      .select('id')
-      .single()
-
-    if (companyError || !company) {
-      results.errors.push(`Failed to create company "${pc.name}": ${companyError?.message}`)
-      continue
-    }
-
-    results.companiesCreated++
-    existingNames.add(pc.name.trim().toLowerCase())
-
-    // Create authorized senders
+    // Create authorized senders (skip duplicates)
     if (pc.sender_emails?.length) {
       for (const email of pc.sender_emails) {
         const trimmedEmail = email.trim().toLowerCase()
-        if (!trimmedEmail) continue
+        if (!trimmedEmail || existingSenderEmails.has(trimmedEmail)) continue
 
         const { error: senderError } = await admin
           .from('authorized_senders')
           .insert({
             fund_id: fundId,
             email: trimmedEmail,
-            label: pc.name.trim(),
+            label: companyName,
           })
 
-        if (!senderError) results.sendersCreated++
+        if (!senderError) {
+          results.sendersCreated++
+          existingSenderEmails.add(trimmedEmail)
+        }
       }
     }
 
+    // Get existing metrics for this company to avoid duplicates
+    const { data: existingMetrics } = await admin
+      .from('metrics')
+      .select('id, slug')
+      .eq('company_id', companyId)
+
+    const metricBySlug = new Map(
+      (existingMetrics ?? []).map(m => [m.slug as string, m.id as string])
+    )
+
     // Create metrics and historical values
     if (pc.metrics?.length) {
+      const nextOrder = (existingMetrics ?? []).length
+
       for (let i = 0; i < pc.metrics.length; i++) {
         const m = pc.metrics[i]
         if (!m.name?.trim()) continue
 
         const slug = slugify(m.name)
+        let metricId = metricBySlug.get(slug)
 
-        const { data: metric, error: metricError } = await admin
-          .from('metrics')
-          .insert({
-            company_id: company.id,
-            fund_id: fundId,
-            name: m.name.trim(),
-            slug,
-            unit: m.unit || null,
-            unit_position: m.unit_position || 'prefix',
-            value_type: m.value_type || 'number',
-            reporting_cadence: m.cadence || 'quarterly',
-            display_order: i,
-            is_active: true,
-          })
-          .select('id')
-          .single()
+        if (metricId) {
+          // Metric already exists — reuse it for values
+          results.metricsMatched++
+        } else {
+          const { data: newMetric, error: metricError } = await admin
+            .from('metrics')
+            .insert({
+              company_id: companyId,
+              fund_id: fundId,
+              name: m.name.trim(),
+              slug,
+              unit: m.unit || null,
+              unit_position: m.unit_position || 'prefix',
+              value_type: m.value_type || 'number',
+              reporting_cadence: m.cadence || 'quarterly',
+              display_order: nextOrder + i,
+              is_active: true,
+            })
+            .select('id')
+            .single()
 
-        if (metricError || !metric) {
-          results.errors.push(`Failed to create metric "${m.name}" for "${pc.name}": ${metricError?.message}`)
-          continue
+          if (metricError || !newMetric) {
+            results.errors.push(`Failed to create metric "${m.name}" for "${companyName}": ${metricError?.message}`)
+            continue
+          }
+
+          metricId = newMetric.id
+          results.metricsCreated++
+          metricBySlug.set(slug, metricId)
         }
 
-        results.metricsCreated++
-
-        // Create historical values
+        // Create historical values (upsert — skip if period already exists)
         if (m.historical_values?.length) {
           for (const hv of m.historical_values) {
             const period = parsePeriodLabel(hv.period)
             const valueNum = typeof hv.value === 'number' ? hv.value : parseFloat(String(hv.value).replace(/[^0-9.-]/g, ''))
 
+            // Check if value already exists for this metric + period
+            let existingQuery = admin
+              .from('metric_values')
+              .select('id')
+              .eq('metric_id', metricId)
+              .eq('period_year', period.year)
+
+            existingQuery = period.quarter != null
+              ? existingQuery.eq('period_quarter', period.quarter)
+              : existingQuery.is('period_quarter', null)
+
+            existingQuery = period.month != null
+              ? existingQuery.eq('period_month', period.month)
+              : existingQuery.is('period_month', null)
+
+            const { data: existingVal } = await existingQuery.maybeSingle()
+
+            if (existingVal) {
+              results.metricValuesSkipped++
+              continue
+            }
+
             const { error: valError } = await admin
               .from('metric_values')
               .insert({
-                metric_id: metric.id,
-                company_id: company.id,
+                metric_id: metricId,
+                company_id: companyId,
                 fund_id: fundId,
                 period_label: period.label,
                 period_year: period.year,

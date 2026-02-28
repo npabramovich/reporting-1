@@ -8,9 +8,11 @@ import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 
 interface ImportResult {
   companiesCreated: number
-  companiesSkipped: number
+  companiesMatched: number
   metricsCreated: number
+  metricsMatched: number
   metricValuesCreated: number
+  metricValuesSkipped: number
   sendersCreated: number
   errors: string[]
 }
@@ -69,12 +71,9 @@ export default function ImportPage() {
             <div className="space-y-1">
               <p className="font-medium">Import complete</p>
               <ul className="text-sm space-y-0.5">
-                <li>{result.companiesCreated} companies created</li>
-                {result.companiesSkipped > 0 && (
-                  <li>{result.companiesSkipped} companies skipped (already exist)</li>
-                )}
-                <li>{result.metricsCreated} metrics created</li>
-                <li>{result.metricValuesCreated} metric values imported</li>
+                <li>{result.companiesCreated} companies created{result.companiesMatched > 0 ? `, ${result.companiesMatched} matched existing` : ''}</li>
+                <li>{result.metricsCreated} metrics created{result.metricsMatched > 0 ? `, ${result.metricsMatched} matched existing` : ''}</li>
+                <li>{result.metricValuesCreated} metric values imported{result.metricValuesSkipped > 0 ? `, ${result.metricValuesSkipped} skipped (already exist)` : ''}</li>
                 {result.sendersCreated > 0 && (
                   <li>{result.sendersCreated} authorized senders added</li>
                 )}

@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { CompanyForm } from '@/components/company-form'
 import { MetricForm } from '@/components/metric-form'
-import { Check, X, Pencil, Building2, Loader2 } from 'lucide-react'
+import { Check, X, Pencil, Building2, Loader2, Plus, BarChart3 } from 'lucide-react'
 import type { Company } from '@/lib/types/database'
 
 // ---------------------------------------------------------------------------
@@ -33,6 +33,17 @@ interface ReviewData {
   total: number
   counts: Record<string, number>
   items: ReviewItem[]
+}
+
+interface EmailInfo {
+  id: string
+  company: { id: string; name: string } | null
+}
+
+interface MetricInfo {
+  id: string
+  name: string
+  slug: string
 }
 
 // ---------------------------------------------------------------------------
@@ -58,14 +69,6 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-dialog views
-// ---------------------------------------------------------------------------
-type SubView =
-  | { kind: 'none' }
-  | { kind: 'create-company'; reviewItem: ReviewItem }
-  | { kind: 'add-metric'; companyId: string; companyName: string }
-
-// ---------------------------------------------------------------------------
 // EmailReviewModal
 // ---------------------------------------------------------------------------
 
@@ -78,40 +81,153 @@ export function EmailReviewModal({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const [data, setData] = useState<ReviewData | null>(null)
   const [loading, setLoading] = useState(false)
+  const [emailInfo, setEmailInfo] = useState<EmailInfo | null>(null)
+  const [metrics, setMetrics] = useState<MetricInfo[]>([])
+  const [reviewData, setReviewData] = useState<ReviewData | null>(null)
   const [resolving, setResolving] = useState<Record<string, boolean>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
-  const [subView, setSubView] = useState<SubView>({ kind: 'none' })
+
+  // Section expand states
+  const [showCompanyForm, setShowCompanyForm] = useState(false)
+  const [showMetricForm, setShowMetricForm] = useState(false)
   const [metricsAdded, setMetricsAdded] = useState(0)
 
-  const load = useCallback(async () => {
+  // Extract company name hint from review items (for new_company_detected)
+  const companyNameHint = reviewData?.items.find(
+    i => i.issue_type === 'new_company_detected' || i.issue_type === 'company_not_identified'
+  )?.extracted_value ?? ''
+
+  const loadAll = useCallback(async () => {
     if (!emailId) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/emails/${emailId}/reviews`)
-      if (!res.ok) throw new Error('Failed to load reviews')
-      setData(await res.json())
+      // Fetch email info and reviews in parallel
+      const [emailRes, reviewsRes] = await Promise.all([
+        fetch(`/api/emails/${emailId}`),
+        fetch(`/api/emails/${emailId}/reviews`),
+      ])
+
+      if (!emailRes.ok) throw new Error('Failed to load email')
+      if (!reviewsRes.ok) throw new Error('Failed to load reviews')
+
+      const emailData = await emailRes.json()
+      const reviewsResult: ReviewData = await reviewsRes.json()
+
+      const info: EmailInfo = {
+        id: emailData.id,
+        company: emailData.company ?? null,
+      }
+      setEmailInfo(info)
+      setReviewData(reviewsResult)
+
+      // If company exists, fetch its metrics
+      if (info.company) {
+        await loadMetrics(info.company.id)
+      } else {
+        setMetrics([])
+      }
     } catch {
-      setData(null)
+      setEmailInfo(null)
+      setReviewData(null)
+      setMetrics([])
     } finally {
       setLoading(false)
     }
   }, [emailId])
 
+  async function loadMetrics(companyId: string) {
+    try {
+      const res = await fetch(`/api/companies/${companyId}/metrics`)
+      if (res.ok) {
+        const data = await res.json()
+        setMetrics((data as MetricInfo[]).map(m => ({ id: m.id, name: m.name, slug: m.slug })))
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   useEffect(() => {
     if (open && emailId) {
-      load()
-      setSubView({ kind: 'none' })
+      loadAll()
+      setShowCompanyForm(false)
+      setShowMetricForm(false)
       setMetricsAdded(0)
-    } else {
-      setData(null)
       setEditingId(null)
-      setSubView({ kind: 'none' })
+    } else {
+      setEmailInfo(null)
+      setReviewData(null)
+      setMetrics([])
+      setShowCompanyForm(false)
+      setShowMetricForm(false)
       setMetricsAdded(0)
+      setEditingId(null)
     }
-  }, [open, emailId, load])
+  }, [open, emailId, loadAll])
+
+  // Auto-show forms when needed
+  useEffect(() => {
+    if (!loading && emailInfo) {
+      if (!emailInfo.company) {
+        setShowCompanyForm(true)
+      } else if (metrics.length === 0) {
+        setShowMetricForm(true)
+      }
+    }
+  }, [loading, emailInfo, metrics.length])
+
+  async function handleCompanyCreated(company: Company) {
+    // Link the email to the new company
+    if (emailId) {
+      await fetch(`/api/emails/${emailId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId: company.id }),
+      })
+    }
+
+    // Auto-resolve any new_company_detected or company_not_identified reviews
+    const companyReviews = reviewData?.items.filter(
+      i => i.issue_type === 'new_company_detected' || i.issue_type === 'company_not_identified'
+    ) ?? []
+    for (const item of companyReviews) {
+      try {
+        await fetch(`/api/review/${item.id}/resolve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resolution: 'accepted', resolved_value: company.name }),
+        })
+      } catch {
+        // ignore
+      }
+    }
+
+    // Update local state
+    setEmailInfo(prev => prev ? { ...prev, company: { id: company.id, name: company.name } } : prev)
+    setShowCompanyForm(false)
+    setShowMetricForm(true)
+
+    // Remove resolved review items from local state
+    const resolvedIds = new Set(companyReviews.map(i => i.id))
+    setReviewData(prev => prev ? {
+      ...prev,
+      total: prev.total - resolvedIds.size,
+      items: prev.items.filter(i => !resolvedIds.has(i.id)),
+    } : prev)
+
+    // Load metrics for the new company
+    await loadMetrics(company.id)
+  }
+
+  function handleMetricAdded() {
+    setMetricsAdded(prev => prev + 1)
+    // Refresh metrics list
+    if (emailInfo?.company) {
+      loadMetrics(emailInfo.company.id)
+    }
+  }
 
   async function resolve(
     item: ReviewItem,
@@ -129,7 +245,7 @@ export function EmailReviewModal({
         const d = await res.json()
         throw new Error(d.error ?? 'Failed to resolve')
       }
-      setData(prev =>
+      setReviewData(prev =>
         prev
           ? {
               ...prev,
@@ -155,111 +271,183 @@ export function EmailReviewModal({
     setEditValue(item.extracted_value ?? '')
   }
 
-  function handleCompanyCreated(company: Company, reviewItem: ReviewItem) {
-    // Resolve the review as accepted
-    resolve(reviewItem, 'accepted', company.name)
-    // Transition to "add metric" sub-view
-    setSubView({ kind: 'add-metric', companyId: company.id, companyName: company.name })
-    setMetricsAdded(0)
-  }
-
-  const items = data?.items ?? []
-  const isSubViewOpen = subView.kind !== 'none'
+  const hasCompany = !!emailInfo?.company
+  const hasMetrics = metrics.length > 0
+  const items = reviewData?.items ?? []
 
   return (
-    <>
-      {/* Main review dialog — hidden when a sub-view is open */}
-      <Dialog open={open && !isSubViewOpen} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Review Items</DialogTitle>
-          </DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Email Setup & Review</DialogTitle>
+        </DialogHeader>
 
-          {loading && (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          )}
+        {loading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        )}
 
-          {!loading && items.length === 0 && (
-            <div className="py-8 text-center">
-              <Check className="h-8 w-8 text-green-500 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">All items resolved.</p>
-            </div>
-          )}
+        {!loading && emailInfo && (
+          <div className="space-y-5">
+            {/* ── Section 1: Company ── */}
+            <section>
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`flex items-center justify-center h-5 w-5 rounded-full ${hasCompany ? 'bg-green-100' : 'bg-slate-100'}`}>
+                  {hasCompany ? (
+                    <Check className="h-3 w-3 text-green-600" />
+                  ) : (
+                    <Building2 className="h-3 w-3 text-slate-400" />
+                  )}
+                </div>
+                <h3 className="text-sm font-medium">Company</h3>
+                {hasCompany && (
+                  <span className="text-sm text-muted-foreground">{emailInfo.company!.name}</span>
+                )}
+              </div>
 
-          {!loading && items.length > 0 && (
-            <div className="space-y-3">
-              {items.map(item => (
-                <ReviewCard
-                  key={item.id}
-                  item={item}
-                  resolving={!!resolving[item.id]}
-                  editing={editingId === item.id}
-                  editValue={editValue}
-                  onEditValueChange={setEditValue}
-                  onAccept={() => resolve(item, 'accepted')}
-                  onReject={() => resolve(item, 'rejected')}
-                  onStartEdit={() => startEdit(item)}
-                  onCancelEdit={() => setEditingId(null)}
-                  onSubmitEdit={() => resolve(item, 'manually_corrected', editValue)}
-                  onCreateCompany={() => setSubView({ kind: 'create-company', reviewItem: item })}
-                />
-              ))}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Company sub-dialog */}
-      <Dialog
-        open={subView.kind === 'create-company'}
-        onOpenChange={o => { if (!o) setSubView({ kind: 'none' }) }}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Create Company</DialogTitle>
-          </DialogHeader>
-          {subView.kind === 'create-company' && (
-            <CompanyForm
-              initialName={subView.reviewItem.extracted_value ?? ''}
-              onSuccess={(company) => handleCompanyCreated(company, subView.reviewItem)}
-              onCancel={() => setSubView({ kind: 'none' })}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Metric sub-dialog */}
-      <Dialog
-        open={subView.kind === 'add-metric'}
-        onOpenChange={o => { if (!o) setSubView({ kind: 'none' }) }}
-      >
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              Add Metric{subView.kind === 'add-metric' ? ` — ${subView.companyName}` : ''}
-            </DialogTitle>
-          </DialogHeader>
-          {subView.kind === 'add-metric' && (
-            <>
-              {metricsAdded > 0 && (
-                <p className="text-xs text-emerald-600 flex items-center gap-1">
-                  <Check className="h-3 w-3" />
-                  {metricsAdded} metric{metricsAdded !== 1 ? 's' : ''} added
-                </p>
+              {!hasCompany && showCompanyForm && (
+                <div className="ml-7 rounded-lg border bg-muted/30 p-4">
+                  <p className="text-xs text-muted-foreground mb-3">
+                    No company assigned. Create one to continue.
+                  </p>
+                  <CompanyForm
+                    initialName={companyNameHint}
+                    onSuccess={handleCompanyCreated}
+                    onCancel={() => setShowCompanyForm(false)}
+                  />
+                </div>
               )}
-              <MetricForm
-                key={metricsAdded}
-                companyId={subView.companyId}
-                onSuccess={() => { setMetricsAdded(prev => prev + 1) }}
-                onCancel={() => setSubView({ kind: 'none' })}
-              />
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
+
+              {!hasCompany && !showCompanyForm && (
+                <div className="ml-7">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowCompanyForm(true)}
+                    className="gap-1.5"
+                  >
+                    <Building2 className="h-3.5 w-3.5" />
+                    Create Company
+                  </Button>
+                </div>
+              )}
+            </section>
+
+            {/* ── Section 2: Metrics ── */}
+            {hasCompany && (
+              <section>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`flex items-center justify-center h-5 w-5 rounded-full ${hasMetrics ? 'bg-green-100' : 'bg-slate-100'}`}>
+                    {hasMetrics ? (
+                      <Check className="h-3 w-3 text-green-600" />
+                    ) : (
+                      <BarChart3 className="h-3 w-3 text-slate-400" />
+                    )}
+                  </div>
+                  <h3 className="text-sm font-medium">Metrics</h3>
+                  {hasMetrics && (
+                    <span className="text-sm text-muted-foreground">
+                      {metrics.length} configured
+                    </span>
+                  )}
+                </div>
+
+                {/* Show existing metrics as compact list */}
+                {hasMetrics && (
+                  <div className="ml-7 mb-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {metrics.map(m => (
+                        <span
+                          key={m.id}
+                          className="inline-flex items-center rounded-md border bg-muted/50 px-2 py-0.5 text-xs"
+                        >
+                          {m.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {showMetricForm && (
+                  <div className="ml-7 rounded-lg border bg-muted/30 p-4">
+                    {!hasMetrics && (
+                      <p className="text-xs text-muted-foreground mb-3">
+                        No metrics configured. Add at least one so Claude knows what to extract.
+                      </p>
+                    )}
+                    {metricsAdded > 0 && (
+                      <p className="text-xs text-emerald-600 flex items-center gap-1 mb-3">
+                        <Check className="h-3 w-3" />
+                        {metricsAdded} metric{metricsAdded !== 1 ? 's' : ''} added
+                      </p>
+                    )}
+                    <MetricForm
+                      key={metricsAdded}
+                      companyId={emailInfo.company!.id}
+                      onSuccess={handleMetricAdded}
+                      onCancel={() => setShowMetricForm(false)}
+                    />
+                  </div>
+                )}
+
+                {!showMetricForm && (
+                  <div className="ml-7">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowMetricForm(true)}
+                      className="gap-1.5"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add Metric
+                    </Button>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* ── Section 3: Review Items ── */}
+            {items.length > 0 && (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <h3 className="text-sm font-medium">Review Items</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {items.length} pending
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {items.map(item => (
+                    <ReviewCard
+                      key={item.id}
+                      item={item}
+                      resolving={!!resolving[item.id]}
+                      editing={editingId === item.id}
+                      editValue={editValue}
+                      onEditValueChange={setEditValue}
+                      onAccept={() => resolve(item, 'accepted')}
+                      onReject={() => resolve(item, 'rejected')}
+                      onStartEdit={() => startEdit(item)}
+                      onCancelEdit={() => setEditingId(null)}
+                      onSubmitEdit={() => resolve(item, 'manually_corrected', editValue)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* All done state */}
+            {hasCompany && hasMetrics && items.length === 0 && !showMetricForm && (
+              <div className="py-4 text-center">
+                <Check className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">All set. You can close this dialog.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -278,7 +466,6 @@ function ReviewCard({
   onStartEdit,
   onCancelEdit,
   onSubmitEdit,
-  onCreateCompany,
 }: {
   item: ReviewItem
   resolving: boolean
@@ -290,7 +477,6 @@ function ReviewCard({
   onStartEdit: () => void
   onCancelEdit: () => void
   onSubmitEdit: () => void
-  onCreateCompany: () => void
 }) {
   const hasValue = !!item.extracted_value
   const isNewCompany = item.issue_type === 'new_company_detected'
@@ -308,9 +494,6 @@ function ReviewCard({
         </span>
         {item.company && (
           <span className="text-sm font-medium">{item.company.name}</span>
-        )}
-        {!item.company && (
-          <span className="text-sm text-muted-foreground italic">Unknown company</span>
         )}
         {item.metric && (
           <>
@@ -364,25 +547,15 @@ function ReviewCard({
       {/* Actions */}
       {!editing && (
         <div className="flex flex-wrap gap-2 pt-1">
-          {isNewCompany ? (
-            <>
-              <Button
-                size="sm"
-                onClick={onCreateCompany}
-                disabled={resolving}
-                className="gap-1.5"
-              >
-                <Building2 className="h-3.5 w-3.5" />
-                Create Company
-              </Button>
-              <Button size="sm" variant="outline" onClick={onReject} disabled={resolving}>
-                <X className="h-3.5 w-3.5 mr-1" />
-                Dismiss
-              </Button>
-            </>
+          {/* new_company_detected and company_not_identified are handled by the Company section above */}
+          {isNewCompany || isUnidentified ? (
+            <Button size="sm" variant="outline" onClick={onReject} disabled={resolving} className="gap-1.5">
+              <X className="h-3.5 w-3.5" />
+              Dismiss
+            </Button>
           ) : (
             <>
-              {!isMetricNotFound && !isUnidentified && hasValue && (
+              {!isMetricNotFound && hasValue && (
                 <Button size="sm" onClick={onAccept} disabled={resolving} className="gap-1.5">
                   <Check className="h-3.5 w-3.5" />
                   Accept
@@ -396,7 +569,7 @@ function ReviewCard({
                 className="gap-1.5"
               >
                 <X className="h-3.5 w-3.5" />
-                {isMetricNotFound || isUnidentified ? 'Dismiss' : 'Reject'}
+                {isMetricNotFound ? 'Dismiss' : 'Reject'}
               </Button>
               {hasValue && (
                 <Button
