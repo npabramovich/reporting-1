@@ -57,7 +57,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="p-8 max-w-3xl">
+      <div className="p-4 md:p-8 max-w-3xl">
         <h1 className="text-2xl font-semibold tracking-tight mb-6">Settings</h1>
         <div className="animate-pulse space-y-4">
           {[1, 2, 3].map(i => <div key={i} className="h-24 bg-muted rounded-lg" />)}
@@ -68,7 +68,7 @@ export default function SettingsPage() {
 
   if (!settings) {
     return (
-      <div className="p-8 max-w-3xl">
+      <div className="p-4 md:p-8 max-w-3xl">
         <h1 className="text-2xl font-semibold tracking-tight mb-6">Settings</h1>
         <p className="text-muted-foreground">Could not load settings.</p>
       </div>
@@ -76,7 +76,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-8 max-w-3xl space-y-8">
+    <div className="p-4 md:p-8 max-w-3xl space-y-8">
       <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
 
       <FundNameSection name={settings.fundName} onSaved={load} />
@@ -127,7 +127,7 @@ function FundNameSection({ name, onSaved }: { name: string; onSaved: () => void 
 
   return (
     <Section title="Fund name">
-      <div className="flex items-end gap-3">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
         <div className="flex-1">
           <Label>Name</Label>
           <Input value={value} onChange={(e) => setValue(e.target.value)} />
@@ -228,7 +228,7 @@ function ClaudeKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
           ? 'A Claude API key is configured. Enter a new key below to replace it.'
           : 'No Claude API key configured. Add one to enable report parsing.'}
       </p>
-      <div className="flex items-end gap-2">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
         <div className="flex-1">
           <Label>API key</Label>
           <Input
@@ -238,12 +238,14 @@ function ClaudeKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
             placeholder="sk-ant-..."
           />
         </div>
-        <Button onClick={testKey} disabled={!newKey.trim() || testing} variant="outline" size="sm">
-          {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Test'}
-        </Button>
-        <Button onClick={saveKey} disabled={!newKey.trim() || saving} size="sm">
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Update'}
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={testKey} disabled={!newKey.trim() || testing} variant="outline" size="sm">
+            {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Test'}
+          </Button>
+          <Button onClick={saveKey} disabled={!newKey.trim() || saving} size="sm">
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Update'}
+          </Button>
+        </div>
       </div>
       {status === 'valid' && (
         <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
@@ -412,7 +414,7 @@ function PostmarkSection({
   return (
     <Section title="Postmark">
       <div className="space-y-3">
-        <div className="flex items-end gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
           <div className="flex-1">
             <Label>Inbound address</Label>
             <Input
@@ -442,7 +444,7 @@ function PostmarkSection({
             <div>
               <Label>Webhook URL</Label>
               <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs bg-muted rounded px-3 py-2 truncate block">
+                <code className="flex-1 text-xs bg-muted rounded px-3 py-2 truncate block break-all">
                   {webhookUrl}
                 </code>
                 <Button onClick={copyWebhookUrl} variant="outline" size="icon" className="shrink-0 h-8 w-8">
@@ -741,7 +743,7 @@ function SendersSection({
         </div>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
         <div className="flex-1">
           <Label>Email</Label>
           <Input
@@ -751,7 +753,7 @@ function SendersSection({
             placeholder="founder@company.com"
           />
         </div>
-        <div className="w-32">
+        <div className="sm:w-32">
           <Label>Label</Label>
           <Input
             value={label}
@@ -849,7 +851,7 @@ function WhitelistSection() {
             </div>
           )}
 
-          <div className="flex items-end gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
             <div className="flex-1">
               <Label>Email or domain pattern</Label>
               <Input

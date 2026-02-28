@@ -76,7 +76,7 @@ export default async function DashboardPage() {
   const staleCompanyCount = companies.filter((c) => c.stale && companies.length > 0).length
 
   return (
-    <div className="p-8 max-w-6xl">
+    <div className="p-4 md:p-8 max-w-6xl">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">
           {fund?.name ?? 'Dashboard'}
@@ -85,7 +85,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <StatCard label="Active companies" value={companyCount ?? 0} />
         <StatCard label="Reports (last 90 days)" value={recentEmailCount ?? 0} />
         <StatCard

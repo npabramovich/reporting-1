@@ -35,7 +35,7 @@ export default async function CompaniesPage() {
   })
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-4 md:p-8 max-w-4xl">
       <h1 className="text-2xl font-semibold tracking-tight mb-6">Companies</h1>
 
       {companies.length === 0 ? (
@@ -50,7 +50,7 @@ export default async function CompaniesPage() {
               href={`/companies/${c.id}`}
               className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium">{c.name}</span>
                 {c.tags.map(tag => (
                   <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>
@@ -60,7 +60,7 @@ export default async function CompaniesPage() {
                   <Badge variant="outline" className="text-[10px]">{c.status}</Badge>
                 )}
               </div>
-              <div className="flex items-center gap-6 text-xs text-muted-foreground">
+              <div className="flex items-center gap-4 sm:gap-6 text-xs text-muted-foreground shrink-0">
                 <span>{c.metricsCount} metric{c.metricsCount !== 1 ? 's' : ''}</span>
                 <span>
                   {c.lastReportAt

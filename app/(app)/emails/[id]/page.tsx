@@ -135,7 +135,7 @@ export default async function EmailDetailPage({ params }: { params: { id: string
   }
 
   return (
-    <div className="p-8 max-w-4xl space-y-6">
+    <div className="p-4 md:p-8 max-w-4xl space-y-6">
       {/* Back link */}
       <Link
         href="/emails"
@@ -182,7 +182,7 @@ export default async function EmailDetailPage({ params }: { params: { id: string
       {metricValues.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold mb-2">Metrics Written ({metricValues.length})</h2>
-          <div className="rounded-lg border overflow-hidden">
+          <div className="rounded-lg border overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr>
@@ -263,7 +263,7 @@ export default async function EmailDetailPage({ params }: { params: { id: string
 
       {/* Actions */}
       <section className="pt-2 border-t space-y-4">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div>
             <p className="text-sm font-medium">Save to Google Drive</p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -273,7 +273,7 @@ export default async function EmailDetailPage({ params }: { params: { id: string
           <SaveToDriveButton emailId={email.id} />
         </div>
 
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div>
             <p className="text-sm font-medium">Reprocess Email</p>
             <p className="text-xs text-muted-foreground mt-0.5">

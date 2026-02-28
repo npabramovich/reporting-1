@@ -25,14 +25,9 @@ export function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled
-        className="w-full justify-start gap-3 text-muted-foreground"
-      >
-        <Monitor className="h-4 w-4" />
-        System
+      <Button variant="ghost" size="sm" disabled className="gap-2 text-muted-foreground">
+        <Monitor className="h-3.5 w-3.5" />
+        <span className="text-xs">System</span>
       </Button>
     )
   }
@@ -42,10 +37,10 @@ export function ThemeToggle() {
       variant="ghost"
       size="sm"
       onClick={cycle}
-      className="w-full justify-start gap-3 text-muted-foreground hover:text-foreground"
+      className="gap-2 text-muted-foreground hover:text-foreground"
     >
-      <Icon className="h-4 w-4" />
-      {LABELS[current]}
+      <Icon className="h-3.5 w-3.5" />
+      <span className="text-xs">{LABELS[current]}</span>
     </Button>
   )
 }

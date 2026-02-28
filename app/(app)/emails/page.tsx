@@ -203,8 +203,8 @@ export default function EmailsPage() {
   }
 
   return (
-    <div className="p-8 max-w-6xl">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-8 max-w-6xl">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Email Log</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -259,7 +259,7 @@ export default function EmailsPage() {
         <div>
           <label className="block text-xs text-muted-foreground mb-1">Status</label>
           <Select value={status || 'all'} onValueChange={v => setStatus(v === 'all' ? '' : v)}>
-            <SelectTrigger className="h-8 w-40 text-sm">
+            <SelectTrigger className="h-8 w-full sm:w-40 text-sm">
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
@@ -276,7 +276,7 @@ export default function EmailsPage() {
           <label className="block text-xs text-muted-foreground mb-1">From date</label>
           <Input
             type="date"
-            className="h-8 w-36 text-sm"
+            className="h-8 w-full sm:w-36 text-sm"
             value={dateFrom}
             onChange={e => setDateFrom(e.target.value)}
           />
@@ -285,7 +285,7 @@ export default function EmailsPage() {
           <label className="block text-xs text-muted-foreground mb-1">To date</label>
           <Input
             type="date"
-            className="h-8 w-36 text-sm"
+            className="h-8 w-full sm:w-36 text-sm"
             value={dateTo}
             onChange={e => setDateTo(e.target.value)}
           />
@@ -308,7 +308,7 @@ export default function EmailsPage() {
       )}
 
       {/* Table */}
-      <div className="rounded-lg border overflow-hidden">
+      <div className="rounded-lg border overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 border-b">
             <tr>

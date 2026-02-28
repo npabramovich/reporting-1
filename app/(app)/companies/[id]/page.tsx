@@ -32,7 +32,7 @@ export default async function CompanyDetailPage({
     .order('display_order') as { data: Metric[] | null }
 
   return (
-    <div className="p-8 max-w-6xl">
+    <div className="p-4 md:p-8 max-w-6xl">
       <div className="mb-6">
         <Link
           href="/companies"
@@ -42,7 +42,7 @@ export default async function CompanyDetailPage({
           Companies
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl font-semibold tracking-tight">{company.name}</h1>
           {company.stage && (
             <Badge variant="secondary">{company.stage}</Badge>

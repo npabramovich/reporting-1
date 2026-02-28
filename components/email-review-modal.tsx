@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { CompanyForm } from '@/components/company-form'
 import { MetricForm } from '@/components/metric-form'
-import { Check, X, Pencil, Building2, Loader2, Plus, BarChart3 } from 'lucide-react'
+import { Check, X, Pencil, Building2, Loader2, Plus, BarChart3, RefreshCw } from 'lucide-react'
 import type { Company } from '@/lib/types/database'
 
 // ---------------------------------------------------------------------------
@@ -89,6 +89,15 @@ export function EmailReviewModal({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
 
+  // Company selector state
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([])
+  const [selectedCompanyId, setSelectedCompanyId] = useState('')
+  const [assigningCompany, setAssigningCompany] = useState(false)
+
+  // Reprocess state
+  const [reprocessing, setReprocessing] = useState(false)
+  const [reprocessSuccess, setReprocessSuccess] = useState(false)
+
   // Section expand states
   const [showCompanyForm, setShowCompanyForm] = useState(false)
   const [showMetricForm, setShowMetricForm] = useState(false)
@@ -103,10 +112,11 @@ export function EmailReviewModal({
     if (!emailId) return
     setLoading(true)
     try {
-      // Fetch email info and reviews in parallel
-      const [emailRes, reviewsRes] = await Promise.all([
+      // Fetch email info, reviews, and companies list in parallel
+      const [emailRes, reviewsRes, companiesRes] = await Promise.all([
         fetch(`/api/emails/${emailId}`),
         fetch(`/api/emails/${emailId}/reviews`),
+        fetch('/api/companies'),
       ])
 
       if (!emailRes.ok) throw new Error('Failed to load email')
@@ -114,6 +124,17 @@ export function EmailReviewModal({
 
       const emailData = await emailRes.json()
       const reviewsResult: ReviewData = await reviewsRes.json()
+
+      // Load companies for the selector
+      if (companiesRes.ok) {
+        const companiesData = await companiesRes.json()
+        setCompanies(
+          (companiesData as { id: string; name: string; status: string }[])
+            .filter(c => c.status === 'active')
+            .map(c => ({ id: c.id, name: c.name }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        )
+      }
 
       const info: EmailInfo = {
         id: emailData.id,
@@ -156,23 +177,30 @@ export function EmailReviewModal({
       setShowMetricForm(false)
       setMetricsAdded(0)
       setEditingId(null)
+      setSelectedCompanyId('')
+      setAssigningCompany(false)
+      setReprocessing(false)
+      setReprocessSuccess(false)
     } else {
       setEmailInfo(null)
       setReviewData(null)
       setMetrics([])
+      setCompanies([])
       setShowCompanyForm(false)
       setShowMetricForm(false)
       setMetricsAdded(0)
       setEditingId(null)
+      setSelectedCompanyId('')
+      setAssigningCompany(false)
+      setReprocessing(false)
+      setReprocessSuccess(false)
     }
   }, [open, emailId, loadAll])
 
-  // Auto-show forms when needed
+  // Auto-show metric form when company exists but no metrics
   useEffect(() => {
     if (!loading && emailInfo) {
-      if (!emailInfo.company) {
-        setShowCompanyForm(true)
-      } else if (metrics.length === 0) {
+      if (emailInfo.company && metrics.length === 0) {
         setShowMetricForm(true)
       }
     }
@@ -226,6 +254,83 @@ export function EmailReviewModal({
     // Refresh metrics list
     if (emailInfo?.company) {
       loadMetrics(emailInfo.company.id)
+    }
+  }
+
+  async function handleAssignCompany() {
+    if (!selectedCompanyId || !emailId) return
+    setAssigningCompany(true)
+    try {
+      const res = await fetch(`/api/emails/${emailId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId: selectedCompanyId }),
+      })
+      if (!res.ok) throw new Error('Failed to assign company')
+
+      const company = companies.find(c => c.id === selectedCompanyId)
+      if (!company) return
+
+      // Auto-resolve company-related reviews
+      const companyReviews = reviewData?.items.filter(
+        i => i.issue_type === 'new_company_detected' || i.issue_type === 'company_not_identified'
+      ) ?? []
+      for (const item of companyReviews) {
+        try {
+          await fetch(`/api/review/${item.id}/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resolution: 'accepted', resolved_value: company.name }),
+          })
+        } catch {
+          // ignore
+        }
+      }
+
+      // Update local state
+      setEmailInfo(prev => prev ? { ...prev, company: { id: company.id, name: company.name } } : prev)
+      setSelectedCompanyId('')
+
+      // Remove resolved review items
+      const resolvedIds = new Set(companyReviews.map(i => i.id))
+      setReviewData(prev => prev ? {
+        ...prev,
+        total: prev.total - resolvedIds.size,
+        items: prev.items.filter(i => !resolvedIds.has(i.id)),
+      } : prev)
+
+      // Load metrics for the assigned company
+      await loadMetrics(company.id)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error assigning company')
+    } finally {
+      setAssigningCompany(false)
+    }
+  }
+
+  async function handleReprocess() {
+    if (!emailId) return
+    setReprocessing(true)
+    setReprocessSuccess(false)
+    try {
+      const res = await fetch(`/api/emails/${emailId}/reprocess`, { method: 'POST' })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error ?? 'Failed to reprocess')
+      }
+      setReprocessSuccess(true)
+      // Refresh modal data after a short delay to let pipeline start
+      setTimeout(() => {
+        loadAll()
+      }, 1500)
+      // Close modal and refresh parent after pipeline has started
+      setTimeout(() => {
+        onOpenChange(false)
+      }, 2500)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error reprocessing email')
+    } finally {
+      setReprocessing(false)
     }
   }
 
@@ -290,7 +395,37 @@ export function EmailReviewModal({
 
         {!loading && emailInfo && (
           <div className="space-y-5">
-            {/* ── Section 1: Company ── */}
+            {/* ── Section 1: Review Items ── */}
+            {items.length > 0 && (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <h3 className="text-sm font-medium">Review Items</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {items.length} pending
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {items.map(item => (
+                    <ReviewCard
+                      key={item.id}
+                      item={item}
+                      resolving={!!resolving[item.id]}
+                      editing={editingId === item.id}
+                      editValue={editValue}
+                      onEditValueChange={setEditValue}
+                      onAccept={() => resolve(item, 'accepted')}
+                      onReject={() => resolve(item, 'rejected')}
+                      onStartEdit={() => startEdit(item)}
+                      onCancelEdit={() => setEditingId(null)}
+                      onSubmitEdit={() => resolve(item, 'manually_corrected', editValue)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* ── Section 2: Company ── */}
             <section>
               <div className="flex items-center gap-2 mb-2">
                 <div className={`flex items-center justify-center h-5 w-5 rounded-full ${hasCompany ? 'bg-green-100' : 'bg-slate-100'}`}>
@@ -306,11 +441,60 @@ export function EmailReviewModal({
                 )}
               </div>
 
+              {!hasCompany && !showCompanyForm && (
+                <div className="ml-7 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    No company assigned. Select an existing company or create a new one.
+                  </p>
+
+                  {/* Select existing company */}
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={selectedCompanyId}
+                      onChange={e => setSelectedCompanyId(e.target.value)}
+                      className="h-9 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 flex-1"
+                    >
+                      <option value="">Select a company…</option>
+                      {companies.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <Button
+                      size="sm"
+                      onClick={handleAssignCompany}
+                      disabled={!selectedCompanyId || assigningCompany}
+                      className="gap-1.5"
+                    >
+                      {assigningCompany ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Check className="h-3.5 w-3.5" />
+                      )}
+                      Assign
+                    </Button>
+                  </div>
+
+                  {/* Or create new */}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="h-px flex-1 bg-border" />
+                    <span>or</span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowCompanyForm(true)}
+                    className="gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Create New Company
+                  </Button>
+                </div>
+              )}
+
               {!hasCompany && showCompanyForm && (
                 <div className="ml-7 rounded-lg border bg-muted/30 p-4">
-                  <p className="text-xs text-muted-foreground mb-3">
-                    No company assigned. Create one to continue.
-                  </p>
                   <CompanyForm
                     initialName={companyNameHint}
                     onSuccess={handleCompanyCreated}
@@ -318,23 +502,9 @@ export function EmailReviewModal({
                   />
                 </div>
               )}
-
-              {!hasCompany && !showCompanyForm && (
-                <div className="ml-7">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setShowCompanyForm(true)}
-                    className="gap-1.5"
-                  >
-                    <Building2 className="h-3.5 w-3.5" />
-                    Create Company
-                  </Button>
-                </div>
-              )}
             </section>
 
-            {/* ── Section 2: Metrics ── */}
+            {/* ── Section 3: Metrics ── */}
             {hasCompany && (
               <section>
                 <div className="flex items-center gap-2 mb-2">
@@ -407,42 +577,48 @@ export function EmailReviewModal({
               </section>
             )}
 
-            {/* ── Section 3: Review Items ── */}
-            {items.length > 0 && (
+            {/* ── Section 4: Reprocess Email ── */}
+            {hasCompany && (
               <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <h3 className="text-sm font-medium">Review Items</h3>
-                  <span className="text-xs text-muted-foreground">
-                    {items.length} pending
-                  </span>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`flex items-center justify-center h-5 w-5 rounded-full ${reprocessSuccess ? 'bg-green-100' : 'bg-slate-100'}`}>
+                    {reprocessSuccess ? (
+                      <Check className="h-3 w-3 text-green-600" />
+                    ) : (
+                      <RefreshCw className="h-3 w-3 text-slate-400" />
+                    )}
+                  </div>
+                  <h3 className="text-sm font-medium">Reprocess Email</h3>
                 </div>
 
-                <div className="space-y-3">
-                  {items.map(item => (
-                    <ReviewCard
-                      key={item.id}
-                      item={item}
-                      resolving={!!resolving[item.id]}
-                      editing={editingId === item.id}
-                      editValue={editValue}
-                      onEditValueChange={setEditValue}
-                      onAccept={() => resolve(item, 'accepted')}
-                      onReject={() => resolve(item, 'rejected')}
-                      onStartEdit={() => startEdit(item)}
-                      onCancelEdit={() => setEditingId(null)}
-                      onSubmitEdit={() => resolve(item, 'manually_corrected', editValue)}
-                    />
-                  ))}
+                <div className="ml-7">
+                  {reprocessSuccess ? (
+                    <p className="text-sm text-emerald-600 flex items-center gap-1.5">
+                      <Check className="h-3.5 w-3.5" />
+                      Reprocessing started. Modal will close shortly.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Run the email through the AI pipeline to extract metric values.
+                      </p>
+                      <Button
+                        size="sm"
+                        onClick={handleReprocess}
+                        disabled={reprocessing}
+                        className="gap-1.5"
+                      >
+                        {reprocessing ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                        {reprocessing ? 'Reprocessing…' : 'Reprocess Email'}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </section>
-            )}
-
-            {/* All done state */}
-            {hasCompany && hasMetrics && items.length === 0 && !showMetricForm && (
-              <div className="py-4 text-center">
-                <Check className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">All set. You can close this dialog.</p>
-              </div>
             )}
           </div>
         )}

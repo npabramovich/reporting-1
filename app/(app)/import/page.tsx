@@ -51,7 +51,7 @@ export default function ImportPage() {
   }
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-4 md:p-8 max-w-3xl">
       <h1 className="text-2xl font-semibold tracking-tight mb-2">Bulk Import</h1>
       <p className="text-sm text-muted-foreground mb-6">
         Paste CSV or spreadsheet data from Google Sheets. Claude will parse it to create companies, metrics, and historical values.
@@ -100,7 +100,7 @@ export default function ImportPage() {
           className="font-mono text-sm"
         />
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
             Supports CSV, tab-separated, or any tabular text format.
           </p>
