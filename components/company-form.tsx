@@ -25,10 +25,15 @@ export function CompanyForm({ company, initialName, onSuccess, onCancel }: Props
   const [aliases, setAliases] = useState<string[]>(company?.aliases ?? [])
   const [aliasInput, setAliasInput] = useState('')
   const [stage, setStage] = useState(company?.stage ?? '')
-  const [sector, setSector] = useState(company?.sector ?? '')
+  const [industry, setIndustry] = useState(company?.industry ?? '')
   const [tags, setTags] = useState<string[]>(company?.tags ?? [])
   const [tagInput, setTagInput] = useState('')
   const [notes, setNotes] = useState(company?.notes ?? '')
+  const [overview, setOverview] = useState(company?.overview ?? '')
+  const [founders, setFounders] = useState(company?.founders ?? '')
+  const [whyInvested, setWhyInvested] = useState(company?.why_invested ?? '')
+  const [currentUpdate, setCurrentUpdate] = useState(company?.current_update ?? '')
+  const [contactEmail, setContactEmail] = useState(company?.contact_email ?? '')
   const [status, setStatus] = useState(company?.status ?? 'active')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -89,8 +94,13 @@ export function CompanyForm({ company, initialName, onSuccess, onCancel }: Props
           aliases: aliases.length > 0 ? aliases : null,
           tags: tags.length > 0 ? tags : [],
           stage: stage.trim() || null,
-          sector: sector.trim() || null,
+          industry: industry.trim() || null,
           notes: notes.trim() || null,
+          overview: overview.trim() || null,
+          founders: founders.trim() || null,
+          why_invested: whyInvested.trim() || null,
+          current_update: currentUpdate.trim() || null,
+          contact_email: contactEmail.trim() || null,
           ...(isEdit ? { status } : {}),
         }),
       })
@@ -194,14 +204,68 @@ export function CompanyForm({ company, initialName, onSuccess, onCancel }: Props
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="sector">Sector</Label>
+          <Label htmlFor="industry">Industry</Label>
           <Input
-            id="sector"
+            id="industry"
             placeholder="SaaS"
-            value={sector}
-            onChange={e => setSector(e.target.value)}
+            value={industry}
+            onChange={e => setIndustry(e.target.value)}
           />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="founders">Founders</Label>
+        <Input
+          id="founders"
+          placeholder="Jane Doe, John Smith"
+          value={founders}
+          onChange={e => setFounders(e.target.value)}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="contact-email">Contact Email</Label>
+        <Input
+          id="contact-email"
+          type="email"
+          placeholder="founder@company.com"
+          value={contactEmail}
+          onChange={e => setContactEmail(e.target.value)}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="overview">Overview</Label>
+        <Textarea
+          id="overview"
+          placeholder="Brief description of the company..."
+          value={overview}
+          onChange={e => setOverview(e.target.value)}
+          rows={2}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="why-invested">Why We Invested</Label>
+        <Textarea
+          id="why-invested"
+          placeholder="Investment thesis..."
+          value={whyInvested}
+          onChange={e => setWhyInvested(e.target.value)}
+          rows={2}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="current-update">Current Business Update</Label>
+        <Textarea
+          id="current-update"
+          placeholder="Latest update on the business..."
+          value={currentUpdate}
+          onChange={e => setCurrentUpdate(e.target.value)}
+          rows={2}
+        />
       </div>
 
       {isEdit && (

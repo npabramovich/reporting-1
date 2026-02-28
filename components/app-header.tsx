@@ -5,28 +5,18 @@ import { Menu, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { AppSidebar } from '@/components/app-sidebar'
-import { Separator } from '@/components/ui/separator'
-import type { LucideIcon } from 'lucide-react'
-
-interface NavItem {
-  href: string
-  label: string
-  icon: LucideIcon
-  badge?: boolean
-}
 
 interface AppHeaderProps {
   fundName: string
   userEmail: string
-  navItems: NavItem[]
   reviewBadge: number
 }
 
-export function AppHeader({ fundName, userEmail, navItems, reviewBadge }: AppHeaderProps) {
+export function AppHeader({ fundName, userEmail, reviewBadge }: AppHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   return (
-    <header className="flex items-center justify-between border-b bg-card px-4 py-3 shrink-0">
+    <header className="flex items-center justify-between px-4 py-3 shrink-0">
       {/* Left: hamburger + fund name */}
       <div className="flex items-center gap-3">
         <Button
@@ -38,7 +28,7 @@ export function AppHeader({ fundName, userEmail, navItems, reviewBadge }: AppHea
           <Menu className="h-5 w-5" />
           <span className="sr-only">Open menu</span>
         </Button>
-        <span className="font-semibold text-sm tracking-tight truncate">{fundName}</span>
+        <span className="font-semibold text-xl tracking-tight truncate">{fundName}</span>
       </div>
 
       {/* Right: user + sign out */}
@@ -63,7 +53,6 @@ export function AppHeader({ fundName, userEmail, navItems, reviewBadge }: AppHea
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
         <SheetContent side="left" className="p-0 pt-12 w-64">
           <AppSidebar
-            navItems={navItems}
             reviewBadge={reviewBadge}
             onNavigate={() => setDrawerOpen(false)}
           />

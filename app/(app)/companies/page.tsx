@@ -10,9 +10,9 @@ export default async function CompaniesPage() {
 
   const { data } = await supabase
     .from('companies')
-    .select('id, name, stage, status, sector, tags, metrics(id), inbound_emails(received_at)')
+    .select('id, name, stage, status, industry, tags, metrics(id), inbound_emails(received_at)')
     .order('name') as { data: Array<{
-      id: string; name: string; stage: string | null; status: string; sector: string | null
+      id: string; name: string; stage: string | null; status: string; industry: string | null
       tags: string[]
       metrics: { id: string }[]; inbound_emails: { received_at: string }[]
     }> | null }
@@ -27,7 +27,7 @@ export default async function CompaniesPage() {
       name: c.name,
       stage: c.stage,
       status: c.status,
-      sector: c.sector,
+      industry: c.industry,
       tags: c.tags ?? [],
       metricsCount: c.metrics?.length ?? 0,
       lastReportAt,

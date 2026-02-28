@@ -2,27 +2,28 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { LayoutDashboard, Building2, Mail, Upload, Settings } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-interface NavItem {
-  href: string
-  label: string
-  icon: LucideIcon
-  badge?: boolean
-}
+const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badge?: boolean }[] = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/companies', label: 'Companies', icon: Building2 },
+  { href: '/emails', label: 'Email Log', icon: Mail, badge: true },
+  { href: '/import', label: 'Import', icon: Upload },
+  { href: '/settings', label: 'Settings', icon: Settings },
+]
 
 interface AppSidebarProps {
-  navItems: NavItem[]
   reviewBadge: number
   onNavigate?: () => void
 }
 
-export function AppSidebar({ navItems, reviewBadge, onNavigate }: AppSidebarProps) {
+export function AppSidebar({ reviewBadge, onNavigate }: AppSidebarProps) {
   const pathname = usePathname()
 
   return (
     <nav className="flex-1 p-2 space-y-0.5">
-      {navItems.map(({ href, label, icon: Icon, badge }) => {
+      {NAV_ITEMS.map(({ href, label, icon: Icon, badge }) => {
         const isActive = pathname === href || pathname.startsWith(href + '/')
         return (
           <Link

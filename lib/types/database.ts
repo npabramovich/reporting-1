@@ -213,12 +213,17 @@ export type Database = {
           fund_id: string
           name: string
           aliases: string[] | null
-          sector: string | null
+          industry: string | null
           stage: string | null
           founded_year: number | null
           notes: string | null
           tags: string[]
           status: 'active' | 'exited' | 'written-off'
+          overview: string | null
+          founders: string | null
+          why_invested: string | null
+          current_update: string | null
+          contact_email: string | null
           created_at: string
           updated_at: string
         }
@@ -227,12 +232,17 @@ export type Database = {
           fund_id: string
           name: string
           aliases?: string[] | null
-          sector?: string | null
+          industry?: string | null
           stage?: string | null
           founded_year?: number | null
           notes?: string | null
           tags?: string[]
           status?: 'active' | 'exited' | 'written-off'
+          overview?: string | null
+          founders?: string | null
+          why_invested?: string | null
+          current_update?: string | null
+          contact_email?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -241,12 +251,17 @@ export type Database = {
           fund_id?: string
           name?: string
           aliases?: string[] | null
-          sector?: string | null
+          industry?: string | null
           stage?: string | null
           founded_year?: number | null
           notes?: string | null
           tags?: string[]
           status?: 'active' | 'exited' | 'written-off'
+          overview?: string | null
+          founders?: string | null
+          why_invested?: string | null
+          current_update?: string | null
+          contact_email?: string | null
           created_at?: string
           updated_at?: string
         }

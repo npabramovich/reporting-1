@@ -48,7 +48,7 @@ const STATUS_VARIANTS: Record<string, { label: string; className: string }> = {
   success: { label: 'Success', className: 'bg-green-100 text-green-800 border-green-200' },
   failed: { label: 'Failed', className: 'bg-red-100 text-red-800 border-red-200' },
   needs_review: {
-    label: 'Needs Review',
+    label: 'Review',
     className: 'bg-amber-100 text-amber-800 border-amber-200',
   },
 }
@@ -265,7 +265,7 @@ export default function EmailsPage() {
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="success">Success</SelectItem>
-              <SelectItem value="needs_review">Needs Review</SelectItem>
+              <SelectItem value="needs_review">Review</SelectItem>
               <SelectItem value="failed">Failed</SelectItem>
               <SelectItem value="processing">Processing</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>

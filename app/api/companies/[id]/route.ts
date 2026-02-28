@@ -26,7 +26,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { name, aliases, tags, stage, sector, notes, status } = body
+  const { name, aliases, tags, stage, industry, notes, status, overview, founders, why_invested, current_update, contact_email } = body
 
   if (name !== undefined && !name?.trim()) {
     return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 })
@@ -57,8 +57,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (aliases !== undefined) updates.aliases = aliases
   if (tags !== undefined) updates.tags = tags
   if (stage !== undefined) updates.stage = stage?.trim() || null
-  if (sector !== undefined) updates.sector = sector?.trim() || null
+  if (industry !== undefined) updates.industry = industry?.trim() || null
   if (notes !== undefined) updates.notes = notes?.trim() || null
+  if (overview !== undefined) updates.overview = overview?.trim() || null
+  if (founders !== undefined) updates.founders = founders?.trim() || null
+  if (why_invested !== undefined) updates.why_invested = why_invested?.trim() || null
+  if (current_update !== undefined) updates.current_update = current_update?.trim() || null
+  if (contact_email !== undefined) updates.contact_email = contact_email?.trim() || null
   if (status !== undefined) updates.status = status as CompanyStatus
 
   const { data, error } = await admin

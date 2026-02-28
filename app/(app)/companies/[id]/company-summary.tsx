@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Sparkles, RefreshCw } from 'lucide-react'
+import { Sparkles, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface SummaryData {
@@ -18,6 +18,7 @@ export function CompanySummary({ companyId }: Props) {
   const [data, setData] = useState<SummaryData | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Load the latest stored summary
@@ -50,6 +51,21 @@ export function CompanySummary({ companyId }: Props) {
     }
   }
 
+  async function clear() {
+    setClearing(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/companies/${companyId}/summary`, { method: 'DELETE' })
+      if (res.ok) {
+        setData({ summary: null })
+      }
+    } catch {
+      setError('Failed to clear summary.')
+    } finally {
+      setClearing(false)
+    }
+  }
+
   useEffect(() => { load() }, [load])
 
   // Loading skeleton
@@ -58,7 +74,7 @@ export function CompanySummary({ companyId }: Props) {
       <div className="rounded-lg border bg-card p-5 mb-6">
         <div className="flex items-center gap-2 mb-2">
           <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground">AI Summary</span>
+          <span className="text-xs font-medium text-muted-foreground">AI Analyst</span>
         </div>
         <div className="animate-pulse space-y-2">
           <div className="h-3 bg-muted rounded w-full" />
@@ -76,7 +92,7 @@ export function CompanySummary({ companyId }: Props) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground">AI Summary</span>
+            <span className="text-xs font-medium text-muted-foreground">AI Analyst</span>
           </div>
           <Button size="sm" variant="outline" onClick={generate} disabled={generating}>
             <Sparkles className="h-3.5 w-3.5 mr-1.5" />
@@ -105,7 +121,7 @@ export function CompanySummary({ companyId }: Props) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground">AI Summary</span>
+          <span className="text-xs font-medium text-muted-foreground">AI Analyst</span>
           {data.generated_at && (
             <span className="text-[10px] text-muted-foreground">
               · {new Date(data.generated_at).toLocaleDateString(undefined, {
@@ -114,16 +130,28 @@ export function CompanySummary({ companyId }: Props) {
             </span>
           )}
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={generate}
-          disabled={generating}
-          title="Regenerate summary"
-          className="h-7 px-2 text-muted-foreground hover:text-foreground"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${generating ? 'animate-spin' : ''}`} />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={generate}
+            disabled={generating || clearing}
+            title="Regenerate summary"
+            className="h-7 px-2 text-muted-foreground hover:text-foreground"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${generating ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={clear}
+            disabled={generating || clearing}
+            title="Clear and start fresh"
+            className="h-7 px-2 text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
       <div className="space-y-2">
         {paragraphs.map((p, i) => (

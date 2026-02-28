@@ -1,19 +1,9 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { LayoutDashboard, Building2, Mail, Upload, Settings } from 'lucide-react'
-import { Separator } from '@/components/ui/separator'
 import { AppHeader } from '@/components/app-header'
 import { AppSidebar } from '@/components/app-sidebar'
 import { AppFooter } from '@/components/app-footer'
 import { DemoSeeder } from './demo-seeder'
-
-const NAV_ITEMS = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/companies', label: 'Companies', icon: Building2 },
-  { href: '/emails', label: 'Email Log', icon: Mail, badge: true },
-  { href: '/import', label: 'Import', icon: Upload },
-  { href: '/settings', label: 'Settings', icon: Settings },
-]
 
 const isDemo = process.env.DEMO_MODE === 'true'
 
@@ -37,34 +27,34 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const fundName = fund?.name ?? 'Portfolio Reporting'
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="min-h-screen flex flex-col bg-background">
       {isDemo && (
         <div className="bg-amber-500 text-white text-center text-xs py-1.5 px-4 shrink-0">
           Running in demo mode — email parsing is disabled
         </div>
       )}
 
-      <AppHeader
-        fundName={fundName}
-        userEmail={user.email ?? ''}
-        navItems={NAV_ITEMS}
-        reviewBadge={reviewBadge}
-      />
+      <div className="w-full max-w-screen-xl mx-auto flex flex-col flex-1">
+        <AppHeader
+          fundName={fundName}
+          userEmail={user.email ?? ''}
+          reviewBadge={reviewBadge}
+        />
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Desktop sidebar */}
-        <aside className="hidden md:flex w-56 border-r bg-card flex-col shrink-0">
-          <AppSidebar navItems={NAV_ITEMS} reviewBadge={reviewBadge} />
-          <Separator />
-        </aside>
+        <div className="flex flex-1">
+          {/* Desktop sidebar */}
+          <aside className="hidden md:flex w-56 flex-col shrink-0 pt-4">
+            <AppSidebar reviewBadge={reviewBadge} />
+          </aside>
 
-        {/* Page content */}
-        <main className="flex-1 overflow-auto bg-background">
-          {children}
-        </main>
+          {/* Page content */}
+          <main className="flex-1 min-w-0">
+            {children}
+          </main>
+        </div>
+
+        <AppFooter />
       </div>
-
-      <AppFooter />
 
       {isDemo && <DemoSeeder />}
     </div>

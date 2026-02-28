@@ -42,6 +42,30 @@ export async function GET(
 }
 
 // ---------------------------------------------------------------------------
+// DELETE — wipe all stored summaries so the next generate is fresh
+// ---------------------------------------------------------------------------
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = createAdminClient()
+
+  const { error } = await admin
+    .from('company_summaries')
+    .delete()
+    .eq('company_id', params.id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  return NextResponse.json({ ok: true })
+}
+
+// ---------------------------------------------------------------------------
 // POST — generate a new AI summary and persist it
 // ---------------------------------------------------------------------------
 
@@ -58,7 +82,7 @@ export async function POST(
   // --- Company ---
   const { data: company } = await admin
     .from('companies')
-    .select('id, name, fund_id, stage, sector, notes')
+    .select('id, name, fund_id, stage, industry, notes, overview, why_invested, current_update')
     .eq('id', params.id)
     .maybeSingle()
 
@@ -226,8 +250,11 @@ Keep it to 2-4 short paragraphs. Be direct and analytical, not promotional. Use 
 
 Company: ${company.name}
 ${company.stage ? `Stage: ${company.stage}` : ''}
-${company.sector ? `Sector: ${company.sector}` : ''}
-${company.notes ? `Fund notes: ${company.notes}` : ''}`
+${company.industry ? `Industry: ${company.industry}` : ''}
+${company.notes ? `Fund notes: ${company.notes}` : ''}
+${company.overview ? `Overview: ${company.overview}` : ''}
+${company.why_invested ? `Why We Invested: ${company.why_invested}` : ''}
+${company.current_update ? `Current Business Update: ${company.current_update}` : ''}`
 
   if (metricsBlock) {
     promptText += `

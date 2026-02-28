@@ -4,8 +4,7 @@ import { ThemeToggle } from '@/components/theme-toggle'
 
 export function AppFooter() {
   return (
-    <footer className="flex items-center justify-between border-t bg-card px-4 py-2 shrink-0">
-      <ThemeToggle />
+    <footer className="flex items-center justify-between px-4 py-2 shrink-0">
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
         <a
           href="https://hemrock.com"
@@ -25,6 +24,7 @@ export function AppFooter() {
           GitHub
         </a>
       </div>
+      <ThemeToggle />
     </footer>
   )
 }

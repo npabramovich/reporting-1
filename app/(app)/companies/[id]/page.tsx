@@ -47,10 +47,42 @@ export default async function CompanyDetailPage({
           {company.stage && (
             <Badge variant="secondary">{company.stage}</Badge>
           )}
-          {company.sector && (
-            <Badge variant="outline">{company.sector}</Badge>
+          {company.industry && (
+            <Badge variant="outline">{company.industry}</Badge>
           )}
         </div>
+
+        {(company.founders || company.contact_email) && (
+          <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
+            {company.founders && <span>Founders: {company.founders}</span>}
+            {company.contact_email && (
+              <a href={`mailto:${company.contact_email}`} className="hover:underline">
+                {company.contact_email}
+              </a>
+            )}
+          </div>
+        )}
+
+        {company.overview && (
+          <div className="mt-4">
+            <h3 className="text-sm font-medium text-muted-foreground mb-1">Overview</h3>
+            <p className="text-sm">{company.overview}</p>
+          </div>
+        )}
+
+        {company.why_invested && (
+          <div className="mt-3">
+            <h3 className="text-sm font-medium text-muted-foreground mb-1">Why We Invested</h3>
+            <p className="text-sm">{company.why_invested}</p>
+          </div>
+        )}
+
+        {company.current_update && (
+          <div className="mt-3">
+            <h3 className="text-sm font-medium text-muted-foreground mb-1">Current Business Update</h3>
+            <p className="text-sm">{company.current_update}</p>
+          </div>
+        )}
       </div>
 
       <CompanySummary companyId={company.id} />
