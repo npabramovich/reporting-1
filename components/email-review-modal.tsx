@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { CompanyForm } from '@/components/company-form'
+import { MetricForm } from '@/components/metric-form'
 import { Check, X, Pencil, Building2, Loader2 } from 'lucide-react'
 import type { Company } from '@/lib/types/database'
 
@@ -57,6 +58,14 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
+// Sub-dialog views
+// ---------------------------------------------------------------------------
+type SubView =
+  | { kind: 'none' }
+  | { kind: 'create-company'; reviewItem: ReviewItem }
+  | { kind: 'add-metric'; companyId: string; companyName: string }
+
+// ---------------------------------------------------------------------------
 // EmailReviewModal
 // ---------------------------------------------------------------------------
 
@@ -64,19 +73,18 @@ export function EmailReviewModal({
   emailId,
   open,
   onOpenChange,
-  onResolved,
 }: {
   emailId: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onResolved: () => void
 }) {
   const [data, setData] = useState<ReviewData | null>(null)
   const [loading, setLoading] = useState(false)
   const [resolving, setResolving] = useState<Record<string, boolean>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
-  const [createCompanyFor, setCreateCompanyFor] = useState<ReviewItem | null>(null)
+  const [subView, setSubView] = useState<SubView>({ kind: 'none' })
+  const [metricsAdded, setMetricsAdded] = useState(0)
 
   const load = useCallback(async () => {
     if (!emailId) return
@@ -95,10 +103,13 @@ export function EmailReviewModal({
   useEffect(() => {
     if (open && emailId) {
       load()
+      setSubView({ kind: 'none' })
+      setMetricsAdded(0)
     } else {
       setData(null)
       setEditingId(null)
-      setCreateCompanyFor(null)
+      setSubView({ kind: 'none' })
+      setMetricsAdded(0)
     }
   }, [open, emailId, load])
 
@@ -144,21 +155,21 @@ export function EmailReviewModal({
     setEditValue(item.extracted_value ?? '')
   }
 
-  function handleCompanyCreated(company: Company) {
-    setCreateCompanyFor(null)
-    if (createCompanyFor) {
-      resolve(createCompanyFor, 'accepted', company.name)
-    }
+  function handleCompanyCreated(company: Company, reviewItem: ReviewItem) {
+    // Resolve the review as accepted
+    resolve(reviewItem, 'accepted', company.name)
+    // Transition to "add metric" sub-view
+    setSubView({ kind: 'add-metric', companyId: company.id, companyName: company.name })
+    setMetricsAdded(0)
   }
 
   const items = data?.items ?? []
+  const isSubViewOpen = subView.kind !== 'none'
 
   return (
     <>
-      <Dialog open={open && !createCompanyFor} onOpenChange={(o) => {
-        onOpenChange(o)
-        if (!o) onResolved()
-      }}>
+      {/* Main review dialog — hidden when a sub-view is open */}
+      <Dialog open={open && !isSubViewOpen} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Review Items</DialogTitle>
@@ -192,7 +203,7 @@ export function EmailReviewModal({
                   onStartEdit={() => startEdit(item)}
                   onCancelEdit={() => setEditingId(null)}
                   onSubmitEdit={() => resolve(item, 'manually_corrected', editValue)}
-                  onCreateCompany={() => setCreateCompanyFor(item)}
+                  onCreateCompany={() => setSubView({ kind: 'create-company', reviewItem: item })}
                 />
               ))}
             </div>
@@ -200,20 +211,52 @@ export function EmailReviewModal({
         </DialogContent>
       </Dialog>
 
-      {/* Create Company Dialog */}
+      {/* Create Company sub-dialog */}
       <Dialog
-        open={!!createCompanyFor}
-        onOpenChange={o => !o && setCreateCompanyFor(null)}
+        open={subView.kind === 'create-company'}
+        onOpenChange={o => { if (!o) setSubView({ kind: 'none' }) }}
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Create Company</DialogTitle>
           </DialogHeader>
-          <CompanyForm
-            initialName={createCompanyFor?.extracted_value ?? ''}
-            onSuccess={handleCompanyCreated}
-            onCancel={() => setCreateCompanyFor(null)}
-          />
+          {subView.kind === 'create-company' && (
+            <CompanyForm
+              initialName={subView.reviewItem.extracted_value ?? ''}
+              onSuccess={(company) => handleCompanyCreated(company, subView.reviewItem)}
+              onCancel={() => setSubView({ kind: 'none' })}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Metric sub-dialog */}
+      <Dialog
+        open={subView.kind === 'add-metric'}
+        onOpenChange={o => { if (!o) setSubView({ kind: 'none' }) }}
+      >
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Add Metric{subView.kind === 'add-metric' ? ` — ${subView.companyName}` : ''}
+            </DialogTitle>
+          </DialogHeader>
+          {subView.kind === 'add-metric' && (
+            <>
+              {metricsAdded > 0 && (
+                <p className="text-xs text-emerald-600 flex items-center gap-1">
+                  <Check className="h-3 w-3" />
+                  {metricsAdded} metric{metricsAdded !== 1 ? 's' : ''} added
+                </p>
+              )}
+              <MetricForm
+                key={metricsAdded}
+                companyId={subView.companyId}
+                onSuccess={() => { setMetricsAdded(prev => prev + 1) }}
+                onCancel={() => setSubView({ kind: 'none' })}
+              />
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </>
@@ -221,7 +264,7 @@ export function EmailReviewModal({
 }
 
 // ---------------------------------------------------------------------------
-// ReviewCard (ported from review page)
+// ReviewCard
 // ---------------------------------------------------------------------------
 
 function ReviewCard({

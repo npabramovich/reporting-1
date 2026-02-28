@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertCircle, RefreshCw, ChevronLeft, ChevronRight, HardDrive, Check, Loader2, X } from 'lucide-react'
+import { AlertCircle, RefreshCw, ChevronLeft, ChevronRight, HardDrive, Check, Loader2, Trash2 } from 'lucide-react'
 import { EmailReviewModal } from '@/components/email-review-modal'
 
 // ---------------------------------------------------------------------------
@@ -325,8 +325,8 @@ export default function EmailsPage() {
               <th className="text-right px-4 py-3 font-medium text-muted-foreground w-20">
                 Metrics
               </th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground w-24">
-                Actions
+              <th className="px-4 py-3 w-10">
+                <span className="sr-only">Actions</span>
               </th>
             </tr>
           </thead>
@@ -361,6 +361,16 @@ export default function EmailsPage() {
                 <td className="px-4 py-3">
                   {email.company ? (
                     <span>{email.company.name}</span>
+                  ) : email.processing_status === 'needs_review' ? (
+                    <button
+                      className="text-amber-600 hover:text-amber-700 font-medium text-sm underline underline-offset-2"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setReviewModalEmailId(email.id)
+                      }}
+                    >
+                      Review
+                    </button>
                   ) : (
                     <span className="text-muted-foreground italic">Unknown</span>
                   )}
@@ -371,38 +381,22 @@ export default function EmailsPage() {
                 <td className="px-4 py-3 text-right tabular-nums">
                   {email.metrics_extracted}
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-center">
                   {email.processing_status === 'needs_review' && (
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs text-amber-600 hover:text-amber-700 gap-1"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setReviewModalEmailId(email.id)
-                        }}
-                      >
-                        Review
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs text-muted-foreground hover:text-destructive gap-1"
-                        disabled={!!dismissing[email.id]}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          dismissReviews(email.id)
-                        }}
-                      >
-                        {dismissing[email.id] ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <X className="h-3 w-3" />
-                        )}
-                        Dismiss
-                      </Button>
-                    </div>
+                    <button
+                      className="text-muted-foreground hover:text-destructive disabled:opacity-50 p-1"
+                      disabled={!!dismissing[email.id]}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        dismissReviews(email.id)
+                      }}
+                    >
+                      {dismissing[email.id] ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                    </button>
                   )}
                 </td>
               </tr>
@@ -441,11 +435,7 @@ export default function EmailsPage() {
       <EmailReviewModal
         emailId={reviewModalEmailId}
         open={!!reviewModalEmailId}
-        onOpenChange={(open) => { if (!open) setReviewModalEmailId(null) }}
-        onResolved={() => {
-          setReviewModalEmailId(null)
-          load(page)
-        }}
+        onOpenChange={(open) => { if (!open) { setReviewModalEmailId(null); load(page) } }}
       />
     </div>
   )
