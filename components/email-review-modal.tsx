@@ -102,13 +102,6 @@ export function EmailReviewModal({
     }
   }, [open, emailId, load])
 
-  // Check if all resolved after each action
-  useEffect(() => {
-    if (data && data.total === 0 && !loading && open) {
-      onResolved()
-    }
-  }, [data, loading, open, onResolved])
-
   async function resolve(
     item: ReviewItem,
     resolution: 'accepted' | 'rejected' | 'manually_corrected',
@@ -162,7 +155,10 @@ export function EmailReviewModal({
 
   return (
     <>
-      <Dialog open={open && !createCompanyFor} onOpenChange={onOpenChange}>
+      <Dialog open={open && !createCompanyFor} onOpenChange={(o) => {
+        onOpenChange(o)
+        if (!o) onResolved()
+      }}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Review Items</DialogTitle>

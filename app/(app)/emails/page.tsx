@@ -361,16 +361,6 @@ export default function EmailsPage() {
                 <td className="px-4 py-3">
                   {email.company ? (
                     <span>{email.company.name}</span>
-                  ) : email.processing_status === 'needs_review' ? (
-                    <button
-                      className="text-amber-600 hover:text-amber-700 font-medium text-sm underline underline-offset-2"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setReviewModalEmailId(email.id)
-                      }}
-                    >
-                      Needs Review
-                    </button>
                   ) : (
                     <span className="text-muted-foreground italic">Unknown</span>
                   )}
@@ -383,23 +373,36 @@ export default function EmailsPage() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   {email.processing_status === 'needs_review' && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-muted-foreground hover:text-destructive gap-1"
-                      disabled={!!dismissing[email.id]}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        dismissReviews(email.id)
-                      }}
-                    >
-                      {dismissing[email.id] ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <X className="h-3 w-3" />
-                      )}
-                      Dismiss
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-amber-600 hover:text-amber-700 gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setReviewModalEmailId(email.id)
+                        }}
+                      >
+                        Review
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground hover:text-destructive gap-1"
+                        disabled={!!dismissing[email.id]}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          dismissReviews(email.id)
+                        }}
+                      >
+                        {dismissing[email.id] ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <X className="h-3 w-3" />
+                        )}
+                        Dismiss
+                      </Button>
+                    </div>
                   )}
                 </td>
               </tr>
