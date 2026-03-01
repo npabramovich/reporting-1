@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -16,16 +16,17 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
-  const [branding, setBranding] = useState<{ fundName: string | null; fundLogo: string | null; authSubtitle: string | null; authContact: string | null }>({ fundName: null, fundLogo: null, authSubtitle: null, authContact: null })
+  const [branding] = useState(() => {
+    if (typeof document !== 'undefined') {
+      try {
+        const el = document.getElementById('auth-branding')
+        if (el?.textContent) return JSON.parse(el.textContent)
+      } catch { /* ignore */ }
+    }
+    return { fundName: null, fundLogo: null, authSubtitle: null, authContact: null }
+  })
 
   const supabase = createClient()
-
-  useEffect(() => {
-    fetch('/api/auth/branding')
-      .then(r => r.json())
-      .then(data => setBranding(data))
-      .catch(() => {})
-  }, [])
 
   async function signUp() {
     if (!email.trim()) {

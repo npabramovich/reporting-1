@@ -57,7 +57,8 @@ export async function GET() {
     .order('received_at', { ascending: false })
 
   // Get company names for those emails
-  const emailCompanyIds = [...new Set((reviewEmails ?? []).map(e => e.company_id).filter(Boolean))]
+  const emailRows = (reviewEmails ?? []) as unknown as { id: string; from_address: string; subject: string | null; received_at: string; processing_status: string; company_id: string | null; attachments_count: number }[]
+  const emailCompanyIds = Array.from(new Set(emailRows.map(e => e.company_id).filter(Boolean))) as string[]
   let companiesById: Record<string, string> = {}
   if (emailCompanyIds.length > 0) {
     const { data: emailCompanies } = await supabase
@@ -69,7 +70,7 @@ export async function GET() {
     )
   }
 
-  const needsReviewEmails = (reviewEmails ?? []).map((e: any) => ({
+  const needsReviewEmails = emailRows.map(e => ({
     id: e.id,
     from_address: e.from_address,
     subject: e.subject,
