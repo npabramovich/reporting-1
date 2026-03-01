@@ -43,7 +43,7 @@ export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge }: AppHea
           </div>
         )}
         {!collapsed && (
-          <span className="font-medium text-base text-muted-foreground tracking-tight truncate">{fundName}</span>
+          <span className="font-medium text-sm text-muted-foreground tracking-tight truncate">{fundName}</span>
         )}
       </div>
 
