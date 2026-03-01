@@ -21,7 +21,18 @@ export async function GET(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json(data ?? [])
+  // Deduplicate: keep the latest entry per period
+  const rows = (data ?? []) as unknown as Array<Record<string, unknown>>
+  const seen = new Map<string, Record<string, unknown>>()
+  for (const row of rows) {
+    const key = `${row.period_year}-${row.period_quarter ?? ''}-${row.period_month ?? ''}`
+    const existing = seen.get(key)
+    if (!existing || (row.created_at as string) > (existing.created_at as string)) {
+      seen.set(key, row)
+    }
+  }
+
+  return NextResponse.json(Array.from(seen.values()))
 }
 
 export async function POST(
@@ -63,6 +74,45 @@ export async function POST(
     metric.value_type === 'text'
       ? { value_text: String(value) }
       : { value_number: typeof value === 'number' ? value : parseFloat(value) }
+
+  // Check for existing value in the same period — update instead of creating duplicate
+  let existingQuery = admin
+    .from('metric_values')
+    .select('id')
+    .eq('metric_id', params.metricId)
+    .eq('period_year', period_year)
+
+  if (period_quarter != null) {
+    existingQuery = existingQuery.eq('period_quarter', period_quarter)
+  } else {
+    existingQuery = existingQuery.is('period_quarter', null)
+  }
+  if (period_month != null) {
+    existingQuery = existingQuery.eq('period_month', period_month)
+  } else {
+    existingQuery = existingQuery.is('period_month', null)
+  }
+
+  const { data: existing } = await existingQuery.maybeSingle()
+
+  if (existing) {
+    // Update the existing row
+    const { data, error } = await admin
+      .from('metric_values')
+      .update({
+        period_label,
+        confidence: 'high',
+        is_manually_entered: true,
+        notes: notes ?? null,
+        ...valueFields,
+      })
+      .eq('id', existing.id)
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data)
+  }
 
   const { data, error } = await admin
     .from('metric_values')
