@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, Plus } from 'lucide-react'
+import { Download, Loader2, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { MetricForm } from '@/components/metric-form'
@@ -40,6 +40,7 @@ export function CompanyCharts({ companyId, companyName, metrics }: Props) {
   const [valuesByMetric, setValuesByMetric] = useState<Record<string, MetricValueRow[]>>({})
   const [loading, setLoading] = useState(true)
   const [addMetricOpen, setAddMetricOpen] = useState(false)
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
 
   // Stabilize metrics dependency to avoid refetching on every render
   const metricIds = metrics.map(m => m.id).join(',')
@@ -134,17 +135,19 @@ export function CompanyCharts({ companyId, companyName, metrics }: Props) {
     )
   }
 
+  const visibleMetrics = metrics.filter(m => !deletedIds.has(m.id))
+
   const gridClass =
-    metrics.length === 1
+    visibleMetrics.length === 1
       ? 'grid gap-4 grid-cols-1'
-      : metrics.length >= 3 && metrics.length % 2 !== 0
+      : visibleMetrics.length >= 3 && visibleMetrics.length % 2 !== 0
         ? 'grid gap-4 grid-cols-1 md:grid-cols-3'
         : 'grid gap-4 grid-cols-1 md:grid-cols-2'
 
   if (loading) {
     return (
       <div className={gridClass}>
-        {metrics.map((m) => (
+        {visibleMetrics.map((m) => (
           <div key={m.id} className="rounded-lg border p-4 animate-pulse">
             <div className="h-4 w-32 bg-muted rounded mb-3" />
             <div className="h-[180px] bg-muted/50 rounded" />
@@ -154,7 +157,7 @@ export function CompanyCharts({ companyId, companyName, metrics }: Props) {
     )
   }
 
-  const hasData = metrics.some((m) => (valuesByMetric[m.id]?.length ?? 0) > 0)
+  const hasData = visibleMetrics.some((m) => (valuesByMetric[m.id]?.length ?? 0) > 0)
 
   return (
     <div className="space-y-4">
@@ -178,13 +181,14 @@ export function CompanyCharts({ companyId, companyName, metrics }: Props) {
       </div>
 
       <div className={gridClass}>
-        {metrics.map((m) => (
+        {visibleMetrics.map((m) => (
           <MetricChartCard
             key={m.id}
             companyId={companyId}
             metric={m}
             values={valuesByMetric[m.id] ?? []}
             onRefresh={loadValues}
+            onDelete={(id) => setDeletedIds(prev => new Set(prev).add(id))}
           />
         ))}
       </div>
@@ -199,13 +203,30 @@ function MetricChartCard({
   metric,
   values,
   onRefresh,
+  onDelete,
 }: {
   companyId: string
   metric: Metric
   values: MetricValueRow[]
   onRefresh: () => void
+  onDelete: (id: string) => void
 }) {
   const [addOpen, setAddOpen] = useState(false)
+  const [confirmStep, setConfirmStep] = useState<0 | 1 | 2>(0)
+
+  const handleDelete = async () => {
+    setConfirmStep(2)
+    try {
+      const res = await fetch(`/api/metrics/${metric.id}?force=true`, { method: 'DELETE' })
+      if (res.ok) {
+        onDelete(metric.id)
+      } else {
+        setConfirmStep(0)
+      }
+    } catch {
+      setConfirmStep(0)
+    }
+  }
 
   return (
     <div className="rounded-lg border bg-card p-4">
@@ -216,15 +237,49 @@ function MetricChartCard({
             <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{metric.description}</p>
           )}
         </div>
-        <button
-          onClick={() => setAddOpen(true)}
-          className="text-[11px] text-primary hover:underline shrink-0 ml-2"
-        >
-          + Add
-        </button>
+        <div className="flex items-center gap-2 shrink-0 ml-2">
+          <button
+            onClick={() => setAddOpen(true)}
+            className="text-[11px] text-primary hover:underline"
+          >
+            + Add
+          </button>
+          <button
+            onClick={() => setConfirmStep(1)}
+            className="text-muted-foreground/50 hover:text-destructive transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
-      {values.length === 0 ? (
+      {confirmStep >= 1 ? (
+        <div className="h-[180px] flex flex-col items-center justify-center rounded border border-dashed border-destructive/30 bg-destructive/5 gap-3 px-4">
+          <p className="text-sm text-center">
+            Delete <strong>{metric.name}</strong> and all its data? This cannot be undone.
+          </p>
+          <div className="flex items-center gap-3">
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={confirmStep === 2}
+              onClick={handleDelete}
+            >
+              {confirmStep === 2 ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              ) : null}
+              Delete
+            </Button>
+            <button
+              onClick={() => setConfirmStep(0)}
+              className="text-xs text-muted-foreground hover:text-foreground"
+              disabled={confirmStep === 2}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : values.length === 0 ? (
         <div className="h-[180px] flex items-center justify-center rounded border border-dashed">
           <p className="text-xs text-muted-foreground text-center px-3">
             No data yet. Add data points manually or process a report.

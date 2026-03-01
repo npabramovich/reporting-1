@@ -15,13 +15,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .select('id', { count: 'exact', head: true })
     .is('resolution', null)
 
+  const { count: needsReviewEmailCount } = await supabase
+    .from('inbound_emails')
+    .select('id', { count: 'exact', head: true })
+    .eq('processing_status', 'needs_review')
+
   const { data: fund } = await supabase
     .from('funds')
     .select('name, logo_url')
     .limit(1)
     .single() as { data: { name: string; logo_url: string | null } | null }
 
-  const reviewBadge = openReviewCount ?? 0
+  const reviewBadge = (openReviewCount ?? 0) + (needsReviewEmailCount ?? 0)
   const fundName = fund?.name ?? 'Portfolio Reporting'
   const fundLogo = fund?.logo_url ?? null
 

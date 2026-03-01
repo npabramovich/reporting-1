@@ -71,7 +71,12 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
 
     const groups = new Map<string, Company[]>()
     for (const c of filtered) {
-      const keys = c.portfolioGroup && c.portfolioGroup.length > 0 ? c.portfolioGroup : ['Other']
+      let keys = c.portfolioGroup && c.portfolioGroup.length > 0 ? c.portfolioGroup : ['Other']
+      // When a filter is active, only show the company under the selected group(s)
+      if (selectedGroups.size > 0) {
+        const matched = keys.filter(k => selectedGroups.has(k))
+        if (matched.length > 0) keys = matched
+      }
       for (const key of keys) {
         if (!groups.has(key)) groups.set(key, [])
         groups.get(key)!.push(c)
@@ -94,7 +99,7 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
 
     return sorted
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, hasGroups, groupSortAsc, sortMode, cashSortAsc])
+  }, [filtered, hasGroups, selectedGroups, groupSortAsc, sortMode, cashSortAsc])
 
   const sortedFiltered = useMemo(() => sortCompanies(filtered), [filtered, sortMode, cashSortAsc])
 

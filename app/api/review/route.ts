@@ -49,5 +49,33 @@ export async function GET() {
     counts[item.issue_type] = (counts[item.issue_type] ?? 0) + 1
   }
 
-  return NextResponse.json({ total: items.length, counts, items })
+  // Also fetch inbound emails with needs_review status
+  const { data: reviewEmails } = await supabase
+    .from('inbound_emails')
+    .select('id, from_address, subject, received_at, processing_status, company_id, attachments_count')
+    .eq('processing_status', 'needs_review')
+    .order('received_at', { ascending: false })
+
+  // Get company names for those emails
+  const emailCompanyIds = [...new Set((reviewEmails ?? []).map(e => e.company_id).filter(Boolean))]
+  let companiesById: Record<string, string> = {}
+  if (emailCompanyIds.length > 0) {
+    const { data: emailCompanies } = await supabase
+      .from('companies')
+      .select('id, name')
+      .in('id', emailCompanyIds)
+    companiesById = Object.fromEntries(
+      (emailCompanies ?? []).map((c: { id: string; name: string }) => [c.id, c.name])
+    )
+  }
+
+  const needsReviewEmails = (reviewEmails ?? []).map((e: any) => ({
+    id: e.id,
+    from_address: e.from_address,
+    subject: e.subject,
+    received_at: e.received_at,
+    company: e.company_id ? { id: e.company_id, name: companiesById[e.company_id] ?? 'Unknown' } : null,
+  }))
+
+  return NextResponse.json({ total: items.length, counts, items, needsReviewEmails })
 }

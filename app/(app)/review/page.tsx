@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Check, X, Pencil, Loader2 } from 'lucide-react'
+import { Check, X, Pencil, Loader2, Mail } from 'lucide-react'
+import { EmailReviewModal } from '@/components/email-review-modal'
 
 interface ReviewItem {
   id: string
@@ -18,10 +19,19 @@ interface ReviewItem {
   email: { id: string; subject: string | null; received_at: string; from_address: string } | null
 }
 
+interface NeedsReviewEmail {
+  id: string
+  from_address: string
+  subject: string | null
+  received_at: string
+  company: { id: string; name: string } | null
+}
+
 interface ReviewData {
   total: number
   counts: Record<string, number>
   items: ReviewItem[]
+  needsReviewEmails: NeedsReviewEmail[]
 }
 
 const ISSUE_LABELS: Record<string, string> = {
@@ -48,6 +58,7 @@ export default function ReviewPage() {
   const [resolving, setResolving] = useState<Record<string, boolean>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [reviewModalEmailId, setReviewModalEmailId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -105,7 +116,7 @@ export default function ReviewPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Review</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Items that need your attention — metrics Claude wasn&apos;t sure about, unidentified companies, and more.
+          Items that need your attention — metrics AI wasn&apos;t sure about, unidentified companies, and more.
         </p>
       </div>
 
@@ -115,7 +126,7 @@ export default function ReviewPage() {
         </div>
       )}
 
-      {!loading && items.length === 0 && (
+      {!loading && items.length === 0 && (data?.needsReviewEmails ?? []).length === 0 && (
         <div className="rounded-lg border border-dashed p-12 text-center">
           <p className="text-muted-foreground">All clear — nothing to review.</p>
         </div>
@@ -248,6 +259,55 @@ export default function ReviewPage() {
           })}
         </div>
       )}
+
+      {!loading && (data?.needsReviewEmails ?? []).length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-sm font-medium text-muted-foreground mb-3">
+            Emails needing review ({data!.needsReviewEmails.length})
+          </h2>
+          <div className="space-y-2">
+            {data!.needsReviewEmails.map(email => (
+              <button
+                key={email.id}
+                onClick={() => setReviewModalEmailId(email.id)}
+                className="w-full rounded-lg border bg-card p-4 text-left hover:bg-muted/30 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <Mail className="h-4 w-4 text-amber-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">
+                      {email.subject || '(no subject)'}
+                    </p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                      <span>{email.from_address}</span>
+                      <span>{new Date(email.received_at).toLocaleDateString()}</span>
+                      {email.company ? (
+                        <span>{email.company.name}</span>
+                      ) : (
+                        <span className="text-amber-600">No company assigned</span>
+                      )}
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200 shrink-0">
+                    Needs Review
+                  </Badge>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <EmailReviewModal
+        emailId={reviewModalEmailId}
+        open={!!reviewModalEmailId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReviewModalEmailId(null)
+            load()
+          }
+        }}
+      />
     </div>
   )
 }

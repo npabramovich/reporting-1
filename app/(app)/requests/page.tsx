@@ -278,6 +278,8 @@ export default function RequestsPage() {
         <ResponseTracker quarters={trackerQuarters} data={trackerData} />
       )}
 
+      <h2 className="text-lg font-semibold tracking-tight">Create an Ask</h2>
+
       {/* Subject */}
       <div className="rounded-lg border bg-card p-5 space-y-3">
         <div>

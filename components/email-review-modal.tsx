@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { CompanyForm } from '@/components/company-form'
 import { MetricForm } from '@/components/metric-form'
-import { Check, X, Pencil, Building2, Loader2, Plus, BarChart3, RefreshCw, Mail, ChevronDown, ChevronRight } from 'lucide-react'
+import { Check, X, Pencil, Building2, Loader2, Plus, BarChart3, RefreshCw, Mail, ChevronDown, ChevronRight, Upload, FileText } from 'lucide-react'
 import type { Company } from '@/lib/types/database'
 
 // ---------------------------------------------------------------------------
@@ -101,6 +101,10 @@ export function EmailReviewModal({
   // Reprocess state
   const [reprocessing, setReprocessing] = useState(false)
   const [reprocessSuccess, setReprocessSuccess] = useState(false)
+
+  // Upload state
+  const [uploading, setUploading] = useState(false)
+  const [uploadedFiles, setUploadedFiles] = useState<string[]>([])
 
   // Section expand states
   const [showEmailBody, setShowEmailBody] = useState(false)
@@ -195,6 +199,8 @@ export function EmailReviewModal({
       setAssigningCompany(false)
       setReprocessing(false)
       setReprocessSuccess(false)
+      setUploading(false)
+      setUploadedFiles([])
     } else {
       setEmailInfo(null)
       setReviewData(null)
@@ -209,6 +215,8 @@ export function EmailReviewModal({
       setAssigningCompany(false)
       setReprocessing(false)
       setReprocessSuccess(false)
+      setUploading(false)
+      setUploadedFiles([])
     }
   }, [open, emailId, loadAll])
 
@@ -341,6 +349,35 @@ export function EmailReviewModal({
     }
   }
 
+  async function handleUpload(file: File) {
+    if (!emailId) return
+    setUploading(true)
+    try {
+      const buffer = await file.arrayBuffer()
+      const base64 = btoa(
+        new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      )
+      const res = await fetch(`/api/emails/${emailId}/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type || 'application/octet-stream',
+          content: base64,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error ?? 'Upload failed')
+      }
+      setUploadedFiles(prev => [...prev, file.name])
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error uploading file')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   async function resolve(
     item: ReviewItem,
     resolution: 'accepted' | 'rejected' | 'manually_corrected',
@@ -426,7 +463,7 @@ export function EmailReviewModal({
                         {showEmailBody ? 'Hide email body' : 'Show email body'}
                       </button>
                       {showEmailBody && (
-                        <pre className="mt-2 text-xs text-muted-foreground whitespace-pre-wrap break-words max-h-60 overflow-y-auto bg-background rounded border p-3 leading-relaxed">
+                        <pre className="mt-2 text-xs text-muted-foreground whitespace-pre-wrap break-all max-h-60 overflow-y-auto overflow-x-hidden bg-background rounded border p-3 leading-relaxed w-0 min-w-full">
                           {emailInfo.body_text}
                         </pre>
                       )}
@@ -618,7 +655,70 @@ export function EmailReviewModal({
               </section>
             )}
 
-            {/* ── Section 4: Reprocess Email ── */}
+            {/* ── Section 4: Upload Document ── */}
+            {hasCompany && (
+              <section>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`flex items-center justify-center h-5 w-5 rounded-full ${uploadedFiles.length > 0 ? 'bg-green-100' : 'bg-slate-100'}`}>
+                    {uploadedFiles.length > 0 ? (
+                      <Check className="h-3 w-3 text-green-600" />
+                    ) : (
+                      <Upload className="h-3 w-3 text-slate-400" />
+                    )}
+                  </div>
+                  <h3 className="text-sm font-medium">Upload Document</h3>
+                </div>
+
+                <div className="ml-7">
+                  <p className="text-xs text-muted-foreground mb-3">
+                    If the report was linked rather than attached, upload it here so it can be processed.
+                  </p>
+
+                  {uploadedFiles.length > 0 && (
+                    <div className="space-y-1.5 mb-3">
+                      {uploadedFiles.map((name, i) => (
+                        <p key={i} className="text-xs text-emerald-600 flex items-center gap-1.5">
+                          <FileText className="h-3 w-3" />
+                          {name}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.xlsx,.xls,.csv,.docx,.pptx,.png,.jpg,.jpeg"
+                      disabled={uploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          handleUpload(file)
+                          e.target.value = ''
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={uploading}
+                      className="gap-1.5 pointer-events-none"
+                      tabIndex={-1}
+                    >
+                      {uploading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Upload className="h-3.5 w-3.5" />
+                      )}
+                      {uploading ? 'Uploading…' : 'Choose File'}
+                    </Button>
+                  </label>
+                </div>
+              </section>
+            )}
+
+            {/* ── Section 5: Process Email ── */}
             {hasCompany && (
               <section>
                 <div className="flex items-center gap-2 mb-2">
@@ -629,14 +729,14 @@ export function EmailReviewModal({
                       <RefreshCw className="h-3 w-3 text-slate-400" />
                     )}
                   </div>
-                  <h3 className="text-sm font-medium">Reprocess Email</h3>
+                  <h3 className="text-sm font-medium">Process Email</h3>
                 </div>
 
                 <div className="ml-7">
                   {reprocessSuccess ? (
                     <p className="text-sm text-emerald-600 flex items-center gap-1.5">
                       <Check className="h-3.5 w-3.5" />
-                      Reprocessing started. Modal will close shortly.
+                      Processing started. Modal will close shortly.
                     </p>
                   ) : (
                     <>
@@ -654,7 +754,7 @@ export function EmailReviewModal({
                         ) : (
                           <RefreshCw className="h-3.5 w-3.5" />
                         )}
-                        {reprocessing ? 'Reprocessing…' : 'Reprocess Email'}
+                        {reprocessing ? 'Processing…' : 'Process Email'}
                       </Button>
                     </>
                   )}
