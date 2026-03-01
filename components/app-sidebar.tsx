@@ -62,7 +62,7 @@ export function AppSidebar({ reviewBadge, onNavigate }: AppSidebarProps) {
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
-              <Icon className="h-4 w-4 shrink-0" />
+              <Icon className="h-5 w-5 shrink-0" />
               <span className={`${collapsed ? 'md:hidden' : ''}`}>{label}</span>
               {badge && reviewBadge > 0 && (
                 collapsed ? (
@@ -85,7 +85,7 @@ export function AppSidebar({ reviewBadge, onNavigate }: AppSidebarProps) {
             collapsed ? 'md:justify-center md:px-0' : ''
           }`}
         >
-          <ThemeIcon className="h-4 w-4 shrink-0" />
+          <ThemeIcon className="h-5 w-5 shrink-0" />
           <span className={`flex-1 text-left ${collapsed ? 'md:hidden' : ''}`}>
             {themeLabel}
           </span>
@@ -100,9 +100,9 @@ export function AppSidebar({ reviewBadge, onNavigate }: AppSidebarProps) {
           }`}
         >
           {collapsed ? (
-            <PanelLeftOpen className="h-4 w-4 shrink-0" />
+            <PanelLeftOpen className="h-5 w-5 shrink-0" />
           ) : (
-            <PanelLeftClose className="h-4 w-4 shrink-0" />
+            <PanelLeftClose className="h-5 w-5 shrink-0" />
           )}
           <span className={`flex-1 text-left ${collapsed ? 'md:hidden' : ''}`}>
             {collapsed ? 'Show Sidebar' : 'Hide Sidebar'}
