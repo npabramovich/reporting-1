@@ -144,8 +144,8 @@ export default async function CompanyDetailPage({
       </div>
 
       {/* Content + Notes panel side by side */}
-      <div className="flex gap-6 items-start">
-        <div className="flex-1 min-w-0 max-w-6xl">
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex-1 min-w-0 max-w-6xl w-full">
           <CompanySummary companyId={company.id} />
 
           <CompanyCharts

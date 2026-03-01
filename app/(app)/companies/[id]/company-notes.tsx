@@ -166,7 +166,7 @@ function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
   }
 
   return (
-    <div className="w-[340px] shrink-0 sticky top-4 max-h-[calc(100vh-6rem)] rounded-lg border bg-card flex flex-col">
+    <div className="w-full lg:w-[340px] shrink-0 lg:sticky top-4 max-h-[80vh] lg:max-h-[calc(100vh-6rem)] rounded-lg border bg-card flex flex-col">
       <div className="px-4 py-3 flex items-center justify-between">
         <h2 className="text-sm font-medium text-muted-foreground">Notes</h2>
         <button onClick={toggle}>
@@ -193,7 +193,7 @@ function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
               {note.edited && (
                 <span className="text-[10px] text-muted-foreground italic">edited</span>
               )}
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-1">
+              <div className="md:opacity-0 md:group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-1">
                 {note.userId === userId && (
                   <button onClick={() => startEditing(note)}>
                     <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />

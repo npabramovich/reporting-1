@@ -312,18 +312,18 @@ export default function EmailsPage() {
         <table className="w-full text-sm">
           <thead className="bg-muted/50 border-b">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground w-40">
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell w-40">
                 Received
               </th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">From</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Subject</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Subject</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground w-36">
                 Company
               </th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground w-32">
                 Status
               </th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground w-20">
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell w-20">
                 Metrics
               </th>
               <th className="px-4 py-3 w-10">
@@ -352,11 +352,11 @@ export default function EmailsPage() {
                 className="hover:bg-muted/30 cursor-pointer transition-colors"
                 onClick={() => router.push(`/emails/${email.id}`)}
               >
-                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap hidden sm:table-cell">
                   {fmt(email.received_at)}
                 </td>
                 <td className="px-4 py-3 max-w-[180px] truncate">{email.from_address}</td>
-                <td className="px-4 py-3 max-w-[240px] truncate text-muted-foreground">
+                <td className="px-4 py-3 max-w-[240px] truncate text-muted-foreground hidden md:table-cell">
                   {email.subject ?? <span className="italic">(no subject)</span>}
                 </td>
                 <td className="px-4 py-3">
@@ -384,7 +384,7 @@ export default function EmailsPage() {
                 <td className="px-4 py-3">
                   <StatusBadge status={email.processing_status} />
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums">
+                <td className="px-4 py-3 text-right tabular-nums hidden sm:table-cell">
                   {email.metrics_extracted}
                 </td>
                 <td className="px-4 py-3 text-center">

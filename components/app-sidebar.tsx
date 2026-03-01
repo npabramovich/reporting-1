@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -13,7 +13,7 @@ const THEME_ICONS = { system: Monitor, light: Sun, dark: Moon }
 const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' }
 
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badge?: boolean }[] = [
-  { href: '/dashboard', label: 'Portfolio', icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Portfolio', icon: Building2 },
   { href: '/review', label: 'Review', icon: ClipboardCheck, badge: true },
   { href: '/emails', label: 'Email Log', icon: Mail },
   { href: '/import', label: 'Import', icon: Upload },

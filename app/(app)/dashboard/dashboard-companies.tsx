@@ -2,10 +2,11 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { ArrowDownAZ, ArrowUpZA, DollarSign, ArrowDown, ArrowUp } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpZA, ArrowDown, ArrowUp, LayoutGrid, Table2, Banknote, Coins } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DashboardSparklines } from './dashboard-sparklines'
+import { DashboardTable } from './dashboard-table'
 
 interface Company {
   id: string
@@ -29,6 +30,7 @@ interface Props {
 type SortMode = 'alpha' | 'cash'
 
 export function DashboardCompanies({ companies, allGroups }: Props) {
+  const [view, setView] = useState<'cards' | 'table'>('cards')
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set())
   const [groupSortAsc, setGroupSortAsc] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('alpha')
@@ -155,12 +157,17 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
                 }
               }}
             >
-              <DollarSign className="h-3.5 w-3.5" />
               {cashSortAsc ? (
-                <><ArrowUp className="h-3 w-3" /> Low &rarr; High</>
+                <><Coins className="h-3.5 w-3.5" /><ArrowUp className="h-3 w-3" /></>
               ) : (
-                <><ArrowDown className="h-3 w-3" /> High &rarr; Low</>
+                <><Banknote className="h-3.5 w-3.5" /><ArrowDown className="h-3 w-3" /></>
               )}
+            </Button>
+            <Button variant={view === 'cards' ? 'secondary' : 'ghost'} size="sm" onClick={() => setView('cards')}>
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant={view === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => setView('table')}>
+              <Table2 className="h-3.5 w-3.5" />
             </Button>
           </div>
         </div>
@@ -170,6 +177,11 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
         <div className="rounded-lg border border-dashed p-12 text-center">
           <p className="text-muted-foreground">No companies match the selected filters.</p>
         </div>
+      ) : view === 'table' ? (
+        <DashboardTable
+          companyIds={grouped ? grouped.flatMap(([, cs]) => cs.map(c => c.id)) : sortedFiltered.map(c => c.id)}
+          grouped={grouped ? grouped.map(([name, cs]) => [name, cs.map(c => c.id)] as [string, string[]]) : null}
+        />
       ) : grouped ? (
         <div className="space-y-6">
           {grouped.map(([groupName, groupCompanies]) => (

@@ -1,13 +1,20 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { Badge } from '@/components/ui/badge'
-import { DashboardSparklines } from './dashboard-sparklines'
 import { DashboardCompanies } from './dashboard-companies'
+import { DashboardNotesLayout, DashboardChatButton, DashboardNotesPanel } from './dashboard-notes'
 
 export default async function DashboardPage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth')
+
+  const { data: membership } = await supabase
+    .from('fund_members')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle() as { data: { role: string } | null }
+
+  const isAdmin = membership?.role === 'admin'
 
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -92,12 +99,20 @@ export default async function DashboardPage() {
   const allGroups = Array.from(new Set(companies.flatMap(c => c.portfolioGroup ?? []))).sort()
 
   return (
-    <div className="p-4 md:p-8 max-w-7xl">
-      <div className="mb-6">
+    <DashboardNotesLayout userId={user.id} isAdmin={isAdmin} companies={companies.map(c => ({ id: c.id, name: c.name }))}>
+    <div className="p-4 md:p-8">
+      <div className="mb-6 flex items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Portfolio Overview</h1>
+        <DashboardChatButton />
       </div>
 
-      <DashboardCompanies companies={companies} allGroups={allGroups} />
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex-1 min-w-0 max-w-7xl w-full">
+          <DashboardCompanies companies={companies} allGroups={allGroups} />
+        </div>
+        <DashboardNotesPanel />
+      </div>
     </div>
+    </DashboardNotesLayout>
   )
 }
