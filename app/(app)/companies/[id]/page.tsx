@@ -8,6 +8,7 @@ import { CompanyCharts } from './company-charts'
 import { CompanySummary } from './company-summary'
 import { CompanyEditButton } from './company-edit-button'
 import { CompanyNotesLayout, ChatButton, CompanyNotesPanel } from './company-notes'
+import { CompanyDocuments } from './company-documents'
 
 function formatHighlightValue(value: number, metric: Metric) {
   let formatted: string
@@ -105,7 +106,7 @@ export default async function CompanyDetailPage({
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Dashboard
+          Portfolio
         </Link>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -153,6 +154,8 @@ export default async function CompanyDetailPage({
             companyName={company.name}
             metrics={metrics ?? []}
           />
+
+          <CompanyDocuments companyId={company.id} fundId={company.fund_id} />
 
           {(company.founders || (company.contact_email && company.contact_email.length > 0) || company.overview || company.why_invested || company.current_update) && (
             <div className="mt-6 space-y-3">

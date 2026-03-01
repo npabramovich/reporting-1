@@ -132,6 +132,14 @@ export async function POST(
     .limit(1)
     .maybeSingle()
 
+  // --- Company documents (uploaded context) ---
+  const { data: companyDocuments } = await admin
+    .from('company_documents' as any)
+    .select('filename, extracted_text, has_native_content, storage_path, file_type')
+    .eq('company_id', params.id)
+    .order('created_at', { ascending: false })
+    .limit(5) as { data: { filename: string; extracted_text: string | null; has_native_content: boolean; storage_path: string; file_type: string }[] | null }
+
   // --- Previous summaries ---
   const { data: previousSummaries } = await admin
     .from('company_summaries')
@@ -222,11 +230,49 @@ export async function POST(
     previousSummariesBlock = summaryLines
   }
 
+  // 4. Supplementary documents
+  let documentsBlock = ''
+  if (companyDocuments && companyDocuments.length > 0) {
+    for (const doc of companyDocuments) {
+      if (doc.extracted_text) {
+        documentsBlock += `[DOCUMENT: ${doc.filename}]\n${doc.extracted_text.slice(0, 30_000)}\n\n`
+      }
+      if (doc.has_native_content && doc.storage_path) {
+        // Download PDF/image from Storage and add as native content block
+        const { data: fileData } = await admin
+          .storage
+          .from('company-documents')
+          .download(doc.storage_path)
+
+        if (fileData) {
+          const buffer = Buffer.from(await fileData.arrayBuffer())
+          const base64 = buffer.toString('base64')
+
+          if (doc.file_type === 'application/pdf') {
+            contentParts.push({
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+            } as Anthropic.ContentBlockParam)
+          } else if (doc.file_type.startsWith('image/')) {
+            contentParts.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: doc.file_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+                data: base64,
+              },
+            })
+          }
+        }
+      }
+    }
+  }
+
   // -----------------------------------------------------------------------
   // Build prompt
   // -----------------------------------------------------------------------
 
-  const hasData = metricsBlock || reportContentBlock || contentParts.length > 0
+  const hasData = metricsBlock || reportContentBlock || contentParts.length > 0 || documentsBlock
   if (!hasData) {
     return NextResponse.json({
       summary: 'No data available yet. The summary will be generated after the first report is processed.',
@@ -282,12 +328,22 @@ Your prior analyst summaries for this company (oldest to newest):
 ${previousSummariesBlock}`
   }
 
+  if (documentsBlock) {
+    promptText += `
+
+=== SUPPLEMENTARY DOCUMENTS ===
+Additional context documents uploaded by the investment team (strategy decks, board materials, etc.):
+
+${documentsBlock}`
+  }
+
   promptText += `
 
 === YOUR TASK ===
 ${taskPrompt}
 
-${previousSummariesBlock ? 'Build on your previous analysis — note what has changed since your last review. Avoid repeating the same observations unless they remain critical.' : 'This is the first analysis for this company, so base it entirely on the available data and report content.'}`
+${previousSummariesBlock ? 'Build on your previous analysis — note what has changed since your last review. Avoid repeating the same observations unless they remain critical.' : 'This is the first analysis for this company, so base it entirely on the available data and report content.'}
+${documentsBlock ? '\nYou also have access to supplementary documents (strategy decks, board materials, etc.) uploaded by the investment team. Reference these when relevant.' : ''}`
 
   // -----------------------------------------------------------------------
   // Call Claude

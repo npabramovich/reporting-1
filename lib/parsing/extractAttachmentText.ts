@@ -46,6 +46,24 @@ export async function extractAttachmentText(
   return { emailBody, attachments }
 }
 
+/**
+ * Extract text from a raw buffer + filename (used for uploaded documents).
+ * Reuses the same extraction logic as Postmark attachments.
+ */
+export async function extractFromBuffer(
+  buffer: Buffer,
+  filename: string,
+  contentType: string
+): Promise<AttachmentResult> {
+  const base64 = buffer.toString('base64')
+  return extractSingle({
+    Name: filename,
+    ContentType: contentType,
+    Content: base64,
+    ContentLength: buffer.length,
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Per-attachment dispatcher
 // ---------------------------------------------------------------------------
