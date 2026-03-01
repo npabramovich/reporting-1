@@ -13,8 +13,6 @@ import { Building2 } from 'lucide-react'
 interface Branding {
   fundName: string
   fundLogo: string
-  authSubtitle: string
-  authContact: string
 }
 
 export function SignUpForm({ branding }: { branding: Branding }) {
@@ -85,9 +83,6 @@ export function SignUpForm({ branding }: { branding: Branding }) {
             </div>
           )}
           <h1 className="text-lg font-semibold tracking-tight">{branding.fundName || 'Portfolio Reporting'}</h1>
-          {(branding.authSubtitle || !branding.fundName) && (
-            <p className="text-sm text-muted-foreground mt-1">{branding.authSubtitle || 'VC fund portfolio reporting tool'}</p>
-          )}
         </div>
 
         <Card>
@@ -145,9 +140,6 @@ export function SignUpForm({ branding }: { branding: Branding }) {
             </p>
           </CardContent>
         </Card>
-        {branding.authContact && (
-          <p className="text-center text-sm text-muted-foreground">{branding.authContact}</p>
-        )}
       </div>
     </div>
   )

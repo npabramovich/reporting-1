@@ -12,24 +12,8 @@ export async function GET() {
     .limit(1)
     .maybeSingle()
 
-  let authSubtitle: string | null = null
-  let authContact: string | null = null
-
-  if (fund) {
-    const { data: settings } = await admin
-      .from('fund_settings')
-      .select('auth_subtitle, auth_contact')
-      .eq('fund_id', fund.id)
-      .maybeSingle()
-
-    authSubtitle = settings?.auth_subtitle ?? null
-    authContact = settings?.auth_contact ?? null
-  }
-
   return NextResponse.json({
     fundName: fund?.name || null,
     fundLogo: fund?.logo_url || null,
-    authSubtitle,
-    authContact,
   })
 }

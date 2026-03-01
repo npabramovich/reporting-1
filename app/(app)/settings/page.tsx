@@ -40,8 +40,6 @@ interface Settings {
   hasGoogleCredentials: boolean
   googleClientId: string
   aiSummaryPrompt: string | null
-  authSubtitle: string
-  authContact: string
   displayName: string
   isAdmin: boolean
 }
@@ -87,7 +85,6 @@ export default function SettingsPage() {
       {settings.isAdmin && (
         <>
           <FundNameSection name={settings.fundName} logo={settings.fundLogo} onSaved={load} />
-          <AuthBrandingSection subtitle={settings.authSubtitle} contact={settings.authContact} onSaved={load} />
           <ClaudeKeySection hasKey={settings.hasClaudeKey} currentModel={settings.claudeModel} onSaved={load} />
           <AiSummaryPromptSection currentPrompt={settings.aiSummaryPrompt} onSaved={load} />
           <PostmarkSection
@@ -299,67 +296,6 @@ function FundNameSection({ name, logo, onSaved }: { name: string; logo: string |
             <AlertCircle className="h-3 w-3" /> {logoError}
           </p>
         )}
-      </div>
-    </Section>
-  )
-}
-
-// ──────────────────────────── Auth Branding ────────────────────────────
-
-function AuthBrandingSection({ subtitle, contact, onSaved }: { subtitle: string; contact: string; onSaved: () => void }) {
-  const [sub, setSub] = useState(subtitle)
-  const [con, setCon] = useState(contact)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-
-  const handleSave = async () => {
-    setSaving(true)
-    const res = await fetch('/api/settings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ authSubtitle: sub, authContact: con }),
-    })
-    setSaving(false)
-    if (res.ok) {
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-      onSaved()
-    }
-  }
-
-  const changed = sub !== subtitle || con !== contact
-
-  return (
-    <Section title="Sign-in page">
-      <p className="text-xs text-muted-foreground mb-3">
-        Customize the text shown on the sign-in and sign-up pages.
-      </p>
-      <div className="space-y-3">
-        <div>
-          <Label>Subtitle</Label>
-          <p className="text-xs text-muted-foreground mt-1 mb-1.5">
-            Shown below the fund name. Leave empty to hide.
-          </p>
-          <Input
-            value={sub}
-            onChange={(e) => setSub(e.target.value)}
-            placeholder="VC fund portfolio reporting tool"
-          />
-        </div>
-        <div>
-          <Label>Contact info</Label>
-          <p className="text-xs text-muted-foreground mt-1 mb-1.5">
-            Shown below the sign-in/sign-up form.
-          </p>
-          <Input
-            value={con}
-            onChange={(e) => setCon(e.target.value)}
-            placeholder="Questions? Contact name at email@example.com"
-          />
-        </div>
-        <Button onClick={handleSave} disabled={saving || !changed} size="sm">
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5" /> : 'Save'}
-        </Button>
       </div>
     </Section>
   )

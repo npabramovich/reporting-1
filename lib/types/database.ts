@@ -136,8 +136,6 @@ export type Database = {
           google_client_secret_encrypted: string | null
           claude_model: string
           ai_summary_prompt: string | null
-          auth_subtitle: string | null
-          auth_contact: string | null
           created_at: string
           updated_at: string
         }
@@ -155,8 +153,6 @@ export type Database = {
           google_drive_folder_name?: string | null
           claude_model?: string
           ai_summary_prompt?: string | null
-          auth_subtitle?: string | null
-          auth_contact?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -174,8 +170,6 @@ export type Database = {
           google_drive_folder_name?: string | null
           claude_model?: string
           ai_summary_prompt?: string | null
-          auth_subtitle?: string | null
-          auth_contact?: string | null
           created_at?: string
           updated_at?: string
         }
