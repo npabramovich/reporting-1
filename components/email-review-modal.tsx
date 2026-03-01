@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { CompanyForm } from '@/components/company-form'
 import { MetricForm } from '@/components/metric-form'
-import { Check, X, Pencil, Building2, Loader2, Plus, BarChart3, RefreshCw, Mail } from 'lucide-react'
+import { Check, X, Pencil, Building2, Loader2, Plus, BarChart3, RefreshCw, Mail, ChevronDown, ChevronRight } from 'lucide-react'
 import type { Company } from '@/lib/types/database'
 
 // ---------------------------------------------------------------------------
@@ -41,6 +41,7 @@ interface EmailInfo {
   from_address: string
   received_at: string
   company: { id: string; name: string } | null
+  body_text: string | null
 }
 
 interface MetricInfo {
@@ -102,6 +103,7 @@ export function EmailReviewModal({
   const [reprocessSuccess, setReprocessSuccess] = useState(false)
 
   // Section expand states
+  const [showEmailBody, setShowEmailBody] = useState(false)
   const [showCompanyForm, setShowCompanyForm] = useState(false)
   const [showMetricForm, setShowMetricForm] = useState(false)
   const [metricsAdded, setMetricsAdded] = useState(0)
@@ -139,12 +141,17 @@ export function EmailReviewModal({
         )
       }
 
+      // Extract body text from raw_payload
+      const rawPayload = emailData.raw_payload as Record<string, unknown> | null
+      const bodyText = (rawPayload?.TextBody as string) || (rawPayload?.HtmlBody as string) || null
+
       const info: EmailInfo = {
         id: emailData.id,
         subject: emailData.subject ?? null,
         from_address: emailData.from_address ?? '',
         received_at: emailData.received_at ?? '',
         company: emailData.company ?? null,
+        body_text: bodyText,
       }
       setEmailInfo(info)
       setReviewData(reviewsResult)
@@ -179,6 +186,7 @@ export function EmailReviewModal({
   useEffect(() => {
     if (open && emailId) {
       loadAll()
+      setShowEmailBody(false)
       setShowCompanyForm(false)
       setShowMetricForm(false)
       setMetricsAdded(0)
@@ -192,6 +200,7 @@ export function EmailReviewModal({
       setReviewData(null)
       setMetrics([])
       setCompanies([])
+      setShowEmailBody(false)
       setShowCompanyForm(false)
       setShowMetricForm(false)
       setMetricsAdded(0)
@@ -203,14 +212,6 @@ export function EmailReviewModal({
     }
   }, [open, emailId, loadAll])
 
-  // Auto-show metric form when company exists but no metrics
-  useEffect(() => {
-    if (!loading && emailInfo) {
-      if (emailInfo.company && metrics.length === 0) {
-        setShowMetricForm(true)
-      }
-    }
-  }, [loading, emailInfo, metrics.length])
 
   async function handleCompanyCreated(company: Company) {
     // Link the email to the new company
@@ -390,7 +391,7 @@ export function EmailReviewModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Email Setup & Review</DialogTitle>
+          <DialogTitle>Review</DialogTitle>
         </DialogHeader>
 
         {loading && (
@@ -405,7 +406,7 @@ export function EmailReviewModal({
             <section className="rounded-lg border bg-muted/30 p-4">
               <div className="flex items-start gap-3">
                 <Mail className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="min-w-0 space-y-1">
+                <div className="min-w-0 space-y-1 flex-1">
                   <p className="text-sm font-medium leading-snug">
                     {emailInfo.subject || '(no subject)'}
                   </p>
@@ -415,6 +416,22 @@ export function EmailReviewModal({
                       <span>{new Date(emailInfo.received_at).toLocaleDateString()}</span>
                     )}
                   </div>
+                  {emailInfo.body_text && (
+                    <div className="pt-1">
+                      <button
+                        onClick={() => setShowEmailBody(!showEmailBody)}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        {showEmailBody ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                        {showEmailBody ? 'Hide email body' : 'Show email body'}
+                      </button>
+                      {showEmailBody && (
+                        <pre className="mt-2 text-xs text-muted-foreground whitespace-pre-wrap break-words max-h-60 overflow-y-auto bg-background rounded border p-3 leading-relaxed">
+                          {emailInfo.body_text}
+                        </pre>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </section>

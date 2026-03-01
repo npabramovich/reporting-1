@@ -107,10 +107,10 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
             <button
               key={`group-${group}`}
               onClick={() => toggleGroup(group)}
-              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+              className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
                 selectedGroups.has(group)
-                  ? 'bg-foreground text-background border-foreground'
-                  : 'bg-background text-muted-foreground border-border hover:border-foreground/30'
+                  ? 'bg-accent text-foreground border-border font-medium'
+                  : 'text-muted-foreground border-border hover:text-foreground hover:bg-accent'
               }`}
             >
               {group}
@@ -129,7 +129,7 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs gap-1.5"
+                className="text-xs gap-1.5 text-muted-foreground hover:text-foreground"
                 onClick={() => {
                   if (sortMode === 'alpha') {
                     setGroupSortAsc(prev => !prev)
@@ -148,7 +148,7 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
             <Button
               variant={sortMode === 'cash' ? 'secondary' : 'ghost'}
               size="sm"
-              className="text-xs gap-1.5"
+              className="text-xs gap-1.5 text-muted-foreground hover:text-foreground"
               onClick={() => {
                 if (sortMode === 'cash') {
                   setCashSortAsc(prev => !prev)
@@ -163,10 +163,10 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
                 <><Banknote className="h-3.5 w-3.5" /><ArrowDown className="h-3 w-3" /></>
               )}
             </Button>
-            <Button variant={view === 'cards' ? 'secondary' : 'ghost'} size="sm" onClick={() => setView('cards')}>
+            <Button variant={view === 'cards' ? 'secondary' : 'ghost'} size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => setView('cards')}>
               <LayoutGrid className="h-3.5 w-3.5" />
             </Button>
-            <Button variant={view === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => setView('table')}>
+            <Button variant={view === 'table' ? 'secondary' : 'ghost'} size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => setView('table')}>
               <Table2 className="h-3.5 w-3.5" />
             </Button>
           </div>

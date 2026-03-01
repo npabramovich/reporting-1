@@ -25,7 +25,47 @@ export async function GET(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ documents: documents ?? [] })
+  // Tag uploaded documents with source
+  const uploadDocs = (documents ?? []).map(d => ({ ...d, source: 'upload' as const }))
+
+  // Fetch email attachments from inbound_emails
+  const { data: emails } = await admin
+    .from('inbound_emails')
+    .select('id, subject, raw_payload, received_at')
+    .eq('company_id', params.id)
+    .gt('attachments_count', 0)
+    .in('processing_status', ['success', 'needs_review'])
+    .order('received_at', { ascending: false }) as { data: any[] | null }
+
+  const emailAttachments: any[] = []
+  for (const email of emails ?? []) {
+    const payload = email.raw_payload as Record<string, unknown> | null
+    if (!payload) continue
+    const attachments = (payload.Attachments ?? []) as Array<{
+      Name: string
+      ContentType: string
+      ContentLength: number
+    }>
+    for (let i = 0; i < attachments.length; i++) {
+      const att = attachments[i]
+      emailAttachments.push({
+        id: `email-${email.id}-${i}`,
+        filename: att.Name,
+        file_type: att.ContentType,
+        file_size: att.ContentLength,
+        created_at: email.received_at,
+        source: 'email' as const,
+        email_subject: email.subject,
+      })
+    }
+  }
+
+  // Combine and sort by date descending
+  const combined = [...uploadDocs, ...emailAttachments].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
+
+  return NextResponse.json({ documents: combined })
 }
 
 // ---------------------------------------------------------------------------

@@ -15,9 +15,9 @@ const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' }
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badge?: boolean }[] = [
   { href: '/dashboard', label: 'Portfolio', icon: Building2 },
   { href: '/review', label: 'Review', icon: ClipboardCheck, badge: true },
-  { href: '/emails', label: 'Email Log', icon: Mail },
+  { href: '/emails', label: 'Inbound', icon: Mail },
   { href: '/import', label: 'Import', icon: Upload },
-  { href: '/requests', label: 'Responses', icon: Send },
+  { href: '/requests', label: 'Asks', icon: Send },
   { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/support', label: 'Support', icon: LifeBuoy },
 ]

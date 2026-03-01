@@ -147,7 +147,7 @@ export default async function CompanyDetailPage({
       {/* Content + Notes panel side by side */}
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 max-w-6xl w-full">
-          <CompanySummary companyId={company.id} />
+          <CompanySummary companyId={company.id} fundId={company.fund_id} />
 
           <CompanyCharts
             companyId={company.id}
@@ -155,7 +155,7 @@ export default async function CompanyDetailPage({
             metrics={metrics ?? []}
           />
 
-          <CompanyDocuments companyId={company.id} fundId={company.fund_id} />
+          <CompanyDocuments companyId={company.id} />
 
           {(company.founders || (company.contact_email && company.contact_email.length > 0) || company.overview || company.why_invested || company.current_update) && (
             <div className="mt-6 space-y-3">

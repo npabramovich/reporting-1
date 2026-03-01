@@ -62,9 +62,9 @@ export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge }: AppHea
         <form action="/api/auth/logout" method="POST">
           <Button
             type="submit"
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="text-muted-foreground hover:text-foreground gap-2"
+            className="text-muted-foreground gap-2"
           >
             <LogOut className="h-4 w-4" />
             <span className="hidden sm:inline">Sign out</span>

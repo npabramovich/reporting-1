@@ -83,7 +83,7 @@ export function DashboardChatButton() {
     <Button
       variant="ghost"
       size="sm"
-      className={`ml-auto gap-1.5 h-8 py-2 ${open ? 'bg-accent' : ''}`}
+      className={`ml-auto gap-1.5 h-8 py-2 text-muted-foreground hover:text-foreground ${open ? 'bg-accent' : ''}`}
       onClick={toggle}
     >
       <MessageSquare className="h-3.5 w-3.5" />

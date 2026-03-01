@@ -146,14 +146,14 @@ function ProfileSection({ displayName, onSaved }: { displayName: string; onSaved
       <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
         <div className="flex-1">
           <Label>Display name</Label>
+          <p className="text-xs text-muted-foreground mt-1 mb-1.5">
+            Shown on notes and activity. If empty, your email will be used.
+          </p>
           <Input
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder="Your name"
           />
-          <p className="text-xs text-muted-foreground mt-1">
-            Shown on notes and activity. If empty, your email will be used.
-          </p>
         </div>
         <Button onClick={handleSave} disabled={saving || value === displayName} size="sm">
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5" /> : 'Save'}
@@ -337,25 +337,25 @@ function AuthBrandingSection({ subtitle, contact, onSaved }: { subtitle: string;
       <div className="space-y-3">
         <div>
           <Label>Subtitle</Label>
+          <p className="text-xs text-muted-foreground mt-1 mb-1.5">
+            Shown below the fund name. Leave empty to hide.
+          </p>
           <Input
             value={sub}
             onChange={(e) => setSub(e.target.value)}
             placeholder="VC fund portfolio reporting tool"
           />
-          <p className="text-xs text-muted-foreground mt-1">
-            Shown below the fund name. Leave empty to hide.
-          </p>
         </div>
         <div>
           <Label>Contact info</Label>
+          <p className="text-xs text-muted-foreground mt-1 mb-1.5">
+            Shown below the sign-in/sign-up form.
+          </p>
           <Input
             value={con}
             onChange={(e) => setCon(e.target.value)}
             placeholder="Questions? Contact name at email@example.com"
           />
-          <p className="text-xs text-muted-foreground mt-1">
-            Shown below the sign-in/sign-up form.
-          </p>
         </div>
         <Button onClick={handleSave} disabled={saving || !changed} size="sm">
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5" /> : 'Save'}

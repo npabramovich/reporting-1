@@ -206,7 +206,7 @@ export default function EmailsPage() {
     <div className="p-4 md:p-8 max-w-6xl">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Email Log</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Inbound</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Every inbound email and its processing result.
           </p>
@@ -217,6 +217,7 @@ export default function EmailsPage() {
             size="sm"
             onClick={saveAllToDrive}
             disabled={savingToDrive || !data?.items.length}
+            className="text-muted-foreground"
           >
             {savingToDrive ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -231,7 +232,7 @@ export default function EmailsPage() {
                 ? `${driveResult.saved} saved`
                 : 'Save all to Drive'}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => load(page)} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => load(page)} disabled={loading} className="text-muted-foreground">
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>

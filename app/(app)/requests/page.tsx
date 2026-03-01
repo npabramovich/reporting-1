@@ -216,8 +216,8 @@ export default function RequestsPage() {
     return (
       <div className="p-4 md:p-8 max-w-3xl">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Responses</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage your quarterly reporting program</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
+          <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
         </div>
         <div className="animate-pulse space-y-4">
           {[1, 2, 3].map((i) => <div key={i} className="h-24 bg-muted rounded-lg" />)}
@@ -230,7 +230,7 @@ export default function RequestsPage() {
     return (
       <div className="p-4 md:p-8 max-w-3xl space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Responses</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
           <p className="text-sm text-muted-foreground mt-1">Quarterly reporting email program</p>
         </div>
 
@@ -254,8 +254,8 @@ export default function RequestsPage() {
     return (
       <div className="p-4 md:p-8 max-w-3xl">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Responses</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage your quarterly reporting program</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
+          <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
         </div>
         <div className="rounded-lg border border-dashed p-12 text-center space-y-2">
           <p className="text-muted-foreground">Connect Google in Settings to enable sending emails.</p>
@@ -270,8 +270,8 @@ export default function RequestsPage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Responses</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your quarterly reporting program</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
+        <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
       </div>
 
       {trackerQuarters.length > 0 && (

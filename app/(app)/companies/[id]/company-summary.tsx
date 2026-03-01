@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { Sparkles, RefreshCw, Trash2 } from 'lucide-react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { Sparkles, RefreshCw, Trash2, Upload, Loader2 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 
 interface SummaryData {
@@ -12,14 +13,19 @@ interface SummaryData {
 
 interface Props {
   companyId: string
+  fundId: string
 }
 
-export function CompanySummary({ companyId }: Props) {
+const ACCEPTED_TYPES = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.jpg,.jpeg,.png'
+
+export function CompanySummary({ companyId, fundId }: Props) {
   const [data, setData] = useState<SummaryData | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Load the latest stored summary
   const load = useCallback(async () => {
@@ -66,6 +72,51 @@ export function CompanySummary({ companyId }: Props) {
     }
   }
 
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    setError(null)
+
+    try {
+      const supabase = createClient()
+      const storagePath = `${fundId}/${companyId}/${crypto.randomUUID()}-${file.name}`
+
+      const { error: uploadError } = await supabase
+        .storage
+        .from('company-documents')
+        .upload(storagePath, file)
+
+      if (uploadError) {
+        setError(`Upload failed: ${uploadError.message}`)
+        return
+      }
+
+      const fileExt = file.name.split('.').pop()
+      const res = await fetch(`/api/companies/${companyId}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storagePath,
+          filename: file.name,
+          fileType: file.type || `application/${fileExt}`,
+          fileSize: file.size,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error ?? 'Failed to register document')
+      }
+    } catch {
+      setError('Upload failed')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   useEffect(() => { load() }, [load])
 
   // Loading skeleton
@@ -89,15 +140,38 @@ export function CompanySummary({ companyId }: Props) {
   if (!data?.summary) {
     return (
       <div className="rounded-lg border border-dashed bg-card p-5 mb-6">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPTED_TYPES}
+          onChange={handleUpload}
+          className="hidden"
+        />
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs font-medium text-muted-foreground">AI Analyst</span>
           </div>
-          <Button size="sm" variant="outline" onClick={generate} disabled={generating}>
-            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-            {generating ? 'Generating…' : 'Generate summary'}
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="text-muted-foreground"
+            >
+              {uploading ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Upload className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {uploading ? 'Uploading…' : 'Upload'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={generate} disabled={generating} className="text-muted-foreground">
+              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+              {generating ? 'Analyzing…' : 'Analyze'}
+            </Button>
+          </div>
         </div>
         {generating && (
           <div className="animate-pulse space-y-2 mt-3">
@@ -118,6 +192,13 @@ export function CompanySummary({ companyId }: Props) {
 
   return (
     <div className="rounded-lg border bg-card p-5 mb-6">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_TYPES}
+        onChange={handleUpload}
+        className="hidden"
+      />
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
@@ -131,6 +212,21 @@ export function CompanySummary({ companyId }: Props) {
           )}
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            title="Upload document"
+            className="text-muted-foreground"
+          >
+            {uploading ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Upload className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            {uploading ? 'Uploading…' : 'Upload'}
+          </Button>
           <Button
             size="sm"
             variant="ghost"

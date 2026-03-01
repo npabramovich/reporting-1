@@ -170,7 +170,7 @@ export function CompanyCharts({ companyId, companyName, metrics }: Props) {
               Export CSV
             </button>
           )}
-          <Button size="sm" variant="outline" onClick={() => setAddMetricOpen(true)}>
+          <Button size="sm" variant="outline" onClick={() => setAddMetricOpen(true)} className="text-muted-foreground">
             <Plus className="h-4 w-4 mr-1.5" />
             Add metric
           </Button>
