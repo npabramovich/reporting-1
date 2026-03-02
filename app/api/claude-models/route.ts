@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getClaudeApiKey } from '@/lib/pipeline/processEmail'
-import Anthropic from '@anthropic-ai/sdk'
+import { createFundAIProvider } from '@/lib/ai'
 
 export async function GET() {
   const supabase = createClient()
@@ -19,28 +18,15 @@ export async function GET() {
 
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
 
-  let claudeApiKey: string
   try {
-    claudeApiKey = await getClaudeApiKey(admin, membership.fund_id)
-  } catch {
-    return NextResponse.json({ models: [], error: 'Claude API key not configured.' })
-  }
-
-  try {
-    const client = new Anthropic({ apiKey: claudeApiKey })
-    const list = await client.models.list({ limit: 100 })
-
-    const models = list.data
-      .filter((m) => m.type === 'model')
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .map((m) => ({
-        id: m.id,
-        name: m.display_name,
-      }))
-
+    const { provider } = await createFundAIProvider(admin, membership.fund_id)
+    const models = await provider.listModels()
     return NextResponse.json({ models })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    if (message.includes('not configured')) {
+      return NextResponse.json({ models: [], error: 'Claude API key not configured.' })
+    }
     return NextResponse.json({ models: [], error: message })
   }
 }
