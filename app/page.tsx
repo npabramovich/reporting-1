@@ -19,23 +19,18 @@ export default async function Home() {
     .maybeSingle()
 
   if (membership) {
-    // Check if onboarding is complete (has postmark + senders)
+    // Fund exists — check if basic setup is done (fund_settings row exists)
     const { data: settings } = await admin
       .from('fund_settings')
-      .select('postmark_inbound_address')
+      .select('id')
       .eq('fund_id', membership.fund_id)
       .maybeSingle()
 
-    const { count: senderCount } = await admin
-      .from('authorized_senders')
-      .select('id', { count: 'exact', head: true })
-      .eq('fund_id', membership.fund_id)
-
-    if (settings?.postmark_inbound_address && senderCount && senderCount > 0) {
+    if (settings) {
       redirect('/dashboard')
     }
 
-    // Incomplete onboarding — send back to finish
+    // No settings row yet — finish onboarding
     redirect('/onboarding')
   }
 
