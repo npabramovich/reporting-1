@@ -137,6 +137,11 @@ export type Database = {
           claude_model: string
           ai_summary_prompt: string | null
           outbound_email_provider: string | null
+          asks_email_provider: string | null
+          approval_email_subject: string | null
+          approval_email_body: string | null
+          system_email_from_name: string | null
+          system_email_from_address: string | null
           resend_api_key_encrypted: string | null
           postmark_server_token_encrypted: string | null
           inbound_email_provider: string | null
@@ -144,6 +149,11 @@ export type Database = {
           mailgun_signing_key_encrypted: string | null
           mailgun_api_key_encrypted: string | null
           mailgun_sending_domain: string | null
+          file_storage_provider: string | null
+          dropbox_app_key: string | null
+          dropbox_app_secret_encrypted: string | null
+          dropbox_refresh_token_encrypted: string | null
+          dropbox_folder_path: string | null
           created_at: string
           updated_at: string
         }
@@ -162,6 +172,11 @@ export type Database = {
           claude_model?: string
           ai_summary_prompt?: string | null
           outbound_email_provider?: string | null
+          asks_email_provider?: string | null
+          approval_email_subject?: string | null
+          approval_email_body?: string | null
+          system_email_from_name?: string | null
+          system_email_from_address?: string | null
           resend_api_key_encrypted?: string | null
           postmark_server_token_encrypted?: string | null
           inbound_email_provider?: string | null
@@ -169,6 +184,11 @@ export type Database = {
           mailgun_signing_key_encrypted?: string | null
           mailgun_api_key_encrypted?: string | null
           mailgun_sending_domain?: string | null
+          file_storage_provider?: string | null
+          dropbox_app_key?: string | null
+          dropbox_app_secret_encrypted?: string | null
+          dropbox_refresh_token_encrypted?: string | null
+          dropbox_folder_path?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -187,6 +207,11 @@ export type Database = {
           claude_model?: string
           ai_summary_prompt?: string | null
           outbound_email_provider?: string | null
+          asks_email_provider?: string | null
+          approval_email_subject?: string | null
+          approval_email_body?: string | null
+          system_email_from_name?: string | null
+          system_email_from_address?: string | null
           resend_api_key_encrypted?: string | null
           postmark_server_token_encrypted?: string | null
           inbound_email_provider?: string | null
@@ -194,6 +219,11 @@ export type Database = {
           mailgun_signing_key_encrypted?: string | null
           mailgun_api_key_encrypted?: string | null
           mailgun_sending_domain?: string | null
+          file_storage_provider?: string | null
+          dropbox_app_key?: string | null
+          dropbox_app_secret_encrypted?: string | null
+          dropbox_refresh_token_encrypted?: string | null
+          dropbox_folder_path?: string | null
           created_at?: string
           updated_at?: string
         }

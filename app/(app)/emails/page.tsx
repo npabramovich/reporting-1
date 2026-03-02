@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -13,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertCircle, RefreshCw, ChevronLeft, ChevronRight, HardDrive, Check, Loader2, Trash2 } from 'lucide-react'
+import { AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Loader2, Trash2 } from 'lucide-react'
 import { EmailReviewModal } from '@/components/email-review-modal'
 
 // ---------------------------------------------------------------------------
@@ -94,11 +93,6 @@ export default function EmailsPage() {
   const [reviewModalEmailId, setReviewModalEmailId] = useState<string | null>(null)
   const [dismissing, setDismissing] = useState<Record<string, boolean>>({})
 
-  // Bulk save to drive
-  const [savingToDrive, setSavingToDrive] = useState(false)
-  const [driveResult, setDriveResult] = useState<{ saved: number; failed: number } | null>(null)
-  const [driveError, setDriveError] = useState<string | null>(null)
-
   const abortRef = useRef<AbortController | null>(null)
 
   const load = useCallback(
@@ -148,44 +142,6 @@ export default function EmailsPage() {
 
   const totalPages = data ? Math.ceil(data.total / data.page_size) : 0
 
-  async function saveAllToDrive() {
-    if (!confirm('Save all processed emails and their attachments to Google Drive?')) return
-    setSavingToDrive(true)
-    setDriveResult(null)
-    setDriveError(null)
-
-    try {
-      // Fetch all email IDs with company assigned (successfully processed)
-      const params = new URLSearchParams({ page: '1', page_size: '1000' })
-      const listRes = await fetch(`/api/emails?${params}`)
-      if (!listRes.ok) throw new Error('Failed to fetch emails')
-      const listData = await listRes.json() as EmailsData
-      const emailIds = listData.items
-        .filter(e => e.company !== null)
-        .map(e => e.id)
-
-      if (emailIds.length === 0) {
-        setDriveError('No processed emails with identified companies to save')
-        setSavingToDrive(false)
-        return
-      }
-
-      const res = await fetch('/api/emails/save-to-drive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emailIds }),
-      })
-
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error ?? 'Failed to save')
-      setDriveResult({ saved: result.saved, failed: result.failed })
-    } catch (err) {
-      setDriveError(err instanceof Error ? err.message : 'Failed to save to Drive')
-    } finally {
-      setSavingToDrive(false)
-    }
-  }
-
   async function dismissReviews(emailId: string) {
     setDismissing(prev => ({ ...prev, [emailId]: true }))
     try {
@@ -211,49 +167,11 @@ export default function EmailsPage() {
             Every inbound email and its processing result.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={saveAllToDrive}
-            disabled={savingToDrive || !data?.items.length}
-            className="text-muted-foreground"
-          >
-            {savingToDrive ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : driveResult && driveResult.failed === 0 ? (
-              <Check className="h-4 w-4 mr-2" />
-            ) : (
-              <HardDrive className="h-4 w-4 mr-2" />
-            )}
-            {savingToDrive
-              ? 'Saving…'
-              : driveResult
-                ? `${driveResult.saved} saved`
-                : 'Save all to Drive'}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => load(page)} disabled={loading} className="text-muted-foreground">
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={() => load(page)} disabled={loading} className="text-muted-foreground">
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
-
-      {driveError && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{driveError}</AlertDescription>
-        </Alert>
-      )}
-
-      {driveResult && driveResult.failed > 0 && (
-        <Alert className="mb-4">
-          <AlertDescription>
-            Saved {driveResult.saved} email{driveResult.saved !== 1 ? 's' : ''} to Drive.
-            {driveResult.failed} failed.
-          </AlertDescription>
-        </Alert>
-      )}
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-end gap-3 mb-5">

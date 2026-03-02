@@ -16,7 +16,7 @@ interface Company {
 interface Settings {
   isAdmin: boolean
   googleDriveConnected: boolean
-  outboundEmailProvider: string | null
+  asksEmailProvider: string | null
 }
 
 interface QuarterInfo {
@@ -72,6 +72,8 @@ export default function RequestsPage() {
   const [trackerQuarters, setTrackerQuarters] = useState<QuarterInfo[]>([])
   const [trackerData, setTrackerData] = useState<CompanyResponse[]>([])
 
+  const [fromName, setFromName] = useState('')
+  const [fromAddress, setFromAddress] = useState('')
   const [subject, setSubject] = useState(DEFAULT_SUBJECT)
   const [bodyText, setBodyText] = useState(DEFAULT_BODY)
   const [cc, setCc] = useState('')
@@ -96,7 +98,7 @@ export default function RequestsPage() {
 
     if (settingsRes.ok) {
       const data = await settingsRes.json()
-      setSettings({ isAdmin: data.isAdmin, googleDriveConnected: data.googleDriveConnected, outboundEmailProvider: data.outboundEmailProvider })
+      setSettings({ isAdmin: data.isAdmin, googleDriveConnected: data.googleDriveConnected, asksEmailProvider: data.asksEmailProvider })
     }
 
     if (companiesRes.ok) {
@@ -164,6 +166,8 @@ export default function RequestsPage() {
         body_html: plainTextToHtml(bodyText),
         body_text: bodyText,
         cc: cc.trim() || undefined,
+        from_name: fromName.trim() || undefined,
+        from_address: fromAddress.trim() || undefined,
         recipients: [{ emails: [testEmail.trim()], companyName: 'Test' }],
       }),
     })
@@ -177,7 +181,12 @@ export default function RequestsPage() {
     }
 
     const data = await res.json()
-    setTestResult({ success: data.sent > 0 })
+    if (data.sent > 0) {
+      setTestResult({ success: true })
+    } else {
+      const detail = data.results?.[0]?.error
+      setTestResult({ success: false, error: detail || 'Failed to send' })
+    }
   }
 
   const handleSend = async () => {
@@ -197,6 +206,8 @@ export default function RequestsPage() {
         body_html: plainTextToHtml(bodyText),
         body_text: bodyText,
         cc: cc.trim() || undefined,
+        from_name: fromName.trim() || undefined,
+        from_address: fromAddress.trim() || undefined,
         recipients,
       }),
     })
@@ -251,22 +262,7 @@ export default function RequestsPage() {
     )
   }
 
-  if (!settings?.outboundEmailProvider) {
-    return (
-      <div className="p-4 md:p-8 max-w-3xl">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
-          <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
-        </div>
-        <div className="rounded-lg border border-dashed p-12 text-center space-y-2">
-          <p className="text-muted-foreground">Set up an outbound email provider in Settings to enable sending emails.</p>
-          <p className="text-xs text-muted-foreground">
-            Choose from Gmail, Resend, or Postmark in Settings &gt; Outbound email.
-          </p>
-        </div>
-      </div>
-    )
-  }
+  const hasEmailProvider = !!settings?.asksEmailProvider
 
   return (
     <div className="p-4 md:p-8 max-w-3xl space-y-6">
@@ -281,8 +277,39 @@ export default function RequestsPage() {
 
       <h2 className="text-lg font-semibold tracking-tight">Create an Ask</h2>
 
-      {/* Subject */}
+      {!hasEmailProvider && (
+        <div className="rounded-lg border border-dashed p-4 text-center space-y-1">
+          <p className="text-sm text-muted-foreground">Set up an outbound email provider in Settings to enable sending emails.</p>
+          <p className="text-xs text-muted-foreground">
+            Choose from Gmail, Resend, Mailgun, or Postmark in Settings &gt; Outbound Email.
+          </p>
+        </div>
+      )}
+
+      {/* Compose */}
       <div className="rounded-lg border bg-card p-5 space-y-3">
+        {settings?.asksEmailProvider && settings.asksEmailProvider !== 'gmail' && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>From name</Label>
+              <Input
+                value={fromName}
+                onChange={(e) => setFromName(e.target.value)}
+                placeholder="e.g. Acme Ventures"
+              />
+            </div>
+            <div>
+              <Label>From address</Label>
+              <Input
+                type="email"
+                value={fromAddress}
+                onChange={(e) => setFromAddress(e.target.value)}
+                placeholder="asks@yourdomain.com"
+              />
+            </div>
+          </div>
+        )}
+
         <div>
           <Label>Subject</Label>
           <Input
@@ -372,7 +399,7 @@ export default function RequestsPage() {
             variant="outline"
             size="sm"
             onClick={handleTestSend}
-            disabled={testSending || !testEmail.trim() || !subject.trim() || !bodyText.trim()}
+            disabled={testSending || !testEmail.trim() || !subject.trim() || !bodyText.trim() || !hasEmailProvider}
           >
             {testSending ? (
               <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Sending...</>
@@ -402,7 +429,7 @@ export default function RequestsPage() {
         {!confirmSend ? (
           <Button
             onClick={() => setConfirmSend(true)}
-            disabled={sending || !subject.trim() || !bodyText.trim() || selected.size === 0}
+            disabled={sending || !subject.trim() || !bodyText.trim() || selected.size === 0 || !hasEmailProvider}
           >
             <Send className="h-4 w-4 mr-1.5" /> Send to {selected.size} recipient{selected.size !== 1 ? 's' : ''}
           </Button>

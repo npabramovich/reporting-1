@@ -123,6 +123,14 @@ export default async function EmailDetailPage({ params }: { params: { id: string
   )
 
   // Parse raw payload for body and attachments
+  // Check if file storage is configured
+  const { data: settingsData } = await supabase
+    .from('fund_settings')
+    .select('file_storage_provider')
+    .eq('fund_id', email.fund_id)
+    .maybeSingle() as { data: { file_storage_provider: string | null } | null }
+  const hasFileStorage = !!settingsData?.file_storage_provider
+
   const payload = email.raw_payload as Record<string, unknown> | null
   const textBody: string = (payload?.TextBody as string) ?? ''
   const attachments = (
@@ -263,21 +271,23 @@ export default async function EmailDetailPage({ params }: { params: { id: string
 
       {/* Actions */}
       <section className="pt-2 border-t space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-          <div>
-            <p className="text-sm font-medium">Save to Google Drive</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Saves the email body and attachments to your connected Google Drive folder.
-            </p>
+        {hasFileStorage && (
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+            <div>
+              <p className="text-sm font-medium">Save to file storage</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Saves the email body and attachments to your connected file storage provider.
+              </p>
+            </div>
+            <SaveToDriveButton emailId={email.id} />
           </div>
-          <SaveToDriveButton emailId={email.id} />
-        </div>
+        )}
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div>
-            <p className="text-sm font-medium">Reprocess Email</p>
+            <p className="text-sm font-medium">Process email</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Re-runs the full Claude pipeline on the stored payload. Existing reviews and metric
+              Runs the full pipeline on the stored payload. Existing reviews and metric
               values from this email will be replaced.
             </p>
           </div>

@@ -11,7 +11,7 @@ export function ReprocessButton({ emailId }: { emailId: string }) {
   const [done, setDone] = useState(false)
 
   async function handleClick() {
-    if (!confirm('This will delete existing reviews and metric values for this email and re-run the pipeline. Continue?')) return
+    if (!confirm('This will delete existing reviews and metric values for this email and run the pipeline. Continue?')) return
     setLoading(true)
     try {
       const res = await fetch(`/api/emails/${emailId}/reprocess`, { method: 'POST' })
@@ -38,7 +38,7 @@ export function ReprocessButton({ emailId }: { emailId: string }) {
       className="gap-1.5 shrink-0"
     >
       <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-      {done ? 'Reprocessing…' : 'Re-process'}
+      {done ? 'Processing…' : 'Process'}
     </Button>
   )
 }

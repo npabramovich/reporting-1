@@ -22,7 +22,7 @@ export async function GET() {
 
   const [{ data: fund }, { data: settings }, { data: senders }] = await Promise.all([
     admin.from('funds').select('id, name, logo_url').eq('id', membership.fund_id).single(),
-    admin.from('fund_settings').select('postmark_inbound_address, postmark_webhook_token, retain_resolved_reviews, resolved_reviews_ttl_days, claude_api_key_encrypted, claude_model, ai_summary_prompt, google_refresh_token_encrypted, google_drive_folder_id, google_drive_folder_name, google_client_id, google_client_secret_encrypted, outbound_email_provider, resend_api_key_encrypted, postmark_server_token_encrypted, inbound_email_provider, mailgun_inbound_domain, mailgun_signing_key_encrypted, mailgun_api_key_encrypted, mailgun_sending_domain').eq('fund_id', membership.fund_id).single(),
+    admin.from('fund_settings').select('postmark_inbound_address, postmark_webhook_token, retain_resolved_reviews, resolved_reviews_ttl_days, claude_api_key_encrypted, claude_model, ai_summary_prompt, google_refresh_token_encrypted, google_drive_folder_id, google_drive_folder_name, google_client_id, google_client_secret_encrypted, outbound_email_provider, asks_email_provider, approval_email_subject, approval_email_body, system_email_from_name, system_email_from_address, resend_api_key_encrypted, postmark_server_token_encrypted, inbound_email_provider, mailgun_inbound_domain, mailgun_signing_key_encrypted, mailgun_api_key_encrypted, mailgun_sending_domain, file_storage_provider, dropbox_app_key, dropbox_app_secret_encrypted, dropbox_refresh_token_encrypted, dropbox_folder_path').eq('fund_id', membership.fund_id).single(),
     admin.from('authorized_senders').select('id, email, label, created_at').eq('fund_id', membership.fund_id).order('email'),
   ])
 
@@ -44,6 +44,11 @@ export async function GET() {
     googleClientId: settings?.google_client_id ?? '',
     aiSummaryPrompt: settings?.ai_summary_prompt ?? null,
     outboundEmailProvider: settings?.outbound_email_provider ?? null,
+    asksEmailProvider: settings?.asks_email_provider ?? null,
+    approvalEmailSubject: settings?.approval_email_subject ?? null,
+    approvalEmailBody: settings?.approval_email_body ?? null,
+    systemEmailFromName: settings?.system_email_from_name ?? null,
+    systemEmailFromAddress: settings?.system_email_from_address ?? null,
     hasResendKey: !!settings?.resend_api_key_encrypted,
     hasPostmarkServerToken: !!settings?.postmark_server_token_encrypted,
     inboundEmailProvider: settings?.inbound_email_provider ?? null,
@@ -51,6 +56,11 @@ export async function GET() {
     hasMailgunSigningKey: !!settings?.mailgun_signing_key_encrypted,
     hasMailgunApiKey: !!settings?.mailgun_api_key_encrypted,
     mailgunSendingDomain: settings?.mailgun_sending_domain ?? '',
+    fileStorageProvider: settings?.file_storage_provider ?? null,
+    dropboxConnected: !!settings?.dropbox_refresh_token_encrypted,
+    hasDropboxCredentials: !!(settings?.dropbox_app_key && settings?.dropbox_app_secret_encrypted),
+    dropboxAppKey: settings?.dropbox_app_key ?? '',
+    dropboxFolderPath: settings?.dropbox_folder_path ?? null,
     displayName: membership.display_name ?? '',
     isAdmin: membership.role === 'admin',
   })
@@ -73,7 +83,7 @@ export async function PATCH(req: NextRequest) {
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 404 })
 
   const body = await req.json()
-  const { fundName, fundLogo, postmarkInboundAddress, claudeApiKey, claudeModel, retainResolvedReviews, resolvedReviewsTtlDays, googleClientId, googleClientSecret, aiSummaryPrompt, displayName, outboundEmailProvider, resendApiKey, postmarkServerToken, inboundEmailProvider, mailgunInboundDomain, mailgunSigningKey, mailgunApiKey, mailgunSendingDomain } = body
+  const { fundName, fundLogo, postmarkInboundAddress, claudeApiKey, claudeModel, retainResolvedReviews, resolvedReviewsTtlDays, googleClientId, googleClientSecret, aiSummaryPrompt, displayName, outboundEmailProvider, asksEmailProvider, approvalEmailSubject, approvalEmailBody, systemEmailFromName, systemEmailFromAddress, resendApiKey, postmarkServerToken, inboundEmailProvider, mailgunInboundDomain, mailgunSigningKey, mailgunApiKey, mailgunSendingDomain, fileStorageProvider, dropboxAppKey, dropboxAppSecret } = body
 
   // Update display name on fund_members (any user can do this)
   if (displayName !== undefined) {
@@ -84,9 +94,12 @@ export async function PATCH(req: NextRequest) {
   const hasAdminFields = fundName !== undefined || fundLogo !== undefined || postmarkInboundAddress !== undefined ||
     claudeApiKey !== undefined || claudeModel !== undefined || retainResolvedReviews !== undefined ||
     resolvedReviewsTtlDays !== undefined || googleClientId !== undefined || googleClientSecret !== undefined ||
-    aiSummaryPrompt !== undefined || outboundEmailProvider !== undefined || resendApiKey !== undefined ||
+    aiSummaryPrompt !== undefined || outboundEmailProvider !== undefined || asksEmailProvider !== undefined ||
+    approvalEmailSubject !== undefined || approvalEmailBody !== undefined ||
+    systemEmailFromName !== undefined || systemEmailFromAddress !== undefined || resendApiKey !== undefined ||
     postmarkServerToken !== undefined || inboundEmailProvider !== undefined || mailgunInboundDomain !== undefined ||
-    mailgunSigningKey !== undefined || mailgunApiKey !== undefined || mailgunSendingDomain !== undefined
+    mailgunSigningKey !== undefined || mailgunApiKey !== undefined || mailgunSendingDomain !== undefined ||
+    fileStorageProvider !== undefined || dropboxAppKey !== undefined || dropboxAppSecret !== undefined
 
   if (hasAdminFields && membership.role !== 'admin') {
     return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
@@ -173,6 +186,27 @@ export async function PATCH(req: NextRequest) {
   // Update outbound email provider
   if (outboundEmailProvider !== undefined) {
     settingsUpdates.outbound_email_provider = outboundEmailProvider || null
+  }
+
+  // Update asks email provider
+  if (asksEmailProvider !== undefined) {
+    settingsUpdates.asks_email_provider = asksEmailProvider || null
+  }
+
+  // Update approval email template
+  if (approvalEmailSubject !== undefined) {
+    settingsUpdates.approval_email_subject = approvalEmailSubject?.trim() || null
+  }
+  if (approvalEmailBody !== undefined) {
+    settingsUpdates.approval_email_body = approvalEmailBody?.trim() || null
+  }
+
+  // Update system email from name/address
+  if (systemEmailFromName !== undefined) {
+    settingsUpdates.system_email_from_name = systemEmailFromName?.trim() || null
+  }
+  if (systemEmailFromAddress !== undefined) {
+    settingsUpdates.system_email_from_address = systemEmailFromAddress?.trim() || null
   }
 
   // Update Resend API key
@@ -276,6 +310,38 @@ export async function PATCH(req: NextRequest) {
       settingsUpdates.encryption_key_encrypted = encrypt(dek, kek)
     }
     settingsUpdates.mailgun_api_key_encrypted = encrypt(mailgunApiKey.trim(), dek)
+  }
+
+  // Update file storage provider
+  if (fileStorageProvider !== undefined) {
+    settingsUpdates.file_storage_provider = fileStorageProvider || null
+  }
+
+  // Update Dropbox app key
+  if (dropboxAppKey !== undefined) {
+    settingsUpdates.dropbox_app_key = dropboxAppKey?.trim() || null
+  }
+
+  // Update Dropbox app secret (encrypted)
+  if (dropboxAppSecret !== undefined && dropboxAppSecret.trim()) {
+    const kek = process.env.ENCRYPTION_KEY
+    if (!kek) return NextResponse.json({ error: 'Server misconfiguration: ENCRYPTION_KEY not set' }, { status: 500 })
+
+    const { data: existing } = await admin
+      .from('fund_settings')
+      .select('encryption_key_encrypted')
+      .eq('fund_id', membership.fund_id)
+      .single()
+
+    let dek: string
+    if (existing?.encryption_key_encrypted) {
+      const { decrypt } = await import('@/lib/crypto')
+      dek = decrypt(existing.encryption_key_encrypted, kek)
+    } else {
+      dek = randomBytes(32).toString('hex')
+      settingsUpdates.encryption_key_encrypted = encrypt(dek, kek)
+    }
+    settingsUpdates.dropbox_app_secret_encrypted = encrypt(dropboxAppSecret.trim(), dek)
   }
 
   if (Object.keys(settingsUpdates).length > 0) {

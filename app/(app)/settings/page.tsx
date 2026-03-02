@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { AlertCircle, Check, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X } from 'lucide-react'
+import { AlertCircle, Check, ChevronDown, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X } from 'lucide-react'
 
 interface Sender {
   id: string
@@ -40,8 +41,18 @@ interface Settings {
   googleDriveFolderName: string | null
   hasGoogleCredentials: boolean
   googleClientId: string
+  fileStorageProvider: string | null
+  dropboxConnected: boolean
+  hasDropboxCredentials: boolean
+  dropboxAppKey: string
+  dropboxFolderPath: string | null
   aiSummaryPrompt: string | null
   outboundEmailProvider: string | null
+  asksEmailProvider: string | null
+  approvalEmailSubject: string | null
+  approvalEmailBody: string | null
+  systemEmailFromName: string | null
+  systemEmailFromAddress: string | null
   hasResendKey: boolean
   hasPostmarkServerToken: boolean
   inboundEmailProvider: string | null
@@ -110,55 +121,55 @@ export default function SettingsPage() {
           <GroupHeader label="Outbound Email" />
           <OutboundEmailSection
             provider={settings.outboundEmailProvider}
+            asksProvider={settings.asksEmailProvider}
+            approvalEmailSubject={settings.approvalEmailSubject}
+            approvalEmailBody={settings.approvalEmailBody}
+            systemEmailFromName={settings.systemEmailFromName}
+            systemEmailFromAddress={settings.systemEmailFromAddress}
             hasResendKey={settings.hasResendKey}
             hasPostmarkServerToken={settings.hasPostmarkServerToken}
             hasMailgunApiKey={settings.hasMailgunApiKey}
             mailgunSendingDomain={settings.mailgunSendingDomain}
-            googleDriveConnected={settings.googleDriveConnected}
+            googleConnected={settings.googleDriveConnected}
+            hasGoogleCredentials={settings.hasGoogleCredentials}
+            googleClientId={settings.googleClientId}
             onSaved={load}
           />
 
           <GroupHeader label="AI" />
-          <ClaudeKeySection hasKey={settings.hasClaudeKey} currentModel={settings.claudeModel} onSaved={load} />
-          <AiSummaryPromptSection currentPrompt={settings.aiSummaryPrompt} onSaved={load} />
           <InfoSection
             title="AI provider"
-            description="Prebuilt for Claude (Anthropic). The AI model and prompt can be configured above. To use a different AI provider (e.g. OpenAI), the pipeline code would need to be modified."
+            description="Prebuilt for Claude (Anthropic). The AI model and prompt can be configured below. To use a different AI provider (e.g. OpenAI), the pipeline code would need to be modified."
           />
+          <ClaudeKeySection hasKey={settings.hasClaudeKey} currentModel={settings.claudeModel} onSaved={load} />
+          <AiSummaryPromptSection currentPrompt={settings.aiSummaryPrompt} onSaved={load} />
 
-          <GroupHeader label="Google Drive" />
-          <GoogleDriveSection
-            connected={settings.googleDriveConnected}
-            folderId={settings.googleDriveFolderId}
-            folderName={settings.googleDriveFolderName}
-            hasCredentials={settings.hasGoogleCredentials}
-            clientId={settings.googleClientId}
+          <GroupHeader label="Storage" />
+          <StorageSection
+            fileStorageProvider={settings.fileStorageProvider}
+            googleDriveConnected={settings.googleDriveConnected}
+            googleDriveFolderId={settings.googleDriveFolderId}
+            googleDriveFolderName={settings.googleDriveFolderName}
+            hasGoogleCredentials={settings.hasGoogleCredentials}
+            googleClientId={settings.googleClientId}
+            dropboxConnected={settings.dropboxConnected}
+            hasDropboxCredentials={settings.hasDropboxCredentials}
+            dropboxAppKey={settings.dropboxAppKey}
+            dropboxFolderPath={settings.dropboxFolderPath}
             onChanged={load}
           />
-
-          <GroupHeader label="Database" />
-          <InfoSection
-            title="Database"
-            description="Prebuilt for Supabase (PostgreSQL). Database connection is configured via environment variables (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY). Migrations are in the supabase/migrations folder."
-          />
-
-          <GroupHeader label="Authentication" />
+          <GroupHeader label="Access Control" />
           <InfoSection
             title="Authentication"
             description="Prebuilt for Supabase Auth. Email/password authentication is handled by Supabase. To enable email confirmations and password resets, configure an SMTP provider in your Supabase project dashboard under Authentication > Email Templates."
           />
-
-          <GroupHeader label="Access Control" />
           <WhitelistSection />
           <TeamSection isAdmin={settings.isAdmin} />
           <DangerZone onDeleted={() => router.push('/auth')} />
         </>
       )}
       {!settings.isAdmin && (
-        <>
-          <AiSummaryPromptReadOnly prompt={settings.aiSummaryPrompt} />
-          <TeamSection isAdmin={false} />
-        </>
+        <AiSummaryPromptReadOnly prompt={settings.aiSummaryPrompt} />
       )}
     </div>
   )
@@ -899,34 +910,30 @@ function InboundEmailSection({
                 onChange={(e) => setAddr(e.target.value)}
                 placeholder="abc123@inbound.postmarkapp.com"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Set this in the Postmark dashboard under Inbound. Portfolio companies forward their reports to this address, and Postmark delivers them to your webhook.
+              </p>
             </div>
             {postmarkToken && (
-              <div className="space-y-2">
-                <div>
-                  <Label>Webhook base URL</Label>
-                  <Input
-                    value={baseUrl}
-                    onChange={(e) => setBaseUrl(e.target.value)}
-                    placeholder="https://your-app.vercel.app"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    For local development, use your ngrok or tunnel URL.
-                  </p>
-                </div>
-                <div>
-                  <Label>Webhook URL</Label>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs bg-muted rounded px-3 py-2 truncate block break-all">
-                      {postmarkWebhookUrl}
-                    </code>
-                    <Button onClick={() => copyUrl(postmarkWebhookUrl)} variant="outline" size="icon" className="shrink-0 h-8 w-8">
-                      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                    </Button>
+              <div>
+                <Label>Webhook URL</Label>
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-1 items-center rounded-md border border-input shadow-sm overflow-hidden">
+                    <input
+                      className="h-9 w-40 shrink-0 bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={baseUrl}
+                      onChange={(e) => setBaseUrl(e.target.value)}
+                      placeholder="https://your-app.vercel.app"
+                    />
+                    <span className="text-xs text-muted-foreground bg-muted px-2 py-2 border-l whitespace-nowrap">/api/inbound-email?token={postmarkToken}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Paste this URL into Postmark&#39;s inbound webhook settings.
-                  </p>
+                  <Button onClick={() => copyUrl(postmarkWebhookUrl)} variant="outline" size="icon" className="shrink-0 h-9 w-9">
+                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  </Button>
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Paste this into Postmark&#39;s inbound webhook settings. Edit the base URL for local development (e.g. ngrok).
+                </p>
               </div>
             )}
           </>
@@ -962,29 +969,25 @@ function InboundEmailSection({
                 Found in Mailgun dashboard under Sending &gt; Webhooks.
               </p>
             </div>
-            <div className="space-y-2">
-              <div>
-                <Label>Webhook base URL</Label>
-                <Input
-                  value={baseUrl}
-                  onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder="https://your-app.vercel.app"
-                />
-              </div>
-              <div>
-                <Label>Webhook URL</Label>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs bg-muted rounded px-3 py-2 truncate block break-all">
-                    {mailgunWebhookUrl}
-                  </code>
-                  <Button onClick={() => copyUrl(mailgunWebhookUrl)} variant="outline" size="icon" className="shrink-0 h-8 w-8">
-                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                  </Button>
+            <div>
+              <Label>Webhook URL</Label>
+              <div className="flex items-center gap-2">
+                <div className="flex flex-1 items-center rounded-md border border-input shadow-sm overflow-hidden">
+                  <input
+                    className="h-9 w-40 shrink-0 bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    placeholder="https://your-app.vercel.app"
+                  />
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-2 border-l whitespace-nowrap">/api/inbound-email/mailgun</span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  In Mailgun, go to Receiving &gt; Create Route and forward matching emails to this URL.
-                </p>
+                <Button onClick={() => copyUrl(mailgunWebhookUrl)} variant="outline" size="icon" className="shrink-0 h-9 w-9">
+                  {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
               </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                In Mailgun, go to Receiving &gt; Create Route and forward matching emails to this URL. Edit the base URL for local development (e.g. ngrok).
+              </p>
             </div>
           </>
         )}
@@ -997,35 +1000,28 @@ function InboundEmailSection({
   )
 }
 
-// ──────────────────────────── Google Drive ────────────────────────────
+// ──────────────────────────── Google Connection (shared) ────────────────────────────
 
-function GoogleDriveSection({
+function GoogleConnectionUI({
   connected,
-  folderId,
-  folderName,
   hasCredentials,
   clientId: existingClientId,
   onChanged,
 }: {
   connected: boolean
-  folderId: string | null
-  folderName: string | null
   hasCredentials: boolean
   clientId: string
   onChanged: () => void
 }) {
-  const [disconnecting, setDisconnecting] = useState(false)
-  const [newFolderName, setNewFolderName] = useState('')
-  const [creatingFolder, setCreatingFolder] = useState(false)
-  const [folderError, setFolderError] = useState<string | null>(null)
-  const [showFolderInput, setShowFolderInput] = useState(false)
-
-  // Credentials state
   const [editingCreds, setEditingCreds] = useState(!hasCredentials)
   const [newClientId, setNewClientId] = useState(existingClientId)
   const [newClientSecret, setNewClientSecret] = useState('')
   const [savingCreds, setSavingCreds] = useState(false)
   const [credsSaved, setCredsSaved] = useState(false)
+
+  // Keep in sync if parent refreshes
+  useEffect(() => { setNewClientId(existingClientId) }, [existingClientId])
+  useEffect(() => { if (hasCredentials && editingCreds && credsSaved) setEditingCreds(false) }, [hasCredentials, editingCreds, credsSaved])
 
   const saveCredentials = async () => {
     if (!newClientId.trim() || !newClientSecret.trim()) return
@@ -1047,6 +1043,145 @@ function GoogleDriveSection({
       onChanged()
     }
   }
+
+  const handleDisconnect = async () => {
+    const res = await fetch('/api/settings/drive', { method: 'DELETE' })
+    if (res.ok) onChanged()
+  }
+
+  if (connected) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-sm">
+          <Check className="h-4 w-4 text-green-600 shrink-0" />
+          <span>Google account connected.</span>
+        </div>
+        {(editingCreds && hasCredentials) ? (
+          <div className="space-y-2">
+            <p className="text-xs font-medium">Google OAuth credentials</p>
+            <div>
+              <Label>Client ID</Label>
+              <Input
+                value={newClientId}
+                onChange={(e) => setNewClientId(e.target.value)}
+                placeholder="123456789.apps.googleusercontent.com"
+              />
+            </div>
+            <div>
+              <Label>Client secret</Label>
+              <Input
+                type="password"
+                value={newClientSecret}
+                onChange={(e) => setNewClientSecret(e.target.value)}
+                placeholder="GOCSPX-..."
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={saveCredentials} disabled={savingCreds || !newClientId.trim() || !newClientSecret.trim()}>
+                {savingCreds ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save credentials'}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setEditingCreds(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-muted-foreground flex-1">
+              Google credentials configured.
+              {credsSaved && <span className="text-emerald-600 ml-1">Saved!</span>}
+            </p>
+            <Button size="sm" variant="outline" onClick={() => setEditingCreds(true)} className="text-xs h-7">
+              Update credentials
+            </Button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {(editingCreds || !hasCredentials) ? (
+        <div className="space-y-2">
+          <p className="text-xs font-medium">Google OAuth credentials</p>
+          <div>
+            <Label>Client ID</Label>
+            <Input
+              value={newClientId}
+              onChange={(e) => setNewClientId(e.target.value)}
+              placeholder="123456789.apps.googleusercontent.com"
+            />
+          </div>
+          <div>
+            <Label>Client secret</Label>
+            <Input
+              type="password"
+              value={newClientSecret}
+              onChange={(e) => setNewClientSecret(e.target.value)}
+              placeholder="GOCSPX-..."
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Create credentials at{' '}
+            <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline">
+              Google Cloud Console
+            </a>
+            . Add <code className="text-[11px] bg-muted px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}/api/auth/google/callback</code> as an authorized redirect URI.
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={saveCredentials} disabled={savingCreds || !newClientId.trim() || !newClientSecret.trim()}>
+              {savingCreds ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save credentials'}
+            </Button>
+            {hasCredentials && (
+              <Button size="sm" variant="outline" onClick={() => setEditingCreds(false)}>
+                Cancel
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-muted-foreground flex-1">
+            Google credentials configured.
+            {credsSaved && <span className="text-emerald-600 ml-1">Saved!</span>}
+          </p>
+          <Button size="sm" variant="outline" onClick={() => setEditingCreds(true)} className="text-xs h-7">
+            Update credentials
+          </Button>
+        </div>
+      )}
+      {hasCredentials && (
+        <Button size="sm" onClick={() => { window.location.href = '/api/auth/google' }}>
+          Connect Google account
+        </Button>
+      )}
+    </div>
+  )
+}
+
+// ──────────────────────────── Google Drive ────────────────────────────
+
+function GoogleDriveSection({
+  connected,
+  folderId,
+  folderName,
+  hasCredentials,
+  clientId,
+  onChanged,
+}: {
+  connected: boolean
+  folderId: string | null
+  folderName: string | null
+  hasCredentials: boolean
+  clientId: string
+  onChanged: () => void
+}) {
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const [folderError, setFolderError] = useState<string | null>(null)
+  const [showFolderInput, setShowFolderInput] = useState(false)
 
   const createFolder = async () => {
     if (!newFolderName.trim()) return
@@ -1075,96 +1210,52 @@ function GoogleDriveSection({
     if (res.ok) onChanged()
   }
 
-  // Credentials UI (shared between connected and disconnected states)
-  const credentialsUI = (editingCreds || !hasCredentials) ? (
-    <div className="space-y-3 mb-4">
-      <p className="text-xs font-medium">Google OAuth credentials</p>
-      <div className="space-y-2">
-        <div>
-          <Label>Client ID</Label>
-          <Input
-            value={newClientId}
-            onChange={(e) => setNewClientId(e.target.value)}
-            placeholder="123456789.apps.googleusercontent.com"
-          />
-        </div>
-        <div>
-          <Label>Client secret</Label>
-          <Input
-            type="password"
-            value={newClientSecret}
-            onChange={(e) => setNewClientSecret(e.target.value)}
-            placeholder="GOCSPX-..."
-          />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Create credentials at{' '}
-          <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline">
-            Google Cloud Console
-          </a>
-          . Add <code className="text-[11px] bg-muted px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}/api/auth/google/callback</code> as an authorized redirect URI.
-        </p>
-        <div className="flex gap-2">
-          <Button size="sm" onClick={saveCredentials} disabled={savingCreds || !newClientId.trim() || !newClientSecret.trim()}>
-            {savingCreds ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save credentials'}
-          </Button>
-          {hasCredentials && (
-            <Button size="sm" variant="outline" onClick={() => setEditingCreds(false)}>
-              Cancel
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  ) : (
-    <div className="flex items-center gap-2 mb-4">
-      <p className="text-xs text-muted-foreground flex-1">
-        Google credentials configured.
-        {credsSaved && <span className="text-emerald-600 ml-1">Saved!</span>}
-      </p>
-      <Button size="sm" variant="outline" onClick={() => setEditingCreds(true)} className="text-xs h-7">
-        Update credentials
-      </Button>
-    </div>
-  )
-
   if (!connected) {
     return (
-      <Section title="Google Drive">
-        <p className="text-xs text-muted-foreground mb-3">
+      <div className="space-y-3">
+        <p className="text-xs font-medium">Google Drive</p>
+        <p className="text-xs text-muted-foreground">
           Connect Google Drive to automatically save email attachments and reports to a folder.
         </p>
-        {credentialsUI}
-        {hasCredentials && (
-          <Button size="sm" onClick={() => { window.location.href = '/api/auth/google' }}>
-            Connect Google Drive
-          </Button>
-        )}
-      </Section>
+        <GoogleConnectionUI
+          connected={false}
+          hasCredentials={hasCredentials}
+          clientId={clientId}
+          onChanged={onChanged}
+        />
+      </div>
     )
   }
 
   return (
-    <Section title="Google Drive">
-      <p className="text-xs text-muted-foreground mb-3">
+    <div className="space-y-3">
+      <p className="text-xs font-medium">Google Drive</p>
+      <p className="text-xs text-muted-foreground">
         Google Drive is connected. Attachments from processed emails will be saved automatically.
       </p>
 
-      {credentialsUI}
+      <div className="mb-1">
+        <GoogleConnectionUI
+          connected={true}
+          hasCredentials={hasCredentials}
+          clientId={clientId}
+          onChanged={onChanged}
+        />
+      </div>
 
       {folderName ? (
-        <div className="flex items-center gap-2 mb-3 text-sm">
+        <div className="flex items-center gap-2 text-sm">
           <FolderOpen className="h-4 w-4 text-muted-foreground" />
           <span>Saving to: <span className="font-medium">{folderName}</span></span>
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground mb-3">
+        <p className="text-xs text-muted-foreground">
           No folder selected. Create or specify a folder to start saving reports.
         </p>
       )}
 
       {showFolderInput ? (
-        <div className="border rounded-lg p-3 space-y-3 mb-3">
+        <div className="border rounded-lg p-3 space-y-3">
           <div>
             <Label>Folder name</Label>
             <Input
@@ -1209,7 +1300,317 @@ function GoogleDriveSection({
           </Button>
         </div>
       )}
+    </div>
+  )
+}
+
+// ──────────────────────────── Storage ────────────────────────────
+
+function StorageSection({
+  fileStorageProvider,
+  googleDriveConnected,
+  googleDriveFolderId,
+  googleDriveFolderName,
+  hasGoogleCredentials,
+  googleClientId,
+  dropboxConnected,
+  hasDropboxCredentials,
+  dropboxAppKey,
+  dropboxFolderPath,
+  onChanged,
+}: {
+  fileStorageProvider: string | null
+  googleDriveConnected: boolean
+  googleDriveFolderId: string | null
+  googleDriveFolderName: string | null
+  hasGoogleCredentials: boolean
+  googleClientId: string
+  dropboxConnected: boolean
+  hasDropboxCredentials: boolean
+  dropboxAppKey: string
+  dropboxFolderPath: string | null
+  onChanged: () => void
+}) {
+  const [selectedProvider, setSelectedProvider] = useState(fileStorageProvider || '')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const handleProviderChange = async (value: string) => {
+    setSelectedProvider(value)
+    setSaving(true)
+    const res = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileStorageProvider: value || null }),
+    })
+    setSaving(false)
+    if (res.ok) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      onChanged()
+    }
+  }
+
+  return (
+    <Section title="Storage">
+      <p className="text-xs text-muted-foreground mb-4">
+        All portfolio data, company details, metrics, and email content are stored in the database (Supabase/PostgreSQL). By default, email attachments are also stored in the database. Optionally, connect Google Drive or Dropbox to store portfolio reports and attachments externally.
+      </p>
+
+      <div className="space-y-4">
+        <div>
+          <Label>File storage provider</Label>
+          <div className="flex items-center gap-2">
+            <select
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              value={selectedProvider}
+              onChange={(e) => handleProviderChange(e.target.value)}
+              disabled={saving}
+            >
+              <option value="">None (database only)</option>
+              <option value="google_drive">Google Drive</option>
+              <option value="dropbox">Dropbox</option>
+            </select>
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+            {saved && <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />}
+          </div>
+        </div>
+
+        {selectedProvider === 'google_drive' && (
+          <div className="border-t pt-4">
+            <GoogleDriveSection
+              connected={googleDriveConnected}
+              folderId={googleDriveFolderId}
+              folderName={googleDriveFolderName}
+              hasCredentials={hasGoogleCredentials}
+              clientId={googleClientId}
+              onChanged={onChanged}
+            />
+          </div>
+        )}
+
+        {selectedProvider === 'dropbox' && (
+          <div className="border-t pt-4">
+            <DropboxSection
+              connected={dropboxConnected}
+              hasCredentials={hasDropboxCredentials}
+              appKey={dropboxAppKey}
+              folderPath={dropboxFolderPath}
+              onChanged={onChanged}
+            />
+          </div>
+        )}
+      </div>
     </Section>
+  )
+}
+
+// ──────────────────────────── Dropbox ────────────────────────────
+
+function DropboxSection({
+  connected,
+  hasCredentials,
+  appKey: existingAppKey,
+  folderPath,
+  onChanged,
+}: {
+  connected: boolean
+  hasCredentials: boolean
+  appKey: string
+  folderPath: string | null
+  onChanged: () => void
+}) {
+  const [editingCreds, setEditingCreds] = useState(!hasCredentials)
+  const [newAppKey, setNewAppKey] = useState(existingAppKey)
+  const [newAppSecret, setNewAppSecret] = useState('')
+  const [savingCreds, setSavingCreds] = useState(false)
+  const [credsSaved, setCredsSaved] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [newFolderPath, setNewFolderPath] = useState('')
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const [folderError, setFolderError] = useState<string | null>(null)
+  const [showFolderInput, setShowFolderInput] = useState(false)
+
+  useEffect(() => { setNewAppKey(existingAppKey) }, [existingAppKey])
+  useEffect(() => { if (hasCredentials && editingCreds && credsSaved) setEditingCreds(false) }, [hasCredentials, editingCreds, credsSaved])
+
+  const saveCredentials = async () => {
+    if (!newAppKey.trim() || !newAppSecret.trim()) return
+    setSavingCreds(true)
+    const res = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dropboxAppKey: newAppKey.trim(),
+        dropboxAppSecret: newAppSecret.trim(),
+      }),
+    })
+    setSavingCreds(false)
+    if (res.ok) {
+      setNewAppSecret('')
+      setEditingCreds(false)
+      setCredsSaved(true)
+      setTimeout(() => setCredsSaved(false), 2000)
+      onChanged()
+    }
+  }
+
+  const handleDisconnect = async () => {
+    setDisconnecting(true)
+    const res = await fetch('/api/settings/dropbox', { method: 'DELETE' })
+    setDisconnecting(false)
+    if (res.ok) onChanged()
+  }
+
+  const createFolder = async () => {
+    if (!newFolderPath.trim()) return
+    setCreatingFolder(true)
+    setFolderError(null)
+    const res = await fetch('/api/settings/dropbox/folders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folderPath: newFolderPath.trim() }),
+    })
+    setCreatingFolder(false)
+    if (res.ok) {
+      setNewFolderPath('')
+      setShowFolderInput(false)
+      onChanged()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setFolderError(data.error || 'Failed to create folder')
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs font-medium">Dropbox</p>
+
+      {/* Credentials section */}
+      {(editingCreds || !hasCredentials) ? (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Create a Dropbox app at{' '}
+            <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener noreferrer" className="underline">
+              Dropbox App Console
+            </a>
+            . Add <code className="text-[11px] bg-muted px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}/api/auth/dropbox/callback</code> as a redirect URI.
+          </p>
+          <div>
+            <Label>App key</Label>
+            <Input
+              value={newAppKey}
+              onChange={(e) => setNewAppKey(e.target.value)}
+              placeholder="Dropbox app key"
+            />
+          </div>
+          <div>
+            <Label>App secret</Label>
+            <Input
+              type="password"
+              value={newAppSecret}
+              onChange={(e) => setNewAppSecret(e.target.value)}
+              placeholder="Dropbox app secret"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={saveCredentials} disabled={savingCreds || !newAppKey.trim() || !newAppSecret.trim()}>
+              {savingCreds ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save credentials'}
+            </Button>
+            {hasCredentials && (
+              <Button size="sm" variant="outline" onClick={() => setEditingCreds(false)}>
+                Cancel
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-muted-foreground flex-1">
+            Dropbox credentials configured.
+            {credsSaved && <span className="text-emerald-600 ml-1">Saved!</span>}
+          </p>
+          <Button size="sm" variant="outline" onClick={() => setEditingCreds(true)} className="text-xs h-7">
+            Update credentials
+          </Button>
+        </div>
+      )}
+
+      {/* Connection section */}
+      {hasCredentials && !connected && (
+        <Button size="sm" onClick={() => { window.location.href = '/api/auth/dropbox' }}>
+          Connect Dropbox account
+        </Button>
+      )}
+
+      {connected && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm">
+            <Check className="h-4 w-4 text-green-600 shrink-0" />
+            <span>Dropbox account connected.</span>
+          </div>
+
+          {/* Folder management */}
+          {folderPath ? (
+            <div className="flex items-center gap-2 text-sm">
+              <FolderOpen className="h-4 w-4 text-muted-foreground" />
+              <span>Saving to: <span className="font-medium">{folderPath}</span></span>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No folder selected. Set a folder path to start saving reports.
+            </p>
+          )}
+
+          {showFolderInput ? (
+            <div className="border rounded-lg p-3 space-y-3">
+              <div>
+                <Label>Folder path</Label>
+                <Input
+                  value={newFolderPath}
+                  onChange={(e) => { setNewFolderPath(e.target.value); setFolderError(null) }}
+                  placeholder="/Portfolio Reports"
+                  onKeyDown={(e) => { if (e.key === 'Enter') createFolder() }}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  A folder at this path will be created in your Dropbox. If it already exists, the existing folder will be used.
+                </p>
+              </div>
+              {folderError && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" /> {folderError}
+                </p>
+              )}
+              <div className="flex gap-2 justify-end">
+                <Button size="sm" variant="outline" onClick={() => { setShowFolderInput(false); setFolderError(null) }}>
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={createFolder} disabled={creatingFolder || !newFolderPath.trim()}>
+                  {creatingFolder ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                  {folderPath ? 'Update folder' : 'Set folder'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setShowFolderInput(true)}>
+                {folderPath ? 'Change folder' : 'Set folder'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="text-destructive hover:text-destructive"
+              >
+                {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5 mr-1" />}
+                Disconnect
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -1217,22 +1618,44 @@ function GoogleDriveSection({
 
 function OutboundEmailSection({
   provider,
+  asksProvider,
+  approvalEmailSubject: savedApprovalSubject,
+  approvalEmailBody: savedApprovalBody,
+  systemEmailFromName: savedFromName,
+  systemEmailFromAddress: savedFromAddress,
   hasResendKey,
   hasPostmarkServerToken,
   hasMailgunApiKey,
   mailgunSendingDomain: existingMailgunDomain,
-  googleDriveConnected,
+  googleConnected,
+  hasGoogleCredentials,
+  googleClientId,
   onSaved,
 }: {
   provider: string | null
+  asksProvider: string | null
+  approvalEmailSubject: string | null
+  approvalEmailBody: string | null
+  systemEmailFromName: string | null
+  systemEmailFromAddress: string | null
   hasResendKey: boolean
   hasPostmarkServerToken: boolean
   hasMailgunApiKey: boolean
   mailgunSendingDomain: string
-  googleDriveConnected: boolean
+  googleConnected: boolean
+  hasGoogleCredentials: boolean
+  googleClientId: string
   onSaved: () => void
 }) {
-  const [selectedProvider, setSelectedProvider] = useState(provider || '')
+  const defaultSubject = "You've been approved to join {{fundName}}"
+  const defaultBody = `<h2>Congrats!</h2>\n<p>You've been approved to join <strong>{{fundName}}</strong>.</p>\n<p><a href="{{siteUrl}}/auth">Sign in to get started</a></p>`
+
+  const [systemProvider, setSystemProvider] = useState(provider || '')
+  const [selectedAsksProvider, setSelectedAsksProvider] = useState(asksProvider || '')
+  const [approvalSubject, setApprovalSubject] = useState(savedApprovalSubject || '')
+  const [approvalBody, setApprovalBody] = useState(savedApprovalBody || '')
+  const [fromName, setFromName] = useState(savedFromName || '')
+  const [fromAddress, setFromAddress] = useState(savedFromAddress || '')
   const [resendKey, setResendKey] = useState('')
   const [postmarkToken, setPostmarkToken] = useState('')
   const [mgApiKey, setMgApiKey] = useState('')
@@ -1240,16 +1663,28 @@ function OutboundEmailSection({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  // Determine which providers are actively selected (deduplicated)
+  const activeProviders = new Set<string>()
+  if (systemProvider) activeProviders.add(systemProvider)
+  if (selectedAsksProvider) activeProviders.add(selectedAsksProvider)
+
   const handleSave = async () => {
     setSaving(true)
-    const payload: Record<string, unknown> = { outboundEmailProvider: selectedProvider || null }
-    if (selectedProvider === 'resend' && resendKey.trim()) {
+    const payload: Record<string, unknown> = {
+      outboundEmailProvider: systemProvider || null,
+      asksEmailProvider: selectedAsksProvider || null,
+      approvalEmailSubject: approvalSubject.trim() || null,
+      approvalEmailBody: approvalBody.trim() || null,
+      systemEmailFromName: fromName.trim() || null,
+      systemEmailFromAddress: fromAddress.trim() || null,
+    }
+    if (activeProviders.has('resend') && resendKey.trim()) {
       payload.resendApiKey = resendKey.trim()
     }
-    if (selectedProvider === 'postmark' && postmarkToken.trim()) {
+    if (activeProviders.has('postmark') && postmarkToken.trim()) {
       payload.postmarkServerToken = postmarkToken.trim()
     }
-    if (selectedProvider === 'mailgun') {
+    if (activeProviders.has('mailgun')) {
       if (mgApiKey.trim()) payload.mailgunApiKey = mgApiKey.trim()
       if (mgDomain.trim()) payload.mailgunSendingDomain = mgDomain.trim()
     }
@@ -1269,43 +1704,118 @@ function OutboundEmailSection({
     }
   }
 
-  const hasRequiredKey =
-    selectedProvider === '' ||
-    selectedProvider === 'gmail' ||
-    (selectedProvider === 'resend' && (hasResendKey || resendKey.trim())) ||
-    (selectedProvider === 'postmark' && (hasPostmarkServerToken || postmarkToken.trim())) ||
-    (selectedProvider === 'mailgun' && ((hasMailgunApiKey && existingMailgunDomain) || (mgApiKey.trim() && mgDomain.trim())))
+  const systemProviderChanged = systemProvider !== (provider || '')
+  const asksProviderChanged = selectedAsksProvider !== (asksProvider || '')
+  const approvalSubjectChanged = (approvalSubject.trim() || null) !== (savedApprovalSubject || null)
+  const approvalBodyChanged = (approvalBody.trim() || null) !== (savedApprovalBody || null)
+  const fromNameChanged = (fromName.trim() || null) !== (savedFromName || null)
+  const fromAddressChanged = (fromAddress.trim() || null) !== (savedFromAddress || null)
+  const hasNewSecret = resendKey.trim() || postmarkToken.trim() || mgApiKey.trim() || mgDomain !== existingMailgunDomain
+  const canSave = systemProviderChanged || asksProviderChanged || approvalSubjectChanged || approvalBodyChanged || fromNameChanged || fromAddressChanged || hasNewSecret
 
-  const providerChanged = selectedProvider !== (provider || '')
-  const hasNewSecret = (selectedProvider === 'resend' && resendKey.trim()) ||
-    (selectedProvider === 'postmark' && postmarkToken.trim()) ||
-    (selectedProvider === 'mailgun' && (mgApiKey.trim() || mgDomain !== existingMailgunDomain))
-  const canSave = (providerChanged || hasNewSecret) && hasRequiredKey
+  const selectClass = "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 
   return (
     <Section title="Outbound email">
       <p className="text-xs text-muted-foreground mb-3">
-        Choose a provider for sending notification emails (e.g. join request approvals).
+        Configure email providers for system notifications and portfolio asks.
       </p>
       <div className="space-y-3">
         <div>
-          <Label>Provider</Label>
+          <Label>System emails</Label>
+          <p className="text-xs text-muted-foreground mb-1.5">
+            Automated notifications like member approvals.
+          </p>
           <select
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            value={selectedProvider}
-            onChange={(e) => setSelectedProvider(e.target.value)}
+            className={selectClass}
+            value={systemProvider}
+            onChange={(e) => setSystemProvider(e.target.value)}
           >
             <option value="">None (disabled)</option>
             <option value="resend">Resend</option>
             <option value="postmark">Postmark</option>
             <option value="mailgun">Mailgun</option>
-            <option value="gmail" disabled={!googleDriveConnected}>
-              Gmail{!googleDriveConnected ? ' (connect Google first)' : ''}
-            </option>
+            <option value="gmail">Gmail</option>
           </select>
         </div>
 
-        {selectedProvider === 'resend' && (
+        {systemProvider && (
+          <div className="border rounded-lg p-3 space-y-3">
+            <div>
+              <Label>From name</Label>
+              <Input
+                value={fromName}
+                onChange={(e) => setFromName(e.target.value)}
+                placeholder="e.g. Acme Ventures"
+              />
+            </div>
+            <div>
+              <Label>From address</Label>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
+                Must be a verified sender address for your email provider.{systemProvider === 'gmail' ? ' Ignored when using Gmail — emails are sent from your connected Google account.' : ''}
+              </p>
+              <Input
+                type="email"
+                value={fromAddress}
+                onChange={(e) => setFromAddress(e.target.value)}
+                placeholder="notifications@yourdomain.com"
+                disabled={systemProvider === 'gmail'}
+              />
+            </div>
+            <div>
+              <Label>Approval email subject</Label>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
+                Subject line for the member approval email. Use {'{{fundName}}'} as a placeholder.
+              </p>
+              <Input
+                value={approvalSubject}
+                onChange={(e) => setApprovalSubject(e.target.value)}
+                placeholder={defaultSubject}
+              />
+            </div>
+            <div>
+              <Label>Approval email body</Label>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
+                HTML body for the member approval email. Use {'{{fundName}}'} and {'{{siteUrl}}'} as placeholders.
+              </p>
+              <Textarea
+                value={approvalBody}
+                onChange={(e) => setApprovalBody(e.target.value)}
+                placeholder={defaultBody}
+                rows={5}
+                className="font-mono text-xs"
+              />
+            </div>
+          </div>
+        )}
+
+        <div>
+          <Label>Asks emails</Label>
+          <p className="text-xs text-muted-foreground mb-1.5">
+            Quarterly reporting requests from the Asks page.
+          </p>
+          <select
+            className={selectClass}
+            value={selectedAsksProvider}
+            onChange={(e) => setSelectedAsksProvider(e.target.value)}
+          >
+            <option value="">None (disabled)</option>
+            <option value="resend">Resend</option>
+            <option value="postmark">Postmark</option>
+            <option value="mailgun">Mailgun</option>
+            <option value="gmail">Gmail</option>
+          </select>
+        </div>
+
+        {activeProviders.size > 0 && (
+          <>
+            <div className="border-t pt-3">
+              <p className="text-sm font-medium">Settings for selected email providers</p>
+            </div>
+          </>
+        )}
+
+        {activeProviders.has('resend') && (
           <div>
             <Label>Resend API key</Label>
             {hasResendKey && (
@@ -1322,7 +1832,7 @@ function OutboundEmailSection({
           </div>
         )}
 
-        {selectedProvider === 'postmark' && (
+        {activeProviders.has('postmark') && (
           <div>
             <Label>Postmark server token</Label>
             {hasPostmarkServerToken && (
@@ -1339,7 +1849,7 @@ function OutboundEmailSection({
           </div>
         )}
 
-        {selectedProvider === 'mailgun' && (
+        {activeProviders.has('mailgun') && (
           <>
             <div>
               <Label>Mailgun API key</Label>
@@ -1369,10 +1879,18 @@ function OutboundEmailSection({
           </>
         )}
 
-        {selectedProvider === 'gmail' && (
-          <p className="text-xs text-muted-foreground">
-            Emails will be sent from your connected Google account.
-          </p>
+        {activeProviders.has('gmail') && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Emails will be sent from your connected Google account. The same Google connection is used for Gmail and Google Drive.
+            </p>
+            <GoogleConnectionUI
+              connected={googleConnected}
+              hasCredentials={hasGoogleCredentials}
+              clientId={googleClientId}
+              onChanged={onSaved}
+            />
+          </div>
         )}
 
         <Button onClick={handleSave} disabled={saving || !canSave} size="sm">
@@ -1396,6 +1914,7 @@ function SendersSection({
   const [label, setLabel] = useState('')
   const [adding, setAdding] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
 
   const handleAdd = async () => {
     if (!email.trim()) return
@@ -1427,24 +1946,36 @@ function SendersSection({
       </p>
 
       {senders.length > 0 && (
-        <div className="border rounded-lg divide-y mb-3">
-          {senders.map((s) => (
-            <div key={s.id} className="flex items-center justify-between px-3 py-2">
-              <div>
-                <span className="text-sm">{s.email}</span>
-                {s.label && (
-                  <span className="text-xs text-muted-foreground ml-2">({s.label})</span>
-                )}
-              </div>
-              <button
-                onClick={() => handleDelete(s.id)}
-                disabled={deletingId === s.id}
-                className="text-muted-foreground hover:text-destructive disabled:opacity-50"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-2"
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? '' : '-rotate-90'}`} />
+            {senders.length} sender{senders.length !== 1 ? 's' : ''}
+          </button>
+          {expanded && (
+            <div className="border rounded-lg divide-y">
+              {senders.map((s) => (
+                <div key={s.id} className="flex items-center justify-between px-3 py-2">
+                  <div>
+                    <span className="text-sm">{s.email}</span>
+                    {s.label && (
+                      <span className="text-xs text-muted-foreground ml-2">({s.label})</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleDelete(s.id)}
+                    disabled={deletingId === s.id}
+                    className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
 
