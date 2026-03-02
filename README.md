@@ -54,113 +54,187 @@ Designed as a single-tenant deployment per fund. You control your own data, your
 | **File parsing** | mammoth (DOCX), xlsx (spreadsheets), jszip (PPTX), PDF and images handled natively by Claude |
 | **Icons** | Lucide React |
 
-## Services
+## What You'll Need
 
-| Service | Required | Purpose |
-|---------|----------|---------|
-| **Supabase** | Yes | Database, authentication, file storage, row-level security |
-| **Anthropic API** | Yes | Claude processes emails, extracts metrics, generates summaries |
-| **Hosting** | Yes | Vercel or Netlify (both supported with included config files) |
-| **Inbound email** | Yes | Postmark or Mailgun — receives portfolio company emails via webhook |
-| **Outbound email** | Optional | Resend, Postmark, Mailgun, or Gmail — for sending quarterly requests and system notifications |
-| **Google OAuth** | Optional | Google Drive archiving and Gmail sending |
-| **Dropbox** | Optional | Alternative file archiving to Dropbox |
+Before starting, you'll need to set up accounts with these services and make a few choices.
 
-## Deploy
+### Required services
 
-### Netlify
+| Service | What it does | Free tier |
+|---------|-------------|-----------|
+| [Supabase](https://supabase.com) | Database (PostgreSQL), authentication, file storage, row-level security | Yes — 500 MB database, 1 GB storage |
+| [Anthropic](https://console.anthropic.com) | Claude AI for email processing, metric extraction, and summaries | Pay-as-you-go |
+| Hosting platform | Runs the Next.js app — choose **Netlify** or **Vercel** | Yes on both |
+| Inbound email provider | Receives portfolio company emails — choose **Postmark** or **Mailgun** | Postmark: 100 emails/mo. Mailgun: 1,000/mo |
 
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/tdavidson/reporting)
+### Optional services
 
-The repo includes a `netlify.toml` with the correct build settings and the `@netlify/plugin-nextjs` plugin. After deploying, add the environment variables below in **Site settings > Environment variables** and trigger a redeploy.
+| Service | What it does | When you need it |
+|---------|-------------|-----------------|
+| Outbound email provider | Sends quarterly reporting requests and system notifications | If you want to email portfolio companies from the app. Choose **Resend**, **Postmark**, **Mailgun**, or **Gmail**. |
+| [Google Cloud](https://console.cloud.google.com) (OAuth) | Google Drive archiving + Gmail sending | If you want to save emails/attachments to Drive or send via Gmail |
+| [Dropbox](https://www.dropbox.com/developers) | Alternative file archiving | If you prefer Dropbox over Google Drive |
 
-### Vercel
+### Choices to make
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftdavidson%2Freporting&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY,ENCRYPTION_KEY,NEXT_PUBLIC_APP_URL&envDescription=Required%20environment%20variables%20for%20Portfolio%20Reporting&project-name=portfolio-reporting)
-
-The repo includes a `vercel.json` with extended function timeouts for long-running routes (email processing, AI summaries).
-
-## Environment Variables
-
-```bash
-# Required
-NEXT_PUBLIC_SUPABASE_URL=         # Supabase project URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY=    # Supabase anonymous key
-SUPABASE_SERVICE_ROLE_KEY=        # Supabase service role key (server-side only)
-ENCRYPTION_KEY=                   # 32-byte hex string: openssl rand -hex 32
-NEXT_PUBLIC_APP_URL=              # Your app URL (e.g. https://reporting.yourfund.com)
-
-# Optional
-GOOGLE_CLIENT_ID=                 # Google OAuth client ID (for Drive and Gmail)
-GOOGLE_CLIENT_SECRET=             # Google OAuth client secret
-DEMO_MODE=true                    # Seeds sample data, disables email processing
-```
-
-The Anthropic API key and all provider credentials (Postmark, Resend, Mailgun, Dropbox) are configured through the Settings page in the app and stored with envelope encryption (AES-256-GCM).
+- **Hosting:** Netlify or Vercel. Both work. The repo includes config files for each (`netlify.toml` and `vercel.json`).
+- **Inbound email:** Postmark or Mailgun. Postmark is simpler to set up. Mailgun gives you a custom domain for receiving.
+- **Outbound email:** Optional. If you want to send quarterly asks or approval notifications, pick any of the four providers. You can use different providers for system emails and portfolio asks.
+- **File storage:** Optional. Google Drive, Dropbox, or neither.
 
 ## Setup
 
-### 1. Supabase
+Follow these steps in order. Each step builds on the previous one.
+
+### Step 1: Create the Supabase project
 
 1. Create a new project at [supabase.com](https://supabase.com)
-2. Run the SQL migrations in `supabase/migrations/` against your database (or use the Supabase CLI: `supabase db push`)
-3. Enable **Email Auth** in Authentication > Providers
-4. Set your **Site URL** and **Redirect URLs** in Authentication > URL Configuration to match your deployed app URL
-5. Copy your project URL, anon key, and service role key
+2. Go to **Project Settings > API** and copy these three values (you'll need them in Step 3):
+   - Project URL (`NEXT_PUBLIC_SUPABASE_URL`)
+   - Anon public key (`NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+   - Service role key (`SUPABASE_SERVICE_ROLE_KEY`) — keep this secret
+3. Run the SQL migrations to create the database schema. Either:
+   - Use the Supabase CLI: `supabase db push`
+   - Or paste each file in `supabase/migrations/` into the SQL Editor in the Supabase dashboard, in filename order
+4. In **Authentication > Providers**, confirm **Email** is enabled (it is by default)
 
-### 2. Inbound Email
+Don't configure the auth URLs yet — you need your deployed app URL first.
 
-You need either Postmark or Mailgun to receive portfolio company emails.
+### Step 2: Generate an encryption key
+
+All secrets (API keys, OAuth tokens) are encrypted at rest using AES-256-GCM. Generate a 32-byte hex key:
+
+```bash
+openssl rand -hex 32
+```
+
+Save this value — it's your `ENCRYPTION_KEY`. If you lose it, all encrypted credentials in the database become unrecoverable.
+
+### Step 3: Deploy the app
+
+**Option A: Netlify**
+
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/tdavidson/reporting)
+
+**Option B: Vercel**
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftdavidson%2Freporting&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY,ENCRYPTION_KEY,NEXT_PUBLIC_APP_URL&envDescription=Required%20environment%20variables%20for%20Portfolio%20Reporting&project-name=portfolio-reporting)
+
+After deploying, add these environment variables in your hosting platform's settings:
+
+```bash
+# Required
+NEXT_PUBLIC_SUPABASE_URL=         # From Step 1
+NEXT_PUBLIC_SUPABASE_ANON_KEY=    # From Step 1
+SUPABASE_SERVICE_ROLE_KEY=        # From Step 1
+ENCRYPTION_KEY=                   # From Step 2
+NEXT_PUBLIC_APP_URL=              # Your deployed URL (e.g. https://reporting.yourfund.com)
+
+# Optional — only if using Google Drive or Gmail
+GOOGLE_CLIENT_ID=                 # From Google Cloud Console
+GOOGLE_CLIENT_SECRET=             # From Google Cloud Console
+```
+
+Trigger a redeploy after adding the variables. `NEXT_PUBLIC_*` variables are baked into the build, so they require a rebuild to take effect.
+
+If you're using a custom domain, configure it in your hosting platform's domain settings and update `NEXT_PUBLIC_APP_URL` to match.
+
+### Step 4: Configure Supabase authentication
+
+Now that you have your deployed URL, go back to the Supabase dashboard:
+
+1. **Authentication > URL Configuration**:
+   - Set **Site URL** to your deployed URL (e.g. `https://reporting.yourfund.com`)
+   - Add `https://reporting.yourfund.com/**` to **Redirect URLs** (the `/**` wildcard is important)
+2. **Authentication > Email Templates** (optional): Supabase sends auth emails (confirmations, password resets, magic links) using a built-in email service. For production, configure a custom SMTP provider in **Project Settings > Auth > SMTP Settings** so emails come from your domain instead of Supabase's default.
+
+### Step 5: Allow your first user to sign up
+
+Signups are restricted by an email whitelist. Before anyone can create an account, add their email to the `allowed_signups` table:
+
+1. In the Supabase dashboard, go to **Table Editor > allowed_signups**
+2. Insert a row with `email_pattern` set to your email address (e.g. `you@yourfund.com`)
+   - To allow everyone at a domain: `*@yourfund.com`
+3. Now go to your deployed app at `/auth/signup` and create your account
+4. Check your email for a confirmation link and click it
+
+### Step 6: Complete the onboarding wizard
+
+After confirming your email and signing in, the app walks you through:
+
+1. **Fund name** — this appears in the app header
+2. **Claude API key** — get one from [console.anthropic.com](https://console.anthropic.com). The key is encrypted and stored in your database, not in environment variables.
+3. **Inbound email address** — see Step 7
+
+### Step 7: Set up inbound email
+
+This is how portfolio company reports get into the system. Choose one:
 
 **Postmark:**
 1. Create a [Postmark](https://postmarkapp.com) account and server
-2. Set up an inbound address (e.g. `abc123@inbound.postmarkapp.com`)
-3. In Postmark, set the inbound webhook URL to: `https://your-app.com/api/inbound-email?token=YOUR_TOKEN`
-4. After deploying, go to **Settings** in the app and configure your Postmark inbound address and webhook token
+2. In the Postmark dashboard, go to **Inbound** and note your inbound address (e.g. `abc123@inbound.postmarkapp.com`)
+3. Set the inbound webhook URL to: `https://your-app.com/api/inbound-email?token=YOUR_TOKEN`
+   - `YOUR_TOKEN` is the webhook token shown in the onboarding wizard (also available in Settings)
+4. Enter the Postmark inbound address in the onboarding wizard or Settings page
 
 **Mailgun:**
-1. Create a [Mailgun](https://www.mailgun.com) account and add a domain
-2. Set up inbound routing to forward to: `https://your-app.com/api/inbound-email/mailgun`
-3. Configure your Mailgun API key and signing key in the app's Settings page
+1. Create a [Mailgun](https://www.mailgun.com) account and add a domain for receiving
+2. Set up an inbound route to forward to: `https://your-app.com/api/inbound-email/mailgun`
+3. In the app's Settings page, select Mailgun as your inbound provider and enter your Mailgun API key and signing key
 
-### 3. Outbound Email (optional)
+### Step 8: Add authorized senders
 
-To send quarterly reporting requests from the app, configure one of the supported providers in Settings:
+In **Settings > Authorized Senders**, add the email addresses that your portfolio companies send reports from. Only emails from these addresses will be processed — everything else is silently dropped.
 
-- **Resend** — API key
-- **Postmark** — Server token
-- **Mailgun** — API key and sending domain
-- **Gmail** — Google OAuth connection
+### Step 9: Add companies and metrics
 
-You can configure different providers for system notifications (e.g. member approval emails) and portfolio asks (quarterly reporting requests).
+1. Go to **Portfolio** and add your portfolio companies
+2. For each company, configure the metrics you want to track (revenue, burn rate, headcount, etc.)
+3. Optionally use **Import** to bulk-create companies and metrics from a spreadsheet
 
-### 4. Google Drive / Dropbox (optional)
+### Step 10: Test it
+
+Forward a portfolio company report email to your inbound address. Within a minute you should see:
+- The email appear in **Inbound**
+- Metrics extracted and visible on the company's profile
+- Any low-confidence extractions flagged in **Review**
+
+### Optional: Outbound email
+
+To send quarterly reporting requests or system notifications (e.g. member approval emails), configure an outbound email provider in **Settings > Outbound Email**:
+
+- **Resend** — enter your API key
+- **Postmark** — enter your server token (can reuse the same Postmark account as inbound)
+- **Mailgun** — enter your API key and sending domain
+- **Gmail** — connect via Google OAuth (requires Google Cloud setup below)
+
+You can set different providers for system emails and portfolio asks.
+
+### Optional: Google Drive / Dropbox
+
+To automatically archive processed emails and attachments:
 
 **Google Drive:**
-1. Create a Google Cloud project and enable the Drive and Gmail APIs
-2. Configure an OAuth consent screen and create OAuth 2.0 credentials
-3. Add your app's callback URL as an authorized redirect URI: `https://your-app.com/api/auth/google/callback`
-4. Add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to your environment variables
-5. Connect Google through the Settings page
+1. Create a project in the [Google Cloud Console](https://console.cloud.google.com)
+2. Enable the **Google Drive API** and **Gmail API**
+3. Configure an **OAuth consent screen** (External is fine for personal use)
+4. Create **OAuth 2.0 credentials** (Web application type)
+5. Add `https://your-app.com/api/auth/google/callback` as an authorized redirect URI
+6. Add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to your hosting environment variables and redeploy
+7. In the app, go to **Settings** and connect Google
 
 **Dropbox:**
-1. Create a Dropbox app at [dropbox.com/developers](https://www.dropbox.com/developers)
-2. Add your app's callback URL as a redirect URI: `https://your-app.com/api/auth/dropbox/callback`
-3. Connect Dropbox through the Settings page
+1. Create an app at [dropbox.com/developers](https://www.dropbox.com/developers)
+2. Add `https://your-app.com/api/auth/dropbox/callback` as a redirect URI
+3. In the app, go to **Settings** and connect Dropbox
 
-### 5. First Run
+### Optional: Two-factor authentication
 
-1. Add your email to the `allowed_signups` table in Supabase (e.g. `your@email.com` or `*@yourdomain.com`)
-2. Sign up at `/auth/signup`
-3. Confirm your email and complete the onboarding wizard — enter your fund name and Claude API key
-4. Configure your inbound email address in Settings
-5. Add authorized sender emails in Settings (these are the email addresses your portfolio companies send from)
-6. Add your portfolio companies and configure the metrics you want to track for each
-7. Forward a test report email to your inbound address and watch it process
+Admins and team members can enable TOTP-based two-factor authentication from the Settings page. Once enabled, MFA is enforced on every login. Use any authenticator app (1Password, Authy, Google Authenticator, etc.).
 
-### 6. Two-Factor Authentication (optional)
+### Optional: Invite team members
 
-Admins and team members can enable TOTP-based two-factor authentication from the Settings page. Once enabled, MFA is enforced on every login.
+In **Settings > Team**, your team members can sign up (if their email matches the whitelist or your fund's email domain) and request to join. Admins approve requests and can assign admin or member roles.
 
 ## Local Development
 
@@ -170,9 +244,9 @@ npm install
 
 # Copy environment variables
 cp .env.example .env.local
-# Fill in your Supabase and encryption keys
+# Fill in your Supabase URL, keys, and encryption key
 
-# Run Supabase migrations
+# Run Supabase migrations (if using Supabase CLI)
 npx supabase db push
 
 # Start the dev server
@@ -195,7 +269,7 @@ Then set the tunnel URL as your inbound webhook (e.g. `https://your-tunnel.ngrok
 
 ### Demo mode
 
-To explore the app with sample data:
+To explore the app with sample data without setting up email providers:
 
 ```bash
 # Add to .env.local
