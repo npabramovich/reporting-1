@@ -93,21 +93,28 @@ async function sendViaGmail(admin: SupabaseClient, fundId: string, params: Email
  * Throws on failure — callers decide how to handle errors.
  */
 export async function sendOutboundEmail(config: OutboundConfig, params: EmailParams): Promise<{ id?: string }> {
+  console.log(`[outbound-email] Sending via ${config.provider} to=${params.to} subject="${params.subject}"`)
+  let result: { id?: string }
+
   if (config.provider === 'resend') {
     if (!config.apiKey) throw new Error('Resend API key not configured')
-    return sendViaResend(config.apiKey, params)
+    result = await sendViaResend(config.apiKey, params)
   } else if (config.provider === 'postmark') {
     if (!config.serverToken) throw new Error('Postmark server token not configured')
-    return sendViaPostmark(config.serverToken, params)
+    result = await sendViaPostmark(config.serverToken, params)
   } else if (config.provider === 'mailgun') {
     if (!config.apiKey) throw new Error('Mailgun API key not configured')
     if (!config.mailgunDomain) throw new Error('Mailgun sending domain not configured')
-    return sendViaMailgun(config.apiKey, config.mailgunDomain, params)
+    result = await sendViaMailgun(config.apiKey, config.mailgunDomain, params)
   } else if (config.provider === 'gmail') {
     if (!config.admin || !config.fundId) throw new Error('Gmail requires admin client and fundId')
-    return sendViaGmail(config.admin, config.fundId, params)
+    result = await sendViaGmail(config.admin, config.fundId, params)
+  } else {
+    throw new Error(`Unknown provider: ${config.provider}`)
   }
-  throw new Error(`Unknown provider: ${config.provider}`)
+
+  console.log(`[outbound-email] Sent successfully via ${config.provider} messageId=${result.id}`)
+  return result
 }
 
 /**
@@ -119,46 +126,68 @@ export async function getOutboundConfig(
   fundId: string,
   purpose: 'system' | 'asks' = 'system',
 ): Promise<OutboundConfig | null> {
-  const { data: settings } = await admin
+  const { data: settings, error: settingsError } = await admin
     .from('fund_settings')
     .select('outbound_email_provider, asks_email_provider, resend_api_key_encrypted, postmark_server_token_encrypted, mailgun_api_key_encrypted, mailgun_sending_domain, encryption_key_encrypted')
     .eq('fund_id', fundId)
     .single()
 
-  if (!settings) return null
+  if (settingsError || !settings) {
+    console.warn(`[outbound-email] No fund_settings found for fund ${fundId}`, settingsError?.message)
+    return null
+  }
 
   const selectedProvider = purpose === 'asks'
     ? settings.asks_email_provider
     : settings.outbound_email_provider
 
-  if (!selectedProvider) return null
+  if (!selectedProvider) {
+    console.warn(`[outbound-email] No ${purpose} email provider set for fund ${fundId} (outbound_email_provider=${settings.outbound_email_provider}, asks_email_provider=${settings.asks_email_provider})`)
+    return null
+  }
 
   const provider = selectedProvider as 'resend' | 'postmark' | 'gmail' | 'mailgun'
+  console.log(`[outbound-email] Using provider "${provider}" for purpose "${purpose}" (fund ${fundId})`)
 
   if (provider === 'gmail') {
     return { provider, admin, fundId }
   }
 
   // Decrypt the relevant secret
-  if (!settings.encryption_key_encrypted) return null
+  if (!settings.encryption_key_encrypted) {
+    console.warn(`[outbound-email] No encryption key for fund ${fundId}`)
+    return null
+  }
   const kek = process.env.ENCRYPTION_KEY
-  if (!kek) return null
+  if (!kek) {
+    console.warn('[outbound-email] ENCRYPTION_KEY env var not set')
+    return null
+  }
 
   const { decrypt } = await import('@/lib/crypto')
   const dek = decrypt(settings.encryption_key_encrypted, kek)
 
   if (provider === 'resend') {
-    if (!settings.resend_api_key_encrypted) return null
+    if (!settings.resend_api_key_encrypted) {
+      console.warn(`[outbound-email] Resend selected but no API key stored for fund ${fundId}`)
+      return null
+    }
     return { provider, apiKey: decrypt(settings.resend_api_key_encrypted, dek) }
   }
 
   if (provider === 'postmark') {
-    if (!settings.postmark_server_token_encrypted) return null
+    if (!settings.postmark_server_token_encrypted) {
+      console.warn(`[outbound-email] Postmark selected but no server token stored for fund ${fundId}`)
+      return null
+    }
     return { provider, serverToken: decrypt(settings.postmark_server_token_encrypted, dek) }
   }
 
   if (provider === 'mailgun') {
-    if (!settings.mailgun_api_key_encrypted || !settings.mailgun_sending_domain) return null
+    if (!settings.mailgun_api_key_encrypted || !settings.mailgun_sending_domain) {
+      console.warn(`[outbound-email] Mailgun selected but missing API key or domain for fund ${fundId}`)
+      return null
+    }
     return {
       provider,
       apiKey: decrypt(settings.mailgun_api_key_encrypted, dek),
@@ -212,8 +241,10 @@ export async function sendApprovalEmail(
         : settings.system_email_from_address
     }
 
+    console.log(`[approval-email] Sending to ${to} for fund "${fundName}" via ${config.provider}`)
     await sendOutboundEmail(config, { to, from, subject, html })
+    console.log(`[approval-email] Sent successfully to ${to}`)
   } catch (error) {
-    console.error('Failed to send approval email:', error)
+    console.error(`[approval-email] Failed to send to ${to}:`, error)
   }
 }

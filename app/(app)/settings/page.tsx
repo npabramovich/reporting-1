@@ -2170,16 +2170,13 @@ function TeamSection({ isAdmin }: { isAdmin: boolean }) {
           <div className="border rounded-lg divide-y">
             {members.map(m => (
               <div key={m.id} className="flex items-center justify-between px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">{m.email}</span>
-                  {m.role === 'admin' && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-primary/10 text-primary rounded-full px-2 py-0.5">
-                      <Shield className="h-2.5 w-2.5" />
-                      Admin
-                    </span>
-                  )}
-                </div>
-                {m.role !== 'admin' && (
+                <span className="text-sm">{m.email}</span>
+                {m.role === 'admin' ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-primary/10 text-primary rounded-full px-2 py-0.5">
+                    <Shield className="h-2.5 w-2.5" />
+                    Admin
+                  </span>
+                ) : (
                   <span className="text-xs text-muted-foreground">Member</span>
                 )}
               </div>

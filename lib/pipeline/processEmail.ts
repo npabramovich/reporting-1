@@ -236,6 +236,11 @@ async function writeResults(
     })
 
     if (error) {
+      // Unique constraint violation = duplicate period, skip silently
+      if (error.code === '23505') {
+        console.log(`[pipeline] Skipped duplicate metric_value for ${m.metric_id} period ${reporting_period.label}`)
+        continue
+      }
       console.error(`[pipeline] Failed to insert metric_value for ${m.metric_id}:`, error)
       continue
     }
