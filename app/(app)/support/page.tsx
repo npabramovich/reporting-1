@@ -4,7 +4,9 @@ export default function SupportPage() {
   const tocLinks = (
     <ul className="space-y-1 text-muted-foreground">
       <li><a href="#getting-started" className="hover:text-foreground underline underline-offset-4">Getting Started</a></li>
-      <li className="pl-4"><a href="#pricing" className="hover:text-foreground underline underline-offset-4">Pricing &amp; Setup</a></li>
+      <li className="pl-4"><a href="#setup" className="hover:text-foreground underline underline-offset-4">Setup</a></li>
+      <li className="pl-4"><a href="#license" className="hover:text-foreground underline underline-offset-4">License</a></li>
+      <li className="pl-4"><a href="#pricing" className="hover:text-foreground underline underline-offset-4">Pricing</a></li>
       <li><a href="#portfolio" className="hover:text-foreground underline underline-offset-4">Portfolio</a></li>
       <li className="pl-4"><a href="#company-detail" className="hover:text-foreground underline underline-offset-4">Company Detail</a></li>
       <li><a href="#review" className="hover:text-foreground underline underline-offset-4">Review</a></li>
@@ -94,15 +96,13 @@ export default function SupportPage() {
           </p>
         </div>
 
-        <div id="pricing" className="pl-4 border-l-2 border-border">
-          <h3 className="text-sm font-medium mb-2">Pricing &amp; Setup</h3>
+        <div id="setup" className="pl-4 border-l-2 border-border">
+          <h3 className="text-sm font-medium mb-2">Setup</h3>
           <p className="text-muted-foreground mb-2">
             Under the hood, the platform uses a database, authentication, file storage, inbound email
             processing, and an AI provider, with prebuilt integrations for several third-party services
-            across the stack.
-          </p>
-          <p className="text-muted-foreground mb-2">
-            The platform is open source and can be downloaded and run on your own servers from{' '}
+            across the stack. The software can be downloaded and deployed on your own infrastructure
+            from{' '}
             <a
               href="https://github.com/tdavidson/reporting"
               target="_blank"
@@ -135,6 +135,65 @@ export default function SupportPage() {
             </a>
             . A hosted solution is also available to a select number of funds; reach out to Taylor
             if that&apos;s of interest.
+          </p>
+        </div>
+
+        <div id="license" className="pl-4 border-l-2 border-border">
+          <h3 className="text-sm font-medium mb-2">License</h3>
+          <p className="text-muted-foreground mb-2">
+            This software is free to use if you are a single fund management company running your own
+            operations &mdash; that includes all of your funds, SPVs, and internal team members. You can
+            modify it and deploy it on your own infrastructure. If you are a fund administrator, outsourced
+            CFO, consultant, or any kind of service provider using this software across multiple clients or
+            management companies, you need a paid commercial license.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            You also cannot resell it, white-label it, offer it as SaaS, or bundle it into another product.
+            All intellectual property stays with Unstructured Ventures, LLC. The software is provided as-is
+            with no warranties, and liability is capped at $100. If you violate the terms, your license ends
+            immediately.
+          </p>
+          <p className="text-muted-foreground">
+            For commercial licensing, reach out to{' '}
+            <a
+              href="mailto:hello@hemrock.com"
+              className="text-foreground underline underline-offset-4 hover:text-foreground/80"
+            >
+              hello@hemrock.com
+            </a>
+            . Read the{' '}
+            <a
+              href="/license"
+              className="text-foreground underline underline-offset-4 hover:text-foreground/80"
+            >
+              full license
+            </a>
+            .
+          </p>
+        </div>
+
+        <div id="pricing" className="pl-4 border-l-2 border-border">
+          <h3 className="text-sm font-medium mb-2">Pricing</h3>
+          <p className="text-muted-foreground">
+            <a
+              href="https://www.hemrock.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground underline underline-offset-4 hover:text-foreground/80"
+            >
+              Taylor Davidson
+            </a>
+            {' '}of Hemrock is available to set up, host, and manage the platform for you, including
+            onboarding your portfolio data and providing ongoing support &mdash;{' '}
+            <a
+              href="https://www.hemrock.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground underline underline-offset-4 hover:text-foreground/80"
+            >
+              contact him for details and pricing
+            </a>
+            .
           </p>
         </div>
 
