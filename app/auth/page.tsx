@@ -53,10 +53,13 @@ function AuthForm() {
       }
       // Check if this is a recovery session — redirect to set new password
       const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user?.recovery_sent_at) {
-        router.replace('/auth/reset-password')
+      const destination = session?.user?.recovery_sent_at ? '/auth/reset-password' : '/'
+      // If MFA is enrolled, verify first then continue to destination
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
+        router.replace(`/auth/mfa-verify?next=${encodeURIComponent(destination)}`)
       } else {
-        router.replace('/')
+        router.replace(destination)
       }
     }
     exchangeCode()

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState, useEffect, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,6 +11,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Building2, Loader2 } from 'lucide-react'
 
 export default function MfaVerifyPage() {
+  return (
+    <Suspense>
+      <MfaVerifyForm />
+    </Suspense>
+  )
+}
+
+function MfaVerifyForm() {
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [checking, setChecking] = useState(true)
@@ -19,7 +27,11 @@ export default function MfaVerifyPage() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+
+  // Where to go after successful MFA verification
+  const nextPath = searchParams.get('next') || '/'
 
   useEffect(() => {
     fetch('/api/auth/branding')
@@ -76,7 +88,9 @@ export default function MfaVerifyPage() {
         setCode('')
         inputRef.current?.focus()
       } else {
-        router.push('/')
+        // Prevent open redirect — only allow relative paths
+        const dest = nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/'
+        router.push(dest)
         router.refresh()
       }
     } catch {
