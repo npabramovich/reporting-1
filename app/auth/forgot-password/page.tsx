@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,15 +10,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Building2 } from 'lucide-react'
 
-export default function ResetPasswordPage() {
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+export default function ForgotPasswordPage() {
+  const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [sent, setSent] = useState(false)
   const [branding, setBranding] = useState<{ fundName: string; fundLogo: string }>({ fundName: '', fundLogo: '' })
 
-  const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
@@ -29,24 +26,20 @@ export default function ResetPasswordPage() {
       .catch(() => {})
   }, [])
 
-  async function resetPassword() {
+  async function handleReset() {
+    if (!email.trim()) {
+      setError('Enter your email address.')
+      return
+    }
     setError(null)
-
-    if (!password || password.length < 8) {
-      setError('Password must be at least 8 characters.')
-      return
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.')
-      return
-    }
-
     setLoading(true)
-    const { error } = await supabase.auth.updateUser({ password })
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+    })
     if (error) {
       setError(error.message)
     } else {
-      setSuccess(true)
+      setSent(true)
     }
     setLoading(false)
   }
@@ -67,9 +60,11 @@ export default function ResetPasswordPage() {
 
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Set new password</CardTitle>
+            <CardTitle className="text-lg">Reset your password</CardTitle>
             <CardDescription>
-              {success ? 'Your password has been updated.' : 'Choose a new password for your account.'}
+              {sent
+                ? 'Check your email for a password reset link.'
+                : "Enter your email and we'll send you a link to reset your password."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -79,47 +74,39 @@ export default function ResetPasswordPage() {
               </Alert>
             )}
 
-            {success ? (
+            {sent ? (
               <div className="space-y-4">
                 <Alert>
                   <AlertDescription>
-                    Your password has been updated successfully. You can now sign in with your new password.
+                    If an account exists for <strong>{email}</strong>, you will receive an email with a link to set a new password.
                   </AlertDescription>
                 </Alert>
-                <Button className="w-full" onClick={() => router.push('/')}>
-                  Continue
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => { setSent(false); setEmail('') }}
+                >
+                  Send again
                 </Button>
               </div>
             ) : (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="password">New password</Label>
+                  <Label htmlFor="email">Email</Label>
                   <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && resetPassword()}
-                    autoComplete="new-password"
-                    placeholder="At least 8 characters"
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleReset()}
+                    autoComplete="email"
                     autoFocus
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm password</Label>
-                  <Input
-                    id="confirm-password"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={e => setConfirmPassword(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && resetPassword()}
-                    autoComplete="new-password"
-                  />
-                </div>
-
-                <Button className="w-full" onClick={resetPassword} disabled={loading}>
-                  {loading ? 'Updating…' : 'Update password'}
+                <Button className="w-full" onClick={handleReset} disabled={loading}>
+                  {loading ? 'Sending…' : 'Send reset link'}
                 </Button>
               </>
             )}
