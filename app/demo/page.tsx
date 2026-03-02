@@ -1,78 +1,37 @@
-'use client'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+export default async function DemoPage() {
+  const supabase = createClient()
 
-export default function DemoPage() {
-  const router = useRouter()
-  const [error, setError] = useState<string | null>(null)
+  // If already signed in, don't overwrite the session
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) redirect('/dashboard')
 
-  useEffect(() => {
-    let cancelled = false
+  // Sign in as the demo user server-side
+  const email = process.env.DEMO_USER_EMAIL
+  const password = process.env.DEMO_USER_PASSWORD
 
-    async function startDemo() {
-      try {
-        const supabase = createClient()
+  if (!email || !password) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">Demo is not available.</p>
+      </div>
+    )
+  }
 
-        // If already signed in, don't overwrite the session
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          if (!cancelled) router.replace('/dashboard')
-          return
-        }
-
-        // Not signed in — proceed with demo login
-        const res = await fetch('/api/demo/session', { method: 'POST' })
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          setError(data.error ?? 'Demo is not available')
-          return
-        }
-
-        const { tokenHash } = await res.json()
-
-        const { error: otpError } = await supabase.auth.verifyOtp({
-          token_hash: tokenHash,
-          type: 'magiclink',
-        })
-
-        if (otpError) {
-          setError(otpError.message)
-          return
-        }
-
-        if (!cancelled) {
-          router.replace('/dashboard')
-        }
-      } catch {
-        if (!cancelled) setError('Something went wrong')
-      }
-    }
-
-    startDemo()
-    return () => { cancelled = true }
-  }, [router])
+  const { error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
-          <p className="text-sm text-muted-foreground">{error}</p>
-          <a href="/auth" className="text-sm text-blue-600 underline">
-            Go to sign in
-          </a>
+          <p className="text-sm text-muted-foreground">Unable to load demo.</p>
+          <a href="/auth" className="text-sm text-blue-600 underline">Go to sign in</a>
         </div>
       </div>
     )
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center space-y-2">
-        <div className="animate-spin h-6 w-6 border-2 border-muted-foreground border-t-transparent rounded-full mx-auto" />
-        <p className="text-sm text-muted-foreground">Loading demo&hellip;</p>
-      </div>
-    </div>
-  )
+  redirect('/dashboard')
 }

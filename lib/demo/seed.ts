@@ -401,6 +401,11 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
 
   const fundId = fund.id
 
+  // Remove the auto-created admin membership (from the fund_creator_member trigger)
+  await admin.from('fund_members').delete()
+    .eq('fund_id', fundId)
+    .eq('user_id', adminUserId)
+
   // Add demo user as viewer
   await admin.from('fund_members').upsert({
     fund_id: fundId,
