@@ -25,7 +25,6 @@ function AuthForm() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<string | null>(null)
   const [branding, setBranding] = useState<{ fundName: string; fundLogo: string }>({ fundName: '', fundLogo: '' })
 
   const router = useRouter()
@@ -41,13 +40,30 @@ function AuthForm() {
       .catch(() => {})
   }, [])
 
-  function reset() {
-    setError(null)
-    setInfo(null)
-  }
+  // Handle code param (e.g. password reset link landing on /auth instead of /auth/callback)
+  useEffect(() => {
+    const code = searchParams.get('code')
+    if (!code) return
+
+    async function exchangeCode() {
+      const { error } = await supabase.auth.exchangeCodeForSession(code!)
+      if (error) {
+        setError('Invalid or expired link. Please try again.')
+        return
+      }
+      // Check if this is a recovery session — redirect to set new password
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user?.recovery_sent_at) {
+        router.replace('/auth/reset-password')
+      } else {
+        router.replace('/')
+      }
+    }
+    exchangeCode()
+  }, [searchParams, supabase, router])
 
   async function signIn() {
-    reset()
+    setError(null)
     setLoading(true)
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
@@ -61,45 +77,6 @@ function AuthForm() {
         router.push('/')
       }
       router.refresh()
-    }
-    setLoading(false)
-  }
-
-  async function forgotPassword() {
-    if (!email.trim()) {
-      setError('Enter your email address first.')
-      return
-    }
-    reset()
-    setLoading(true)
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
-    })
-    if (error) {
-      setError(error.message)
-    } else {
-      setInfo('Check your email for a password reset link.')
-    }
-    setLoading(false)
-  }
-
-  async function sendMagicLink() {
-    if (!email.trim()) {
-      setError('Enter your email address first.')
-      return
-    }
-    reset()
-    setLoading(true)
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
-    if (error) {
-      setError(error.message)
-    } else {
-      setInfo('Magic link sent — check your email.')
     }
     setLoading(false)
   }
@@ -120,18 +97,13 @@ function AuthForm() {
 
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Sign in</CardTitle>
-            <CardDescription>Sign in to your account to continue.</CardDescription>
+            <CardTitle className="text-lg">Sign in with your account</CardTitle>
+            <CardDescription>Sign in with password or magic link.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {(error || urlError) && (
               <Alert variant="destructive">
                 <AlertDescription>{error || urlError}</AlertDescription>
-              </Alert>
-            )}
-            {info && (
-              <Alert>
-                <AlertDescription>{info}</AlertDescription>
               </Alert>
             )}
 
@@ -149,7 +121,12 @@ function AuthForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link href="/auth/forgot-password" className="text-xs text-muted-foreground underline underline-offset-4 hover:text-primary">
+                  Forgot password?
+                </Link>
+              </div>
               <Input
                 id="password"
                 type="password"
@@ -158,34 +135,23 @@ function AuthForm() {
                 onKeyDown={e => e.key === 'Enter' && signIn()}
                 autoComplete="current-password"
               />
-              <button
-                type="button"
-                onClick={forgotPassword}
-                className="text-xs text-muted-foreground underline underline-offset-4 hover:text-primary"
-              >
-                Forgot password?
-              </button>
             </div>
 
             <Button className="w-full" onClick={signIn} disabled={loading}>
               {loading ? 'Signing in…' : 'Sign in'}
             </Button>
 
-            <div className="relative">
-              <Separator />
-              <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
-                or
-              </span>
+            <div className="flex items-center gap-3 pt-1 pb-3">
+              <Separator className="flex-1" />
+              <span className="text-xs text-muted-foreground">or</span>
+              <Separator className="flex-1" />
             </div>
 
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={sendMagicLink}
-              disabled={loading}
-            >
-              Send magic link
-            </Button>
+            <Link href="/auth/magic-link">
+              <Button variant="outline" className="w-full">
+                Sign in with magic link
+              </Button>
+            </Link>
 
             <p className="text-center text-sm text-muted-foreground">
               Don&apos;t have an account?{' '}

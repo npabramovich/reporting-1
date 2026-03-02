@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-// Handles magic link and OAuth redirects from Supabase Auth.
+// Handles magic link, password reset, and OAuth redirects from Supabase Auth.
 // Supabase appends ?code= to the redirect URL after authentication.
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/'
+  let next = searchParams.get('next') ?? '/'
+
+  // Prevent open redirect — only allow relative paths
+  if (!next.startsWith('/') || next.startsWith('//')) {
+    next = '/'
+  }
 
   if (!code) {
     return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent('Invalid or expired link. Please try again.')}`)
