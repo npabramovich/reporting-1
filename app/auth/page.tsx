@@ -59,6 +59,24 @@ function AuthForm() {
     setLoading(false)
   }
 
+  async function forgotPassword() {
+    if (!email.trim()) {
+      setError('Enter your email address first.')
+      return
+    }
+    reset()
+    setLoading(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+    })
+    if (error) {
+      setError(error.message)
+    } else {
+      setInfo('Check your email for a password reset link.')
+    }
+    setLoading(false)
+  }
+
   async function sendMagicLink() {
     if (!email.trim()) {
       setError('Enter your email address first.')
@@ -134,6 +152,13 @@ function AuthForm() {
                 onKeyDown={e => e.key === 'Enter' && signIn()}
                 autoComplete="current-password"
               />
+              <button
+                type="button"
+                onClick={forgotPassword}
+                className="text-xs text-muted-foreground underline underline-offset-4 hover:text-primary"
+              >
+                Forgot password?
+              </button>
             </div>
 
             <Button className="w-full" onClick={signIn} disabled={loading}>

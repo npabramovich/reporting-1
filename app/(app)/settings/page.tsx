@@ -40,6 +40,14 @@ interface Settings {
   hasGoogleCredentials: boolean
   googleClientId: string
   aiSummaryPrompt: string | null
+  outboundEmailProvider: string | null
+  hasResendKey: boolean
+  hasPostmarkServerToken: boolean
+  inboundEmailProvider: string | null
+  mailgunInboundDomain: string
+  hasMailgunSigningKey: boolean
+  hasMailgunApiKey: boolean
+  mailgunSendingDomain: string
   displayName: string
   isAdmin: boolean
 }
@@ -85,13 +93,38 @@ export default function SettingsPage() {
       {settings.isAdmin && (
         <>
           <FundNameSection name={settings.fundName} logo={settings.fundLogo} onSaved={load} />
-          <ClaudeKeySection hasKey={settings.hasClaudeKey} currentModel={settings.claudeModel} onSaved={load} />
-          <AiSummaryPromptSection currentPrompt={settings.aiSummaryPrompt} onSaved={load} />
-          <PostmarkSection
-            address={settings.postmarkInboundAddress}
-            token={settings.postmarkWebhookToken}
+
+          <GroupHeader label="Inbound Email" />
+          <InboundEmailSection
+            provider={settings.inboundEmailProvider}
+            postmarkAddress={settings.postmarkInboundAddress}
+            postmarkToken={settings.postmarkWebhookToken}
+            mailgunInboundDomain={settings.mailgunInboundDomain}
+            hasMailgunSigningKey={settings.hasMailgunSigningKey}
             onSaved={load}
           />
+          <SendersSection senders={settings.senders} onChanged={load} />
+
+          <GroupHeader label="Outbound Email" />
+          <OutboundEmailSection
+            provider={settings.outboundEmailProvider}
+            hasResendKey={settings.hasResendKey}
+            hasPostmarkServerToken={settings.hasPostmarkServerToken}
+            hasMailgunApiKey={settings.hasMailgunApiKey}
+            mailgunSendingDomain={settings.mailgunSendingDomain}
+            googleDriveConnected={settings.googleDriveConnected}
+            onSaved={load}
+          />
+
+          <GroupHeader label="AI" />
+          <ClaudeKeySection hasKey={settings.hasClaudeKey} currentModel={settings.claudeModel} onSaved={load} />
+          <AiSummaryPromptSection currentPrompt={settings.aiSummaryPrompt} onSaved={load} />
+          <InfoSection
+            title="AI provider"
+            description="Prebuilt for Claude (Anthropic). The AI model and prompt can be configured above. To use a different AI provider (e.g. OpenAI), the pipeline code would need to be modified."
+          />
+
+          <GroupHeader label="Google Drive" />
           <GoogleDriveSection
             connected={settings.googleDriveConnected}
             folderId={settings.googleDriveFolderId}
@@ -100,7 +133,20 @@ export default function SettingsPage() {
             clientId={settings.googleClientId}
             onChanged={load}
           />
-          <SendersSection senders={settings.senders} onChanged={load} />
+
+          <GroupHeader label="Database" />
+          <InfoSection
+            title="Database"
+            description="Prebuilt for Supabase (PostgreSQL). Database connection is configured via environment variables (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY). Migrations are in the supabase/migrations folder."
+          />
+
+          <GroupHeader label="Authentication" />
+          <InfoSection
+            title="Authentication"
+            description="Prebuilt for Supabase Auth. Email/password authentication is handled by Supabase. To enable email confirmations and password resets, configure an SMTP provider in your Supabase project dashboard under Authentication > Email Templates."
+          />
+
+          <GroupHeader label="Access Control" />
           <WhitelistSection />
           <TeamSection isAdmin={settings.isAdmin} />
           <DangerZone onDeleted={() => router.push('/auth')} />
@@ -549,88 +595,197 @@ function AiSummaryPromptReadOnly({ prompt }: { prompt: string | null }) {
   )
 }
 
-// ──────────────────────────── Postmark ────────────────────────────
+// ──────────────────────────── Inbound Email ────────────────────────────
 
-function PostmarkSection({
-  address,
-  token,
+function InboundEmailSection({
+  provider,
+  postmarkAddress,
+  postmarkToken,
+  mailgunInboundDomain,
+  hasMailgunSigningKey,
   onSaved,
 }: {
-  address: string
-  token: string
+  provider: string | null
+  postmarkAddress: string
+  postmarkToken: string
+  mailgunInboundDomain: string
+  hasMailgunSigningKey: boolean
   onSaved: () => void
 }) {
-  const [addr, setAddr] = useState(address)
+  const [selectedProvider, setSelectedProvider] = useState(provider || '')
+  const [addr, setAddr] = useState(postmarkAddress)
+  const [mgDomain, setMgDomain] = useState(mailgunInboundDomain)
+  const [mgSigningKey, setMgSigningKey] = useState('')
   const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
   const defaultBase = typeof window !== 'undefined' ? window.location.origin : ''
   const [baseUrl, setBaseUrl] = useState(defaultBase)
 
-  const webhookUrl = `${baseUrl}/api/inbound-email?token=${token}`
+  const postmarkWebhookUrl = `${baseUrl}/api/inbound-email?token=${postmarkToken}`
+  const mailgunWebhookUrl = `${baseUrl}/api/inbound-email/mailgun`
 
   const handleSave = async () => {
     setSaving(true)
+    const payload: Record<string, unknown> = {
+      inboundEmailProvider: selectedProvider || null,
+    }
+    if (selectedProvider === 'postmark') {
+      payload.postmarkInboundAddress = addr?.trim() || null
+    }
+    if (selectedProvider === 'mailgun') {
+      payload.mailgunInboundDomain = mgDomain?.trim() || null
+      if (mgSigningKey.trim()) {
+        payload.mailgunSigningKey = mgSigningKey.trim()
+      }
+    }
     const res = await fetch('/api/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ postmarkInboundAddress: addr }),
+      body: JSON.stringify(payload),
     })
     setSaving(false)
-    if (res.ok) onSaved()
+    if (res.ok) {
+      setSaved(true)
+      setMgSigningKey('')
+      setTimeout(() => setSaved(false), 2000)
+      onSaved()
+    }
   }
 
-  const copyWebhookUrl = () => {
-    navigator.clipboard.writeText(webhookUrl)
+  const copyUrl = (url: string) => {
+    navigator.clipboard.writeText(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const providerChanged = selectedProvider !== (provider || '')
+  const hasNewData =
+    (selectedProvider === 'postmark' && addr !== postmarkAddress) ||
+    (selectedProvider === 'mailgun' && (mgDomain !== mailgunInboundDomain || mgSigningKey.trim()))
+  const canSave = providerChanged || hasNewData
+
   return (
-    <Section title="Postmark">
+    <Section title="Inbound email">
+      <p className="text-xs text-muted-foreground mb-3">
+        Choose how portfolio companies send reports to your fund.
+      </p>
       <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
-          <div className="flex-1">
-            <Label>Inbound address</Label>
-            <Input
-              value={addr}
-              onChange={(e) => setAddr(e.target.value)}
-              placeholder="abc123@inbound.postmarkapp.com"
-            />
-          </div>
-          <Button onClick={handleSave} disabled={saving || addr === address} size="sm">
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
-          </Button>
+        <div>
+          <Label>Provider</Label>
+          <select
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={selectedProvider}
+            onChange={(e) => setSelectedProvider(e.target.value)}
+          >
+            <option value="">None (disabled)</option>
+            <option value="postmark">Postmark</option>
+            <option value="mailgun">Mailgun</option>
+          </select>
         </div>
 
-        {token && (
-          <div className="space-y-2">
+        {selectedProvider === 'postmark' && (
+          <>
             <div>
-              <Label>Webhook base URL</Label>
+              <Label>Postmark inbound address</Label>
               <Input
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder="https://your-app.vercel.app"
+                value={addr}
+                onChange={(e) => setAddr(e.target.value)}
+                placeholder="abc123@inbound.postmarkapp.com"
+              />
+            </div>
+            {postmarkToken && (
+              <div className="space-y-2">
+                <div>
+                  <Label>Webhook base URL</Label>
+                  <Input
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    placeholder="https://your-app.vercel.app"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    For local development, use your ngrok or tunnel URL.
+                  </p>
+                </div>
+                <div>
+                  <Label>Webhook URL</Label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-muted rounded px-3 py-2 truncate block break-all">
+                      {postmarkWebhookUrl}
+                    </code>
+                    <Button onClick={() => copyUrl(postmarkWebhookUrl)} variant="outline" size="icon" className="shrink-0 h-8 w-8">
+                      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Paste this URL into Postmark&#39;s inbound webhook settings.
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {selectedProvider === 'mailgun' && (
+          <>
+            <div>
+              <Label>Mailgun inbound domain</Label>
+              <Input
+                value={mgDomain}
+                onChange={(e) => setMgDomain(e.target.value)}
+                placeholder="mg.yourdomain.com"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                For local development, use your ngrok or tunnel URL (e.g. https://abc123.ngrok.io).
+                The domain configured for inbound routing in Mailgun.
               </p>
             </div>
             <div>
-              <Label>Webhook URL</Label>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs bg-muted rounded px-3 py-2 truncate block break-all">
-                  {webhookUrl}
-                </code>
-                <Button onClick={copyWebhookUrl} variant="outline" size="icon" className="shrink-0 h-8 w-8">
-                  {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                </Button>
-              </div>
+              <Label>Webhook signing key</Label>
+              {hasMailgunSigningKey && (
+                <p className="text-xs text-muted-foreground mt-1 mb-1.5">
+                  A signing key is saved. Enter a new one to replace it.
+                </p>
+              )}
+              <Input
+                type="password"
+                value={mgSigningKey}
+                onChange={(e) => setMgSigningKey(e.target.value)}
+                placeholder={hasMailgunSigningKey ? '••••••••' : 'Mailgun webhook signing key'}
+              />
               <p className="text-xs text-muted-foreground mt-1">
-                Paste this URL into Postmark&#39;s inbound webhook settings.
+                Found in Mailgun dashboard under Sending &gt; Webhooks.
               </p>
             </div>
-          </div>
+            <div className="space-y-2">
+              <div>
+                <Label>Webhook base URL</Label>
+                <Input
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  placeholder="https://your-app.vercel.app"
+                />
+              </div>
+              <div>
+                <Label>Webhook URL</Label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs bg-muted rounded px-3 py-2 truncate block break-all">
+                    {mailgunWebhookUrl}
+                  </code>
+                  <Button onClick={() => copyUrl(mailgunWebhookUrl)} variant="outline" size="icon" className="shrink-0 h-8 w-8">
+                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  In Mailgun, go to Receiving &gt; Create Route and forward matching emails to this URL.
+                </p>
+              </div>
+            </div>
+          </>
         )}
+
+        <Button onClick={handleSave} disabled={saving || !canSave} size="sm">
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5" /> : 'Save'}
+        </Button>
       </div>
     </Section>
   )
@@ -848,6 +1003,176 @@ function GoogleDriveSection({
           </Button>
         </div>
       )}
+    </Section>
+  )
+}
+
+// ──────────────────────────── Outbound Email ────────────────────────────
+
+function OutboundEmailSection({
+  provider,
+  hasResendKey,
+  hasPostmarkServerToken,
+  hasMailgunApiKey,
+  mailgunSendingDomain: existingMailgunDomain,
+  googleDriveConnected,
+  onSaved,
+}: {
+  provider: string | null
+  hasResendKey: boolean
+  hasPostmarkServerToken: boolean
+  hasMailgunApiKey: boolean
+  mailgunSendingDomain: string
+  googleDriveConnected: boolean
+  onSaved: () => void
+}) {
+  const [selectedProvider, setSelectedProvider] = useState(provider || '')
+  const [resendKey, setResendKey] = useState('')
+  const [postmarkToken, setPostmarkToken] = useState('')
+  const [mgApiKey, setMgApiKey] = useState('')
+  const [mgDomain, setMgDomain] = useState(existingMailgunDomain)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    const payload: Record<string, unknown> = { outboundEmailProvider: selectedProvider || null }
+    if (selectedProvider === 'resend' && resendKey.trim()) {
+      payload.resendApiKey = resendKey.trim()
+    }
+    if (selectedProvider === 'postmark' && postmarkToken.trim()) {
+      payload.postmarkServerToken = postmarkToken.trim()
+    }
+    if (selectedProvider === 'mailgun') {
+      if (mgApiKey.trim()) payload.mailgunApiKey = mgApiKey.trim()
+      if (mgDomain.trim()) payload.mailgunSendingDomain = mgDomain.trim()
+    }
+    const res = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    setSaving(false)
+    if (res.ok) {
+      setSaved(true)
+      setResendKey('')
+      setPostmarkToken('')
+      setMgApiKey('')
+      setTimeout(() => setSaved(false), 2000)
+      onSaved()
+    }
+  }
+
+  const hasRequiredKey =
+    selectedProvider === '' ||
+    selectedProvider === 'gmail' ||
+    (selectedProvider === 'resend' && (hasResendKey || resendKey.trim())) ||
+    (selectedProvider === 'postmark' && (hasPostmarkServerToken || postmarkToken.trim())) ||
+    (selectedProvider === 'mailgun' && ((hasMailgunApiKey && existingMailgunDomain) || (mgApiKey.trim() && mgDomain.trim())))
+
+  const providerChanged = selectedProvider !== (provider || '')
+  const hasNewSecret = (selectedProvider === 'resend' && resendKey.trim()) ||
+    (selectedProvider === 'postmark' && postmarkToken.trim()) ||
+    (selectedProvider === 'mailgun' && (mgApiKey.trim() || mgDomain !== existingMailgunDomain))
+  const canSave = (providerChanged || hasNewSecret) && hasRequiredKey
+
+  return (
+    <Section title="Outbound email">
+      <p className="text-xs text-muted-foreground mb-3">
+        Choose a provider for sending notification emails (e.g. join request approvals).
+      </p>
+      <div className="space-y-3">
+        <div>
+          <Label>Provider</Label>
+          <select
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={selectedProvider}
+            onChange={(e) => setSelectedProvider(e.target.value)}
+          >
+            <option value="">None (disabled)</option>
+            <option value="resend">Resend</option>
+            <option value="postmark">Postmark</option>
+            <option value="mailgun">Mailgun</option>
+            <option value="gmail" disabled={!googleDriveConnected}>
+              Gmail{!googleDriveConnected ? ' (connect Google first)' : ''}
+            </option>
+          </select>
+        </div>
+
+        {selectedProvider === 'resend' && (
+          <div>
+            <Label>Resend API key</Label>
+            {hasResendKey && (
+              <p className="text-xs text-muted-foreground mt-1 mb-1.5">
+                A key is already saved. Enter a new one to replace it.
+              </p>
+            )}
+            <Input
+              type="password"
+              value={resendKey}
+              onChange={(e) => setResendKey(e.target.value)}
+              placeholder={hasResendKey ? '••••••••' : 're_...'}
+            />
+          </div>
+        )}
+
+        {selectedProvider === 'postmark' && (
+          <div>
+            <Label>Postmark server token</Label>
+            {hasPostmarkServerToken && (
+              <p className="text-xs text-muted-foreground mt-1 mb-1.5">
+                A token is already saved. Enter a new one to replace it.
+              </p>
+            )}
+            <Input
+              type="password"
+              value={postmarkToken}
+              onChange={(e) => setPostmarkToken(e.target.value)}
+              placeholder={hasPostmarkServerToken ? '••••••••' : 'Server token'}
+            />
+          </div>
+        )}
+
+        {selectedProvider === 'mailgun' && (
+          <>
+            <div>
+              <Label>Mailgun API key</Label>
+              {hasMailgunApiKey && (
+                <p className="text-xs text-muted-foreground mt-1 mb-1.5">
+                  A key is already saved. Enter a new one to replace it.
+                </p>
+              )}
+              <Input
+                type="password"
+                value={mgApiKey}
+                onChange={(e) => setMgApiKey(e.target.value)}
+                placeholder={hasMailgunApiKey ? '••••••••' : 'key-...'}
+              />
+            </div>
+            <div>
+              <Label>Sending domain</Label>
+              <Input
+                value={mgDomain}
+                onChange={(e) => setMgDomain(e.target.value)}
+                placeholder="mg.yourdomain.com"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                The verified domain in Mailgun used for sending emails.
+              </p>
+            </div>
+          </>
+        )}
+
+        {selectedProvider === 'gmail' && (
+          <p className="text-xs text-muted-foreground">
+            Emails will be sent from your connected Google account.
+          </p>
+        )}
+
+        <Button onClick={handleSave} disabled={saving || !canSave} size="sm">
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5" /> : 'Save'}
+        </Button>
+      </div>
     </Section>
   )
 }
@@ -1235,6 +1560,25 @@ function DangerZone({ onDeleted }: { onDeleted: () => void }) {
 }
 
 // ──────────────────────────── Shared ────────────────────────────
+
+function GroupHeader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 pt-2">
+      <div className="h-px flex-1 bg-border" />
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
+      <div className="h-px flex-1 bg-border" />
+    </div>
+  )
+}
+
+function InfoSection({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="rounded-lg border bg-card p-5">
+      <h2 className="text-sm font-medium mb-1">{title}</h2>
+      <p className="text-xs text-muted-foreground">{description}</p>
+    </div>
+  )
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

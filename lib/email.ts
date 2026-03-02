@@ -1,0 +1,192 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+export interface EmailParams {
+  to: string
+  from?: string
+  subject: string
+  html: string
+  cc?: string
+}
+
+export interface OutboundConfig {
+  provider: 'resend' | 'postmark' | 'gmail' | 'mailgun'
+  apiKey?: string       // resend or mailgun
+  serverToken?: string  // postmark
+  mailgunDomain?: string // mailgun sending domain
+  // gmail uses admin + fundId
+  admin?: SupabaseClient
+  fundId?: string
+}
+
+async function sendViaResend(apiKey: string, params: EmailParams) {
+  const { Resend } = await import('resend')
+  const resend = new Resend(apiKey)
+  const result = await resend.emails.send({
+    from: params.from || process.env.EMAIL_FROM || 'onboarding@resend.dev',
+    to: params.to,
+    cc: params.cc || undefined,
+    subject: params.subject,
+    html: params.html,
+  })
+  return { id: result.data?.id }
+}
+
+async function sendViaPostmark(serverToken: string, params: EmailParams) {
+  const postmark = await import('postmark')
+  const client = new postmark.ServerClient(serverToken)
+  const result = await client.sendEmail({
+    From: params.from || process.env.EMAIL_FROM || 'noreply@example.com',
+    To: params.to,
+    Cc: params.cc || undefined,
+    Subject: params.subject,
+    HtmlBody: params.html,
+  })
+  return { id: result.MessageID }
+}
+
+async function sendViaMailgun(apiKey: string, domain: string, params: EmailParams) {
+  const FormData = (await import('form-data')).default
+  const Mailgun = (await import('mailgun.js')).default
+  const mailgun = new Mailgun(FormData)
+  const mg = mailgun.client({ username: 'api', key: apiKey })
+  const result = await mg.messages.create(domain, {
+    from: params.from || process.env.EMAIL_FROM || `noreply@${domain}`,
+    to: [params.to],
+    cc: params.cc || undefined,
+    subject: params.subject,
+    html: params.html,
+  })
+  return { id: result.id }
+}
+
+async function sendViaGmail(admin: SupabaseClient, fundId: string, params: EmailParams) {
+  const { decrypt } = await import('@/lib/crypto')
+  const { getGoogleCredentials } = await import('@/lib/google/credentials')
+  const { getAccessToken } = await import('@/lib/google/drive')
+  const { sendEmail, getGmailProfile } = await import('@/lib/google/gmail')
+
+  const { data: settings } = await admin
+    .from('fund_settings')
+    .select('google_refresh_token_encrypted, encryption_key_encrypted')
+    .eq('fund_id', fundId)
+    .single()
+
+  if (!settings?.google_refresh_token_encrypted || !settings?.encryption_key_encrypted) {
+    throw new Error('Google not connected')
+  }
+
+  const kek = process.env.ENCRYPTION_KEY
+  if (!kek) throw new Error('ENCRYPTION_KEY not set')
+
+  const dek = decrypt(settings.encryption_key_encrypted, kek)
+  const refreshToken = decrypt(settings.google_refresh_token_encrypted, dek)
+  const creds = await getGoogleCredentials(admin, fundId)
+  const accessToken = await getAccessToken(refreshToken, creds?.clientId, creds?.clientSecret)
+  const senderEmail = await getGmailProfile(accessToken)
+
+  const result = await sendEmail(accessToken, params.to, senderEmail, params.subject, params.html, params.cc)
+  return { id: result.id }
+}
+
+/**
+ * Send a single email using the given outbound config.
+ * Throws on failure — callers decide how to handle errors.
+ */
+export async function sendOutboundEmail(config: OutboundConfig, params: EmailParams): Promise<{ id?: string }> {
+  if (config.provider === 'resend') {
+    if (!config.apiKey) throw new Error('Resend API key not configured')
+    return sendViaResend(config.apiKey, params)
+  } else if (config.provider === 'postmark') {
+    if (!config.serverToken) throw new Error('Postmark server token not configured')
+    return sendViaPostmark(config.serverToken, params)
+  } else if (config.provider === 'mailgun') {
+    if (!config.apiKey) throw new Error('Mailgun API key not configured')
+    if (!config.mailgunDomain) throw new Error('Mailgun sending domain not configured')
+    return sendViaMailgun(config.apiKey, config.mailgunDomain, params)
+  } else if (config.provider === 'gmail') {
+    if (!config.admin || !config.fundId) throw new Error('Gmail requires admin client and fundId')
+    return sendViaGmail(config.admin, config.fundId, params)
+  }
+  throw new Error(`Unknown provider: ${config.provider}`)
+}
+
+/**
+ * Build an OutboundConfig from a fund's settings.
+ * Returns null if no provider is configured.
+ */
+export async function getOutboundConfig(
+  admin: SupabaseClient,
+  fundId: string,
+): Promise<OutboundConfig | null> {
+  const { data: settings } = await admin
+    .from('fund_settings')
+    .select('outbound_email_provider, resend_api_key_encrypted, postmark_server_token_encrypted, mailgun_api_key_encrypted, mailgun_sending_domain, encryption_key_encrypted')
+    .eq('fund_id', fundId)
+    .single()
+
+  if (!settings?.outbound_email_provider) return null
+
+  const provider = settings.outbound_email_provider as 'resend' | 'postmark' | 'gmail' | 'mailgun'
+
+  if (provider === 'gmail') {
+    return { provider, admin, fundId }
+  }
+
+  // Decrypt the relevant secret
+  if (!settings.encryption_key_encrypted) return null
+  const kek = process.env.ENCRYPTION_KEY
+  if (!kek) return null
+
+  const { decrypt } = await import('@/lib/crypto')
+  const dek = decrypt(settings.encryption_key_encrypted, kek)
+
+  if (provider === 'resend') {
+    if (!settings.resend_api_key_encrypted) return null
+    return { provider, apiKey: decrypt(settings.resend_api_key_encrypted, dek) }
+  }
+
+  if (provider === 'postmark') {
+    if (!settings.postmark_server_token_encrypted) return null
+    return { provider, serverToken: decrypt(settings.postmark_server_token_encrypted, dek) }
+  }
+
+  if (provider === 'mailgun') {
+    if (!settings.mailgun_api_key_encrypted || !settings.mailgun_sending_domain) return null
+    return {
+      provider,
+      apiKey: decrypt(settings.mailgun_api_key_encrypted, dek),
+      mailgunDomain: settings.mailgun_sending_domain,
+    }
+  }
+
+  return null
+}
+
+/**
+ * Send the approval notification email using the fund's configured outbound provider.
+ * Fails silently — never throws.
+ */
+export async function sendApprovalEmail(
+  admin: SupabaseClient,
+  fundId: string,
+  to: string,
+  fundName: string,
+) {
+  try {
+    const config = await getOutboundConfig(admin, fundId)
+    if (!config) return // no provider configured — silently skip
+
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    await sendOutboundEmail(config, {
+      to,
+      subject: `You've been approved to join ${fundName}`,
+      html: `
+        <h2>Congrats!</h2>
+        <p>You've been approved to join <strong>${fundName}</strong>.</p>
+        <p><a href="${siteUrl}/auth">Sign in to get started</a></p>
+      `,
+    })
+  } catch (error) {
+    console.error('Failed to send approval email:', error)
+  }
+}

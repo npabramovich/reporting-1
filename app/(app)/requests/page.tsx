@@ -16,6 +16,7 @@ interface Company {
 interface Settings {
   isAdmin: boolean
   googleDriveConnected: boolean
+  outboundEmailProvider: string | null
 }
 
 interface QuarterInfo {
@@ -95,7 +96,7 @@ export default function RequestsPage() {
 
     if (settingsRes.ok) {
       const data = await settingsRes.json()
-      setSettings({ isAdmin: data.isAdmin, googleDriveConnected: data.googleDriveConnected })
+      setSettings({ isAdmin: data.isAdmin, googleDriveConnected: data.googleDriveConnected, outboundEmailProvider: data.outboundEmailProvider })
     }
 
     if (companiesRes.ok) {
@@ -250,7 +251,7 @@ export default function RequestsPage() {
     )
   }
 
-  if (!settings?.googleDriveConnected) {
+  if (!settings?.outboundEmailProvider) {
     return (
       <div className="p-4 md:p-8 max-w-3xl">
         <div className="mb-6">
@@ -258,9 +259,9 @@ export default function RequestsPage() {
           <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
         </div>
         <div className="rounded-lg border border-dashed p-12 text-center space-y-2">
-          <p className="text-muted-foreground">Connect Google in Settings to enable sending emails.</p>
+          <p className="text-muted-foreground">Set up an outbound email provider in Settings to enable sending emails.</p>
           <p className="text-xs text-muted-foreground">
-            Gmail access is required for sending. You may need to reconnect if you previously connected only for Drive.
+            Choose from Gmail, Resend, or Postmark in Settings &gt; Outbound email.
           </p>
         </div>
       </div>

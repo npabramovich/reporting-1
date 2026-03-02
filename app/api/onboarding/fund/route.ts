@@ -28,7 +28,7 @@ export async function GET() {
   // Get fund settings to determine progress
   const { data: settings } = await admin
     .from('fund_settings')
-    .select('postmark_inbound_address, postmark_webhook_token')
+    .select('postmark_inbound_address, postmark_webhook_token, inbound_email_provider, mailgun_inbound_domain')
     .eq('fund_id', fundId)
     .maybeSingle()
 
@@ -44,7 +44,14 @@ export async function GET() {
 
   const webhookToken = settings.postmark_webhook_token
 
-  if (!settings.postmark_inbound_address) {
+  // Step 2 is complete if either Postmark or Mailgun inbound is configured
+  const inboundConfigured =
+    (settings.inbound_email_provider === 'postmark' && settings.postmark_inbound_address) ||
+    (settings.inbound_email_provider === 'mailgun' && settings.mailgun_inbound_domain) ||
+    // Legacy: postmark address set without explicit provider
+    (!settings.inbound_email_provider && settings.postmark_inbound_address)
+
+  if (!inboundConfigured) {
     return NextResponse.json({ step: 2, fundId, webhookToken })
   }
 

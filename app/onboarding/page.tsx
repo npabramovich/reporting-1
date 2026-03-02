@@ -437,7 +437,7 @@ function Step1({ onComplete }: { onComplete: (fundId: string, webhookToken: stri
 }
 
 // ---------------------------------------------------------------------------
-// Step 2: Postmark setup
+// Step 2: Inbound email setup (Postmark or Mailgun)
 // ---------------------------------------------------------------------------
 
 function Step2({
@@ -449,7 +449,10 @@ function Step2({
   webhookToken: string
   onComplete: () => void
 }) {
+  const [provider, setProvider] = useState<'postmark' | 'mailgun'>('postmark')
   const [inboundAddress, setInboundAddress] = useState('')
+  const [mgDomain, setMgDomain] = useState('')
+  const [mgSigningKey, setMgSigningKey] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -457,20 +460,32 @@ function Step2({
     ? (process.env.NEXT_PUBLIC_APP_URL || window.location.origin)
     : ''
   const [baseUrl, setBaseUrl] = useState(defaultBase)
-  const webhookUrl = `${baseUrl}/api/inbound-email?token=${webhookToken}`
+  const postmarkWebhookUrl = `${baseUrl}/api/inbound-email?token=${webhookToken}`
+  const mailgunWebhookUrl = `${baseUrl}/api/inbound-email/mailgun`
 
   async function submit() {
-    if (!inboundAddress.trim()) {
+    if (provider === 'postmark' && !inboundAddress.trim()) {
       setError('Postmark inbound address is required.')
+      return
+    }
+    if (provider === 'mailgun' && !mgDomain.trim()) {
+      setError('Mailgun inbound domain is required.')
       return
     }
     setError(null)
     setSaving(true)
     try {
-      const res = await fetch('/api/onboarding/postmark', {
+      const body: Record<string, string> = { fundId, provider }
+      if (provider === 'postmark') {
+        body.postmarkInboundAddress = inboundAddress
+      } else {
+        body.mailgunInboundDomain = mgDomain
+        if (mgSigningKey.trim()) body.mailgunSigningKey = mgSigningKey
+      }
+      const res = await fetch('/api/onboarding/inbound-email', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fundId, postmarkInboundAddress: inboundAddress }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -484,10 +499,9 @@ function Step2({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Postmark email integration</CardTitle>
+        <CardTitle>Inbound email integration</CardTitle>
         <CardDescription>
-          Founders email reports to a Postmark inbound address. Postmark forwards
-          them to your webhook.
+          Choose how portfolio companies will send reports to your fund.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -496,6 +510,40 @@ function Step2({
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+
+        <div className="space-y-2">
+          <Label>Email provider</Label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setProvider('postmark')}
+              className={`flex-1 rounded-lg border px-4 py-3 text-left text-sm transition-colors ${
+                provider === 'postmark'
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                  : 'hover:bg-accent'
+              }`}
+            >
+              <span className="font-medium">Postmark</span>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Managed inbound address with webhook forwarding
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setProvider('mailgun')}
+              className={`flex-1 rounded-lg border px-4 py-3 text-left text-sm transition-colors ${
+                provider === 'mailgun'
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                  : 'hover:bg-accent'
+              }`}
+            >
+              <span className="font-medium">Mailgun</span>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Route emails from your own domain
+              </p>
+            </button>
+          </div>
+        </div>
 
         <div className="space-y-2">
           <Label>Webhook base URL</Label>
@@ -513,43 +561,86 @@ function Step2({
           <Label>Your webhook URL</Label>
           <div className="flex items-center gap-2">
             <code className="flex-1 bg-muted rounded-md px-3 py-2 text-xs break-all font-mono">
-              {webhookUrl}
+              {provider === 'postmark' ? postmarkWebhookUrl : mailgunWebhookUrl}
             </code>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigator.clipboard.writeText(webhookUrl)}
+              onClick={() => navigator.clipboard.writeText(
+                provider === 'postmark' ? postmarkWebhookUrl : mailgunWebhookUrl
+              )}
             >
               Copy
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            In your{' '}
-            <a
-              href="https://account.postmarkapp.com/servers"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              Postmark server settings
-            </a>
-            , go to <strong>Inbound</strong> and paste this URL as the webhook endpoint.
+            {provider === 'postmark' ? (
+              <>
+                In your{' '}
+                <a
+                  href="https://account.postmarkapp.com/servers"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  Postmark server settings
+                </a>
+                , go to <strong>Inbound</strong> and paste this URL as the webhook endpoint.
+              </>
+            ) : (
+              <>
+                In Mailgun, go to <strong>Receiving</strong> &gt; <strong>Create Route</strong> and
+                forward matching emails to this URL.
+              </>
+            )}
           </p>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="inbound-address">Postmark inbound email address</Label>
-          <Input
-            id="inbound-address"
-            type="email"
-            placeholder="abc123@inbound.postmarkapp.com"
-            value={inboundAddress}
-            onChange={e => setInboundAddress(e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">
-            Found on the same Inbound settings page. Share this with your portfolio founders.
-          </p>
-        </div>
+        {provider === 'postmark' && (
+          <div className="space-y-2">
+            <Label htmlFor="inbound-address">Postmark inbound email address</Label>
+            <Input
+              id="inbound-address"
+              type="email"
+              placeholder="abc123@inbound.postmarkapp.com"
+              value={inboundAddress}
+              onChange={e => setInboundAddress(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Found on the same Inbound settings page. Share this with your portfolio founders.
+            </p>
+          </div>
+        )}
+
+        {provider === 'mailgun' && (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="mg-domain">Mailgun inbound domain</Label>
+              <Input
+                id="mg-domain"
+                placeholder="mg.yourdomain.com"
+                value={mgDomain}
+                onChange={e => setMgDomain(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                The domain configured for inbound routing in Mailgun.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="mg-signing-key">Webhook signing key (optional)</Label>
+              <Input
+                id="mg-signing-key"
+                type="password"
+                placeholder="Mailgun webhook signing key"
+                value={mgSigningKey}
+                onChange={e => setMgSigningKey(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Found in the Mailgun dashboard under Sending &gt; Webhooks. Used to verify inbound requests.
+              </p>
+            </div>
+          </>
+        )}
 
         <Button className="w-full" onClick={submit} disabled={saving}>
           {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…</> : 'Next →'}

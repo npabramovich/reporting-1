@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { sendApprovalEmail } from '@/lib/email'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -28,7 +29,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // Get the join request
   const { data: request } = await admin
     .from('fund_join_requests')
-    .select('id, fund_id, user_id, status')
+    .select('id, fund_id, user_id, email, status, funds(name)')
     .eq('id', params.id)
     .eq('fund_id', membership.fund_id)
     .eq('status', 'pending')
@@ -65,6 +66,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 })
+  }
+
+  // Send approval notification email (fire-and-forget)
+  if (action === 'approve' && request.email) {
+    const fundName = (request as any).funds?.name || 'your fund'
+    sendApprovalEmail(admin, request.fund_id, request.email, fundName).catch(() => {})
   }
 
   return NextResponse.json({ ok: true })

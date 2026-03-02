@@ -59,7 +59,7 @@ export default function SignUpPage() {
       return
     }
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -68,6 +68,8 @@ export default function SignUpPage() {
     })
     if (error) {
       setError(error.message)
+    } else if (data.user && data.user.identities?.length === 0) {
+      setError('This email is already registered. Please sign in or use the magic link option.')
     } else {
       setInfo('Check your email for a confirmation link.')
     }

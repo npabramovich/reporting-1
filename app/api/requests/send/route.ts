@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { decrypt } from '@/lib/crypto'
-import { getAccessToken } from '@/lib/google/drive'
-import { getGoogleCredentials } from '@/lib/google/credentials'
-import { getGmailProfile, sendEmail } from '@/lib/google/gmail'
+import { getOutboundConfig, sendOutboundEmail } from '@/lib/email'
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()
@@ -28,36 +25,10 @@ export async function POST(req: NextRequest) {
   if (!body_html?.trim() && !body_text?.trim()) return NextResponse.json({ error: 'Body is required' }, { status: 400 })
   if (!recipients?.length) return NextResponse.json({ error: 'No recipients selected' }, { status: 400 })
 
-  // Get Google credentials and access token
-  const { data: settings } = await admin
-    .from('fund_settings')
-    .select('google_refresh_token_encrypted, encryption_key_encrypted')
-    .eq('fund_id', membership.fund_id)
-    .single()
-
-  if (!settings?.google_refresh_token_encrypted || !settings?.encryption_key_encrypted) {
-    return NextResponse.json({ error: 'Google not connected. Connect Google in Settings.' }, { status: 400 })
-  }
-
-  const kek = process.env.ENCRYPTION_KEY
-  if (!kek) return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
-
-  const dek = decrypt(settings.encryption_key_encrypted, kek)
-  const refreshToken = decrypt(settings.google_refresh_token_encrypted, dek)
-  const creds = await getGoogleCredentials(admin, membership.fund_id)
-
-  let accessToken: string
-  try {
-    accessToken = await getAccessToken(refreshToken, creds?.clientId, creds?.clientSecret)
-  } catch {
-    return NextResponse.json({ error: 'Failed to get Google access token. You may need to reconnect Google in Settings.' }, { status: 400 })
-  }
-
-  let senderEmail: string
-  try {
-    senderEmail = await getGmailProfile(accessToken)
-  } catch {
-    return NextResponse.json({ error: 'Gmail access denied. You may need to reconnect Google in Settings to grant Gmail permissions.' }, { status: 403 })
+  // Get the fund's outbound email config
+  const config = await getOutboundConfig(admin, membership.fund_id)
+  if (!config) {
+    return NextResponse.json({ error: 'No outbound email provider configured. Set one up in Settings.' }, { status: 400 })
   }
 
   // Send one email per company — all addresses for a company go in the To field
@@ -66,8 +37,13 @@ export async function POST(req: NextRequest) {
   for (const recipient of recipients as { emails: string[]; companyName: string }[]) {
     const toAddresses = recipient.emails.join(', ')
     try {
-      const result = await sendEmail(accessToken, toAddresses, senderEmail, subject.trim(), body_html.trim(), cc?.trim() || undefined)
-      results.push({ emails: toAddresses, success: true, messageId: result.id })
+      const result = await sendOutboundEmail(config, {
+        to: toAddresses,
+        subject: subject.trim(),
+        html: body_html.trim(),
+        cc: cc?.trim() || undefined,
+      })
+      results.push({ emails: toAddresses, success: true, messageId: result.id?.toString() })
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       results.push({ emails: toAddresses, success: false, error: msg })

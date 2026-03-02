@@ -148,7 +148,7 @@ async function resolveFund(
   return { fundId: senders[0].fund_id, isGlobal: true }
 }
 
-async function isAuthorizedSender(
+export async function isAuthorizedSender(
   supabase: AdminClient,
   fundId: string,
   email: string

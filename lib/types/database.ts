@@ -136,6 +136,14 @@ export type Database = {
           google_client_secret_encrypted: string | null
           claude_model: string
           ai_summary_prompt: string | null
+          outbound_email_provider: string | null
+          resend_api_key_encrypted: string | null
+          postmark_server_token_encrypted: string | null
+          inbound_email_provider: string | null
+          mailgun_inbound_domain: string | null
+          mailgun_signing_key_encrypted: string | null
+          mailgun_api_key_encrypted: string | null
+          mailgun_sending_domain: string | null
           created_at: string
           updated_at: string
         }
@@ -153,6 +161,14 @@ export type Database = {
           google_drive_folder_name?: string | null
           claude_model?: string
           ai_summary_prompt?: string | null
+          outbound_email_provider?: string | null
+          resend_api_key_encrypted?: string | null
+          postmark_server_token_encrypted?: string | null
+          inbound_email_provider?: string | null
+          mailgun_inbound_domain?: string | null
+          mailgun_signing_key_encrypted?: string | null
+          mailgun_api_key_encrypted?: string | null
+          mailgun_sending_domain?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -170,6 +186,14 @@ export type Database = {
           google_drive_folder_name?: string | null
           claude_model?: string
           ai_summary_prompt?: string | null
+          outbound_email_provider?: string | null
+          resend_api_key_encrypted?: string | null
+          postmark_server_token_encrypted?: string | null
+          inbound_email_provider?: string | null
+          mailgun_inbound_domain?: string | null
+          mailgun_signing_key_encrypted?: string | null
+          mailgun_api_key_encrypted?: string | null
+          mailgun_sending_domain?: string | null
           created_at?: string
           updated_at?: string
         }
