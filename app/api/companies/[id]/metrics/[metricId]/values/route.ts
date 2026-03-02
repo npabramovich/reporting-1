@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 export async function GET(
   _req: NextRequest,
@@ -19,7 +20,7 @@ export async function GET(
     .order('period_quarter', { nullsFirst: true })
     .order('period_month', { nullsFirst: true })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'metric-values')
 
   // Deduplicate: keep the latest entry per period
   const rows = (data ?? []) as unknown as Array<Record<string, unknown>>
@@ -110,7 +111,7 @@ export async function POST(
       .select()
       .single()
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return dbError(error, 'metric-values')
     return NextResponse.json(data)
   }
 
@@ -132,7 +133,7 @@ export async function POST(
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'metric-values')
 
   return NextResponse.json(data, { status: 201 })
 }

@@ -186,7 +186,10 @@ export async function sendApprovalEmail(
 ) {
   try {
     const config = await getOutboundConfig(admin, fundId)
-    if (!config) return // no provider configured — silently skip
+    if (!config) {
+      console.warn('[approval-email] No system email provider configured for fund', fundId)
+      return
+    }
 
     const { data: settings } = await admin
       .from('fund_settings')

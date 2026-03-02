@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 export async function GET(req: NextRequest) {
   const supabase = createClient()
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     error: { message: string } | null
   }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'dashboard-notes')
 
   // Batch-load display names
   const { data: members } = await admin
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
     .select('id, content, user_id, company_id, created_at')
     .single() as { data: { id: string; content: string; user_id: string; company_id: string | null; created_at: string } | null; error: { message: string } | null }
 
-  if (error || !note) return NextResponse.json({ error: error?.message ?? 'Failed to create note' }, { status: 500 })
+  if (error || !note) return dbError(error ?? { message: 'Failed to create note' }, 'dashboard-notes')
 
   return NextResponse.json({
     id: note.id,

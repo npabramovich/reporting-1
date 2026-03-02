@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 // DELETE — remove a whitelist entry (admin only)
 export async function DELETE(
@@ -28,7 +29,7 @@ export async function DELETE(
     .delete()
     .eq('id', params.id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'settings-whitelist-id')
 
   return NextResponse.json({ ok: true })
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -17,17 +17,9 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [branding, setBranding] = useState<{ fundName: string; fundLogo: string }>({ fundName: '', fundLogo: '' })
 
   const router = useRouter()
   const supabase = createClient()
-
-  useEffect(() => {
-    fetch('/api/auth/branding')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setBranding(data) })
-      .catch(() => {})
-  }, [])
 
   async function resetPassword() {
     setError(null)
@@ -55,14 +47,10 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
-          {branding.fundLogo ? (
-            <img src={branding.fundLogo} alt="" className="h-10 w-10 rounded object-contain mx-auto mb-2" />
-          ) : (
-            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center mx-auto mb-2">
-              <Building2 className="h-5 w-5 text-muted-foreground" />
-            </div>
-          )}
-          <h1 className="text-lg font-semibold tracking-tight">{branding.fundName || 'Portfolio Reporting'}</h1>
+          <div className="h-10 w-10 rounded bg-muted flex items-center justify-center mx-auto mb-2">
+            <Building2 className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <h1 className="text-lg font-semibold tracking-tight">Portfolio Reporting</h1>
         </div>
 
         <Card>

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { encrypt } from '@/lib/crypto'
 import { randomBytes } from 'crypto'
+import { dbError } from '@/lib/api-error'
 
 // GET — returns fund settings (safe fields only)
 export async function GET() {
@@ -369,7 +370,7 @@ export async function PATCH(req: NextRequest) {
       .update(settingsUpdates)
       .eq('fund_id', membership.fund_id)
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return dbError(error, 'settings')
   }
 
   return NextResponse.json({ ok: true })

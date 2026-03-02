@@ -7,6 +7,7 @@ import {
   type PostmarkPayload,
 } from '@/lib/pipeline/processEmail'
 import { isAuthorizedSender } from '@/lib/pipeline/isAuthorizedSender'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
 function safeTokenCompare(a: string, b: string): boolean {
   try {
@@ -25,6 +26,10 @@ export async function POST(req: NextRequest) {
     console.log('[inbound-email] Skipped — demo mode is enabled')
     return NextResponse.json({ ok: true })
   }
+
+  // Rate limit inbound webhook: 60 per minute per IP
+  const limited = await rateLimit({ key: `inbound:${getClientIp(req)}`, limit: 60, windowSeconds: 60 })
+  if (limited) return limited
 
   try {
     await handleInbound(req)

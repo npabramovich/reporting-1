@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 export async function DELETE(
   _req: NextRequest,
@@ -27,7 +28,7 @@ export async function DELETE(
     .eq('id', params.id)
     .eq('fund_id', membership.fund_id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'settings-senders-id')
 
   return NextResponse.json({ ok: true })
 }

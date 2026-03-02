@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 // ---------------------------------------------------------------------------
 // DELETE — Remove a document and its storage object
@@ -45,7 +46,7 @@ export async function DELETE(
     .delete()
     .eq('id', params.docId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'companies-id-documents-docId')
 
   return NextResponse.json({ success: true })
 }

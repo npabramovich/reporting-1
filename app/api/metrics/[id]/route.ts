@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 const VALID_VALUE_TYPES = ['number', 'currency', 'percentage', 'text']
 const VALID_UNIT_POSITIONS = ['prefix', 'suffix']
@@ -67,7 +68,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'metrics-id')
 
   return NextResponse.json(data)
 }
@@ -98,7 +99,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   }
 
   const { error } = await admin.from('metrics').delete().eq('id', params.id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'metrics-id')
 
   return NextResponse.json({ ok: true })
 }

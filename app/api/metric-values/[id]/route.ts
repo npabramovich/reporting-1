@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 async function verifyOwnership(
   admin: ReturnType<typeof createAdminClient>,
@@ -56,7 +57,7 @@ export async function PATCH(
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'metric-values')
 
   return NextResponse.json(data)
 }
@@ -78,7 +79,7 @@ export async function DELETE(
     .delete()
     .eq('id', params.id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'metric-values')
 
   return NextResponse.json({ ok: true })
 }

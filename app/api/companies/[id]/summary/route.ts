@@ -7,6 +7,8 @@ import {
   type PostmarkPayload,
 } from '@/lib/parsing/extractAttachmentText'
 import Anthropic from '@anthropic-ai/sdk'
+import { dbError } from '@/lib/api-error'
+import { rateLimit } from '@/lib/rate-limit'
 
 // Verify the company belongs to the user's fund
 async function verifyCompanyAccess(supabase: ReturnType<typeof createClient>, admin: ReturnType<typeof createAdminClient>, userId: string, companyId: string) {
@@ -88,7 +90,7 @@ export async function DELETE(
     .delete()
     .eq('company_id', params.id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'companies-id-summary')
 
   return NextResponse.json({ ok: true })
 }
@@ -104,6 +106,10 @@ export async function POST(
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Rate limit AI summary generation: 10 per 5 minutes per user
+  const limited = await rateLimit({ key: `ai-summary:${user.id}`, limit: 10, windowSeconds: 300 })
+  if (limited) return limited
 
   const admin = createAdminClient()
 

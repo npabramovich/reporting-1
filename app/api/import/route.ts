@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getClaudeApiKey, getClaudeModel } from '@/lib/pipeline/processEmail'
 import Anthropic from '@anthropic-ai/sdk'
+import { rateLimit } from '@/lib/rate-limit'
 
 interface ParsedMetric {
   name: string
@@ -115,6 +116,10 @@ export async function POST(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Rate limit import: 10 per 5 minutes per user
+  const limited = await rateLimit({ key: `import:${user.id}`, limit: 10, windowSeconds: 300 })
+  if (limited) return limited
 
   const admin = createAdminClient()
 

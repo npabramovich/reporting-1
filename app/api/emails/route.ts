@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import type { InboundEmail, Company } from '@/lib/types/database'
+import { dbError } from '@/lib/api-error'
 
 const DEFAULT_PAGE_SIZE = 50
 const MAX_PAGE_SIZE = 1000
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
   if (dateTo) query = query.lte('received_at', dateTo)
 
   const { data, error, count } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'emails')
 
   const rows = (data ?? []) as unknown as EmailListRow[]
 

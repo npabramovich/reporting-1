@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { InboundEmail, Metric, MetricValue, ParsingReview } from '@/lib/types/database'
+import { dbError } from '@/lib/api-error'
 
 type MetricValueRow = Pick<
   MetricValue,
@@ -28,7 +29,7 @@ export async function GET(
     .eq('id', params.id)
     .maybeSingle()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'emails-id')
   if (!emailData) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const email = emailData as unknown as InboundEmail
@@ -137,7 +138,7 @@ export async function PATCH(
     .update(updates)
     .eq('id', params.id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'emails-id')
 
   return NextResponse.json({ ok: true })
 }
