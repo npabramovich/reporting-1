@@ -13,6 +13,16 @@ export default function DemoPage() {
 
     async function startDemo() {
       try {
+        const supabase = createClient()
+
+        // If already signed in, don't overwrite the session
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          if (!cancelled) router.replace('/dashboard')
+          return
+        }
+
+        // Not signed in — proceed with demo login
         const res = await fetch('/api/demo/session', { method: 'POST' })
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
@@ -20,8 +30,7 @@ export default function DemoPage() {
           return
         }
 
-        const { tokenHash, email } = await res.json()
-        const supabase = createClient()
+        const { tokenHash } = await res.json()
 
         const { error: otpError } = await supabase.auth.verifyOtp({
           token_hash: tokenHash,

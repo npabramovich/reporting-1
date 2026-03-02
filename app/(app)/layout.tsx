@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { AppShell } from '@/components/app-shell'
+import { DemoSessionGuard } from '@/components/demo-session-guard'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -49,9 +50,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {isViewer && (
-        <div className="bg-blue-500 text-white text-center text-xs py-1.5 px-4 shrink-0">
-          Viewing demo &mdash; read only
-        </div>
+        <>
+          <DemoSessionGuard />
+          <div className="bg-blue-500 text-white text-center text-xs py-1.5 px-4 shrink-0">
+            Viewing demo &mdash; read only
+          </div>
+        </>
       )}
 
       <div className="w-full max-w-screen-xl mx-auto flex flex-col flex-1">

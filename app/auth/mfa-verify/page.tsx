@@ -82,8 +82,9 @@ function MfaVerifyForm() {
       } else {
         // Prevent open redirect — only allow relative paths
         const dest = nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/'
-        router.push(dest)
-        router.refresh()
+        // Hard navigation so the server picks up the updated AAL2 session cookie
+        window.location.href = dest
+        return
       }
     } catch {
       setError('Verification failed. Please try again.')
