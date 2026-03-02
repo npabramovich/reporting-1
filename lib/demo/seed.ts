@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 
-const DEMO_FUND_NAME = 'Hemrock Demo'
+const DEMO_FUND_NAME = 'Hemrock Ventures'
 
 type MetricDef = {
   name: string
@@ -100,14 +100,14 @@ const COMPANIES: CompanyDef[] = [
     ],
   },
   {
-    name: 'UrbanFlow',
+    name: 'RouteWise',
     stage: 'Series B',
     industry: ['Logistics', 'SaaS'],
     group: 'Fund I',
     overview: 'Last-mile delivery optimization platform used by enterprise retailers and logistics providers.',
     founders: 'James Okafor, Lin Wei',
     why_invested: 'Category leader in a $40B TAM with sticky enterprise contracts and strong unit economics.',
-    contact_email: ['james@urbanflow.co', 'lin@urbanflow.co'],
+    contact_email: ['james@routewise.co', 'lin@routewise.co'],
     metrics: [
       { name: 'Annual Recurring Revenue', slug: 'arr', unit: '$', unit_position: 'prefix', value_type: 'currency', cadence: 'quarterly', values: [
         { label: 'Q1 2025', year: 2025, quarter: 1, val: 4200000 },
@@ -133,14 +133,14 @@ const COMPANIES: CompanyDef[] = [
     ],
   },
   {
-    name: 'Marpipe',
+    name: 'AdVantage',
     stage: 'Series A',
     industry: ['AdTech'],
     group: 'Fund I',
     overview: 'Multivariate creative testing platform that automates ad creative optimization at scale.',
-    founders: 'Dan Pantelo, Conor Malloy',
+    founders: 'Jamie Lin, Alex Torres',
     why_invested: 'Unique creative-first approach to ad optimization with rapid adoption among performance marketers.',
-    contact_email: ['dan@marpipe.com'],
+    contact_email: ['jamie@advantage.io'],
     metrics: [
       { name: 'Monthly Recurring Revenue', slug: 'mrr', unit: '$', unit_position: 'prefix', value_type: 'currency', cadence: 'monthly', values: [
         { label: 'Jul 2025', year: 2025, month: 7, val: 280000 },
@@ -159,14 +159,14 @@ const COMPANIES: CompanyDef[] = [
     ],
   },
   {
-    name: 'Clearpath',
+    name: 'Verdant',
     stage: 'Seed',
     industry: ['Climate Tech'],
     group: 'Fund II',
     overview: 'Carbon accounting and offset management platform for mid-market enterprises.',
     founders: 'Anna Kowalski, Raj Mehta',
     why_invested: 'Regulatory tailwinds (CSRD, SEC climate rules) create strong demand pull for compliance tooling.',
-    contact_email: ['anna@clearpath.earth'],
+    contact_email: ['anna@verdant.earth'],
     metrics: [
       { name: 'Cash on Hand', slug: 'cash', unit: '$', unit_position: 'prefix', value_type: 'currency', cadence: 'quarterly', values: [
         { label: 'Q1 2025', year: 2025, quarter: 1, val: 1800000 },
@@ -187,14 +187,14 @@ const COMPANIES: CompanyDef[] = [
     ],
   },
   {
-    name: 'PayStack',
+    name: 'TapFin',
     stage: 'Series A',
     industry: ['Fintech'],
     group: 'Fund II',
     overview: 'Embedded payments infrastructure for African merchants, processing card, mobile money, and bank transfers.',
-    founders: 'Adebayo Ojo',
+    founders: 'Kemi Adeyemi, Tobi Mensah',
     why_invested: 'First-mover in a rapidly digitizing payments market with 50M+ potential merchants.',
-    contact_email: ['adebayo@paystack.ng'],
+    contact_email: ['kemi@tapfin.ng'],
     metrics: [
       { name: 'Gross Merchandise Volume', slug: 'gmv', unit: '$', unit_position: 'prefix', value_type: 'currency', cadence: 'monthly', values: [
         { label: 'Jul 2025', year: 2025, month: 7, val: 12000000 },
@@ -264,14 +264,14 @@ const COMPANIES: CompanyDef[] = [
     ],
   },
   {
-    name: 'Marqo',
+    name: 'Lattis',
     stage: 'Pre-Seed',
     industry: ['AI / ML'],
     group: 'Fund II',
-    overview: 'Open-source tensor search engine for multimodal AI applications (text, image, video).',
-    founders: 'Jesse Clark',
+    overview: 'Open-source vector embedding framework for multimodal retrieval-augmented generation pipelines.',
+    founders: 'Elena Vasquez',
     why_invested: 'Strong open-source traction and early enterprise adoption for AI search infrastructure.',
-    contact_email: ['jesse@marqo.ai'],
+    contact_email: ['elena@lattis.dev'],
     metrics: [
       { name: 'Cash on Hand', slug: 'cash', unit: '$', unit_position: 'prefix', value_type: 'currency', cadence: 'quarterly', values: [
         { label: 'Q1 2025', year: 2025, quarter: 1, val: 900000 },
@@ -294,7 +294,7 @@ const SUMMARIES: Record<string, string> = {
 
 Key concern: the burn rate has been creeping up and should be monitored. The team should consider whether the current growth trajectory justifies the increased spend or if there are efficiency gains to capture. Overall, NovaTech remains one of the strongest performers in the portfolio.`,
 
-  UrbanFlow: `UrbanFlow closed Q1 2026 with $6.1M ARR, up 45% year-over-year. The company continues to add enterprise customers at a healthy pace (74 as of Q1 2026), and gross margins have expanded to 68%. The business is approaching cash flow breakeven as unit economics improve.
+  RouteWise: `RouteWise closed Q1 2026 with $6.1M ARR, up 45% year-over-year. The company continues to add enterprise customers at a healthy pace (74 as of Q1 2026), and gross margins have expanded to 68%. The business is approaching cash flow breakeven as unit economics improve.
 
 The expansion from logistics into retail fulfillment is showing early traction, with 8 new retail customers signed in Q4. This vertical diversification reduces concentration risk. Recommend discussing Series C timeline at the next board meeting.`,
 
@@ -302,7 +302,7 @@ The expansion from logistics into retail fulfillment is showing early traction, 
 
 Headcount grew to 62, primarily in engineering and customer success. Cash position remains strong at $14M, providing 18+ months of runway. The network effect thesis is playing out as planned — each new customer makes the dataset more valuable for all participants.`,
 
-  PayStack: `PayStack processed $19.5M in GMV in December 2025, a seasonal high driven by holiday spending. Revenue scaled proportionally to $292K. The 1.5% take rate remains stable and in line with regional benchmarks.
+  TapFin: `TapFin processed $19.5M in GMV in December 2025, a seasonal high driven by holiday spending. Revenue scaled proportionally to $292K. The 1.5% take rate remains stable and in line with regional benchmarks.
 
 Cash position of $3.2M at year-end provides roughly 12 months of runway at current burn. The team should begin Series B discussions in Q2 2026. Key risk: currency volatility in core markets continues to create FX headwinds on USD-reported metrics.`,
 }
@@ -310,30 +310,30 @@ Cash position of $3.2M at year-end provides roughly 12 months of runway at curre
 const NOTES = [
   { companyName: null, content: 'Q4 portfolio review scheduled for March 15. Need updated financials from all companies by March 1.' },
   { companyName: 'NovaTech', content: 'Sarah mentioned they are exploring a strategic partnership with Salesforce. Follow up in next 1:1.' },
-  { companyName: 'UrbanFlow', content: 'Board meeting recap: team presented Series C readiness plan. Targeting Q3 2026 raise at $50M+ valuation.' },
+  { companyName: 'RouteWise', content: 'Board meeting recap: team presented Series C readiness plan. Targeting Q3 2026 raise at $50M+ valuation.' },
   { companyName: 'GreenLeaf Bio', content: 'FDA pre-submission meeting went well. Team expects to file for regulatory clearance in Q2 2026.' },
-  { companyName: null, content: 'LP update call next Thursday. Prepare portfolio summary with highlights from Benchline and UrbanFlow.' },
-  { companyName: 'Marqo', content: 'GitHub stars passed 5K. Jesse is presenting at NeurIPS next month — great visibility for enterprise pipeline.' },
+  { companyName: null, content: 'LP update call next Thursday. Prepare portfolio summary with highlights from Benchline and RouteWise.' },
+  { companyName: 'Lattis', content: 'GitHub stars passed 5K. Elena is presenting at NeurIPS next month — great visibility for enterprise pipeline.' },
 ]
 
 const INBOUND_EMAILS = [
   { from: 'sarah@novatech.io', subject: 'NovaTech December 2025 Update', companyName: 'NovaTech', metrics_extracted: 4, days_ago: 12 },
-  { from: 'james@urbanflow.co', subject: 'UrbanFlow Q1 2026 Quarterly Report', companyName: 'UrbanFlow', metrics_extracted: 3, days_ago: 5 },
+  { from: 'james@routewise.co', subject: 'RouteWise Q1 2026 Quarterly Report', companyName: 'RouteWise', metrics_extracted: 3, days_ago: 5 },
   { from: 'emily@benchline.com', subject: 'Benchline Q4 2025 Board Deck', companyName: 'Benchline', metrics_extracted: 4, days_ago: 20 },
-  { from: 'adebayo@paystack.ng', subject: 'PayStack January 2026 Metrics', companyName: 'PayStack', metrics_extracted: 3, days_ago: 8 },
+  { from: 'kemi@tapfin.ng', subject: 'TapFin January 2026 Metrics', companyName: 'TapFin', metrics_extracted: 3, days_ago: 8 },
 ]
 
 const REVIEW_ITEMS = [
-  { issue_type: 'low_confidence', extracted_value: '340000', companyName: 'Marpipe', metricSlug: 'mrr' },
-  { issue_type: 'duplicate_period', extracted_value: '5500000', companyName: 'UrbanFlow', metricSlug: 'arr' },
-  { issue_type: 'ambiguous_period', extracted_value: '292000', companyName: 'PayStack', metricSlug: 'revenue' },
+  { issue_type: 'low_confidence', extracted_value: '340000', companyName: 'AdVantage', metricSlug: 'mrr' },
+  { issue_type: 'duplicate_period', extracted_value: '5500000', companyName: 'RouteWise', metricSlug: 'arr' },
+  { issue_type: 'ambiguous_period', extracted_value: '292000', companyName: 'TapFin', metricSlug: 'revenue' },
 ]
 
 const DOCUMENTS = [
   { companyName: 'NovaTech', filename: 'NovaTech_Board_Deck_Q4_2025.pdf', file_type: 'application/pdf', file_size: 2400000 },
-  { companyName: 'UrbanFlow', filename: 'UrbanFlow_Financial_Model_2026.xlsx', file_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', file_size: 890000 },
+  { companyName: 'RouteWise', filename: 'RouteWise_Financial_Model_2026.xlsx', file_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', file_size: 890000 },
   { companyName: 'Benchline', filename: 'Benchline_Series_B_Memo.pdf', file_type: 'application/pdf', file_size: 1500000 },
-  { companyName: 'Clearpath', filename: 'Clearpath_IP_Overview.pdf', file_type: 'application/pdf', file_size: 650000 },
+  { companyName: 'Verdant', filename: 'Verdant_IP_Overview.pdf', file_type: 'application/pdf', file_size: 650000 },
 ]
 
 const EMAIL_REQUEST = {
