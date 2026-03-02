@@ -62,10 +62,9 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function ReviewItems({
   emailId,
-  hasReviews,
 }: {
   emailId: string
-  hasReviews: boolean
+  hasReviews?: boolean
 }) {
   const [data, setData] = useState<ReviewData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -143,7 +142,7 @@ export function ReviewItems({
   const items = data?.items ?? []
   const hasUnresolved = items.length > 0
 
-  if (!hasReviews && !hasUnresolved && !loading) return null
+  if (!hasUnresolved && !loading) return null
 
   return (
     <section>
@@ -155,12 +154,6 @@ export function ReviewItems({
         <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading reviews…
-        </div>
-      )}
-
-      {!loading && items.length === 0 && hasReviews && (
-        <div className="rounded-lg border px-4 py-3 text-sm text-muted-foreground">
-          All review items have been resolved.
         </div>
       )}
 

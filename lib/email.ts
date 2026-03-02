@@ -117,16 +117,23 @@ export async function sendOutboundEmail(config: OutboundConfig, params: EmailPar
 export async function getOutboundConfig(
   admin: SupabaseClient,
   fundId: string,
+  purpose: 'system' | 'asks' = 'system',
 ): Promise<OutboundConfig | null> {
   const { data: settings } = await admin
     .from('fund_settings')
-    .select('outbound_email_provider, resend_api_key_encrypted, postmark_server_token_encrypted, mailgun_api_key_encrypted, mailgun_sending_domain, encryption_key_encrypted')
+    .select('outbound_email_provider, asks_email_provider, resend_api_key_encrypted, postmark_server_token_encrypted, mailgun_api_key_encrypted, mailgun_sending_domain, encryption_key_encrypted')
     .eq('fund_id', fundId)
     .single()
 
-  if (!settings?.outbound_email_provider) return null
+  if (!settings) return null
 
-  const provider = settings.outbound_email_provider as 'resend' | 'postmark' | 'gmail' | 'mailgun'
+  const selectedProvider = purpose === 'asks'
+    ? settings.asks_email_provider
+    : settings.outbound_email_provider
+
+  if (!selectedProvider) return null
+
+  const provider = selectedProvider as 'resend' | 'postmark' | 'gmail' | 'mailgun'
 
   if (provider === 'gmail') {
     return { provider, admin, fundId }
@@ -166,6 +173,11 @@ export async function getOutboundConfig(
  * Send the approval notification email using the fund's configured outbound provider.
  * Fails silently — never throws.
  */
+export const DEFAULT_APPROVAL_SUBJECT = "You've been approved to join {{fundName}}"
+export const DEFAULT_APPROVAL_BODY = `<h2>Congrats!</h2>
+<p>You've been approved to join <strong>{{fundName}}</strong>.</p>
+<p><a href="{{siteUrl}}/auth">Sign in to get started</a></p>`
+
 export async function sendApprovalEmail(
   admin: SupabaseClient,
   fundId: string,
@@ -176,16 +188,28 @@ export async function sendApprovalEmail(
     const config = await getOutboundConfig(admin, fundId)
     if (!config) return // no provider configured — silently skip
 
+    const { data: settings } = await admin
+      .from('fund_settings')
+      .select('approval_email_subject, approval_email_body, system_email_from_name, system_email_from_address')
+      .eq('fund_id', fundId)
+      .single()
+
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    await sendOutboundEmail(config, {
-      to,
-      subject: `You've been approved to join ${fundName}`,
-      html: `
-        <h2>Congrats!</h2>
-        <p>You've been approved to join <strong>${fundName}</strong>.</p>
-        <p><a href="${siteUrl}/auth">Sign in to get started</a></p>
-      `,
-    })
+    const vars: Record<string, string> = { fundName, siteUrl }
+    const interpolate = (template: string) =>
+      template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? '')
+
+    const subject = interpolate(settings?.approval_email_subject || DEFAULT_APPROVAL_SUBJECT)
+    const html = interpolate(settings?.approval_email_body || DEFAULT_APPROVAL_BODY)
+
+    let from: string | undefined
+    if (settings?.system_email_from_address) {
+      from = settings.system_email_from_name
+        ? `${settings.system_email_from_name} <${settings.system_email_from_address}>`
+        : settings.system_email_from_address
+    }
+
+    await sendOutboundEmail(config, { to, from, subject, html })
   } catch (error) {
     console.error('Failed to send approval email:', error)
   }

@@ -10,8 +10,10 @@ import {
   type ExtractMetricsResult,
 } from '@/lib/claude/extractMetrics'
 import { decryptApiKey, decrypt } from '@/lib/crypto'
-import { getAccessToken, findOrCreateFolder, uploadFile } from '@/lib/google/drive'
+import { getAccessToken as getGoogleAccessToken, findOrCreateFolder as findOrCreateGoogleFolder, uploadFile as uploadGoogleFile } from '@/lib/google/drive'
 import { getGoogleCredentials } from '@/lib/google/credentials'
+import { getDropboxCredentials } from '@/lib/dropbox/credentials'
+import { getAccessToken as getDropboxAccessToken, findOrCreateFolder as findOrCreateDropboxFolder, uploadFile as uploadDropboxFile } from '@/lib/dropbox/files'
 import type { Json, IssueType, ProcessingStatus } from '@/lib/types/database'
 
 type Supabase = ReturnType<typeof createAdminClient>
@@ -143,11 +145,11 @@ export async function runPipeline(
   const status: ProcessingStatus = reviewCount > 0 ? 'needs_review' : 'success'
   await finalizeEmail(supabase, emailId, { status, metricsExtracted: writtenCount })
 
-  // Step 9: Save to Google Drive (non-blocking)
+  // Step 9: Save to file storage (non-blocking)
   try {
-    await saveToGoogleDrive(supabase, fundId, companyName, payload)
+    await saveToFileStorage(supabase, fundId, companyName, payload)
   } catch (err) {
-    console.error('[pipeline] Google Drive save failed (non-blocking):', err)
+    console.error('[pipeline] File storage save failed (non-blocking):', err)
   }
 }
 
@@ -412,28 +414,43 @@ function isImage(contentType: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Google Drive integration (Step 9)
+// File storage integration (Step 9)
 // ---------------------------------------------------------------------------
 
-async function saveToGoogleDrive(
+async function saveToFileStorage(
   supabase: Supabase,
   fundId: string,
   companyName: string,
   payload: PostmarkPayload
 ): Promise<void> {
-  // Check if Drive is connected
   const { data: settings } = await supabase
     .from('fund_settings')
-    .select('google_refresh_token_encrypted, encryption_key_encrypted, google_drive_folder_id')
+    .select('file_storage_provider, google_refresh_token_encrypted, encryption_key_encrypted, google_drive_folder_id, dropbox_refresh_token_encrypted, dropbox_folder_path')
     .eq('fund_id', fundId)
     .single()
 
+  if (!settings?.file_storage_provider) return
+
+  if (settings.file_storage_provider === 'google_drive') {
+    await saveToGoogleDrive(supabase, fundId, companyName, payload, settings)
+  } else if (settings.file_storage_provider === 'dropbox') {
+    await saveToDropbox(supabase, fundId, companyName, payload, settings)
+  }
+}
+
+async function saveToGoogleDrive(
+  supabase: Supabase,
+  fundId: string,
+  companyName: string,
+  payload: PostmarkPayload,
+  settings: { google_refresh_token_encrypted: string | null; encryption_key_encrypted: string | null; google_drive_folder_id: string | null }
+): Promise<void> {
   if (
-    !settings?.google_refresh_token_encrypted ||
-    !settings?.encryption_key_encrypted ||
-    !settings?.google_drive_folder_id
+    !settings.google_refresh_token_encrypted ||
+    !settings.encryption_key_encrypted ||
+    !settings.google_drive_folder_id
   ) {
-    return // Drive not connected, skip silently
+    return
   }
 
   const kek = process.env.ENCRYPTION_KEY
@@ -442,27 +459,69 @@ async function saveToGoogleDrive(
   const dek = decrypt(settings.encryption_key_encrypted, kek)
   const refreshToken = decrypt(settings.google_refresh_token_encrypted, dek)
 
-  // Get Google OAuth credentials (DB first, then env vars)
   const creds = await getGoogleCredentials(supabase, fundId)
-  const accessToken = await getAccessToken(refreshToken, creds?.clientId, creds?.clientSecret)
+  const accessToken = await getGoogleAccessToken(refreshToken, creds?.clientId, creds?.clientSecret)
   const rootFolderId = settings.google_drive_folder_id
 
-  // Find or create company subfolder
-  const companyFolderId = await findOrCreateFolder(accessToken, rootFolderId, companyName)
+  const companyFolderId = await findOrCreateGoogleFolder(accessToken, rootFolderId, companyName)
 
-  // Upload email body as text file
   const dateStr = new Date().toISOString().slice(0, 10)
   const subject = payload.Subject?.replace(/[^a-zA-Z0-9 _-]/g, '').slice(0, 60) || 'Report'
   const emailFilename = `${dateStr}_${subject}.txt`
 
   const emailBody = payload.TextBody || payload.HtmlBody || '(no body)'
-  await uploadFile(accessToken, companyFolderId, emailFilename, emailBody, 'text/plain')
+  await uploadGoogleFile(accessToken, companyFolderId, emailFilename, emailBody, 'text/plain')
 
-  // Upload attachments
   if (payload.Attachments?.length) {
     for (const att of payload.Attachments) {
       const content = Buffer.from(att.Content, 'base64')
-      await uploadFile(accessToken, companyFolderId, att.Name, content, att.ContentType)
+      await uploadGoogleFile(accessToken, companyFolderId, att.Name, content, att.ContentType)
+    }
+  }
+}
+
+async function saveToDropbox(
+  supabase: Supabase,
+  fundId: string,
+  companyName: string,
+  payload: PostmarkPayload,
+  settings: { dropbox_refresh_token_encrypted: string | null; encryption_key_encrypted: string | null; dropbox_folder_path: string | null }
+): Promise<void> {
+  if (
+    !settings.dropbox_refresh_token_encrypted ||
+    !settings.encryption_key_encrypted ||
+    !settings.dropbox_folder_path
+  ) {
+    return
+  }
+
+  const kek = process.env.ENCRYPTION_KEY
+  if (!kek) return
+
+  const dek = decrypt(settings.encryption_key_encrypted, kek)
+  const refreshToken = decrypt(settings.dropbox_refresh_token_encrypted, dek)
+
+  const creds = await getDropboxCredentials(supabase, fundId)
+  if (!creds) return
+
+  const accessToken = await getDropboxAccessToken(refreshToken, creds.appKey, creds.appSecret)
+  const rootPath = settings.dropbox_folder_path
+
+  // Create company subfolder
+  const companyPath = `${rootPath}/${companyName}`
+  await findOrCreateDropboxFolder(accessToken, companyPath)
+
+  const dateStr = new Date().toISOString().slice(0, 10)
+  const subject = payload.Subject?.replace(/[^a-zA-Z0-9 _-]/g, '').slice(0, 60) || 'Report'
+  const emailFilename = `${dateStr}_${subject}.txt`
+
+  const emailBody = payload.TextBody || payload.HtmlBody || '(no body)'
+  await uploadDropboxFile(accessToken, companyPath, emailFilename, emailBody)
+
+  if (payload.Attachments?.length) {
+    for (const att of payload.Attachments) {
+      const content = Buffer.from(att.Content, 'base64')
+      await uploadDropboxFile(accessToken, companyPath, att.Name, content)
     }
   }
 }

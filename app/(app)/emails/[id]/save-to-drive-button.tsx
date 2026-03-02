@@ -26,7 +26,7 @@ export function SaveToDriveButton({ emailId }: { emailId: string }) {
       setResult('success')
     } catch (err) {
       setResult('error')
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to save to Drive')
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to save')
     } finally {
       setLoading(false)
     }
@@ -48,7 +48,7 @@ export function SaveToDriveButton({ emailId }: { emailId: string }) {
         ) : (
           <HardDrive className="h-4 w-4" />
         )}
-        {result === 'success' ? 'Saved to Drive' : 'Save to Drive'}
+        {result === 'success' ? 'Saved' : 'Save to storage'}
       </Button>
       {result === 'error' && errorMsg && (
         <span className="text-xs text-destructive flex items-center gap-1">
