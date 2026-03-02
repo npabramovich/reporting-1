@@ -15,16 +15,8 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
-  const [branding, setBranding] = useState<{ fundName: string; fundLogo: string }>({ fundName: '', fundLogo: '' })
 
   const supabase = createClient()
-
-  useEffect(() => {
-    fetch('/api/auth/branding')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setBranding(data) })
-      .catch(() => {})
-  }, [])
 
   async function handleReset() {
     if (!email.trim()) {
@@ -48,14 +40,10 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
-          {branding.fundLogo ? (
-            <img src={branding.fundLogo} alt="" className="h-10 w-10 rounded object-contain mx-auto mb-2" />
-          ) : (
-            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center mx-auto mb-2">
-              <Building2 className="h-5 w-5 text-muted-foreground" />
-            </div>
-          )}
-          <h1 className="text-lg font-semibold tracking-tight">{branding.fundName || 'Portfolio Reporting'}</h1>
+          <div className="h-10 w-10 rounded bg-muted flex items-center justify-center mx-auto mb-2">
+            <Building2 className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <h1 className="text-lg font-semibold tracking-tight">Portfolio Reporting</h1>
         </div>
 
         <Card>

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
+  const limited = await rateLimit({ key: `signup:${getClientIp(req)}`, limit: 5, windowSeconds: 300 })
+  if (limited) return limited
+
   const { email, password } = await req.json()
 
   if (!email?.trim()) {

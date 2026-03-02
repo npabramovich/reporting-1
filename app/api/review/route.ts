@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import type { ParsingReview, Company, Metric, InboundEmail } from '@/lib/types/database'
+import { dbError } from '@/lib/api-error'
 
 type ReviewRow = Pick<
   ParsingReview,
@@ -29,7 +30,7 @@ export async function GET() {
     .is('resolution', null)
     .order('created_at', { ascending: false })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'review')
 
   const rows = (data ?? []) as unknown as ReviewRow[]
 

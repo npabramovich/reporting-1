@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -24,7 +25,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .eq('company_id', params.id)
     .order('created_at', { ascending: true }) as { data: { id: string; content: string; user_id: string; created_at: string; updated_at: string }[] | null; error: { message: string } | null }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'companies-id-notes')
 
   // Get the fund_id for looking up display names
   const { data: companyRow } = await supabase
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .select('id, content, user_id, created_at')
     .single() as { data: { id: string; content: string; user_id: string; created_at: string } | null; error: { message: string } | null }
 
-  if (error || !note) return NextResponse.json({ error: error?.message ?? 'Failed to create note' }, { status: 500 })
+  if (error || !note) return dbError(error ?? { message: 'Failed to create note' }, 'company-notes')
 
   // Look up current user's display name
   const { data: membership } = await admin

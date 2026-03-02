@@ -26,6 +26,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .limit(1)
     .single() as { data: { name: string; logo_url: string | null } | null }
 
+  // Check if user is admin and count pending join requests
+  const { data: membership } = await supabase
+    .from('fund_members')
+    .select('role')
+    .eq('user_id', user.id)
+    .limit(1)
+    .maybeSingle() as { data: { role: string } | null }
+
+  let pendingRequestCount = 0
+  if (membership?.role === 'admin') {
+    const { count } = await supabase
+      .from('fund_join_requests' as any)
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+    pendingRequestCount = count ?? 0
+  }
+
   const reviewBadge = (openReviewCount ?? 0) + (needsReviewEmailCount ?? 0)
   const fundName = fund?.name ?? 'Portfolio Reporting'
   const fundLogo = fund?.logo_url ?? null
@@ -44,6 +61,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           fundLogo={fundLogo}
           userEmail={user.email ?? ''}
           reviewBadge={reviewBadge}
+          settingsBadge={pendingRequestCount}
         >
           {children}
         </AppShell>

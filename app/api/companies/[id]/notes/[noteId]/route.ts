@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 export async function PATCH(
   req: NextRequest,
@@ -39,7 +40,7 @@ export async function PATCH(
     .select('id, content, user_id, created_at, updated_at')
     .single() as { data: { id: string; content: string; user_id: string; created_at: string; updated_at: string } | null; error: { message: string } | null }
 
-  if (error || !updated) return NextResponse.json({ error: error?.message ?? 'Failed to update' }, { status: 500 })
+  if (error || !updated) return dbError(error ?? { message: 'Failed to update' }, 'company-notes')
 
   const { data: membership } = await admin
     .from('fund_members')
@@ -98,7 +99,7 @@ export async function DELETE(
     .delete()
     .eq('id', params.noteId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'companies-id-notes-noteId')
 
   return NextResponse.json({ success: true })
 }

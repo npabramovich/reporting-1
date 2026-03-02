@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { extractFromBuffer } from '@/lib/parsing/extractAttachmentText'
+import { dbError } from '@/lib/api-error'
 
 // ---------------------------------------------------------------------------
 // GET — List all documents for a company
@@ -23,7 +24,7 @@ export async function GET(
     .eq('company_id', params.id)
     .order('created_at', { ascending: false }) as { data: any[] | null; error: { message: string } | null }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'companies-id-documents')
 
   // Tag uploaded documents with source
   const uploadDocs = (documents ?? []).map(d => ({ ...d, source: 'upload' as const }))

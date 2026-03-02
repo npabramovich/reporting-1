@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { CompanyStatus } from '@/lib/types/database'
+import { dbError } from '@/lib/api-error'
 
 const VALID_STATUSES: CompanyStatus[] = ['active', 'exited', 'written-off']
 
@@ -16,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .eq('id', params.id)
     .maybeSingle()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'companies-id')
   if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   return NextResponse.json(data)
@@ -81,7 +82,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'companies-id')
 
   return NextResponse.json(data)
 }

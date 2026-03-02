@@ -12,22 +12,23 @@ const THEME_CYCLE = ['system', 'light', 'dark'] as const
 const THEME_ICONS = { system: Monitor, light: Sun, dark: Moon }
 const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' }
 
-const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badge?: boolean }[] = [
+const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badgeKey?: 'review' | 'settings' }[] = [
   { href: '/dashboard', label: 'Portfolio', icon: Building2 },
-  { href: '/review', label: 'Review', icon: ClipboardCheck, badge: true },
+  { href: '/review', label: 'Review', icon: ClipboardCheck, badgeKey: 'review' },
   { href: '/emails', label: 'Inbound', icon: Mail },
   { href: '/import', label: 'Import', icon: Upload },
   { href: '/requests', label: 'Asks', icon: Send },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/settings', label: 'Settings', icon: Settings, badgeKey: 'settings' },
   { href: '/support', label: 'Support', icon: LifeBuoy },
 ]
 
 interface AppSidebarProps {
   reviewBadge: number
+  settingsBadge?: number
   onNavigate?: () => void
 }
 
-export function AppSidebar({ reviewBadge, onNavigate }: AppSidebarProps) {
+export function AppSidebar({ reviewBadge, settingsBadge, onNavigate }: AppSidebarProps) {
   const pathname = usePathname()
   const { collapsed, toggle } = useSidebar()
   const { theme, setTheme } = useTheme()
@@ -46,8 +47,11 @@ export function AppSidebar({ reviewBadge, onNavigate }: AppSidebarProps) {
   return (
     <div className="flex flex-col flex-1">
       <nav className={`flex-1 p-2 space-y-0.5 ${collapsed ? 'md:px-1' : ''}`}>
-        {NAV_ITEMS.map(({ href, label, icon: Icon, badge }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon, badgeKey }) => {
           const isActive = pathname === href || pathname.startsWith(href + '/')
+          const badgeCount = badgeKey === 'review' ? reviewBadge
+            : badgeKey === 'settings' ? (settingsBadge ?? 0)
+            : 0
           return (
             <Link
               key={href}
@@ -64,12 +68,12 @@ export function AppSidebar({ reviewBadge, onNavigate }: AppSidebarProps) {
             >
               <Icon className="h-5 w-5 shrink-0" />
               <span className={`${collapsed ? 'md:hidden' : ''}`}>{label}</span>
-              {badge && reviewBadge > 0 && (
+              {badgeCount > 0 && (
                 collapsed ? (
                   <span className="hidden md:block absolute top-1 right-1 h-2 w-2 rounded-full bg-amber-500" />
                 ) : (
                   <span className="rounded-full bg-amber-500 text-white text-[10px] font-semibold leading-none px-1.5 py-0.5 min-w-[18px] text-center">
-                    {reviewBadge > 99 ? '99+' : reviewBadge}
+                    {badgeCount > 99 ? '99+' : badgeCount}
                   </span>
                 )
               )}

@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runPipeline, type PostmarkPayload } from '@/lib/pipeline/processEmail'
 import type { InboundEmail } from '@/lib/types/database'
+import { dbError } from '@/lib/api-error'
+import { rateLimit } from '@/lib/rate-limit'
 
 export async function POST(
   _req: NextRequest,
@@ -14,6 +16,10 @@ export async function POST(
   } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // Rate limit reprocessing: 10 per 5 minutes per user
+  const limited = await rateLimit({ key: `reprocess:${user.id}`, limit: 10, windowSeconds: 300 })
+  if (limited) return limited
+
   // Fetch email — RLS ensures it belongs to the user's fund
   const { data: emailData, error } = await supabase
     .from('inbound_emails')
@@ -21,7 +27,7 @@ export async function POST(
     .eq('id', params.id)
     .maybeSingle()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'emails-id-reprocess')
   if (!emailData) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const email = emailData as unknown as Pick<

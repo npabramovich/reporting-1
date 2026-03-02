@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { ParsingReview, Company, Metric, InboundEmail } from '@/lib/types/database'
+import { dbError } from '@/lib/api-error'
 
 type ReviewRow = Pick<
   ParsingReview,
@@ -33,7 +34,7 @@ export async function GET(
     .is('resolution', null)
     .order('created_at', { ascending: false })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'emails-id-reviews')
 
   const rows = (data ?? []) as unknown as ReviewRow[]
 
@@ -81,7 +82,7 @@ export async function POST(
     .eq('email_id', params.id)
     .is('resolution', null)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'emails-id-reviews')
   if (!reviews || reviews.length === 0) {
     return NextResponse.json({ ok: true, dismissed: 0 })
   }
