@@ -4,6 +4,7 @@ import {
   runPipeline,
   type PostmarkPayload,
 } from '@/lib/pipeline/processEmail'
+import { isAuthorizedSender } from '@/lib/pipeline/isAuthorizedSender'
 
 // ---------------------------------------------------------------------------
 // Entry point — always returns HTTP 200 to Postmark
@@ -95,10 +96,8 @@ async function handleInbound(req: NextRequest) {
 // Fund resolution helpers (specific to inbound routing)
 // ---------------------------------------------------------------------------
 
-type AdminClient = ReturnType<typeof createAdminClient>
-
 async function resolveFund(
-  supabase: AdminClient,
+  supabase: ReturnType<typeof createAdminClient>,
   toAddress: string,
   fromAddress: string,
   token: string
@@ -148,16 +147,3 @@ async function resolveFund(
   return { fundId: senders[0].fund_id, isGlobal: true }
 }
 
-export async function isAuthorizedSender(
-  supabase: AdminClient,
-  fundId: string,
-  email: string
-): Promise<boolean> {
-  const { data } = await supabase
-    .from('authorized_senders')
-    .select('id')
-    .eq('fund_id', fundId)
-    .eq('email', email)
-    .maybeSingle()
-  return !!data
-}

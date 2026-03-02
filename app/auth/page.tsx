@@ -53,7 +53,13 @@ function AuthForm() {
     if (error) {
       setError(error.message)
     } else {
-      router.push('/')
+      // Check if user has MFA enrolled and needs to verify
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
+        router.push('/auth/mfa-verify')
+      } else {
+        router.push('/')
+      }
       router.refresh()
     }
     setLoading(false)

@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyMailgunWebhook } from '@/lib/mailgun/verify'
 import { normalizeMailgunPayload, toPostmarkPayload } from '@/lib/pipeline/normalizePayload'
 import { runPipeline } from '@/lib/pipeline/processEmail'
-import { isAuthorizedSender } from '@/app/api/inbound-email/route'
+import { isAuthorizedSender } from '@/lib/pipeline/isAuthorizedSender'
 import { decrypt } from '@/lib/crypto'
 import type { Json } from '@/lib/types/database'
 
