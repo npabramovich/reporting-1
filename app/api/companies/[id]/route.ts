@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import type { CompanyStatus } from '@/lib/types/database'
 import { dbError } from '@/lib/api-error'
+import { logActivity } from '@/lib/activity'
 
 const VALID_STATUSES: CompanyStatus[] = ['active', 'exited', 'written-off']
 
@@ -87,6 +88,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .single()
 
   if (error) return dbError(error, 'companies-id')
+
+  logActivity(admin, company.fund_id, user.id, 'company.update', { companyId: params.id })
 
   return NextResponse.json(data)
 }

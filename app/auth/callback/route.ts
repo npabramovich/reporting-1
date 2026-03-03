@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { logActivity } from '@/lib/activity'
 
 // Handles magic link, password reset, and OAuth redirects from Supabase Auth.
 // Supabase appends ?code= to the redirect URL after authentication.
@@ -20,6 +22,18 @@ export async function GET(request: NextRequest) {
   const supabase = createClient()
   const { error } = await supabase.auth.exchangeCodeForSession(code)
   if (!error) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const admin = createAdminClient()
+      const { data: membership } = await admin
+        .from('fund_members')
+        .select('fund_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (membership) {
+        logActivity(admin, membership.fund_id, user.id, 'login', { method: 'magic_link' })
+      }
+    }
     return NextResponse.redirect(`${origin}${next}`)
   }
 

@@ -5,6 +5,7 @@ import { assertWriteAccess } from '@/lib/api-helpers'
 import { parseValue } from '@/lib/pipeline/processEmail'
 import type { ParsingReview, Metric } from '@/lib/types/database'
 import type { ExtractMetricsResult } from '@/lib/claude/extractMetrics'
+import { logActivity } from '@/lib/activity'
 
 type ReviewRow = Pick<
   ParsingReview,
@@ -171,6 +172,8 @@ export async function POST(
   if (settings && !settings.retain_resolved_reviews) {
     await admin.from('parsing_reviews').delete().eq('id', params.id)
   }
+
+  logActivity(admin, review.fund_id, user.id, 'review.resolve', { reviewId: params.id, resolution })
 
   return NextResponse.json({ ok: true })
 }

@@ -63,6 +63,7 @@ function AuthForm() {
     if (error) {
       setError(error.message)
     } else {
+      fetch('/api/auth/activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'password' }) }).catch(() => {})
       // Check if user has MFA enrolled and needs to verify
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
       if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {

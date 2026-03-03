@@ -1,8 +1,10 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { MessageSquare, Send, Pencil, X, Check, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { NoteContent } from '@/components/note-content'
+import { MentionTextarea, type MentionMember, type MentionTextareaRef } from '@/components/mention-textarea'
 import Link from 'next/link'
 
 interface Note {
@@ -13,6 +15,8 @@ interface Note {
   userEmail: string
   companyId: string | null
   companyName: string | null
+  mentionedUserIds: string[]
+  isRead: boolean
   createdAt: string
   edited: boolean
 }
@@ -28,7 +32,9 @@ interface NotesContextValue {
   userId: string
   isAdmin: boolean
   companies: CompanyOption[]
-  inputRef: React.MutableRefObject<HTMLTextAreaElement | null>
+  unreadCount: number
+  setUnreadCount: (n: number) => void
+  inputRef: React.MutableRefObject<MentionTextareaRef | null>
 }
 
 function formatRelativeTime(dateStr: string) {
@@ -60,7 +66,8 @@ export function DashboardNotesLayout({
   children: ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const inputRef = useRef<MentionTextareaRef | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -69,7 +76,7 @@ export function DashboardNotesLayout({
   }, [open])
 
   return (
-    <DashboardNotesContext.Provider value={{ open, toggle: () => setOpen(prev => !prev), userId, isAdmin, companies, inputRef }}>
+    <DashboardNotesContext.Provider value={{ open, toggle: () => setOpen(prev => !prev), userId, isAdmin, companies, unreadCount, setUnreadCount, inputRef }}>
       {children}
     </DashboardNotesContext.Provider>
   )
@@ -78,7 +85,7 @@ export function DashboardNotesLayout({
 export function DashboardChatButton() {
   const ctx = useContext(DashboardNotesContext)
   if (!ctx) return null
-  const { open, toggle } = ctx
+  const { open, toggle, unreadCount } = ctx
   return (
     <Button
       variant="ghost"
@@ -86,8 +93,18 @@ export function DashboardChatButton() {
       className={`ml-auto gap-1.5 h-8 py-2 text-muted-foreground hover:text-foreground ${open ? 'bg-accent' : ''}`}
       onClick={toggle}
     >
-      <MessageSquare className="h-3.5 w-3.5" />
+      <span className="relative">
+        <MessageSquare className="h-3.5 w-3.5" />
+        {!open && unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500" />
+        )}
+      </span>
       Notes
+      {!open && unreadCount > 0 && (
+        <span className="text-[10px] font-medium bg-blue-500 text-white rounded-full px-1 min-w-[16px] text-center">
+          {unreadCount}
+        </span>
+      )}
     </Button>
   )
 }
@@ -101,7 +118,7 @@ export function DashboardNotesPanel() {
 type FilterMode = 'all' | 'general'
 
 function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
-  const { userId, isAdmin, companies, inputRef, toggle } = ctx
+  const { userId, isAdmin, companies, inputRef, toggle, setUnreadCount } = ctx
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(false)
   const [content, setContent] = useState('')
@@ -110,7 +127,26 @@ function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
   const [editContent, setEditContent] = useState('')
   const [filter, setFilter] = useState<FilterMode>('all')
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('')
+  const [members, setMembers] = useState<MentionMember[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    fetch('/api/notes/members').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setMembers(data)
+    }).catch(() => {})
+  }, [])
+
+  const markAsRead = useCallback((notesList: Note[]) => {
+    const unreadIds = notesList.filter(n => !n.isRead).map(n => n.id)
+    if (unreadIds.length === 0) return
+    fetch('/api/notes/mark-read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ noteIds: unreadIds }),
+    }).catch(() => {})
+    setNotes(prev => prev.map(n => unreadIds.includes(n.id) ? { ...n, isRead: true } : n))
+    setUnreadCount(0)
+  }, [setUnreadCount])
 
   useEffect(() => {
     setLoading(true)
@@ -120,10 +156,17 @@ function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
     fetch(url)
       .then(r => r.json())
       .then(data => {
-        if (Array.isArray(data)) setNotes(data)
+        if (Array.isArray(data)) {
+          setNotes(data)
+          const unread = data.filter((n: Note) => !n.isRead)
+          setUnreadCount(unread.length)
+          if (unread.length > 0) {
+            markAsRead(data)
+          }
+        }
       })
       .finally(() => setLoading(false))
-  }, [filter])
+  }, [filter, markAsRead, setUnreadCount])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -227,6 +270,9 @@ function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
         {notes.map(note => (
           <div key={note.id} className="group">
             <div className="flex items-center gap-2 mb-0.5">
+              {!note.isRead && (
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
+              )}
               <span className="text-xs font-medium">
                 {note.userName || note.userEmail.split('@')[0]}
               </span>
@@ -287,7 +333,7 @@ function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
                 </div>
               </div>
             ) : (
-              <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+              <NoteContent content={note.content} />
             )}
           </div>
         ))}
@@ -305,19 +351,20 @@ function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
           ))}
         </select>
         <div className="flex gap-2">
-          <textarea
-            ref={(el) => { inputRef.current = el }}
+          <MentionTextarea
+            ref={inputRef}
             value={content}
-            onChange={e => setContent(e.target.value)}
+            onChange={setContent}
+            members={members}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
                 handlePost()
               }
             }}
-            placeholder="Write a note..."
+            placeholder="Write a note... (@ to mention)"
             rows={2}
-            className="flex-1 resize-none rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
           <Button
             size="icon"

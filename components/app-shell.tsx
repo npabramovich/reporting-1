@@ -11,10 +11,12 @@ interface AppShellProps {
   userEmail: string
   reviewBadge: number
   settingsBadge?: number
+  notesBadge?: number
+  isAdmin?: boolean
   children: React.ReactNode
 }
 
-export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, children }: AppShellProps) {
+export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, children }: AppShellProps) {
   return (
     <SidebarProvider>
       <AppShellInner
@@ -23,6 +25,8 @@ export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsB
         userEmail={userEmail}
         reviewBadge={reviewBadge}
         settingsBadge={settingsBadge}
+        notesBadge={notesBadge}
+        isAdmin={isAdmin}
       >
         {children}
       </AppShellInner>
@@ -30,7 +34,7 @@ export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsB
   )
 }
 
-function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, children }: AppShellProps) {
+function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, children }: AppShellProps) {
   const { collapsed } = useSidebar()
 
   return (
@@ -41,6 +45,8 @@ function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBad
         userEmail={userEmail}
         reviewBadge={reviewBadge}
         settingsBadge={settingsBadge}
+        notesBadge={notesBadge}
+        isAdmin={isAdmin}
       />
 
       <div className="flex flex-1">
@@ -50,7 +56,7 @@ function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBad
             collapsed ? 'w-14' : 'w-56'
           }`}
         >
-          <AppSidebar reviewBadge={reviewBadge} settingsBadge={settingsBadge} />
+          <AppSidebar reviewBadge={reviewBadge} settingsBadge={settingsBadge} notesBadge={notesBadge} isAdmin={isAdmin} />
         </aside>
 
         {/* Page content */}

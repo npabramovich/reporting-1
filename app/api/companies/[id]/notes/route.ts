@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { dbError } from '@/lib/api-error'
+import { parseMentions } from '@/lib/notes/mentions'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -16,29 +17,35 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .from('companies')
     .select('id, fund_id')
     .eq('id', params.id)
-    .maybeSingle()
+    .maybeSingle() as { data: { id: string; fund_id: string } | null }
 
   if (!company) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { data: notes, error } = await supabase
     .from('company_notes')
-    .select('id, content, user_id, created_at, updated_at')
+    .select('id, content, user_id, mentioned_user_ids, created_at, updated_at')
     .eq('company_id', params.id)
-    .order('created_at', { ascending: true }) as { data: { id: string; content: string; user_id: string; created_at: string; updated_at: string }[] | null; error: { message: string } | null }
+    .order('created_at', { ascending: true }) as { data: { id: string; content: string; user_id: string; mentioned_user_ids: string[] | null; created_at: string; updated_at: string }[] | null; error: { message: string } | null }
 
   if (error) return dbError(error, 'companies-id-notes')
 
-  // Get the fund_id for looking up display names
-  const { data: companyRow } = await supabase
-    .from('companies')
-    .select('fund_id')
-    .eq('id', params.id)
-    .maybeSingle() as { data: { fund_id: string } | null }
+  // Batch-load read status for current user
+  const noteIds = (notes ?? []).map(n => n.id)
+  const readSet = new Set<string>()
+  if (noteIds.length > 0) {
+    const { data: reads } = await supabase
+      .from('note_reads' as any)
+      .select('note_id')
+      .eq('user_id', user.id)
+      .in('note_id', noteIds) as { data: { note_id: string }[] | null }
+    for (const r of reads ?? []) readSet.add(r.note_id)
+  }
 
-  // Batch-load display names for all note authors in this fund
-  const { data: members } = companyRow
-    ? await admin.from('fund_members').select('user_id, display_name').eq('fund_id', companyRow.fund_id) as { data: { user_id: string; display_name: string | null }[] | null }
-    : { data: null }
+  // Batch-load display names for all note authors
+  const { data: members } = await admin
+    .from('fund_members')
+    .select('user_id, display_name')
+    .eq('fund_id', company.fund_id) as { data: { user_id: string; display_name: string | null }[] | null }
   const nameMap: Record<string, string | null> = {}
   for (const m of members ?? []) {
     nameMap[m.user_id] = m.display_name
@@ -58,6 +65,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       userId: note.user_id,
       userName: nameMap[note.user_id] || null,
       userEmail: emailCache[note.user_id],
+      mentionedUserIds: note.mentioned_user_ids ?? [],
+      isRead: note.user_id === user.id || readSet.has(note.id),
       createdAt: note.created_at,
       edited: note.updated_at !== note.created_at,
     })
@@ -85,11 +94,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Get the company's fund_id
   const { data: company } = await supabase
     .from('companies')
-    .select('fund_id')
+    .select('fund_id, name')
     .eq('id', params.id)
-    .maybeSingle() as { data: { fund_id: string } | null }
+    .maybeSingle() as { data: { fund_id: string; name: string } | null }
 
   if (!company) return NextResponse.json({ error: 'Company not found' }, { status: 404 })
+
+  // Parse @mentions
+  const { data: members } = await admin
+    .from('fund_members')
+    .select('user_id, display_name')
+    .eq('fund_id', company.fund_id) as { data: { user_id: string; display_name: string | null }[] | null }
+
+  const mentionedUserIds = parseMentions(content.trim(), members ?? [])
 
   const { data: note, error } = await supabase
     .from('company_notes')
@@ -98,6 +115,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       fund_id: company.fund_id,
       user_id: user.id,
       content: content.trim(),
+      mentioned_user_ids: mentionedUserIds,
     } as any)
     .select('id, content, user_id, created_at')
     .single() as { data: { id: string; content: string; user_id: string; created_at: string } | null; error: { message: string } | null }
@@ -112,13 +130,36 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .eq('user_id', user.id)
     .maybeSingle() as { data: { display_name: string | null } | null }
 
+  // Fire-and-forget notification
+  sendNoteNotificationsAsync(admin, company.fund_id, {
+    id: note.id,
+    content: note.content,
+    companyId: params.id,
+    companyName: company.name,
+    authorName: membership?.display_name || user.email?.split('@')[0] || 'Someone',
+    authorUserId: user.id,
+    mentionedUserIds,
+  })
+
   return NextResponse.json({
     id: note.id,
     content: note.content,
     userId: note.user_id,
     userName: membership?.display_name || null,
     userEmail: user.email ?? 'Unknown',
+    mentionedUserIds,
+    isRead: true,
     createdAt: note.created_at,
     edited: false,
   })
+}
+
+// Fire-and-forget wrapper to avoid blocking the response
+async function sendNoteNotificationsAsync(...args: Parameters<typeof import('@/lib/notes/notify').sendNoteNotifications>) {
+  try {
+    const { sendNoteNotifications } = await import('@/lib/notes/notify')
+    await sendNoteNotifications(...args)
+  } catch (err) {
+    console.error('[notes] Failed to send notifications:', err)
+  }
 }

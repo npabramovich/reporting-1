@@ -14,8 +14,18 @@ export interface CreateMessageParams {
 
 export interface AIModel { id: string; name: string }
 
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+}
+
+export interface AIResult {
+  text: string
+  usage: TokenUsage
+}
+
 export interface AIProvider {
-  createMessage(params: CreateMessageParams): Promise<string>
+  createMessage(params: CreateMessageParams): Promise<AIResult>
   testConnection(): Promise<void>
   listModels(): Promise<AIModel[]>
 }

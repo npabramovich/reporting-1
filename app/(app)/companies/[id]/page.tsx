@@ -9,6 +9,7 @@ import { CompanySummary } from './company-summary'
 import { CompanyEditButton } from './company-edit-button'
 import { CompanyNotesLayout, ChatButton, CompanyNotesPanel } from './company-notes'
 import { CompanyDocuments } from './company-documents'
+import { CompanyInvestments } from './company-investments'
 
 function formatHighlightValue(value: number, metric: Metric) {
   let formatted: string
@@ -169,6 +170,8 @@ export default async function CompanyDetailPage({
           />
 
           <CompanyDocuments companyId={company.id} />
+
+          <CompanyInvestments companyId={company.id} companyStatus={company.status} />
 
           {(company.founders || (company.contact_email && company.contact_email.length > 0) || company.overview || company.why_invested || company.current_update) && (
             <div className="mt-6 space-y-3">

@@ -13,9 +13,11 @@ interface AppHeaderProps {
   userEmail: string
   reviewBadge: number
   settingsBadge?: number
+  notesBadge?: number
+  isAdmin?: boolean
 }
 
-export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge }: AppHeaderProps) {
+export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin }: AppHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { collapsed } = useSidebar()
 
@@ -79,6 +81,8 @@ export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge, settings
           <AppSidebar
             reviewBadge={reviewBadge}
             settingsBadge={settingsBadge}
+            notesBadge={notesBadge}
+            isAdmin={isAdmin}
             onNavigate={() => setDrawerOpen(false)}
           />
         </SheetContent>

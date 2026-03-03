@@ -1,5 +1,6 @@
 import { AnthropicProvider } from '@/lib/ai/anthropic'
 import type { ContentBlock } from '@/lib/ai/types'
+import { logAIUsage } from '@/lib/ai/usage'
 
 const DEFAULT_MODEL = 'claude-sonnet-4-5'
 
@@ -43,6 +44,11 @@ export interface ExtractMetricsResult {
   unextracted_metrics: UnextractedMetric[]
 }
 
+export interface ExtractMetricsLogParams {
+  admin: { from: (table: string) => any }
+  fundId: string
+}
+
 export async function extractMetrics(
   companyName: string,
   combinedText: string,
@@ -50,12 +56,13 @@ export async function extractMetrics(
   pdfBase64s: string[],
   images: ImageInput[],
   claudeApiKey: string,
-  model: string = DEFAULT_MODEL
+  model: string = DEFAULT_MODEL,
+  logParams?: ExtractMetricsLogParams
 ): Promise<ExtractMetricsResult> {
   const provider = new AnthropicProvider(claudeApiKey)
   const { system, userContent } = buildMessage(companyName, combinedText, metrics, pdfBase64s, images)
 
-  const raw = await callWithRetry(provider, system, userContent, model)
+  const raw = await callWithRetry(provider, system, userContent, model, logParams)
   return raw
 }
 
@@ -150,15 +157,16 @@ async function callWithRetry(
   provider: AnthropicProvider,
   system: string,
   userContent: ContentBlock[],
-  model: string
+  model: string,
+  logParams?: ExtractMetricsLogParams
 ): Promise<ExtractMetricsResult> {
-  const first = await call(provider, system, userContent, model)
+  const first = await call(provider, system, userContent, model, logParams)
   const parsed = tryParse(first)
   if (parsed) return parsed
 
   // Append strict instruction to the text block on retry
   const strictContent = appendStrictSuffix(userContent)
-  const second = await call(provider, system, strictContent, model)
+  const second = await call(provider, system, strictContent, model, logParams)
   const reparsed = tryParse(second)
   if (reparsed) return reparsed
 
@@ -171,14 +179,27 @@ async function call(
   provider: AnthropicProvider,
   system: string,
   userContent: ContentBlock[],
-  model: string
+  model: string,
+  logParams?: ExtractMetricsLogParams
 ): Promise<string> {
-  return provider.createMessage({
+  const { text, usage } = await provider.createMessage({
     model,
     maxTokens: 2048,
     system,
     content: userContent,
   })
+
+  if (logParams) {
+    logAIUsage(logParams.admin, {
+      fundId: logParams.fundId,
+      provider: 'anthropic',
+      model,
+      feature: 'extract_metrics',
+      usage,
+    })
+  }
+
+  return text
 }
 
 // Appends the strict suffix to the first text block in the content array

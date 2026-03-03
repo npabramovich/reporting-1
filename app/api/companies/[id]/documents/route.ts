@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { extractFromBuffer } from '@/lib/parsing/extractAttachmentText'
 import { dbError } from '@/lib/api-error'
+import { logActivity } from '@/lib/activity'
 
 // ---------------------------------------------------------------------------
 // GET — List all documents for a company
@@ -142,6 +143,8 @@ export async function POST(
   if (insertError) {
     return NextResponse.json({ error: insertError.message }, { status: 500 })
   }
+
+  logActivity(admin, company.fund_id, user.id, 'company.document_upload', { companyId: params.id })
 
   return NextResponse.json({ success: true })
 }

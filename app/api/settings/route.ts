@@ -5,6 +5,7 @@ import { assertWriteAccess } from '@/lib/api-helpers'
 import { encrypt } from '@/lib/crypto'
 import { randomBytes } from 'crypto'
 import { dbError } from '@/lib/api-error'
+import { logActivity } from '@/lib/activity'
 
 // GET — returns fund settings (safe fields only)
 export async function GET() {
@@ -415,6 +416,8 @@ export async function PATCH(req: NextRequest) {
 
     if (error) return dbError(error, 'settings')
   }
+
+  logActivity(admin, membership.fund_id, user.id, 'settings.update', {})
 
   return NextResponse.json({ ok: true })
 }

@@ -1,4 +1,5 @@
 import { AnthropicProvider } from '@/lib/ai/anthropic'
+import { logAIUsage } from '@/lib/ai/usage'
 
 const DEFAULT_MODEL = 'claude-sonnet-4-5'
 
@@ -15,17 +16,23 @@ export interface IdentifyCompanyResult {
   reasoning: string
 }
 
+export interface IdentifyCompanyLogParams {
+  admin: { from: (table: string) => any }
+  fundId: string
+}
+
 export async function identifyCompany(
   subject: string,
   bodyExcerpt: string,
   companies: CompanyRef[],
   claudeApiKey: string,
-  model: string = DEFAULT_MODEL
+  model: string = DEFAULT_MODEL,
+  logParams?: IdentifyCompanyLogParams
 ): Promise<IdentifyCompanyResult> {
   const provider = new AnthropicProvider(claudeApiKey)
   const prompt = buildPrompt(subject, bodyExcerpt, companies)
 
-  const raw = await callWithRetry(provider, prompt, model)
+  const raw = await callWithRetry(provider, prompt, model, logParams)
   return raw
 }
 
@@ -72,14 +79,15 @@ const STRICT_SUFFIX =
 async function callWithRetry(
   provider: AnthropicProvider,
   prompt: string,
-  model: string
+  model: string,
+  logParams?: IdentifyCompanyLogParams
 ): Promise<IdentifyCompanyResult> {
-  const first = await call(provider, prompt, model)
+  const first = await call(provider, prompt, model, logParams)
   const parsed = tryParse(first)
   if (parsed) return parsed
 
   // Retry with stricter instruction appended
-  const second = await call(provider, prompt + STRICT_SUFFIX, model)
+  const second = await call(provider, prompt + STRICT_SUFFIX, model, logParams)
   const reparsed = tryParse(second)
   if (reparsed) return reparsed
 
@@ -88,13 +96,25 @@ async function callWithRetry(
   )
 }
 
-async function call(provider: AnthropicProvider, userPrompt: string, model: string): Promise<string> {
-  return provider.createMessage({
+async function call(provider: AnthropicProvider, userPrompt: string, model: string, logParams?: IdentifyCompanyLogParams): Promise<string> {
+  const { text, usage } = await provider.createMessage({
     model,
     maxTokens: 256,
     system: SYSTEM_PROMPT,
     content: userPrompt,
   })
+
+  if (logParams) {
+    logAIUsage(logParams.admin, {
+      fundId: logParams.fundId,
+      provider: 'anthropic',
+      model,
+      feature: 'identify_company',
+      usage,
+    })
+  }
+
+  return text
 }
 
 function tryParse(raw: string): IdentifyCompanyResult | null {

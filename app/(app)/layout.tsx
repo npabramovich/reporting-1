@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { AppShell } from '@/components/app-shell'
 import { DemoSessionGuard } from '@/components/demo-session-guard'
 
@@ -43,7 +44,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     pendingRequestCount = count ?? 0
   }
 
+  // Count unread notes via RPC
+  const admin = createAdminClient()
+  const { data: unreadNotesCount } = await admin.rpc('count_unread_notes', { p_user_id: user.id }) as { data: number | null }
+
   const reviewBadge = (openReviewCount ?? 0) + (needsReviewEmailCount ?? 0)
+  const notesBadge = unreadNotesCount ?? 0
   const fundName = fund?.name ?? 'Portfolio Reporting'
   const fundLogo = fund?.logo_url ?? null
 
@@ -66,6 +72,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           userEmail={user.email ?? ''}
           reviewBadge={reviewBadge}
           settingsBadge={pendingRequestCount}
+          notesBadge={notesBadge}
+          isAdmin={membership?.role === 'admin'}
         >
           {children}
         </AppShell>
