@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,9 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { AlertCircle, Check, ChevronDown, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X } from 'lucide-react'
+import { AlertCircle, Check, ChevronDown, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X, Lock } from 'lucide-react'
+
+const AdminSectionContext = createContext(false)
 
 interface Sender {
   id: string
@@ -63,6 +65,7 @@ interface Settings {
   hasMailgunSigningKey: boolean
   hasMailgunApiKey: boolean
   mailgunSendingDomain: string
+  currency: string
   displayName: string
   isAdmin: boolean
 }
@@ -106,11 +109,19 @@ export default function SettingsPage() {
 
       <ProfileSection displayName={settings.displayName} onSaved={load} />
       <MfaSection />
-      <NotificationPreferencesSection />
       {settings.isAdmin && (
-        <>
+        <AdminSectionContext.Provider value={true}>
           <FundNameSection name={settings.fundName} logo={settings.fundLogo} onSaved={load} />
-
+          <CurrencySection currency={settings.currency} onSaved={load} />
+        </AdminSectionContext.Provider>
+      )}
+      <GroupHeader label="Notes" />
+      <NotificationPreferencesSection />
+      {!settings.isAdmin && (
+        <AiSummaryPromptReadOnly prompt={settings.aiSummaryPrompt} />
+      )}
+      {settings.isAdmin && (
+        <AdminSectionContext.Provider value={true}>
           <GroupHeader label="Inbound Email" />
           <InboundEmailSection
             provider={settings.inboundEmailProvider}
@@ -173,10 +184,7 @@ export default function SettingsPage() {
           <WhitelistSection />
           <TeamSection isAdmin={settings.isAdmin} />
           <DangerZone onDeleted={() => router.push('/auth')} />
-        </>
-      )}
-      {!settings.isAdmin && (
-        <AiSummaryPromptReadOnly prompt={settings.aiSummaryPrompt} />
+        </AdminSectionContext.Provider>
       )}
     </div>
   )
@@ -426,6 +434,76 @@ function MfaSection() {
           )}
         </div>
       )}
+    </Section>
+  )
+}
+
+// ──────────────────────────── Currency ────────────────────────────
+
+const SUPPORTED_CURRENCIES = [
+  { code: 'USD', label: 'USD – US Dollar' },
+  { code: 'EUR', label: 'EUR – Euro' },
+  { code: 'GBP', label: 'GBP – British Pound' },
+  { code: 'CHF', label: 'CHF – Swiss Franc' },
+  { code: 'CAD', label: 'CAD – Canadian Dollar' },
+  { code: 'AUD', label: 'AUD – Australian Dollar' },
+  { code: 'JPY', label: 'JPY – Japanese Yen' },
+  { code: 'CNY', label: 'CNY – Chinese Yuan' },
+  { code: 'INR', label: 'INR – Indian Rupee' },
+  { code: 'SGD', label: 'SGD – Singapore Dollar' },
+  { code: 'HKD', label: 'HKD – Hong Kong Dollar' },
+  { code: 'SEK', label: 'SEK – Swedish Krona' },
+  { code: 'NOK', label: 'NOK – Norwegian Krone' },
+  { code: 'DKK', label: 'DKK – Danish Krone' },
+  { code: 'NZD', label: 'NZD – New Zealand Dollar' },
+  { code: 'BRL', label: 'BRL – Brazilian Real' },
+  { code: 'ZAR', label: 'ZAR – South African Rand' },
+  { code: 'ILS', label: 'ILS – Israeli Shekel' },
+  { code: 'KRW', label: 'KRW – South Korean Won' },
+]
+
+function CurrencySection({ currency, onSaved }: { currency: string; onSaved: () => void }) {
+  const [value, setValue] = useState(currency)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    const res = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currency: value }),
+    })
+    setSaving(false)
+    if (res.ok) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      onSaved()
+    }
+  }
+
+  return (
+    <Section title="Fund currency">
+      <p className="text-xs text-muted-foreground mb-3">
+        The default currency used for investment values and currency-type metrics across the app.
+      </p>
+      <div className="flex items-end gap-3">
+        <div className="flex-1 max-w-xs">
+          <Label>Currency</Label>
+          <select
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {SUPPORTED_CURRENCIES.map(c => (
+              <option key={c.code} value={c.code}>{c.label}</option>
+            ))}
+          </select>
+        </div>
+        <Button onClick={handleSave} disabled={saving || value === currency} size="sm">
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5" /> : 'Save'}
+        </Button>
+      </div>
     </Section>
   )
 }
@@ -2596,7 +2674,7 @@ function DangerZone({ onDeleted }: { onDeleted: () => void }) {
 
   return (
     <div className="rounded-lg border border-destructive/30 p-5">
-      <h2 className="text-sm font-medium text-destructive mb-1">Danger zone</h2>
+      <h2 className="text-sm font-medium text-destructive mb-1 flex items-center gap-1.5"><Lock className="h-3 w-3 text-amber-500" />Danger zone</h2>
       <p className="text-xs text-muted-foreground mb-3">
         Permanently delete your fund and all associated data. This cannot be undone.
       </p>
@@ -2644,28 +2722,41 @@ function DangerZone({ onDeleted }: { onDeleted: () => void }) {
 // ──────────────────────────── Shared ────────────────────────────
 
 function GroupHeader({ label }: { label: string }) {
+  const isAdminSection = useContext(AdminSectionContext)
+  const lineColor = isAdminSection ? 'bg-amber-500/30' : 'bg-border'
   return (
     <div className="flex items-center gap-3 pt-2">
-      <div className="h-px flex-1 bg-border" />
-      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
-      <div className="h-px flex-1 bg-border" />
+      <div className={`h-px flex-1 ${lineColor}`} />
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+        {isAdminSection && <Lock className="h-2.5 w-2.5 text-amber-500" />}
+        {label}
+      </span>
+      <div className={`h-px flex-1 ${lineColor}`} />
     </div>
   )
 }
 
 function InfoSection({ title, description }: { title: string; description: string }) {
+  const isAdminSection = useContext(AdminSectionContext)
   return (
-    <div className="rounded-lg border bg-card p-5">
-      <h2 className="text-sm font-medium mb-1">{title}</h2>
+    <div className={`rounded-lg border bg-card p-5 ${isAdminSection ? 'border-amber-500/30' : ''}`}>
+      <h2 className="text-sm font-medium mb-1 flex items-center gap-1.5">
+        {isAdminSection && <Lock className="h-3 w-3 text-amber-500" />}
+        {title}
+      </h2>
       <p className="text-xs text-muted-foreground">{description}</p>
     </div>
   )
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const isAdminSection = useContext(AdminSectionContext)
   return (
-    <div className="rounded-lg border bg-card p-5">
-      <h2 className="text-sm font-medium mb-3">{title}</h2>
+    <div className={`rounded-lg border bg-card p-5 ${isAdminSection ? 'border-amber-500/30' : ''}`}>
+      <h2 className="text-sm font-medium mb-3 flex items-center gap-1.5">
+        {isAdminSection && <Lock className="h-3 w-3 text-amber-500" />}
+        {title}
+      </h2>
       {children}
     </div>
   )

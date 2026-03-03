@@ -156,7 +156,7 @@ export default function EmailsPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl">
+    <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Inbound</h1>

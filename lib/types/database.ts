@@ -158,6 +158,7 @@ export type Database = {
           openai_api_key_encrypted: string | null
           openai_model: string
           default_ai_provider: string
+          currency: string
           created_at: string
           updated_at: string
         }
@@ -197,6 +198,7 @@ export type Database = {
           openai_api_key_encrypted?: string | null
           openai_model?: string
           default_ai_provider?: string
+          currency?: string
           created_at?: string
           updated_at?: string
         }
@@ -236,6 +238,7 @@ export type Database = {
           openai_api_key_encrypted?: string | null
           openai_model?: string
           default_ai_provider?: string
+          currency?: string
           created_at?: string
           updated_at?: string
         }

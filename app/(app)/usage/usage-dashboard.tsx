@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Lock } from 'lucide-react'
 
 interface DailyRow {
   date: string
@@ -148,9 +148,9 @@ export function UsageDashboard() {
   const activity = data.activity
 
   return (
-    <div className="p-6 md:p-8 space-y-8">
+    <div className="p-4 md:py-8 md:pl-8 md:pr-4 space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">AI Usage</h1>
+        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2"><Lock className="h-4 w-4 text-amber-500" />AI Usage</h1>
         <p className="text-sm text-muted-foreground mt-1">{monthLabel} &mdash; month to date</p>
       </div>
 

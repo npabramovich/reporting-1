@@ -10,6 +10,16 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const admin = createAdminClient()
+
+  const { data: membership } = await admin
+    .from('fund_members')
+    .select('fund_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+
   type CompanyRow = {
     id: string; name: string; stage: string | null; status: string
     industry: string[] | null; aliases: string[] | null; tags: string[]
@@ -17,9 +27,10 @@ export async function GET() {
     metrics: { id: string }[]; inbound_emails: { received_at: string }[]
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await admin
     .from('companies')
     .select('id, name, stage, status, industry, aliases, tags, portfolio_group, contact_email, metrics(id), inbound_emails(received_at)')
+    .eq('fund_id', membership.fund_id)
     .order('name') as { data: CompanyRow[] | null; error: { message: string } | null }
 
   if (error) return dbError(error, 'companies')

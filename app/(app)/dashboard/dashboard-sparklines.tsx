@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { ResponsiveContainer, LineChart, Line } from 'recharts'
+import { useCurrency, getCurrencySymbol } from '@/components/currency-context'
 
 interface SparkMetric {
   id: string
@@ -27,6 +28,7 @@ const SPARK_COLORS = [
 ]
 
 export function DashboardSparklines({ companyId, metrics }: Props) {
+  const fundCurrency = useCurrency()
   const [data, setData] = useState<Record<string, ValuePoint[]>>({})
   const [loaded, setLoaded] = useState(false)
 
@@ -66,15 +68,17 @@ export function DashboardSparklines({ companyId, metrics }: Props) {
         if (!values || values.length < 2) return null
 
         const lastVal = values[values.length - 1]?.value_number
+        const effectiveUnit = m.unit ?? (m.value_type === 'currency' ? getCurrencySymbol(fundCurrency) : null)
+        const effectivePos = m.unit ? m.unit_position : 'prefix'
         const formatVal = (v: number | null) => {
           if (v === null) return '—'
           let str: string
           if (Math.abs(v) >= 1_000_000) str = `${(v / 1_000_000).toFixed(1)}M`
           else if (Math.abs(v) >= 1_000) str = `${(v / 1_000).toFixed(0)}K`
           else str = v.toLocaleString()
-          if (m.unit && m.unit_position === 'prefix') return `${m.unit}${str}`
+          if (effectiveUnit && effectivePos === 'prefix') return `${effectiveUnit}${str}`
           if (m.value_type === 'percentage') return `${str}%`
-          if (m.unit && m.unit_position === 'suffix') return `${str} ${m.unit}`
+          if (effectiveUnit && effectivePos === 'suffix') return `${str} ${effectiveUnit}`
           return str
         }
 

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, DollarSign, StickyNote } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, TrendingUp, StickyNote, Lock } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -17,7 +17,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badgeKey?: 're
   { href: '/review', label: 'Review', icon: ClipboardCheck, badgeKey: 'review' },
   { href: '/emails', label: 'Inbound', icon: Mail },
   { href: '/import', label: 'Import', icon: Upload },
-  { href: '/investments', label: 'Investments', icon: DollarSign, adminOnly: true },
+  { href: '/investments', label: 'Investments', icon: TrendingUp, adminOnly: true },
   { href: '/requests', label: 'Asks', icon: Send },
   { href: '/notes', label: 'Notes', icon: StickyNote, badgeKey: 'notes' },
   { href: '/usage', label: 'Usage', icon: BarChart3, adminOnly: true },
@@ -52,7 +52,7 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, on
   return (
     <div className="flex flex-col flex-1">
       <nav className={`flex-1 p-2 space-y-0.5 ${collapsed ? 'md:px-1' : ''}`}>
-        {NAV_ITEMS.filter(item => !item.adminOnly || isAdmin).map(({ href, label, icon: Icon, badgeKey }) => {
+        {NAV_ITEMS.filter(item => !item.adminOnly || isAdmin).map(({ href, label, icon: Icon, badgeKey, adminOnly }) => {
           const isActive = pathname === href || pathname.startsWith(href + '/')
           const badgeCount = badgeKey === 'review' ? reviewBadge
             : badgeKey === 'settings' ? (settingsBadge ?? 0)
@@ -82,6 +82,14 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, on
                     {badgeCount > 99 ? '99+' : badgeCount}
                   </span>
                 )
+              )}
+              {adminOnly && !collapsed && (
+                <Lock className="h-3 w-3 text-amber-500 shrink-0 md:block hidden" />
+              )}
+              {adminOnly && collapsed && (
+                <span className="hidden md:block absolute top-1 right-1">
+                  <Lock className="h-2.5 w-2.5 text-amber-500" />
+                </span>
               )}
             </Link>
           )

@@ -16,15 +16,15 @@ export default function LicensePage() {
   )
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8 max-w-screen-xl mx-auto">
-      <div className="mb-6 max-w-3xl">
+    <div className="min-h-screen bg-background p-4 md:p-8 max-w-screen-xl mx-auto flex flex-col items-center">
+      <div className="mb-6 max-w-3xl w-full">
         <h1 className="text-2xl font-semibold tracking-tight">License</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Version 1.0 &mdash; Copyright &copy; 2026 Unstructured Ventures, LLC. All rights reserved.
         </p>
       </div>
 
-      <div className="flex gap-16">
+      <div className="flex gap-16 max-w-3xl w-full">
         {/* Main content */}
         <div className="flex-1 min-w-0 max-w-3xl space-y-8 text-sm leading-relaxed">
           {/* Table of contents — inline on mobile only */}

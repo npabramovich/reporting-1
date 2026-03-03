@@ -1,5 +1,8 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+
+export const metadata: Metadata = { title: 'Portfolio' }
 import { DashboardCompanies } from './dashboard-companies'
 import { DashboardNotesLayout, DashboardChatButton, DashboardNotesPanel } from './dashboard-notes'
 
@@ -35,7 +38,6 @@ export default async function DashboardPage() {
       inbound_emails(received_at),
       parsing_reviews(id, resolution)
     `)
-    .eq('status', 'active')
     .order('name') as { data: CompanyRow[] | null }
 
   // Find cash metric IDs for each company
@@ -85,6 +87,7 @@ export default async function DashboardPage() {
       id: c.id,
       name: c.name,
       stage: c.stage,
+      status: c.status,
       tags: c.tags ?? [],
       industry: c.industry,
       portfolioGroup: c.portfolio_group,
@@ -100,7 +103,7 @@ export default async function DashboardPage() {
 
   return (
     <DashboardNotesLayout userId={user.id} isAdmin={isAdmin} companies={companies.map(c => ({ id: c.id, name: c.name }))}>
-    <div className="p-4 md:p-8">
+    <div className="p-4 md:py-8 md:pl-8 md:pr-4">
       <div className="mb-6 flex items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Portfolio Overview</h1>
         <DashboardChatButton />

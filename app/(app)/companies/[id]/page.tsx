@@ -1,8 +1,16 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { ArrowLeft } from 'lucide-react'
+
+export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+  const supabase = createClient()
+  const { data } = await supabase.from('companies').select('name').eq('id', params.id).maybeSingle() as { data: { name: string } | null }
+  return { title: data?.name ?? 'Company' }
+}
 import { Badge } from '@/components/ui/badge'
+import { getCurrencySymbol } from '@/components/currency-context'
 import type { Company, Metric } from '@/lib/types/database'
 import { CompanyCharts } from './company-charts'
 import { CompanySummary } from './company-summary'
@@ -11,7 +19,7 @@ import { CompanyNotesLayout, ChatButton, CompanyNotesPanel } from './company-not
 import { CompanyDocuments } from './company-documents'
 import { CompanyInvestments } from './company-investments'
 
-function formatHighlightValue(value: number, metric: Metric) {
+function formatHighlightValue(value: number, metric: Metric, fundCurrency: string) {
   let formatted: string
   if (metric.value_type === 'percentage') {
     formatted = `${value}%`
@@ -23,10 +31,14 @@ function formatHighlightValue(value: number, metric: Metric) {
     formatted = value.toLocaleString('en-US', { maximumFractionDigits: 2 })
   }
 
-  if (!metric.unit) return formatted
-  return metric.unit_position === 'prefix'
-    ? `${metric.unit}${formatted}`
-    : `${formatted} ${metric.unit}`
+  // Use explicit metric unit if set, otherwise fall back to fund currency for currency-type metrics
+  const unit = metric.unit ?? (metric.value_type === 'currency' ? getCurrencySymbol(fundCurrency) : null)
+  const unitPosition = metric.unit ? metric.unit_position : 'prefix'
+
+  if (!unit) return formatted
+  return unitPosition === 'prefix'
+    ? `${unit}${formatted}`
+    : `${formatted} ${unit}`
 }
 
 export default async function CompanyDetailPage({
@@ -58,9 +70,11 @@ export default async function CompanyDetailPage({
   // Fetch AI provider settings for the summary component
   const { data: fundSettings } = await supabase
     .from('fund_settings')
-    .select('claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider')
+    .select('claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, currency')
     .eq('fund_id', company.fund_id)
-    .maybeSingle() as { data: { claude_api_key_encrypted: string | null; openai_api_key_encrypted: string | null; default_ai_provider: string | null } | null }
+    .maybeSingle() as { data: { claude_api_key_encrypted: string | null; openai_api_key_encrypted: string | null; default_ai_provider: string | null; currency: string | null } | null }
+
+  const fundCurrency = fundSettings?.currency ?? 'USD'
 
   const { data: metrics } = await supabase
     .from('metrics')
@@ -137,14 +151,14 @@ export default async function CompanyDetailPage({
             {latestMrr && (
               <span className="text-sm">
                 <span className="text-muted-foreground">MRR:</span>{' '}
-                <span className="font-medium">{formatHighlightValue(latestMrr.value, latestMrr.metric)}</span>
+                <span className="font-medium">{formatHighlightValue(latestMrr.value, latestMrr.metric, fundCurrency)}</span>
                 <span className="text-xs text-muted-foreground ml-1">({latestMrr.period})</span>
               </span>
             )}
             {latestCash && (
               <span className="text-sm">
                 <span className="text-muted-foreground">Cash:</span>{' '}
-                <span className="font-medium">{formatHighlightValue(latestCash.value, latestCash.metric)}</span>
+                <span className="font-medium">{formatHighlightValue(latestCash.value, latestCash.metric, fundCurrency)}</span>
                 <span className="text-xs text-muted-foreground ml-1">({latestCash.period})</span>
               </span>
             )}

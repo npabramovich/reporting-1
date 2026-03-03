@@ -1,4 +1,7 @@
+import type { Metadata } from 'next'
 import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose } from 'lucide-react'
+
+export const metadata: Metadata = { title: 'Support' }
 
 export default function SupportPage() {
   const tocLinks = (

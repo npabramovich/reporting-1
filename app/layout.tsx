@@ -3,7 +3,10 @@ import { ThemeProvider } from '@/components/theme-provider'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Portfolio Reporting',
+  title: {
+    template: '%s | Powered by Hemrock',
+    default: 'Portfolio Reporting | Powered by Hemrock',
+  },
   description: 'VC fund portfolio reporting tool',
 }
 

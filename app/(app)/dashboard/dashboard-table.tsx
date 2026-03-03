@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
+import { useCurrency, getCurrencySymbol } from '@/components/currency-context'
 
 interface MetricData {
   id: string
@@ -28,20 +29,24 @@ interface Props {
   grouped: [string, string[]][] | null
 }
 
-function formatValue(v: number | string | null, metric: MetricData): string {
+function formatValue(v: number | string | null, metric: MetricData, fundCurrencySymbol?: string): string {
   if (v === null || v === undefined) return '—'
   if (typeof v === 'string') return v
   let str: string
   if (Math.abs(v) >= 1_000_000) str = `${(v / 1_000_000).toFixed(1)}M`
   else if (Math.abs(v) >= 1_000) str = `${(v / 1_000).toFixed(0)}K`
   else str = v.toLocaleString()
-  if (metric.unit && metric.unitPosition === 'prefix') return `${metric.unit}${str}`
+  const effectiveUnit = metric.unit ?? (metric.valueType === 'currency' && fundCurrencySymbol ? fundCurrencySymbol : null)
+  const effectivePos = metric.unit ? metric.unitPosition : 'prefix'
+  if (effectiveUnit && effectivePos === 'prefix') return `${effectiveUnit}${str}`
   if (metric.valueType === 'percentage') return `${str}%`
-  if (metric.unit && metric.unitPosition === 'suffix') return `${str} ${metric.unit}`
+  if (effectiveUnit && effectivePos === 'suffix') return `${str} ${effectiveUnit}`
   return str
 }
 
 export function DashboardTable({ companyIds, grouped }: Props) {
+  const fundCurrency = useCurrency()
+  const currencySymbol = getCurrencySymbol(fundCurrency)
   const [data, setData] = useState<CompanyData[] | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -149,7 +154,7 @@ export function DashboardTable({ companyIds, grouped }: Props) {
               >
                 {metric ? (
                   <span className={metric.values[q] != null ? '' : 'text-muted-foreground/40'}>
-                    {formatValue(metric.values[q] ?? null, metric)}
+                    {formatValue(metric.values[q] ?? null, metric, currencySymbol)}
                   </span>
                 ) : (
                   <span className="text-muted-foreground/40">—</span>

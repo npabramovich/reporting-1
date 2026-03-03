@@ -1,6 +1,7 @@
 'use client'
 
 import { SidebarProvider, useSidebar } from '@/components/sidebar-context'
+import { CurrencyProvider } from '@/components/currency-context'
 import { AppHeader } from '@/components/app-header'
 import { AppSidebar } from '@/components/app-sidebar'
 import { AppFooter } from '@/components/app-footer'
@@ -13,24 +14,27 @@ interface AppShellProps {
   settingsBadge?: number
   notesBadge?: number
   isAdmin?: boolean
+  currency?: string
   children: React.ReactNode
 }
 
-export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, children }: AppShellProps) {
+export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, currency, children }: AppShellProps) {
   return (
-    <SidebarProvider>
-      <AppShellInner
-        fundName={fundName}
-        fundLogo={fundLogo}
-        userEmail={userEmail}
-        reviewBadge={reviewBadge}
-        settingsBadge={settingsBadge}
-        notesBadge={notesBadge}
-        isAdmin={isAdmin}
-      >
-        {children}
-      </AppShellInner>
-    </SidebarProvider>
+    <CurrencyProvider currency={currency ?? 'USD'}>
+      <SidebarProvider>
+        <AppShellInner
+          fundName={fundName}
+          fundLogo={fundLogo}
+          userEmail={userEmail}
+          reviewBadge={reviewBadge}
+          settingsBadge={settingsBadge}
+          notesBadge={notesBadge}
+          isAdmin={isAdmin}
+        >
+          {children}
+        </AppShellInner>
+      </SidebarProvider>
+    </CurrencyProvider>
   )
 }
 

@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { cn } from '@/lib/utils'
+import { useCurrency, getCurrencySymbol } from '@/components/currency-context'
 
 interface MetricWithValues {
   id: string
@@ -33,8 +34,12 @@ function toSlug(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
 }
 
+const CURRENCY_SYMBOLS = new Set(['$', '€', '£', '¥', '₹', '₪', '₩', 'R$', 'C$', 'A$', 'S$', 'NZ$', 'HK$'])
+
 export function MetricForm({ companyId, metric, onSuccess, onCancel }: Props) {
   const isEdit = !!metric
+  const fundCurrency = useCurrency()
+  const currencySymbol = getCurrencySymbol(fundCurrency).trim()
 
   const [name, setName] = useState(metric?.name ?? '')
   const [slug, setSlug] = useState(metric?.slug ?? '')
@@ -147,13 +152,13 @@ export function MetricForm({ companyId, metric, onSuccess, onCancel }: Props) {
           <Label htmlFor="metric-unit">Unit</Label>
           <Input
             id="metric-unit"
-            placeholder="$, %, #, users, etc."
+            placeholder={`${currencySymbol}, %, #, users, etc.`}
             value={unit}
             onChange={e => {
               const v = e.target.value
               setUnit(v)
               const trimmed = v.trim()
-              if (trimmed === '$') {
+              if (CURRENCY_SYMBOLS.has(trimmed)) {
                 setUnitPosition('prefix')
                 setValueType('currency')
               } else if (trimmed === '%') {
@@ -182,7 +187,7 @@ export function MetricForm({ companyId, metric, onSuccess, onCancel }: Props) {
                   : 'hover:bg-muted text-muted-foreground'
               )}
             >
-              Prefix ($100)
+              Prefix ({currencySymbol}100)
             </button>
             <button
               type="button"

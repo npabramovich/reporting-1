@@ -16,6 +16,7 @@ import {
 import type { Metric } from '@/lib/types/database'
 import type { MetricValueRow } from './company-charts'
 import { DataPointPopover } from './data-point-popover'
+import { useCurrency, getCurrencySymbol } from '@/components/currency-context'
 
 interface Props {
   metric: Metric
@@ -39,6 +40,7 @@ const CONFIDENCE_COLORS: Record<string, string> = {
 }
 
 export function MetricChart({ metric, values, onRefresh, compact }: Props) {
+  const fundCurrency = useCurrency()
   const [chartType, setChartType] = useState<'line' | 'bar'>('line')
   const [activePoint, setActivePoint] = useState<{
     data: MetricValueRow
@@ -52,6 +54,10 @@ export function MetricChart({ metric, values, onRefresh, compact }: Props) {
     raw: v,
   }))
 
+  // Resolve effective unit: explicit metric unit, or fund currency symbol for currency-type metrics
+  const effectiveUnit = metric.unit ?? (metric.value_type === 'currency' ? getCurrencySymbol(fundCurrency) : null)
+  const effectiveUnitPosition = metric.unit ? metric.unit_position : 'prefix'
+
   const formatValue = useCallback(
     (val: number | null) => {
       if (val === null) return '—'
@@ -62,12 +68,12 @@ export function MetricChart({ metric, values, onRefresh, compact }: Props) {
             ? val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
             : val.toLocaleString()
 
-      if (!metric.unit) return formatted
-      return metric.unit_position === 'prefix'
-        ? `${metric.unit}${formatted}`
-        : `${formatted} ${metric.unit}`
+      if (!effectiveUnit) return formatted
+      return effectiveUnitPosition === 'prefix'
+        ? `${effectiveUnit}${formatted}`
+        : `${formatted} ${effectiveUnit}`
     },
-    [metric]
+    [metric, effectiveUnit, effectiveUnitPosition]
   )
 
   const formatYAxis = useCallback(
@@ -77,11 +83,11 @@ export function MetricChart({ metric, values, onRefresh, compact }: Props) {
       else if (Math.abs(val) >= 1_000) str = `${(val / 1_000).toFixed(0)}K`
       else str = val.toString()
 
-      if (metric.unit && metric.unit_position === 'prefix') return `${metric.unit}${str}`
+      if (effectiveUnit && effectiveUnitPosition === 'prefix') return `${effectiveUnit}${str}`
       if (metric.value_type === 'percentage') return `${str}%`
       return str
     },
-    [metric]
+    [metric, effectiveUnit, effectiveUnitPosition]
   )
 
   const handleClick = (payload: ChartPoint, e: React.MouseEvent) => {

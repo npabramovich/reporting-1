@@ -1,6 +1,9 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { UsageDashboard } from './usage-dashboard'
+
+export const metadata: Metadata = { title: 'Usage' }
 
 export default async function UsagePage() {
   const supabase = createClient()

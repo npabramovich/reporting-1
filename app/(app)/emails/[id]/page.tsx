@@ -1,7 +1,10 @@
+import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import type { InboundEmail } from '@/lib/types/database'
+
+export const metadata: Metadata = { title: 'Email' }
 import { ChevronLeft } from 'lucide-react'
 import { ReprocessButton } from './reprocess-button'
 import { UploadDocumentButton } from './upload-document-button'

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
+import { useCurrency, formatCurrencyFull, formatCurrencyPrice, getCurrencySymbol } from '@/components/currency-context'
 import type { InvestmentTransaction, CompanyStatus } from '@/lib/types/database'
 import type { CompanyInvestmentSummary } from '@/lib/types/investments'
 
@@ -25,19 +26,9 @@ const TYPE_LABELS: Record<TransactionType, string> = {
   unrealized_gain_change: 'Unrealized Change',
 }
 
-function fmt(val: number | null | undefined): string {
-  if (val == null) return '-'
-  return val.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-}
-
 function fmtNum(val: number | null | undefined): string {
   if (val == null) return '-'
   return val.toLocaleString('en-US', { maximumFractionDigits: 2 })
-}
-
-function fmtPrice(val: number | null | undefined): string {
-  if (val == null) return '-'
-  return val.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
 }
 
 function fmtMoic(val: number | null | undefined): string {
@@ -64,6 +55,11 @@ const EMPTY_FORM: Record<string, string> = {
 }
 
 export function CompanyInvestments({ companyId, companyStatus }: Props) {
+  const currency = useCurrency()
+  const symbol = getCurrencySymbol(currency)
+  const fmt = (val: number | null | undefined) => val == null ? '-' : formatCurrencyFull(val, currency)
+  const fmtPrice = (val: number | null | undefined) => val == null ? '-' : formatCurrencyPrice(val, currency)
+
   const [transactions, setTransactions] = useState<InvestmentTransaction[]>([])
   const [summary, setSummary] = useState<CompanyInvestmentSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -404,7 +400,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
             {txnType === 'investment' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Investment Cost ($)</Label>
+                  <Label>Investment Cost ({symbol.trim()})</Label>
                   <Input
                     className="mt-1"
                     type="number"
@@ -414,7 +410,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                   />
                 </div>
                 <div>
-                  <Label>Interest Converted ($)</Label>
+                  <Label>Interest Converted ({symbol.trim()})</Label>
                   <Input
                     className="mt-1"
                     type="number"
@@ -434,7 +430,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                   />
                 </div>
                 <div>
-                  <Label>Share Price ($)</Label>
+                  <Label>Share Price ({symbol.trim()})</Label>
                   <Input
                     className="mt-1"
                     type="number"
@@ -449,7 +445,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
             {txnType === 'proceeds' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Cost Basis Exited ($)</Label>
+                  <Label>Cost Basis Exited ({symbol.trim()})</Label>
                   <Input
                     className="mt-1"
                     type="number"
@@ -459,7 +455,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                   />
                 </div>
                 <div>
-                  <Label>Proceeds Received ($)</Label>
+                  <Label>Proceeds Received ({symbol.trim()})</Label>
                   <Input
                     className="mt-1"
                     type="number"
@@ -469,7 +465,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                   />
                 </div>
                 <div>
-                  <Label>Proceeds Escrow ($)</Label>
+                  <Label>Proceeds Escrow ({symbol.trim()})</Label>
                   <Input
                     className="mt-1"
                     type="number"
@@ -479,7 +475,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                   />
                 </div>
                 <div>
-                  <Label>Written Off ($)</Label>
+                  <Label>Written Off ({symbol.trim()})</Label>
                   <Input
                     className="mt-1"
                     type="number"
@@ -489,7 +485,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                   />
                 </div>
                 <div>
-                  <Label>Proceeds Per Share ($)</Label>
+                  <Label>Proceeds Per Share ({symbol.trim()})</Label>
                   <Input
                     className="mt-1"
                     type="number"
@@ -504,7 +500,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
             {txnType === 'unrealized_gain_change' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Unrealized Value Change ($)</Label>
+                  <Label>Unrealized Value Change ({symbol.trim()})</Label>
                   <Input
                     className="mt-1"
                     type="number"
@@ -514,7 +510,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                   />
                 </div>
                 <div>
-                  <Label>Current Share Price ($)</Label>
+                  <Label>Current Share Price ({symbol.trim()})</Label>
                   <Input
                     className="mt-1"
                     type="number"

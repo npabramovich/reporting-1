@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, ChevronUp, ChevronDown } from 'lucide-react'
+import { Loader2, ChevronUp, ChevronDown, Lock } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { useCurrency, formatCurrency, formatCurrencyFull } from '@/components/currency-context'
 import type { CompanyStatus } from '@/lib/types/database'
 
 interface CompanySummary {
@@ -32,20 +33,6 @@ interface PortfolioData {
 type SortKey = 'companyName' | 'status' | 'portfolioGroup' | 'totalInvested' | 'fmv' | 'totalRealized' | 'moic' | 'irr'
 type SortDir = 'asc' | 'desc'
 
-function fmt(val: number): string {
-  if (Math.abs(val) >= 1_000_000) {
-    return `$${(val / 1_000_000).toFixed(1)}M`
-  }
-  if (Math.abs(val) >= 1_000) {
-    return `$${(val / 1_000).toFixed(0)}K`
-  }
-  return val.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-}
-
-function fmtFull(val: number): string {
-  return val.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-}
-
 function fmtMoic(val: number | null): string {
   if (val == null) return '-'
   return `${val.toFixed(2)}x`
@@ -65,6 +52,10 @@ const STATUS_COLORS: Record<CompanyStatus, string> = {
 const TEXT_SORT_KEYS: SortKey[] = ['companyName', 'status', 'portfolioGroup']
 
 export default function InvestmentsPage() {
+  const currency = useCurrency()
+  const fmt = (val: number) => formatCurrency(val, currency)
+  const fmtFull = (val: number) => formatCurrencyFull(val, currency)
+
   const [data, setData] = useState<PortfolioData | null>(null)
   const [loading, setLoading] = useState(true)
   const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().split('T')[0])
@@ -158,6 +149,7 @@ export default function InvestmentsPage() {
 
   const heading = (
     <div className="flex items-center gap-4 mb-6">
+      <Lock className="h-4 w-4 text-amber-500" />
       <h1 className="text-2xl font-semibold tracking-tight">Investments</h1>
       <span className="text-sm text-muted-foreground">As of</span>
       <input
@@ -171,7 +163,7 @@ export default function InvestmentsPage() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-8 max-w-6xl">
+      <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
         {heading}
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -183,7 +175,7 @@ export default function InvestmentsPage() {
 
   if (!data || data.companies.length === 0) {
     return (
-      <div className="p-4 md:p-8 max-w-6xl">
+      <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
         {heading}
         <p className="text-sm text-muted-foreground">
           No investment data yet. Add transactions from individual company pages or use the Import page.
@@ -193,7 +185,7 @@ export default function InvestmentsPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl">
+    <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
       {heading}
 
       {/* Summary cards */}

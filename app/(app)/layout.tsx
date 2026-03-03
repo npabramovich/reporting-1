@@ -21,9 +21,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: fund } = await supabase
     .from('funds')
-    .select('name, logo_url')
+    .select('id, name, logo_url')
     .limit(1)
-    .single() as { data: { name: string; logo_url: string | null } | null }
+    .single() as { data: { id: string; name: string; logo_url: string | null } | null }
 
   // Check if user is admin and count pending join requests
   const { data: membership } = await supabase
@@ -44,9 +44,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     pendingRequestCount = count ?? 0
   }
 
-  // Count unread notes via RPC
+  // Count unread notes + fetch currency via admin client
   const admin = createAdminClient()
   const { data: unreadNotesCount } = await admin.rpc('count_unread_notes', { p_user_id: user.id }) as { data: number | null }
+  const { data: currencySettings } = fund?.id
+    ? await admin.from('fund_settings').select('currency').eq('fund_id', fund.id).maybeSingle()
+    : { data: null }
+  const fundCurrency = (currencySettings as { currency?: string } | null)?.currency ?? 'USD'
 
   const reviewBadge = (openReviewCount ?? 0) + (needsReviewEmailCount ?? 0)
   const notesBadge = unreadNotesCount ?? 0
@@ -74,6 +78,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           settingsBadge={pendingRequestCount}
           notesBadge={notesBadge}
           isAdmin={membership?.role === 'admin'}
+          currency={fundCurrency}
         >
           {children}
         </AppShell>

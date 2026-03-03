@@ -12,6 +12,7 @@ interface Company {
   id: string
   name: string
   stage: string | null
+  status: string
   tags: string[]
   industry: string[] | null
   portfolioGroup: string[] | null
@@ -31,6 +32,7 @@ type SortMode = 'alpha' | 'cash'
 
 export function DashboardCompanies({ companies, allGroups }: Props) {
   const [view, setView] = useState<'cards' | 'table'>('cards')
+  const [statusFilter, setStatusFilter] = useState<string>('active')
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set())
   const [groupSortAsc, setGroupSortAsc] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('alpha')
@@ -47,11 +49,14 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
 
   const filtered = useMemo(() => {
     let result = companies
+    if (statusFilter) {
+      result = result.filter(c => c.status === statusFilter)
+    }
     if (selectedGroups.size > 0) {
       result = result.filter(c => (c.portfolioGroup ?? []).some(g => selectedGroups.has(g)))
     }
     return result
-  }, [companies, selectedGroups])
+  }, [companies, statusFilter, selectedGroups])
 
   const hasGroups = filtered.some(c => c.portfolioGroup && c.portfolioGroup.length > 0)
 
@@ -108,6 +113,16 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
       {/* Filter bar */}
       {(allGroups.length > 0 || filtered.length > 0) && (
         <div className="flex items-center gap-2 flex-wrap mb-4">
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="text-xs px-2 py-1 rounded-md border border-border bg-background"
+          >
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="exited">Exited</option>
+            <option value="written-off">Written Off</option>
+          </select>
           {allGroups.map(group => (
             <button
               key={`group-${group}`}
