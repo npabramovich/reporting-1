@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   const email = process.env.DEMO_USER_EMAIL
   const password = process.env.DEMO_USER_PASSWORD

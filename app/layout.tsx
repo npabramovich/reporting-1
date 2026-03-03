@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import { ThemeProvider } from '@/components/theme-provider'
 import './globals.css'
 
@@ -17,16 +18,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        {/* Unregister any stale service workers from prior deployments */}
-        <script dangerouslySetInnerHTML={{ __html: `
-          if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-              registrations.forEach(function(r) { r.unregister(); });
-            });
-          }
-        `}} />
-      </head>
       <body>
         <ThemeProvider
           attribute="class"
@@ -36,6 +27,14 @@ export default function RootLayout({
         >
           {children}
         </ThemeProvider>
+        {/* Unregister any stale service workers from prior deployments */}
+        <Script id="sw-cleanup" strategy="afterInteractive">{`
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              regs.forEach(function(r) { r.unregister(); });
+            });
+          }
+        `}</Script>
       </body>
     </html>
   )
