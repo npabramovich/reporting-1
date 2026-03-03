@@ -1,12 +1,21 @@
-# Portfolio Reporting
+# Fund Portfolio Reporting
 
-A self-hosted portfolio reporting tool for venture capital funds. Portfolio companies send their quarterly updates in any format — PDF, Excel, PowerPoint, or plain text — and AI automatically identifies the company, extracts the metrics you've configured, and stores everything as time-series data. You review the results, and the dashboard gives you a live view of your portfolio.
+A portfolio reporting tool for venture capital funds, available for self-hosting, managed deployments, and as a hosted solution. Portfolio companies send their quarterly updates in any format — PDF, Excel, PowerPoint, or plain text — to you via email or directly to the platform, and AI automatically identifies the company, extracts the metrics you've configured, stores everything as time-series data, and creates an analysis of the new updates and trends. Add investment details to see investments and returns on a per-company basis. The dashboard gives you a live view of your portfolio, with the ability to see fund-level, portfolio-level, and individual company details. Simplify the data collection process and build portfolio intelligence easier.
 
-The goal is to spend less time on data entry and more time on the analysis and conversations that matter.
+Built by Taylor Davidson at [Hemrock](https://www.hemrock.com). For setup assistance, managed deployments, or general questions, [contact Taylor](https://www.hemrock.com/contact).
 
 **[Try the demo](https://portfolio.hemrock.com/demo)** — explore the platform with sample data, no signup required.
 
----
+## Pricing & License
+
+Self-hosted, operating this for yourself, this software is free to use if you are a single fund management company running your own operations — that includes all of your funds, SPVs, and internal team members. You can modify it and deploy it on your own infrastructure and on your own domain.
+
+Managed deployments are available, [contact Taylor](https://www.hemrock.com/contact) if you want him to deploy this on your infrastructure and your accounts.
+
+If you are a fund administrator, outsourced CFO, consultant, or service provider using this across multiple clients, you need a paid commercial license. You cannot resell it, white-label it, offer it as SaaS, or bundle it into another product.
+
+See [LICENSE](LICENSE) for full terms. For commercial licensing, [contact Taylor](https://www.hemrock.com/contact).
+
 
 ## How It Works
 
@@ -15,8 +24,6 @@ The fastest way to get data flowing is to forward reporting emails to the inboun
 Not everything arrives by email. When someone sends you a link to a Google Sheet, Docsend deck, or any other hosted file, download it and upload it through the Import page. The same goes for PDFs, Excel workbooks, Word docs, PowerPoint decks, CSVs, and images — anything you can download, you can import. The AI pipeline processes uploads identically to inbound emails.
 
 Once data starts flowing, the Portfolio dashboard gives you a real-time view of every company, the Review queue catches anything that needs a human decision, and the AI Analyst on each company page synthesizes the data into actionable summaries.
-
----
 
 ## Portfolio
 
@@ -42,8 +49,6 @@ A **notes panel** on the right side lets your team leave company-specific observ
 
 ![Company Detail](docs/screenshots/company.png)
 
----
-
 ## Review
 
 When inbound emails are processed, the AI pipeline sometimes flags items that need a human decision. These appear in the Review queue. Common reasons: a new company name was detected, a metric value was extracted with low confidence, a reporting period was ambiguous, or a metric couldn't be found in the report.
@@ -53,8 +58,6 @@ Each review item shows the issue type, the extracted value, and context from the
 The review badge in the sidebar shows how many items are waiting. Once all items for an email are resolved, its status moves to "success." The system is designed to err on the side of flagging rather than silently writing bad data.
 
 ![Review Queue](docs/screenshots/review.png)
-
----
 
 ## Inbound
 
@@ -68,8 +71,6 @@ If file storage is connected (Google Drive or Dropbox), emails and attachments a
 
 ![Email Detail](docs/screenshots/email-detail.png)
 
----
-
 ## Import
 
 Import lets you process reports manually when they arrive outside the normal email flow. Upload file attachments (PDFs, Excel spreadsheets, Word documents, PowerPoint decks, CSV files, and images up to 10 MB each), paste email text directly, or combine both. The system runs the same AI pipeline as automated inbound processing.
@@ -80,8 +81,6 @@ Investment transaction data can also be pasted — rounds, proceeds, valuations,
 
 ![Import](docs/screenshots/import.png)
 
----
-
 ## Asks
 
 Asks lets you send reporting request emails to portfolio companies. Compose a message, select which companies should receive it, and send it out. The system tracks each request so you know what was sent and when.
@@ -89,8 +88,6 @@ Asks lets you send reporting request emails to portfolio companies. Compose a me
 The email composer supports a customizable subject and body. Each request is logged with its recipient list, send timestamp, and delivery results. When companies reply to your ask email with their report, those replies flow into the Inbound pipeline automatically.
 
 ![Asks](docs/screenshots/asks.png)
-
----
 
 ## Notes
 
@@ -100,8 +97,6 @@ Notes support **@mentions** — type @ while writing to see a dropdown of team m
 
 ![Notes](docs/screenshots/notes.png)
 
----
-
 ## Settings
 
 Settings is where the platform is configured. Most settings are admin-only, but all users can update their display name and enable two-factor authentication.
@@ -110,30 +105,22 @@ For admins, Settings covers: AI provider keys and model selection (Anthropic and
 
 ![Settings](docs/screenshots/settings.png)
 
----
-
 ## Setup & Deployment
 
-Designed as a single-tenant deployment per fund. You control your own data, your own API keys, and your own infrastructure.
+Designed as a single-tenant deployment per fund. You control your own data, your own API keys, your own domain, and your own infrastructure. [Taylor Davidson](https://www.hemrock.com) of Hemrock is available to manage the setup, onboard you and your portfolio data, and provide ongoing support — [contact him for details](https://www.hemrock.com/contact). A hosted solution is also available to a select number of funds.
 
-[Taylor Davidson](https://www.hemrock.com) of Hemrock is available to set this up, onboard you and your portfolio data, and provide ongoing support — [contact him for details](https://www.hemrock.com/contact). A hosted solution is also available to a select number of funds.
-
-<details>
-<summary><strong>Required services</strong></summary>
+### Required services
 
 | Service | What it does | Free tier |
 |---------|-------------|-----------|
+| Hosting platform | Runs the Next.js app — choose **Netlify** or **Vercel** or other platfoms | Yes |
 | [Supabase](https://supabase.com) | Database (PostgreSQL), authentication, file storage, row-level security | Yes — 500 MB database, 1 GB storage |
+| Inbound email provider | Receives portfolio company emails — choose **Postmark** or **Mailgun** | Postmark: 100 emails/mo. Mailgun: 1,000/mo |
 | AI provider — at least one | AI for email processing, metric extraction, and summaries | Pay-as-you-go |
 | ↳ [Anthropic](https://console.anthropic.com) | Claude API | Pay-as-you-go |
 | ↳ [OpenAI](https://platform.openai.com) | OpenAI API | Pay-as-you-go |
-| Hosting platform | Runs the Next.js app — choose **Netlify** or **Vercel** | Yes on both |
-| Inbound email provider | Receives portfolio company emails — choose **Postmark** or **Mailgun** | Postmark: 100 emails/mo. Mailgun: 1,000/mo |
 
-</details>
-
-<details>
-<summary><strong>Optional services</strong></summary>
+### Optional services
 
 | Service | What it does | When you need it |
 |---------|-------------|-----------------|
@@ -141,17 +128,26 @@ Designed as a single-tenant deployment per fund. You control your own data, your
 | [Google Cloud](https://console.cloud.google.com) (OAuth) | Google Drive archiving + Gmail sending | If you want to save emails/attachments to Drive or send via Gmail |
 | [Dropbox](https://www.dropbox.com/developers) | Alternative file archiving | If you prefer Dropbox over Google Drive |
 
-</details>
-
-<details>
-<summary><strong>Step-by-step setup guide</strong></summary>
+### Step-by-step setup guide
 
 Follow these steps in order. Each step builds on the previous one.
 
-### Step 1: Create the Supabase project
+### Step 1: Download from Github or Clone the repository in Github 
+
+Download the source code from Github, or clone to copy it to your own Github account:
+
+```bash
+git clone https://github.com/tdavidson/reporting.git
+cd reporting
+npm install
+```
+
+### Step 2: Create the Supabase project
+
+Next setup your database.
 
 1. Create a new project at [supabase.com](https://supabase.com)
-2. Go to **Project Settings > API** and copy these three values (you'll need them in Step 3):
+2. Go to **Project Settings > API** and copy these three values (you'll need them in Step 4):
    - Project URL (`NEXT_PUBLIC_SUPABASE_URL`)
    - Anon public key (`NEXT_PUBLIC_SUPABASE_ANON_KEY`)
    - Service role key (`SUPABASE_SERVICE_ROLE_KEY`) — keep this secret
@@ -162,7 +158,9 @@ Follow these steps in order. Each step builds on the previous one.
 
 Don't configure the auth URLs yet — you need your deployed app URL first.
 
-### Step 2: Generate an encryption key
+The app is not prebuilt to use other database providers, but it could be edited to use other database providers.
+
+### Step 3: Generate an encryption key
 
 All secrets (API keys, OAuth tokens) are encrypted at rest using AES-256-GCM. Generate a 32-byte hex key:
 
@@ -172,7 +170,9 @@ openssl rand -hex 32
 
 Save this value — it's your `ENCRYPTION_KEY`. If you lose it, all encrypted credentials in the database become unrecoverable.
 
-### Step 3: Deploy the app
+### Step 4: Deploy the app
+
+Next is to deploy the app to your chosen hosting provider. Prebuilt the options are Netlify and Vervel, but you are not tied to those providers, feel free to deploy to your desired host.
 
 **Option A: Netlify**
 
@@ -186,10 +186,10 @@ After deploying, add these environment variables in your hosting platform's sett
 
 ```bash
 # Required
-NEXT_PUBLIC_SUPABASE_URL=         # From Step 1
-NEXT_PUBLIC_SUPABASE_ANON_KEY=    # From Step 1
-SUPABASE_SERVICE_ROLE_KEY=        # From Step 1
-ENCRYPTION_KEY=                   # From Step 2
+NEXT_PUBLIC_SUPABASE_URL=         # From Step 2
+NEXT_PUBLIC_SUPABASE_ANON_KEY=    # From Step 2
+SUPABASE_SERVICE_ROLE_KEY=        # From Step 2
+ENCRYPTION_KEY=                   # From Step 3
 NEXT_PUBLIC_APP_URL=              # Your deployed URL (e.g. https://reporting.yourfund.com)
 ```
 
@@ -197,16 +197,16 @@ Trigger a redeploy after adding the variables. `NEXT_PUBLIC_*` variables are bak
 
 If you're using a custom domain, configure it in your hosting platform's domain settings and update `NEXT_PUBLIC_APP_URL` to match.
 
-### Step 4: Configure Supabase authentication
+### Step 5: Configure Supabase authentication
 
 Now that you have your deployed URL, go back to the Supabase dashboard:
 
 1. **Authentication > URL Configuration**:
-   - Set **Site URL** to your deployed URL (e.g. `https://reporting.yourfund.com`)
+   - Set **Site URL** to your deployed URL (e.g. `https://reporting.yourfund.com` or your Netlify or Vercel deployment URLs)
    - Add `https://reporting.yourfund.com/**` to **Redirect URLs** (the `/**` wildcard is important)
 2. **Authentication > Email Templates** (optional): Supabase sends auth emails (confirmations, password resets, magic links) using a built-in email service. For production, configure a custom SMTP provider in **Project Settings > Auth > SMTP Settings** so emails come from your domain instead of Supabase's default.
 
-### Step 5: Allow your first user to sign up
+### Step 6: Allow your first user to sign up
 
 Signups are restricted by an email whitelist. Before anyone can create an account, add their email to the `allowed_signups` table:
 
@@ -216,15 +216,17 @@ Signups are restricted by an email whitelist. Before anyone can create an accoun
 3. Now go to your deployed app at `/auth/signup` and create your account
 4. Check your email for a confirmation link and click it
 
-### Step 6: Complete the onboarding wizard
+By default the first signup is the admin, with access to the fund-level and technical settings, but the admin can be changed after creation if needed.
+
+### Step 7: Complete the onboarding wizard
 
 After confirming your email and signing in, the app walks you through:
 
 1. **Fund name** — this appears in the app header
 2. **AI API key** — enter at least one: an Anthropic key from [console.anthropic.com](https://console.anthropic.com) and/or an OpenAI key from [platform.openai.com](https://platform.openai.com). You can configure both and switch between them. Keys are encrypted and stored in your database, not in environment variables.
-3. **Inbound email address** — see Step 7
+3. **Inbound email address** — see Step 8
 
-### Step 7: Set up inbound email
+### Step 8: Set up inbound email
 
 This is how portfolio company reports get into the system. Choose one:
 
@@ -240,27 +242,34 @@ This is how portfolio company reports get into the system. Choose one:
 2. Set up an inbound route to forward to: `https://your-app.com/api/inbound-email/mailgun`
 3. In the app's Settings page, select Mailgun as your inbound provider and enter your Mailgun API key and signing key
 
+You can also edit the app to use other inbound email parsing services.
+
 ### Step 8: Add authorized senders
 
 In **Settings > Authorized Senders**, add the email addresses that your portfolio companies send reports from. Only emails from these addresses will be processed — everything else is silently dropped.
 
-### Step 9: Add companies and metrics
+### Step 10: Add companies and metrics
 
 1. Go to **Portfolio** and add your portfolio companies
 2. For each company, configure the metrics you want to track (revenue, burn rate, headcount, etc.)
 3. Optionally use **Import** to bulk-create companies and metrics from a spreadsheet
 
-### Step 10: Test it
+### Step 11: Test it
 
 Forward a portfolio company report email to your inbound address. Within a minute you should see:
 - The email appear in **Inbound**
 - Metrics extracted and visible on the company's profile
 - Any low-confidence extractions flagged in **Review**
 
-</details>
+### Step 12: Invite your colleagues
 
-<details>
-<summary><strong>Optional: Outbound email</strong></summary>
+You can send your colleagues at your fund an email directing them to the signup link. They will not go through the onboarding wizard, and instead get a screen to request access to the fund you created. In your admin login in the settings, you will be able to approve them, and if you have configured the outbound email in Settings, they will get an email noting they have been approved. 
+
+> Many of the inputs on Settings are only for the admin. All setting only available to admins are noted with a lock icon and color.
+
+> By default the app assumes all colleagues use the same email domain. If this is not the case, contact Taylor and we can change this restriction.
+
+### Optional: Outbound email
 
 To send quarterly reporting requests or system notifications, configure an outbound email provider in **Settings > Outbound Email**:
 
@@ -271,10 +280,7 @@ To send quarterly reporting requests or system notifications, configure an outbo
 
 You can set different providers for system emails and portfolio asks.
 
-</details>
-
-<details>
-<summary><strong>Optional: Google Drive / Dropbox</strong></summary>
+### Optional: Google Drive / Dropbox
 
 To automatically archive processed emails and attachments:
 
@@ -291,28 +297,15 @@ To automatically archive processed emails and attachments:
 2. Add `https://your-app.com/api/auth/dropbox/callback` as a redirect URI
 3. In the app, go to **Settings** and connect Dropbox
 
-</details>
-
-<details>
-<summary><strong>Optional: Two-factor authentication</strong></summary>
+### Optional: Two-factor authentication
 
 Admins and team members can enable TOTP-based two-factor authentication from the Settings page. Once enabled, MFA is enforced on every login. Use any authenticator app (1Password, Authy, Google Authenticator, etc.).
 
-</details>
-
-<details>
-<summary><strong>Optional: Invite team members</strong></summary>
+### Optional: Invite team members
 
 In **Settings > Team**, your team members can sign up (if their email matches the whitelist or your fund's email domain) and request to join. Admins approve requests and can assign admin or member roles.
 
-</details>
-
----
-
 ## Local Development
-
-<details>
-<summary><strong>Dev server setup</strong></summary>
 
 ```bash
 # Install dependencies
@@ -343,26 +336,11 @@ cloudflared tunnel --url http://localhost:3000
 
 Then set the tunnel URL as your inbound webhook (e.g. `https://your-tunnel.ngrok.io/api/inbound-email?token=YOUR_TOKEN`).
 
-</details>
+### Demo mode
 
-<details>
-<summary><strong>Demo mode</strong></summary>
+**[Try the demo](https://portfolio.hemrock.com/demo)** — explore the platform with sample data, no signup required.
 
-To set up a public read-only demo at `/demo`:
-
-1. Add the demo environment variables:
-   ```bash
-   DEMO_USER_EMAIL=demo@yourdomain.com
-   DEMO_USER_PASSWORD=<a-strong-random-password>
-   ```
-2. Sign in as an admin and trigger the seed: `POST /api/demo/seed`
-
-This creates a demo fund with sample companies, realistic metric data, AI summaries, notes, inbound emails, review items, and documents. It also creates the demo user account automatically. Visitors to `/demo` are signed in as a read-only viewer — all mutations are blocked.
-
-</details>
-
-<details>
-<summary><strong>Tech stack</strong></summary>
+### Tech stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -374,10 +352,7 @@ This creates a demo fund with sample companies, realistic metric data, AI summar
 | **File parsing** | mammoth (DOCX), xlsx (spreadsheets), jszip (PPTX), PDF and images handled natively by the AI provider |
 | **Icons** | Lucide React |
 
-</details>
-
-<details>
-<summary><strong>Security</strong></summary>
+### Security
 
 - Two-factor authentication (TOTP)
 - Envelope encryption (AES-256-GCM) for all stored secrets
@@ -386,20 +361,6 @@ This creates a demo fund with sample companies, realistic metric data, AI summar
 - Timing-safe webhook verification
 - Security headers
 - Row Level Security on all database tables
-
-</details>
-
----
-
-## License
-
-This software is free to use if you are a single fund management company running your own operations — that includes all of your funds, SPVs, and internal team members. You can modify it and deploy it on your own infrastructure.
-
-If you are a fund administrator, outsourced CFO, consultant, or service provider using this across multiple clients, you need a paid commercial license. You cannot resell it, white-label it, offer it as SaaS, or bundle it into another product.
-
-See [LICENSE](LICENSE) for full terms. For commercial licensing, contact [hello@hemrock.com](mailto:hello@hemrock.com).
-
----
 
 ## Contact
 

@@ -52,7 +52,7 @@ export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge, settings
 
       {/* Fund name aligned above page content when sidebar collapsed */}
       {collapsed && (
-        <span className="hidden md:block absolute left-[5.5rem] top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground/70 tracking-tight">
+        <span className="hidden md:block absolute left-24 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground/70 tracking-tight">
           {fundName}
         </span>
       )}

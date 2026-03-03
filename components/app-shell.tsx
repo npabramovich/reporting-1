@@ -57,14 +57,14 @@ function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBad
         {/* Desktop sidebar — always rendered, width varies */}
         <aside
           className={`hidden md:flex flex-col shrink-0 pt-6 transition-all duration-200 ${
-            collapsed ? 'w-14' : 'w-56'
+            collapsed ? 'w-16' : 'w-56'
           }`}
         >
           <AppSidebar reviewBadge={reviewBadge} settingsBadge={settingsBadge} notesBadge={notesBadge} isAdmin={isAdmin} />
         </aside>
 
         {/* Page content */}
-        <main className="flex-1 pl-2 min-w-0 flex flex-col">
+        <main className="flex-1 min-w-0 flex flex-col">
           <div className="flex-1">
             {children}
           </div>

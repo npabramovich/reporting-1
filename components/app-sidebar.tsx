@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, TrendingUp, StickyNote, Lock } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, TrendingUp, StickyNote, Lock, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -17,10 +17,10 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badgeKey?: 're
   { href: '/review', label: 'Review', icon: ClipboardCheck, badgeKey: 'review' },
   { href: '/emails', label: 'Inbound', icon: Mail },
   { href: '/import', label: 'Import', icon: Upload },
-  { href: '/investments', label: 'Investments', icon: TrendingUp, adminOnly: true },
+  { href: '/investments', label: 'Investments', icon: BarChart3, adminOnly: true },
   { href: '/requests', label: 'Asks', icon: Send },
   { href: '/notes', label: 'Notes', icon: StickyNote, badgeKey: 'notes' },
-  { href: '/usage', label: 'Usage', icon: BarChart3, adminOnly: true },
+  { href: '/usage', label: 'Usage', icon: Users, adminOnly: true },
   { href: '/settings', label: 'Settings', icon: Settings, badgeKey: 'settings' },
   { href: '/support', label: 'Support', icon: LifeBuoy },
 ]
