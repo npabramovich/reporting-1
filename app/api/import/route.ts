@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { createFundAIProvider } from '@/lib/ai'
+import { logAIUsage } from '@/lib/ai/usage'
+import { logActivity } from '@/lib/activity'
 import { rateLimit } from '@/lib/rate-limit'
 
 interface ParsedMetric {
@@ -150,10 +152,12 @@ export async function POST(req: NextRequest) {
   // Get AI provider + model
   let provider: Awaited<ReturnType<typeof createFundAIProvider>>['provider']
   let claudeModel: string
+  let aiProviderType: 'anthropic' | 'openai'
   try {
     const result = await createFundAIProvider(admin, fundId)
     provider = result.provider
     claudeModel = result.model
+    aiProviderType = result.providerType
   } catch {
     return NextResponse.json({ error: 'Claude API key not configured. Add one in Settings.' }, { status: 400 })
   }
@@ -161,7 +165,7 @@ export async function POST(req: NextRequest) {
   // Parse with AI
   let responseText: string
   try {
-    responseText = await provider.createMessage({
+    const aiResult = await provider.createMessage({
       model: claudeModel,
       maxTokens: 8192,
       content: `Parse the following spreadsheet/CSV data into structured JSON. Extract companies with their details and metrics.
@@ -214,6 +218,16 @@ Rules:
 
 Data to parse:
 ${text}`,
+    })
+    responseText = aiResult.text
+
+    logAIUsage(admin, {
+      fundId,
+      userId: user.id,
+      provider: aiProviderType,
+      model: claudeModel,
+      feature: 'import',
+      usage: aiResult.usage,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -490,6 +504,8 @@ ${text}`,
       }
     }
   }
+
+  logActivity(admin, fundId, user.id, 'import.data', { companiesCreated: results.companiesCreated, companiesMatched: results.companiesMatched })
 
   return NextResponse.json(results)
 }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, DollarSign, StickyNote } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -12,12 +12,15 @@ const THEME_CYCLE = ['system', 'light', 'dark'] as const
 const THEME_ICONS = { system: Monitor, light: Sun, dark: Moon }
 const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' }
 
-const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badgeKey?: 'review' | 'settings' }[] = [
+const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badgeKey?: 'review' | 'settings' | 'notes'; adminOnly?: boolean }[] = [
   { href: '/dashboard', label: 'Portfolio', icon: Building2 },
   { href: '/review', label: 'Review', icon: ClipboardCheck, badgeKey: 'review' },
   { href: '/emails', label: 'Inbound', icon: Mail },
   { href: '/import', label: 'Import', icon: Upload },
+  { href: '/investments', label: 'Investments', icon: DollarSign, adminOnly: true },
   { href: '/requests', label: 'Asks', icon: Send },
+  { href: '/notes', label: 'Notes', icon: StickyNote, badgeKey: 'notes' },
+  { href: '/usage', label: 'Usage', icon: BarChart3, adminOnly: true },
   { href: '/settings', label: 'Settings', icon: Settings, badgeKey: 'settings' },
   { href: '/support', label: 'Support', icon: LifeBuoy },
 ]
@@ -25,10 +28,12 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badgeKey?: 're
 interface AppSidebarProps {
   reviewBadge: number
   settingsBadge?: number
+  notesBadge?: number
+  isAdmin?: boolean
   onNavigate?: () => void
 }
 
-export function AppSidebar({ reviewBadge, settingsBadge, onNavigate }: AppSidebarProps) {
+export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, onNavigate }: AppSidebarProps) {
   const pathname = usePathname()
   const { collapsed, toggle } = useSidebar()
   const { theme, setTheme } = useTheme()
@@ -47,10 +52,11 @@ export function AppSidebar({ reviewBadge, settingsBadge, onNavigate }: AppSideba
   return (
     <div className="flex flex-col flex-1">
       <nav className={`flex-1 p-2 space-y-0.5 ${collapsed ? 'md:px-1' : ''}`}>
-        {NAV_ITEMS.map(({ href, label, icon: Icon, badgeKey }) => {
+        {NAV_ITEMS.filter(item => !item.adminOnly || isAdmin).map(({ href, label, icon: Icon, badgeKey }) => {
           const isActive = pathname === href || pathname.startsWith(href + '/')
           const badgeCount = badgeKey === 'review' ? reviewBadge
             : badgeKey === 'settings' ? (settingsBadge ?? 0)
+            : badgeKey === 'notes' ? (notesBadge ?? 0)
             : 0
           return (
             <Link

@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { createFundAIProviderWithOverride } from '@/lib/ai'
 import type { ContentBlock } from '@/lib/ai/types'
+import { logAIUsage } from '@/lib/ai/usage'
+import { logActivity } from '@/lib/activity'
 import {
   extractAttachmentText,
   type PostmarkPayload,
@@ -147,10 +149,12 @@ export async function POST(
   // --- AI provider + model + custom prompt ---
   let provider: Awaited<ReturnType<typeof createFundAIProviderWithOverride>>['provider']
   let aiModel: string
+  let aiProviderType: 'anthropic' | 'openai'
   try {
     const result = await createFundAIProviderWithOverride(admin, company.fund_id, providerOverride)
     provider = result.provider
     aiModel = result.model
+    aiProviderType = result.providerType
   } catch {
     return NextResponse.json({
       error: 'AI API key not configured. Add one in Settings to enable AI summaries.',
@@ -393,11 +397,22 @@ ${documentsBlock ? '\nYou also have access to supplementary documents (strategy 
   ]
 
   try {
-    const summaryText = await provider.createMessage({
+    const { text: summaryText, usage } = await provider.createMessage({
       model: aiModel,
       maxTokens: 1000,
       content: userContent,
     })
+
+    logAIUsage(admin, {
+      fundId: company.fund_id,
+      userId: user.id,
+      provider: aiProviderType,
+      model: aiModel,
+      feature: 'summary',
+      usage,
+    })
+
+    logActivity(admin, company.fund_id, user.id, 'company.summary', { companyId: params.id })
 
     // Persist the summary
     const { error: insertError } = await admin.from('company_summaries').insert({

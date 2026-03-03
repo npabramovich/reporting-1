@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { createFundAIProvider } from '@/lib/ai'
+import { logAIUsage } from '@/lib/ai/usage'
+import { logActivity } from '@/lib/activity'
 
 interface MatchResult {
   filename: string
@@ -60,10 +62,12 @@ export async function POST(req: NextRequest) {
   // Get AI provider
   let provider: Awaited<ReturnType<typeof createFundAIProvider>>['provider']
   let claudeModel: string
+  let aiProviderType: 'anthropic' | 'openai'
   try {
     const result = await createFundAIProvider(admin, fundId)
     provider = result.provider
     claudeModel = result.model
+    aiProviderType = result.providerType
   } catch {
     return NextResponse.json({
       error: 'Claude API key not configured. Add one in Settings.',
@@ -88,12 +92,23 @@ Return JSON only, no prose. Format:
 { "matches": [{ "filename": "...", "companyId": "..." or null, "companyName": "..." or null, "confidence": "high"|"medium"|"low"|"none" }] }`
 
   try {
-    const text = await provider.createMessage({
+    const { text, usage } = await provider.createMessage({
       model: claudeModel,
       maxTokens: 2048,
       system: 'You are a portfolio reporting assistant. Match document filenames to portfolio companies. Return JSON only.',
       content: prompt,
     })
+
+    logAIUsage(admin, {
+      fundId,
+      userId: user.id,
+      provider: aiProviderType,
+      model: claudeModel,
+      feature: 'import_documents',
+      usage,
+    })
+
+    logActivity(admin, fundId, user.id, 'import.documents', { fileCount: filenames.length })
 
     // Parse the response
     const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()

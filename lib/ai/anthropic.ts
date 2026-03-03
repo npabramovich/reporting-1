@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { AIProvider, AIModel, CreateMessageParams, ContentBlock } from './types'
+import type { AIProvider, AIModel, AIResult, CreateMessageParams, ContentBlock } from './types'
 
 export class AnthropicProvider implements AIProvider {
   private client: Anthropic
@@ -8,7 +8,7 @@ export class AnthropicProvider implements AIProvider {
     this.client = new Anthropic({ apiKey })
   }
 
-  async createMessage(params: CreateMessageParams): Promise<string> {
+  async createMessage(params: CreateMessageParams): Promise<AIResult> {
     const content = typeof params.content === 'string'
       ? params.content
       : toAnthropicContent(params.content)
@@ -20,10 +20,18 @@ export class AnthropicProvider implements AIProvider {
       messages: [{ role: 'user', content }],
     })
 
-    return response.content
+    const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map(b => b.text)
       .join('')
+
+    return {
+      text,
+      usage: {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      },
+    }
   }
 
   async testConnection(): Promise<void> {

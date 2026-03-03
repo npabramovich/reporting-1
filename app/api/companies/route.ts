@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { dbError } from '@/lib/api-error'
+import { logActivity } from '@/lib/activity'
 
 export async function GET() {
   const supabase = createClient()
@@ -94,6 +95,8 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return dbError(error, 'companies')
+
+  logActivity(admin, membership.fund_id, user.id, 'company.create', { companyName: name.trim() })
 
   return NextResponse.json(data, { status: 201 })
 }

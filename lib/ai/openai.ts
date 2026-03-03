@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import type { AIProvider, AIModel, CreateMessageParams, ContentBlock } from './types'
+import type { AIProvider, AIModel, AIResult, CreateMessageParams, ContentBlock } from './types'
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI
@@ -8,7 +8,7 @@ export class OpenAIProvider implements AIProvider {
     this.client = new OpenAI({ apiKey })
   }
 
-  async createMessage(params: CreateMessageParams): Promise<string> {
+  async createMessage(params: CreateMessageParams): Promise<AIResult> {
     const userContent = typeof params.content === 'string'
       ? params.content
       : toOpenAIContent(params.content)
@@ -27,7 +27,13 @@ export class OpenAIProvider implements AIProvider {
       messages,
     })
 
-    return response.choices[0]?.message?.content ?? ''
+    return {
+      text: response.choices[0]?.message?.content ?? '',
+      usage: {
+        inputTokens: response.usage?.prompt_tokens ?? 0,
+        outputTokens: response.usage?.completion_tokens ?? 0,
+      },
+    }
   }
 
   async testConnection(): Promise<void> {

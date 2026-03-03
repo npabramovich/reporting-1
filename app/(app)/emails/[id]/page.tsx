@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { InboundEmail } from '@/lib/types/database'
 import { ChevronLeft } from 'lucide-react'
 import { ReprocessButton } from './reprocess-button'
+import { UploadDocumentButton } from './upload-document-button'
 import { SaveToDriveButton } from './save-to-drive-button'
 import { CollapsibleJson } from './collapsible-json'
 import { ReviewItems } from './review-items'
@@ -271,6 +272,16 @@ export default async function EmailDetailPage({ params }: { params: { id: string
 
       {/* Actions */}
       <section className="pt-2 border-t space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          <div>
+            <p className="text-sm font-medium">Upload document</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              If the report was linked rather than attached, upload it here so it can be processed with the email.
+            </p>
+          </div>
+          <UploadDocumentButton emailId={email.id} />
+        </div>
+
         {hasFileStorage && (
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
             <div>

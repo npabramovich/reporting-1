@@ -1,0 +1,205 @@
+import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+
+// Pricing per million tokens
+const PRICING: Record<string, { input: number; output: number }> = {
+  'anthropic:sonnet': { input: 3.0, output: 15.0 },
+  'anthropic:haiku': { input: 0.8, output: 4.0 },
+  'anthropic:opus': { input: 15.0, output: 75.0 },
+  'openai:gpt-4o-mini': { input: 0.15, output: 0.6 },
+  'openai:gpt-4o': { input: 2.5, output: 10.0 },
+  'openai:gpt-4.1': { input: 2.0, output: 8.0 },
+  'openai:o3-mini': { input: 1.1, output: 4.4 },
+}
+const FALLBACK_PRICING = { input: 5.0, output: 15.0 }
+
+function getPricing(provider: string, model: string) {
+  // Try exact provider:model match first
+  const exact = PRICING[`${provider}:${model}`]
+  if (exact) return exact
+
+  // Try partial match (e.g. model contains 'sonnet', 'haiku', etc.)
+  for (const [key, pricing] of Object.entries(PRICING)) {
+    const modelPattern = key.split(':')[1]
+    if (model.includes(modelPattern)) return pricing
+  }
+
+  return FALLBACK_PRICING
+}
+
+function estimateCost(provider: string, model: string, inputTokens: number, outputTokens: number) {
+  const pricing = getPricing(provider, model)
+  return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
+}
+
+export async function GET() {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = createAdminClient()
+
+  const { data: membership } = await admin
+    .from('fund_members')
+    .select('fund_id, role')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+  if (membership.role !== 'admin') return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+
+  const fundId = membership.fund_id
+
+  // Get current month boundaries
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+
+  // Fetch all usage logs for current month
+  interface UsageLog {
+    provider: string
+    model: string
+    feature: string
+    input_tokens: number
+    output_tokens: number
+    created_at: string
+  }
+
+  const { data: logs, error } = await admin
+    .from('ai_usage_logs' as any)
+    .select('provider, model, feature, input_tokens, output_tokens, created_at')
+    .eq('fund_id', fundId)
+    .gte('created_at', monthStart)
+    .order('created_at', { ascending: false }) as { data: UsageLog[] | null; error: any }
+
+  if (error) {
+    return NextResponse.json({ error: 'Failed to fetch usage data' }, { status: 500 })
+  }
+
+  // Group by date + provider + model for daily breakdown
+  const dailyMap = new Map<string, {
+    date: string
+    provider: string
+    model: string
+    input_tokens: number
+    output_tokens: number
+  }>()
+
+  const mtdByProvider: Record<string, { input_tokens: number; output_tokens: number; estimated_cost: number }> = {}
+
+  for (const log of logs ?? []) {
+    const date = log.created_at.slice(0, 10)
+    const key = `${date}|${log.provider}|${log.model}`
+
+    const existing = dailyMap.get(key)
+    if (existing) {
+      existing.input_tokens += log.input_tokens
+      existing.output_tokens += log.output_tokens
+    } else {
+      dailyMap.set(key, {
+        date,
+        provider: log.provider,
+        model: log.model,
+        input_tokens: log.input_tokens,
+        output_tokens: log.output_tokens,
+      })
+    }
+
+    // MTD aggregation by provider
+    if (!mtdByProvider[log.provider]) {
+      mtdByProvider[log.provider] = { input_tokens: 0, output_tokens: 0, estimated_cost: 0 }
+    }
+    mtdByProvider[log.provider].input_tokens += log.input_tokens
+    mtdByProvider[log.provider].output_tokens += log.output_tokens
+    mtdByProvider[log.provider].estimated_cost += estimateCost(
+      log.provider, log.model, log.input_tokens, log.output_tokens
+    )
+  }
+
+  // Build daily array with cost estimates
+  const daily = Array.from(dailyMap.values())
+    .map(d => ({
+      ...d,
+      estimated_cost: estimateCost(d.provider, d.model, d.input_tokens, d.output_tokens),
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date))
+
+  const totalEstimatedCost = Object.values(mtdByProvider).reduce((sum, p) => sum + p.estimated_cost, 0)
+
+  // Fetch user activity logs for current month
+  interface ActivityLog {
+    user_id: string
+    action: string
+    metadata: Record<string, unknown>
+    created_at: string
+  }
+
+  const { data: activityLogs } = await admin
+    .from('user_activity_logs' as any)
+    .select('user_id, action, metadata, created_at')
+    .eq('fund_id', fundId)
+    .gte('created_at', monthStart)
+    .order('created_at', { ascending: false })
+    .limit(200) as { data: ActivityLog[] | null }
+
+  // Build per-user summary
+  const userActionMap = new Map<string, Record<string, number>>()
+  for (const log of activityLogs ?? []) {
+    if (!userActionMap.has(log.user_id)) {
+      userActionMap.set(log.user_id, {})
+    }
+    const actions = userActionMap.get(log.user_id)!
+    actions[log.action] = (actions[log.action] ?? 0) + 1
+  }
+
+  // Resolve user info from fund_members + auth
+  const { data: members } = await admin
+    .from('fund_members')
+    .select('user_id, display_name')
+    .eq('fund_id', fundId) as { data: { user_id: string; display_name: string | null }[] | null }
+
+  const memberMap: Record<string, string | null> = {}
+  for (const m of members ?? []) {
+    memberMap[m.user_id] = m.display_name
+  }
+
+  // Collect all unique user IDs from activity logs
+  const activityUserIds = Array.from(new Set((activityLogs ?? []).map(l => l.user_id)))
+
+  // Resolve emails
+  const emailMap: Record<string, string> = {}
+  for (const uid of activityUserIds) {
+    const { data: { user: activityUser } } = await admin.auth.admin.getUserById(uid)
+    emailMap[uid] = activityUser?.email ?? 'Unknown'
+  }
+
+  const userSummary = Array.from(userActionMap.entries()).map(([userId, actions]) => ({
+    userId,
+    email: emailMap[userId] ?? 'Unknown',
+    displayName: memberMap[userId] ?? null,
+    actions,
+    total: Object.values(actions).reduce((s, n) => s + n, 0),
+  }))
+
+  // Recent activity feed (last 50)
+  const recent = (activityLogs ?? []).slice(0, 50).map(log => ({
+    userId: log.user_id,
+    email: emailMap[log.user_id] ?? 'Unknown',
+    displayName: memberMap[log.user_id] ?? null,
+    action: log.action,
+    metadata: log.metadata,
+    createdAt: log.created_at,
+  }))
+
+  return NextResponse.json({
+    daily,
+    mtd: {
+      ...mtdByProvider,
+      total_estimated_cost: totalEstimatedCost,
+    },
+    activity: {
+      userSummary,
+      recent,
+    },
+  })
+}

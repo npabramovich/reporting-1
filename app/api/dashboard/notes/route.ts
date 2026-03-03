@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { dbError } from '@/lib/api-error'
+import { logActivity } from '@/lib/activity'
+import { parseMentions } from '@/lib/notes/mentions'
 
 export async function GET(req: NextRequest) {
   const supabase = createClient()
@@ -22,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   let query = admin
     .from('company_notes')
-    .select('id, content, user_id, company_id, created_at, updated_at')
+    .select('id, content, user_id, company_id, mentioned_user_ids, created_at, updated_at')
     .eq('fund_id', membership.fund_id)
     .order('created_at', { ascending: true })
 
@@ -31,11 +33,23 @@ export async function GET(req: NextRequest) {
   }
 
   const { data: notes, error } = await query as {
-    data: { id: string; content: string; user_id: string; company_id: string | null; created_at: string; updated_at: string }[] | null
+    data: { id: string; content: string; user_id: string; company_id: string | null; mentioned_user_ids: string[] | null; created_at: string; updated_at: string }[] | null
     error: { message: string } | null
   }
 
   if (error) return dbError(error, 'dashboard-notes')
+
+  // Batch-load read status
+  const noteIds = (notes ?? []).map(n => n.id)
+  const readSet = new Set<string>()
+  if (noteIds.length > 0) {
+    const { data: reads } = await admin
+      .from('note_reads' as any)
+      .select('note_id')
+      .eq('user_id', user.id)
+      .in('note_id', noteIds) as { data: { note_id: string }[] | null }
+    for (const r of reads ?? []) readSet.add(r.note_id)
+  }
 
   // Batch-load display names
   const { data: members } = await admin
@@ -77,6 +91,8 @@ export async function GET(req: NextRequest) {
       userEmail: emailCache[note.user_id],
       companyId: note.company_id,
       companyName: note.company_id ? companyNameMap[note.company_id] ?? null : null,
+      mentionedUserIds: note.mentioned_user_ids ?? [],
+      isRead: note.user_id === user.id || readSet.has(note.id),
       createdAt: note.created_at,
       edited: note.updated_at !== note.created_at,
     })
@@ -123,6 +139,14 @@ export async function POST(req: NextRequest) {
     companyName = company.name
   }
 
+  // Parse @mentions
+  const { data: members } = await admin
+    .from('fund_members')
+    .select('user_id, display_name')
+    .eq('fund_id', membership.fund_id) as { data: { user_id: string; display_name: string | null }[] | null }
+
+  const mentionedUserIds = parseMentions(content.trim(), members ?? [])
+
   const { data: note, error } = await admin
     .from('company_notes')
     .insert({
@@ -130,11 +154,25 @@ export async function POST(req: NextRequest) {
       fund_id: membership.fund_id,
       user_id: user.id,
       content: content.trim(),
+      mentioned_user_ids: mentionedUserIds,
     } as any)
     .select('id, content, user_id, company_id, created_at')
     .single() as { data: { id: string; content: string; user_id: string; company_id: string | null; created_at: string } | null; error: { message: string } | null }
 
   if (error || !note) return dbError(error ?? { message: 'Failed to create note' }, 'dashboard-notes')
+
+  logActivity(admin, membership.fund_id, user.id, 'note.create', {})
+
+  // Fire-and-forget notification
+  sendNoteNotificationsAsync(admin, membership.fund_id, {
+    id: note.id,
+    content: note.content,
+    companyId: companyId || null,
+    companyName,
+    authorName: membership.display_name || user.email?.split('@')[0] || 'Someone',
+    authorUserId: user.id,
+    mentionedUserIds,
+  })
 
   return NextResponse.json({
     id: note.id,
@@ -144,7 +182,18 @@ export async function POST(req: NextRequest) {
     userEmail: user.email ?? 'Unknown',
     companyId: note.company_id,
     companyName,
+    mentionedUserIds,
+    isRead: true,
     createdAt: note.created_at,
     edited: false,
   })
+}
+
+async function sendNoteNotificationsAsync(...args: Parameters<typeof import('@/lib/notes/notify').sendNoteNotifications>) {
+  try {
+    const { sendNoteNotifications } = await import('@/lib/notes/notify')
+    await sendNoteNotifications(...args)
+  } catch (err) {
+    console.error('[notes] Failed to send notifications:', err)
+  }
 }

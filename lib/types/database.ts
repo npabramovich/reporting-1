@@ -816,6 +816,7 @@ export type Database = {
           fund_id: string
           user_id: string
           content: string
+          mentioned_user_ids: string[]
           created_at: string
           updated_at: string
         }
@@ -825,6 +826,7 @@ export type Database = {
           fund_id: string
           user_id: string
           content: string
+          mentioned_user_ids?: string[]
           created_at?: string
           updated_at?: string
         }
@@ -834,6 +836,7 @@ export type Database = {
           fund_id?: string
           user_id?: string
           content?: string
+          mentioned_user_ids?: string[]
           created_at?: string
           updated_at?: string
         }
@@ -858,12 +861,194 @@ export type Database = {
           },
         ]
       }
+      investment_transactions: {
+        Row: {
+          id: string
+          company_id: string
+          fund_id: string
+          transaction_type: 'investment' | 'proceeds' | 'unrealized_gain_change'
+          round_name: string | null
+          transaction_date: string | null
+          notes: string | null
+          investment_cost: number | null
+          interest_converted: number | null
+          shares_acquired: number | null
+          share_price: number | null
+          cost_basis_exited: number | null
+          proceeds_received: number | null
+          proceeds_escrow: number | null
+          proceeds_written_off: number | null
+          proceeds_per_share: number | null
+          unrealized_value_change: number | null
+          current_share_price: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          fund_id: string
+          transaction_type: 'investment' | 'proceeds' | 'unrealized_gain_change'
+          round_name?: string | null
+          transaction_date?: string | null
+          notes?: string | null
+          investment_cost?: number | null
+          interest_converted?: number | null
+          shares_acquired?: number | null
+          share_price?: number | null
+          cost_basis_exited?: number | null
+          proceeds_received?: number | null
+          proceeds_escrow?: number | null
+          proceeds_written_off?: number | null
+          proceeds_per_share?: number | null
+          unrealized_value_change?: number | null
+          current_share_price?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          fund_id?: string
+          transaction_type?: 'investment' | 'proceeds' | 'unrealized_gain_change'
+          round_name?: string | null
+          transaction_date?: string | null
+          notes?: string | null
+          investment_cost?: number | null
+          interest_converted?: number | null
+          shares_acquired?: number | null
+          share_price?: number | null
+          cost_basis_exited?: number | null
+          proceeds_received?: number | null
+          proceeds_escrow?: number | null
+          proceeds_written_off?: number | null
+          proceeds_per_share?: number | null
+          unrealized_value_change?: number | null
+          current_share_price?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'investment_transactions_company_id_fkey'
+            columns: ['company_id']
+            referencedRelation: 'companies'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'investment_transactions_fund_id_fkey'
+            columns: ['fund_id']
+            referencedRelation: 'funds'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      note_reads: {
+        Row: {
+          user_id: string
+          note_id: string
+          read_at: string
+        }
+        Insert: {
+          user_id: string
+          note_id: string
+          read_at?: string
+        }
+        Update: {
+          user_id?: string
+          note_id?: string
+          read_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'note_reads_note_id_fkey'
+            columns: ['note_id']
+            referencedRelation: 'company_notes'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      note_notification_preferences: {
+        Row: {
+          id: string
+          user_id: string
+          fund_id: string
+          level: 'all' | 'mentions' | 'none'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          fund_id: string
+          level?: 'all' | 'mentions' | 'none'
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          fund_id?: string
+          level?: 'all' | 'mentions' | 'none'
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'note_notification_preferences_fund_id_fkey'
+            columns: ['fund_id']
+            referencedRelation: 'funds'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      note_company_subscriptions: {
+        Row: {
+          id: string
+          user_id: string
+          company_id: string
+          fund_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          company_id: string
+          fund_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          company_id?: string
+          fund_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'note_company_subscriptions_company_id_fkey'
+            columns: ['company_id']
+            referencedRelation: 'companies'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'note_company_subscriptions_fund_id_fkey'
+            columns: ['fund_id']
+            referencedRelation: 'funds'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: Record<string, never>
     Functions: {
       get_my_fund_ids: {
         Args: Record<PropertyKey, never>
         Returns: string[]
+      }
+      count_unread_notes: {
+        Args: { p_user_id: string }
+        Returns: number
       }
     }
     Enums: Record<string, never>
@@ -897,6 +1082,10 @@ export type AllowedSignup  = Tables<'allowed_signups'>
 export type FundJoinRequest = Tables<'fund_join_requests'>
 export type EmailRequest    = Tables<'email_requests'>
 export type CompanyNote     = Tables<'company_notes'>
+export type InvestmentTransaction = Tables<'investment_transactions'>
+export type NoteRead             = Tables<'note_reads'>
+export type NoteNotificationPreference = Tables<'note_notification_preferences'>
+export type NoteCompanySubscription    = Tables<'note_company_subscriptions'>
 
 // Enum-style string literals
 export type CompanyStatus      = 'active' | 'exited' | 'written-off'
@@ -914,3 +1103,5 @@ export type IssueType          =
   | 'duplicate_period'
 export type ReviewResolution   = 'accepted' | 'rejected' | 'manually_corrected'
 export type EmailRequestStatus = 'draft' | 'sent' | 'failed'
+export type TransactionType    = 'investment' | 'proceeds' | 'unrealized_gain_change'
+export type NotificationLevel  = 'all' | 'mentions' | 'none'

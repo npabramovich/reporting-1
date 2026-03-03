@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { getOutboundConfig, sendOutboundEmail } from '@/lib/email'
 import { rateLimit } from '@/lib/rate-limit'
+import { logActivity } from '@/lib/activity'
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()
@@ -85,6 +86,8 @@ export async function POST(req: NextRequest) {
     sent_at: new Date().toISOString(),
     send_results: { sent, failed, details: results },
   })
+
+  logActivity(admin, membership.fund_id, user.id, 'requests.send', { recipientCount: recipients.length })
 
   return NextResponse.json({ sent, failed, results })
 }

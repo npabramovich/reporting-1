@@ -19,6 +19,15 @@ interface ImportResult {
   errors: string[]
 }
 
+interface InvestmentImportResult {
+  investmentsCreated: number
+  proceedsCreated: number
+  unrealizedCreated: number
+  companiesMatched: number
+  companiesCreated: number
+  errors: string[]
+}
+
 interface FileMatch {
   file: File
   filename: string
@@ -51,6 +60,12 @@ export default function ImportPage() {
   const [companies, setCompanies] = useState<Company[]>([])
   const [fundId, setFundId] = useState<string | null>(null)
   const docInputRef = useRef<HTMLInputElement>(null)
+
+  // Investment import state
+  const [investmentText, setInvestmentText] = useState('')
+  const [investmentImporting, setInvestmentImporting] = useState(false)
+  const [investmentResult, setInvestmentResult] = useState<InvestmentImportResult | null>(null)
+  const [investmentError, setInvestmentError] = useState<string | null>(null)
 
   // Load companies for the dropdown and get fund_id
   useEffect(() => {
@@ -241,6 +256,33 @@ export default function ImportPage() {
     }
   }
 
+  async function handleInvestmentImport() {
+    if (!investmentText.trim()) return
+    setInvestmentImporting(true)
+    setInvestmentResult(null)
+    setInvestmentError(null)
+
+    try {
+      const res = await fetch('/api/import/investments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: investmentText }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        setInvestmentError(data.error ?? 'Import failed')
+        return
+      }
+
+      setInvestmentResult(data)
+    } catch {
+      setInvestmentError('Something went wrong')
+    } finally {
+      setInvestmentImporting(false)
+    }
+  }
+
   const matchedCount = docFiles.filter(f => f.companyId).length
   const unmatchedCount = docFiles.filter(f => !f.companyId).length
 
@@ -376,7 +418,7 @@ export default function ImportPage() {
 
       {/* Paste Data Section */}
       <div className="mt-12 pt-8 border-t">
-        <h2 className="text-xl font-semibold tracking-tight mb-2">Paste Data</h2>
+        <h2 className="text-xl font-semibold tracking-tight mb-2">Paste Company Metrics</h2>
         <p className="text-sm text-muted-foreground mb-6">
           Paste CSV or spreadsheet data from Google Sheets. Claude will parse it to create companies, metrics, and historical values.
         </p>
@@ -431,6 +473,75 @@ export default function ImportPage() {
             <Button onClick={handleImport} disabled={importing || !text.trim()}>
               {importing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {importing ? 'Importing...' : 'Import'}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Investment Data Section */}
+      <div className="mt-12 pt-8 border-t">
+        <h2 className="text-xl font-semibold tracking-tight mb-2">Paste Investment Data</h2>
+        <p className="text-sm text-muted-foreground mb-6">
+          Paste investment transaction data (rounds, proceeds, valuations). AI will parse and match to existing portfolio companies.
+        </p>
+
+        {investmentError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{investmentError}</AlertDescription>
+          </Alert>
+        )}
+
+        {investmentResult && (
+          <Alert className="mb-4">
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertDescription>
+              <div className="space-y-1">
+                <p className="font-medium">Import complete</p>
+                <ul className="text-sm space-y-0.5">
+                  {investmentResult.investmentsCreated > 0 && (
+                    <li>{investmentResult.investmentsCreated} investment transaction{investmentResult.investmentsCreated !== 1 ? 's' : ''} created</li>
+                  )}
+                  {investmentResult.proceedsCreated > 0 && (
+                    <li>{investmentResult.proceedsCreated} proceeds transaction{investmentResult.proceedsCreated !== 1 ? 's' : ''} created</li>
+                  )}
+                  {investmentResult.unrealizedCreated > 0 && (
+                    <li>{investmentResult.unrealizedCreated} unrealized change{investmentResult.unrealizedCreated !== 1 ? 's' : ''} created</li>
+                  )}
+                  <li>{investmentResult.companiesMatched} compan{investmentResult.companiesMatched !== 1 ? 'ies' : 'y'} matched</li>
+                  {investmentResult.companiesCreated > 0 && (
+                    <li>{investmentResult.companiesCreated} compan{investmentResult.companiesCreated !== 1 ? 'ies' : 'y'} created</li>
+                  )}
+                </ul>
+                {investmentResult.errors.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-sm font-medium text-destructive">Issues:</p>
+                    <ul className="text-sm text-destructive space-y-0.5">
+                      {investmentResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="space-y-4">
+          <Textarea
+            placeholder={`Paste investment data here...\n\nExample:\nCompany, Round, Date, Amount Invested, Shares, Price/Share\nAcme Corp, Series A, 2024-03-15, 500000, 50000, 10.00\nBeta Inc, Seed, 2023-11-01, 250000, 100000, 2.50`}
+            value={investmentText}
+            onChange={e => setInvestmentText(e.target.value)}
+            rows={12}
+            className="font-mono text-sm"
+          />
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              Supports CSV, tab-separated, or free-form text. New companies will be created automatically.
+            </p>
+            <Button onClick={handleInvestmentImport} disabled={investmentImporting || !investmentText.trim()}>
+              {investmentImporting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {investmentImporting ? 'Importing...' : 'Import Investments'}
             </Button>
           </div>
         </div>

@@ -63,7 +63,8 @@ export async function runPipeline(
     extracted.emailBody,
     companies,
     claudeApiKey,
-    claudeModel
+    claudeModel,
+    { admin: supabase, fundId }
   )
 
   if (identification.new_company_name) {
@@ -122,7 +123,8 @@ export async function runPipeline(
     pdfBase64s,
     images,
     claudeApiKey,
-    claudeModel
+    claudeModel,
+    { admin: supabase, fundId }
   )
 
   // Store the raw Claude response
