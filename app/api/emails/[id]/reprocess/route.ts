@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { runPipeline, type PostmarkPayload } from '@/lib/pipeline/processEmail'
+import { hydrateAttachments } from '@/lib/parsing/extractAttachmentText'
 import type { InboundEmail } from '@/lib/types/database'
 import { dbError } from '@/lib/api-error'
 import { rateLimit } from '@/lib/rate-limit'
@@ -66,8 +67,13 @@ export async function POST(
     })
     .eq('id', emailId)
 
+  // Hydrate attachments from Storage before re-running pipeline
+  const hydratedPayload = await hydrateAttachments(
+    email.raw_payload as unknown as PostmarkPayload
+  ) as unknown as PostmarkPayload
+
   // Re-run pipeline asynchronously — return immediately
-  runPipeline(admin, emailId, fundId, email.raw_payload as unknown as PostmarkPayload).catch(
+  runPipeline(admin, emailId, fundId, hydratedPayload).catch(
     async err => {
       const message = err instanceof Error ? err.message : String(err)
       console.error(`[reprocess] Pipeline error for email ${emailId}:`, err)

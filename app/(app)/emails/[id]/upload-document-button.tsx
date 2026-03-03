@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Upload, Loader2, FileText, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { createClient } from '@/lib/supabase/client'
 
 interface Props {
   emailId: string
@@ -17,17 +18,23 @@ export function UploadDocumentButton({ emailId }: Props) {
     setUploading(true)
     setError(null)
     try {
-      const buffer = await file.arrayBuffer()
-      const base64 = btoa(
-        new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-      )
+      const supabase = createClient()
+      const storagePath = `${emailId}/${crypto.randomUUID()}-${file.name}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('email-attachments')
+        .upload(storagePath, file)
+
+      if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`)
+
       const res = await fetch(`/api/emails/${emailId}/attachments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           filename: file.name,
           contentType: file.type || 'application/octet-stream',
-          content: base64,
+          contentLength: file.size,
+          storagePath,
         }),
       })
       if (!res.ok) {

@@ -33,8 +33,9 @@ export interface PostmarkPayload {
   Attachments?: Array<{
     Name: string
     ContentType: string
-    Content: string
+    Content?: string
     ContentLength: number
+    StoragePath?: string
   }>
 }
 
@@ -517,6 +518,7 @@ async function saveToGoogleDrive(
 
   if (payload.Attachments?.length) {
     for (const att of payload.Attachments) {
+      if (!att.Content) continue
       const content = Buffer.from(att.Content, 'base64')
       await uploadGoogleFile(accessToken, companyFolderId, att.Name, content, att.ContentType)
     }
@@ -563,6 +565,7 @@ async function saveToDropbox(
 
   if (payload.Attachments?.length) {
     for (const att of payload.Attachments) {
+      if (!att.Content) continue
       const content = Buffer.from(att.Content, 'base64')
       await uploadDropboxFile(accessToken, companyPath, att.Name, content)
     }

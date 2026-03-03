@@ -8,6 +8,7 @@ import { logAIUsage } from '@/lib/ai/usage'
 import { logActivity } from '@/lib/activity'
 import {
   extractAttachmentText,
+  hydrateAttachments,
   type PostmarkPayload,
 } from '@/lib/parsing/extractAttachmentText'
 import { dbError } from '@/lib/api-error'
@@ -242,7 +243,7 @@ export async function POST(
   const contentParts: ContentBlock[] = []
 
   if (latestEmail?.raw_payload) {
-    const payload = latestEmail.raw_payload as unknown as PostmarkPayload
+    const payload = await hydrateAttachments(latestEmail.raw_payload as unknown as PostmarkPayload)
     const extracted = await extractAttachmentText(payload)
 
     // Email body
