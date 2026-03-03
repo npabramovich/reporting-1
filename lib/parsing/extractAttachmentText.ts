@@ -1,6 +1,7 @@
 import mammoth from 'mammoth'
 import JSZip from 'jszip'
 import * as XLSX from 'xlsx'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const MAX_CHARS = 50_000
 
@@ -8,8 +9,9 @@ const MAX_CHARS = 50_000
 interface PostmarkAttachment {
   Name: string
   ContentType: string
-  Content: string // base64-encoded
+  Content?: string // base64-encoded — absent when stored in Storage
   ContentLength: number
+  StoragePath?: string // path in email-attachments bucket
 }
 
 // Postmark inbound payload (fields relevant to extraction)
@@ -17,6 +19,43 @@ export interface PostmarkPayload {
   TextBody?: string
   HtmlBody?: string
   Attachments?: PostmarkAttachment[]
+}
+
+/**
+ * Reconstitute full attachment content by downloading from Supabase Storage.
+ * - If `Content` is already present (legacy data) → kept as-is
+ * - If `StoragePath` is present → download from `email-attachments` bucket, base64-encode
+ * Returns a new payload with Content populated on every attachment.
+ */
+export async function hydrateAttachments(
+  payload: PostmarkPayload
+): Promise<PostmarkPayload> {
+  if (!payload.Attachments || payload.Attachments.length === 0) return payload
+
+  const needsHydration = payload.Attachments.some(a => !a.Content && a.StoragePath)
+  if (!needsHydration) return payload
+
+  const admin = createAdminClient()
+  const hydrated = await Promise.all(
+    payload.Attachments.map(async (att) => {
+      if (att.Content) return att
+      if (!att.StoragePath) return att
+
+      const { data, error } = await admin.storage
+        .from('email-attachments')
+        .download(att.StoragePath)
+
+      if (error || !data) {
+        console.error(`[hydrateAttachments] Failed to download ${att.StoragePath}:`, error)
+        return att
+      }
+
+      const buffer = Buffer.from(await data.arrayBuffer())
+      return { ...att, Content: buffer.toString('base64') }
+    })
+  )
+
+  return { ...payload, Attachments: hydrated }
 }
 
 export interface AttachmentResult {
@@ -71,6 +110,16 @@ export async function extractFromBuffer(
 async function extractSingle(attachment: PostmarkAttachment): Promise<AttachmentResult> {
   const { Name: filename, ContentType: contentType, Content: base64 } = attachment
   const ext = filename.split('.').pop()?.toLowerCase() ?? ''
+
+  if (!base64) {
+    return {
+      filename,
+      contentType,
+      extractedText: '',
+      skipped: true,
+      skipReason: 'No content available (attachment may not have been hydrated)',
+    }
+  }
 
   try {
     // PDF — pass to Claude natively as base64

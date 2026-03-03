@@ -36,6 +36,7 @@ interface FileMatch {
   confidence: string
   status: 'pending' | 'uploading' | 'done' | 'error'
   error?: string
+  textOnly?: boolean
 }
 
 interface Company {
@@ -44,7 +45,8 @@ interface Company {
 }
 
 const ACCEPTED_DOC_TYPES = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.jpg,.jpeg,.png'
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
+const TEXT_ONLY_THRESHOLD = 10 * 1024 * 1024 // 10 MB — files above this get text-only extraction
 
 export default function ImportPage() {
   const [text, setText] = useState('')
@@ -133,12 +135,6 @@ export default function ImportPage() {
     setDocSuccess(null)
 
     const fileList = Array.from(files)
-    const oversized = fileList.filter(f => f.size > MAX_FILE_SIZE)
-    if (oversized.length > 0) {
-      setDocError(`${oversized.length === 1 ? `"${oversized[0].name}" exceeds` : `${oversized.length} files exceed`} the 10 MB file size limit.`)
-      if (docInputRef.current) docInputRef.current.value = ''
-      return
-    }
 
     const initialMatches: FileMatch[] = fileList.map(f => ({
       file: f,
@@ -215,6 +211,10 @@ export default function ImportPage() {
       ))
 
       try {
+        if (fileMatch.file.size > MAX_FILE_SIZE) {
+          throw new Error('File exceeds 50 MB limit')
+        }
+        const isOversized = fileMatch.file.size > TEXT_ONLY_THRESHOLD
         const storagePath = `${fundId}/${fileMatch.companyId}/${crypto.randomUUID()}-${fileMatch.filename}`
 
         // Upload to Storage
@@ -234,6 +234,7 @@ export default function ImportPage() {
             filename: fileMatch.filename,
             fileType: fileMatch.file.type || `application/${fileMatch.filename.split('.').pop()}`,
             fileSize: fileMatch.file.size,
+            ...(isOversized ? { textOnly: true } : {}),
           }),
         })
 
@@ -242,8 +243,12 @@ export default function ImportPage() {
           throw new Error(data.error ?? 'Registration failed')
         }
 
+        const result = await res.json()
+
         setDocFiles(prev => prev.map(f =>
-          f.filename === fileMatch.filename ? { ...f, status: 'done' } : f
+          f.filename === fileMatch.filename
+            ? { ...f, status: 'done', textOnly: isOversized && result.textOnly }
+            : f
         ))
         successCount++
       } catch (err) {
@@ -337,7 +342,7 @@ export default function ImportPage() {
               <Upload className="h-4 w-4 mr-2" />
               Select Files
             </Button>
-            <p className="text-xs text-muted-foreground mt-1.5">Max 10 MB per file</p>
+            <p className="text-xs text-muted-foreground mt-1.5">Max 50 MB per file. Files over 10 MB will have text extracted only.</p>
           </div>
 
           {matching && (
@@ -395,8 +400,11 @@ export default function ImportPage() {
                           {f.status === 'uploading' && (
                             <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                           )}
-                          {f.status === 'done' && (
+                          {f.status === 'done' && !f.textOnly && (
                             <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                          )}
+                          {f.status === 'done' && f.textOnly && (
+                            <span className="text-xs text-amber-600" title="File exceeded 10 MB — only extracted text was stored (no native PDF/image)">Text only</span>
                           )}
                           {f.status === 'error' && (
                             <span className="text-xs text-destructive" title={f.error}>Failed</span>

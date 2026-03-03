@@ -107,14 +107,24 @@ async function handleMailgunInbound(req: NextRequest) {
   const normalized = normalizeMailgunPayload(fields, attachments)
   const payload = toPostmarkPayload(normalized)
 
-  // Persist raw email
+  // Build a storage-friendly payload (strip Content from attachments)
+  const strippedPayload = { ...payload }
+  if (payload.Attachments && payload.Attachments.length > 0) {
+    strippedPayload.Attachments = payload.Attachments.map(att => ({
+      Name: att.Name,
+      ContentType: att.ContentType,
+      ContentLength: att.ContentLength,
+    }))
+  }
+
+  // Persist raw email (without attachment content)
   const { data: emailRow, error: insertError } = await supabase
     .from('inbound_emails')
     .insert({
       fund_id: fundId,
       from_address: fromAddress,
       subject: fields.subject ?? null,
-      raw_payload: fields as unknown as Json,
+      raw_payload: strippedPayload as unknown as Json,
       processing_status: 'pending',
       attachments_count: attachments.length,
     })
@@ -128,12 +138,42 @@ async function handleMailgunInbound(req: NextRequest) {
 
   const emailId = emailRow.id
 
+  // Upload attachments to Storage and update payload with StoragePaths
+  if (payload.Attachments && payload.Attachments.length > 0) {
+    const updatedAttachments = []
+    for (const att of payload.Attachments) {
+      const storagePath = `${emailId}/${att.Name}`
+      try {
+        const buffer = Buffer.from(att.Content!, 'base64')
+        await supabase.storage
+          .from('email-attachments')
+          .upload(storagePath, buffer, { contentType: att.ContentType })
+      } catch (err) {
+        console.error(`[inbound-email/mailgun] Failed to upload attachment ${att.Name} to storage:`, err)
+      }
+      updatedAttachments.push({
+        Name: att.Name,
+        ContentType: att.ContentType,
+        ContentLength: att.ContentLength,
+        StoragePath: storagePath,
+      })
+    }
+
+    await supabase
+      .from('inbound_emails')
+      .update({
+        raw_payload: { ...strippedPayload, Attachments: updatedAttachments } as unknown as Json,
+      })
+      .eq('id', emailId)
+  }
+
   try {
     await supabase
       .from('inbound_emails')
       .update({ processing_status: 'processing' })
       .eq('id', emailId)
 
+    // Pass original in-memory payload (with Content) to avoid extra Storage download
     await runPipeline(supabase, emailId, fundId, payload)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

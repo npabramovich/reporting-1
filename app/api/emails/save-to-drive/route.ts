@@ -7,6 +7,7 @@ import { getAccessToken as getGoogleAccessToken, findOrCreateFolder as findOrCre
 import { getGoogleCredentials } from '@/lib/google/credentials'
 import { getDropboxCredentials } from '@/lib/dropbox/credentials'
 import { getAccessToken as getDropboxAccessToken, findOrCreateFolder as findOrCreateDropboxFolder, uploadFile as uploadDropboxFile } from '@/lib/dropbox/files'
+import { hydrateAttachments } from '@/lib/parsing/extractAttachmentText'
 
 // POST — save one or more emails to file storage (Google Drive or Dropbox)
 export async function POST(req: NextRequest) {
@@ -139,19 +140,22 @@ export async function POST(req: NextRequest) {
 
   for (const email of emails) {
     try {
-      const payload = email.raw_payload as Record<string, unknown> | null
-      if (!payload) {
+      const rawPayload = email.raw_payload as Record<string, unknown> | null
+      if (!rawPayload) {
         errors.push(`${email.id}: no payload stored`)
         failed++
         continue
       }
+
+      // Hydrate attachments from Storage (downloads Content from email-attachments bucket)
+      const payload = await hydrateAttachments(rawPayload as import('@/lib/parsing/extractAttachmentText').PostmarkPayload)
 
       const companyName = email.company_id
         ? companiesMap[email.company_id] ?? 'Unknown Company'
         : 'Unidentified'
 
       const dateStr = new Date(email.received_at).toISOString().slice(0, 10)
-      const subject = ((payload.Subject as string) ?? '')
+      const subject = (((payload as Record<string, unknown>).Subject as string) ?? '')
         .replace(/[^a-zA-Z0-9 _-]/g, '')
         .slice(0, 60) || 'Report'
       const emailBody = (payload.TextBody as string) || (payload.HtmlBody as string) || '(no body)'
@@ -161,10 +165,11 @@ export async function POST(req: NextRequest) {
       const attachments = (payload.Attachments as Array<{
         Name: string
         ContentType: string
-        Content: string
+        Content?: string
       }>) ?? []
 
       for (const att of attachments) {
+        if (!att.Content) continue
         const content = Buffer.from(att.Content, 'base64')
         await uploadAttachment(companyName, att.Name, content)
       }

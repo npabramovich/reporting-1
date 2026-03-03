@@ -107,7 +107,7 @@ export async function POST(
   if (!membership) return NextResponse.json({ error: 'Not a fund member' }, { status: 403 })
 
   const body = await req.json()
-  const { storagePath, filename, fileType, fileSize } = body
+  const { storagePath, filename, fileType, fileSize, textOnly } = body
 
   if (!storagePath || !filename || !fileType) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -126,6 +126,13 @@ export async function POST(
   const buffer = Buffer.from(await fileData.arrayBuffer())
   const result = await extractFromBuffer(buffer, filename, fileType)
 
+  // In textOnly mode, decide whether we can discard the original file.
+  // Files that yield extractedText (DOCX/PPTX/XLSX/CSV) → store text only, delete from Storage.
+  // Files that rely on native content (PDF/images) → keep in Storage as normal.
+  const canDiscardFile = textOnly && !!result.extractedText
+  const finalStoragePath = canDiscardFile ? null : storagePath
+  const hasNative = canDiscardFile ? false : !!result.base64Content
+
   const { error: insertError } = await admin
     .from('company_documents' as any)
     .insert({
@@ -134,9 +141,9 @@ export async function POST(
       filename,
       file_type: fileType,
       file_size: fileSize ?? buffer.length,
-      storage_path: storagePath,
+      storage_path: finalStoragePath,
       extracted_text: result.extractedText || null,
-      has_native_content: !!result.base64Content,
+      has_native_content: hasNative,
       uploaded_by: user.id,
     })
 
@@ -144,7 +151,12 @@ export async function POST(
     return NextResponse.json({ error: insertError.message }, { status: 500 })
   }
 
+  // Clean up Storage if we only needed the text
+  if (canDiscardFile) {
+    await admin.storage.from('company-documents').remove([storagePath])
+  }
+
   logActivity(admin, company.fund_id, user.id, 'company.document_upload', { companyId: params.id })
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, textOnly: canDiscardFile })
 }

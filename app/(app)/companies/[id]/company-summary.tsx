@@ -20,7 +20,8 @@ interface Props {
 }
 
 const ACCEPTED_TYPES = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.jpg,.jpeg,.png'
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
+const TEXT_ONLY_THRESHOLD = 10 * 1024 * 1024 // 10 MB — files above this get text-only extraction
 
 export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, defaultAIProvider }: Props) {
   const [data, setData] = useState<SummaryData | null>(null)
@@ -29,6 +30,7 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
   const [clearing, setClearing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
   const [selectedProvider, setSelectedProvider] = useState<string>(defaultAIProvider ?? 'anthropic')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -88,13 +90,15 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
     if (!file) return
 
     if (file.size > MAX_FILE_SIZE) {
-      setError('File size must be under 10 MB.')
-      if (fileInputRef.current) fileInputRef.current.value = ''
+      setError('File exceeds 50 MB limit')
       return
     }
 
+    const isOversized = file.size > TEXT_ONLY_THRESHOLD
+
     setUploading(true)
     setError(null)
+    setWarning(null)
 
     try {
       const supabase = createClient()
@@ -119,12 +123,15 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
           filename: file.name,
           fileType: file.type || `application/${fileExt}`,
           fileSize: file.size,
+          ...(isOversized ? { textOnly: true } : {}),
         }),
       })
 
       if (!res.ok) {
         const data = await res.json()
         setError(data.error ?? 'Failed to register document')
+      } else if (isOversized) {
+        setWarning('File exceeds 10 MB — only extracted text was stored.')
       }
     } catch {
       setError('Upload failed')
@@ -210,6 +217,9 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
         )}
         {error && (
           <p className="text-sm text-destructive mt-3">{error}</p>
+        )}
+        {warning && (
+          <p className="text-sm text-amber-600 mt-3">{warning}</p>
         )}
       </div>
     )
@@ -301,6 +311,9 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
       )}
       {error && (
         <p className="text-sm text-destructive mt-3 pt-3 border-t">{error}</p>
+      )}
+      {warning && (
+        <p className="text-sm text-amber-600 mt-3 pt-3 border-t">{warning}</p>
       )}
     </div>
   )

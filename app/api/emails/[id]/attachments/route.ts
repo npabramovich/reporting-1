@@ -12,14 +12,15 @@ export async function POST(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { filename, contentType, content } = body as {
+  const { filename, contentType, contentLength, storagePath } = body as {
     filename: string
     contentType: string
-    content: string // base64
+    contentLength: number
+    storagePath: string
   }
 
-  if (!filename || !contentType || !content) {
-    return NextResponse.json({ error: 'Missing filename, contentType, or content' }, { status: 400 })
+  if (!filename || !contentType || !storagePath) {
+    return NextResponse.json({ error: 'Missing filename, contentType, or storagePath' }, { status: 400 })
   }
 
   // Fetch the email to get current raw_payload
@@ -33,19 +34,14 @@ export async function POST(
   if (!emailData) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const rawPayload = ((emailData as Record<string, unknown>).raw_payload ?? {}) as Record<string, unknown>
-  const existingAttachments = (rawPayload.Attachments ?? []) as Array<{
-    Name: string
-    ContentType: string
-    Content: string
-    ContentLength: number
-  }>
+  const existingAttachments = (rawPayload.Attachments ?? []) as Array<Record<string, unknown>>
 
-  // Append the new attachment
+  // Append metadata-only attachment entry (no Content — file is in Storage)
   const newAttachment = {
     Name: filename,
     ContentType: contentType,
-    Content: content,
-    ContentLength: Math.ceil(content.length * 0.75), // approximate decoded size
+    ContentLength: contentLength,
+    StoragePath: storagePath,
   }
 
   const updatedPayload = {
@@ -57,7 +53,7 @@ export async function POST(
   const { error: updateError } = await admin
     .from('inbound_emails')
     .update({
-      raw_payload: updatedPayload,
+      raw_payload: updatedPayload as unknown as import('@/lib/types/database').Json,
       attachments_count: existingAttachments.length + 1,
     })
     .eq('id', params.id)

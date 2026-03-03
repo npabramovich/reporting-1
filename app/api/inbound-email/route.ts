@@ -67,14 +67,23 @@ async function handleInbound(req: NextRequest) {
     }
   }
 
-  // Step 3: Persist raw payload with status 'pending'
+  // Step 3: Build a storage-friendly payload (strip Content from attachments)
+  const strippedPayload = { ...payload }
+  if (payload.Attachments && payload.Attachments.length > 0) {
+    strippedPayload.Attachments = payload.Attachments.map(att => ({
+      Name: att.Name,
+      ContentType: att.ContentType,
+      ContentLength: att.ContentLength,
+    }))
+  }
+
   const { data: emailRow, error: insertError } = await supabase
     .from('inbound_emails')
     .insert({
       fund_id: fundId,
       from_address: fromAddress,
       subject: payload.Subject ?? null,
-      raw_payload: payload as unknown as import('@/lib/types/database').Json,
+      raw_payload: strippedPayload as unknown as import('@/lib/types/database').Json,
       processing_status: 'pending',
       attachments_count: payload.Attachments?.length ?? 0,
     })
@@ -88,7 +97,36 @@ async function handleInbound(req: NextRequest) {
 
   const emailId = emailRow.id
 
-  // Steps 4–8: extraction pipeline. Any error → mark failed.
+  // Step 3b: Upload attachments to Storage and update payload with StoragePaths
+  if (payload.Attachments && payload.Attachments.length > 0) {
+    const updatedAttachments = []
+    for (const att of payload.Attachments) {
+      const storagePath = `${emailId}/${att.Name}`
+      try {
+        const buffer = Buffer.from(att.Content!, 'base64')
+        await supabase.storage
+          .from('email-attachments')
+          .upload(storagePath, buffer, { contentType: att.ContentType })
+      } catch (err) {
+        console.error(`[inbound-email] Failed to upload attachment ${att.Name} to storage:`, err)
+      }
+      updatedAttachments.push({
+        Name: att.Name,
+        ContentType: att.ContentType,
+        ContentLength: att.ContentLength,
+        StoragePath: storagePath,
+      })
+    }
+
+    await supabase
+      .from('inbound_emails')
+      .update({
+        raw_payload: { ...strippedPayload, Attachments: updatedAttachments } as unknown as import('@/lib/types/database').Json,
+      })
+      .eq('id', emailId)
+  }
+
+  // Steps 4–8: extraction pipeline. Pass original in-memory payload (with Content).
   try {
     await supabase
       .from('inbound_emails')
