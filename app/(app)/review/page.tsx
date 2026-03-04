@@ -61,7 +61,6 @@ export default function ReviewPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [reviewModalEmailId, setReviewModalEmailId] = useState<string | null>(null)
-  const [approvingEmail, setApprovingEmail] = useState<Record<string, boolean>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -109,22 +108,6 @@ export default function ReviewPage() {
     } finally {
       setResolving(prev => ({ ...prev, [item.id]: false }))
       setEditingId(null)
-    }
-  }
-
-  async function approveEmail(emailId: string) {
-    setApprovingEmail(prev => ({ ...prev, [emailId]: true }))
-    try {
-      const res = await fetch(`/api/emails/${emailId}/reviews`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'approve_all' }),
-      })
-      if (res.ok) load()
-    } catch {
-      // ignore
-    } finally {
-      setApprovingEmail(prev => ({ ...prev, [emailId]: false }))
     }
   }
 
@@ -291,44 +274,32 @@ export default function ReviewPage() {
           </h2>
           <div className="space-y-2">
             {data!.needsReviewEmails.map(email => (
-              <div key={email.id} className="rounded-lg border bg-card p-4 hover:bg-muted/30 transition-colors">
+              <button
+                key={email.id}
+                onClick={() => setReviewModalEmailId(email.id)}
+                className="w-full rounded-lg border bg-card p-4 text-left hover:bg-muted/30 transition-colors"
+              >
                 <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setReviewModalEmailId(email.id)}
-                    className="flex items-center gap-3 min-w-0 flex-1 text-left"
-                  >
-                    <Mail className="h-4 w-4 text-amber-500 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">
-                        {email.subject || '(no subject)'}
-                      </p>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                        <span>{email.from_address}</span>
-                        <span>{new Date(email.received_at).toLocaleDateString()}</span>
-                        {email.company ? (
-                          <span>{email.company.name}</span>
-                        ) : (
-                          <span className="text-amber-600">No company assigned</span>
-                        )}
-                      </div>
+                  <Mail className="h-4 w-4 text-amber-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">
+                      {email.subject || '(no subject)'}
+                    </p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                      <span>{email.from_address}</span>
+                      <span>{new Date(email.received_at).toLocaleDateString()}</span>
+                      {email.company ? (
+                        <span>{email.company.name}</span>
+                      ) : (
+                        <span className="text-amber-600">No company assigned</span>
+                      )}
                     </div>
-                  </button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0 gap-1.5"
-                    disabled={!!approvingEmail[email.id]}
-                    onClick={() => approveEmail(email.id)}
-                  >
-                    {approvingEmail[email.id] ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Check className="h-3.5 w-3.5" />
-                    )}
-                    Approve
-                  </Button>
+                  </div>
+                  <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200 shrink-0">
+                    Needs Review
+                  </Badge>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>

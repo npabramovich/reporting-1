@@ -99,6 +99,10 @@ export function EmailReviewModal({
   const [selectedCompanyId, setSelectedCompanyId] = useState('')
   const [assigningCompany, setAssigningCompany] = useState(false)
 
+  // Approve state
+  const [approvingAll, setApprovingAll] = useState(false)
+  const [approveSuccess, setApproveSuccess] = useState(false)
+
   // Reprocess state
   const [reprocessing, setReprocessing] = useState(false)
   const [reprocessSuccess, setReprocessSuccess] = useState(false)
@@ -321,6 +325,28 @@ export function EmailReviewModal({
       toast.error(err instanceof Error ? err.message : 'Error assigning company')
     } finally {
       setAssigningCompany(false)
+    }
+  }
+
+  async function handleApproveAll() {
+    if (!emailId) return
+    setApprovingAll(true)
+    try {
+      const res = await fetch(`/api/emails/${emailId}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve_all' }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error ?? 'Failed to approve')
+      }
+      setApproveSuccess(true)
+      setTimeout(() => onOpenChange(false), 1500)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error approving email')
+    } finally {
+      setApprovingAll(false)
     }
   }
 
@@ -719,7 +745,45 @@ export function EmailReviewModal({
               </section>
             )}
 
-            {/* ── Section 5: Process Email ── */}
+            {/* ── Section 5: Approve ── */}
+            <section>
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`flex items-center justify-center h-5 w-5 rounded-full ${approveSuccess ? 'bg-green-100' : 'bg-slate-100'}`}>
+                  <Check className={`h-3 w-3 ${approveSuccess ? 'text-green-600' : 'text-slate-400'}`} />
+                </div>
+                <h3 className="text-sm font-medium">Approve</h3>
+              </div>
+              <div className="ml-7">
+                {approveSuccess ? (
+                  <p className="text-sm text-emerald-600 flex items-center gap-1.5">
+                    <Check className="h-3.5 w-3.5" />
+                    Approved. Modal will close shortly.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Accept all outstanding reviews and mark this email as successfully processed without reprocessing.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleApproveAll}
+                      disabled={approvingAll}
+                      className="gap-1.5"
+                    >
+                      {approvingAll ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Check className="h-3.5 w-3.5" />
+                      )}
+                      {approvingAll ? 'Approving…' : 'Approve'}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </section>
+
+            {/* ── Section 6: Process Email ── */}
             {hasCompany && (
               <section>
                 <div className="flex items-center gap-2 mb-2">
