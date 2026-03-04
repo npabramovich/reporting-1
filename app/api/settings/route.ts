@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
@@ -445,6 +446,9 @@ export async function PATCH(req: NextRequest) {
   }
 
   logActivity(admin, membership.fund_id, user.id, 'settings.update', {})
+
+  revalidateTag('fund-data')
+  revalidateTag('fund-settings')
 
   return NextResponse.json({ ok: true })
 }

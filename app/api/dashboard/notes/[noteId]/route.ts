@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
@@ -61,6 +62,8 @@ export async function PATCH(
     .eq('user_id', user.id)
     .maybeSingle() as { data: { display_name: string | null } | null }
 
+  revalidateTag('notes-badge')
+
   return NextResponse.json({
     id: updated.id,
     content: updated.content,
@@ -112,6 +115,8 @@ export async function DELETE(
     .eq('id', params.noteId)
 
   if (error) return dbError(error, 'dashboard-notes-noteId')
+
+  revalidateTag('notes-badge')
 
   return NextResponse.json({ success: true })
 }

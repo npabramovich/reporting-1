@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
@@ -77,6 +78,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const fundName = (request as any).funds?.name || 'your fund'
     sendApprovalEmail(admin, request.fund_id, request.email, fundName).catch(() => {})
   }
+
+  revalidateTag('pending-requests')
+  revalidateTag('membership')
 
   return NextResponse.json({ ok: true })
 }
