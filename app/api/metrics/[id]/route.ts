@@ -105,6 +105,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     await admin.from('metric_values').delete().eq('metric_id', params.id)
   }
 
+  // Nullify metric_id on parsing_reviews to avoid FK constraint
+  await admin.from('parsing_reviews').update({ metric_id: null }).eq('metric_id', params.id)
+
   const { error } = await admin.from('metrics').delete().eq('id', params.id)
   if (error) return dbError(error, 'metrics-id')
 
