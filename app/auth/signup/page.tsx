@@ -20,7 +20,7 @@ export default function SignUpPage() {
 
   useEffect(() => {
     const host = window.location.hostname
-    setIsHemrock(host === 'hemrock.com' || host.endsWith('.hemrock.com') || host.endsWith('.netlify.app') || host === 'localhost')
+    setIsHemrock(host === 'hemrock.com' || host.endsWith('.hemrock.com') || host.endsWith('.netlify.app') || host.endsWith('.vercel.app') || host === 'localhost')
   }, [])
 
   async function signUp() {
