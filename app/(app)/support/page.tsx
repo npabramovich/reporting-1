@@ -296,7 +296,7 @@ export default function SupportPage() {
             Further down the page, a <strong>documents section</strong> lists all files associated with
             the company &mdash; both files you&apos;ve uploaded and attachments from processed emails.
             These documents are available to the Analyst when generating summaries. Individual file
-            uploads are limited to 10 MB. Finally, if the company has additional details like founders,
+            uploads are limited to 20 MB per file. Finally, if the company has additional details like founders,
             contact emails, an overview, investment thesis, or a current business update, those appear
             at the bottom. A <strong>notes panel</strong> on
             the right side (or toggled via the chat button on mobile) lets your team leave company-specific
@@ -425,7 +425,7 @@ export default function SupportPage() {
           <p className="text-muted-foreground mb-2">
             Import lets you process reports manually when they arrive outside the normal email flow.
             You can paste email text directly, upload file attachments (PDFs, Excel spreadsheets, Word
-            documents, PowerPoint decks, CSV files, and images up to 10 MB each), or combine both. The system runs the
+            documents, PowerPoint decks, CSV files, and images up to 20 MB each), paste email text directly, or combine both. The system runs the
             same AI pipeline as automated inbound processing &mdash; identifying the company, extracting
             metrics, and writing results to the database.
           </p>
@@ -714,7 +714,7 @@ export default function SupportPage() {
             inbound emails, or uploaded directly to a company&apos;s documents section.
           </p>
           <p className="text-muted-foreground mb-2">
-            <strong>File size limits:</strong> Individual file uploads are limited to 10 MB. This applies
+            <strong>File size limits:</strong> Individual file uploads are limited to 20 MB per file. This applies
             to both manual uploads and email attachments. For larger files (such as high-resolution board
             decks or extensive spreadsheets), consider splitting them into smaller parts, compressing images,
             or exporting to a more compact format before uploading. The AI processing pipeline works best

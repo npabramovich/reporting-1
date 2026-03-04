@@ -47,7 +47,7 @@ interface Company {
 }
 
 const ACCEPTED_DOC_TYPES = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.jpg,.jpeg,.png'
-const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 MB
 const TEXT_ONLY_THRESHOLD = 10 * 1024 * 1024 // 10 MB — files above this get text-only extraction
 
 export default function ImportPage() {
@@ -360,7 +360,7 @@ export default function ImportPage() {
               <Upload className="h-4 w-4 mr-2" />
               Select Files
             </Button>
-            <p className="text-xs text-muted-foreground mt-1.5">Max 50 MB per file. Files over 10 MB will have text extracted only.</p>
+            <p className="text-xs text-muted-foreground mt-1.5">Max 20 MB per file. Files over 10 MB will have text extracted only.</p>
           </div>
 
           {matching && (

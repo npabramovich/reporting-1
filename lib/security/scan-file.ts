@@ -5,7 +5,7 @@ export interface ScanResult {
   reason?: string
 }
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 MB
 
 const DANGEROUS_EXTENSIONS = new Set([
   'exe', 'bat', 'cmd', 'sh', 'ps1', 'dll', 'so', 'msi',

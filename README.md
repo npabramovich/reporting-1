@@ -41,7 +41,7 @@ The **AI Analyst** card generates a summary based on all available data — repo
 
 Below the AI Analyst is the **metrics section**, where each metric has its own chart card. Charts show data points over time, color-coded by confidence level. Click any data point to view details and edit or delete values. You can also add data points manually using the "Add" button on each card. An export button lets you download all metric data as a CSV.
 
-A **documents section** lists all files associated with the company — both uploads and email attachments. These documents are available to the AI Analyst when generating summaries. Individual file uploads are limited to 10 MB.
+A **documents section** lists all files associated with the company — both uploads and email attachments. These documents are available to the AI Analyst when generating summaries. Individual file uploads are limited to 20 MB.
 
 The **Investments section** tracks the fund's transaction history with the company — investment rounds, proceeds from exits or distributions, and unrealized gain changes. It displays summary metrics (total invested, FMV, MOIC, total realized) along with a detailed transaction table.
 
@@ -73,7 +73,7 @@ If file storage is connected (Google Drive or Dropbox), emails and attachments a
 
 ## Import
 
-Import lets you process reports manually when they arrive outside the normal email flow. Upload file attachments (PDFs, Excel spreadsheets, Word documents, PowerPoint decks, CSV files, and images up to 10 MB each), paste email text directly, or combine both. The system runs the same AI pipeline as automated inbound processing.
+Import lets you process reports manually when they arrive outside the normal email flow. Upload file attachments (PDFs, Excel spreadsheets, Word documents, PowerPoint decks, CSV files, and images up to 20 MB each), paste email text directly, or combine both. The system runs the same AI pipeline as automated inbound processing.
 
 You can also paste data covering multiple companies at once — rows from a spreadsheet or CSV. The system will parse the data, create new companies if needed, add new metrics, and populate values. This makes it easy to bulk import historical data or onboard an entire portfolio in one step.
 
