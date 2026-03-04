@@ -129,7 +129,7 @@ On each company's detail page, a **Recent Interactions** section shows the lates
 
 Settings is where the platform is configured. Most settings are admin-only, but all users can update their display name and enable two-factor authentication.
 
-For admins, Settings covers: AI provider keys and model selection (Anthropic and/or OpenAI), fund currency, inbound email setup (Postmark or Mailgun), outbound email providers (Gmail, Resend, Postmark, or Mailgun), file storage connections (Google Drive or Dropbox), the AI summary prompt, email templates for reporting asks, authorized senders, team members and roles, and the signup allow-list.
+For admins, Settings covers: AI provider keys and model selection (Anthropic and/or OpenAI), fund currency, inbound email setup (Postmark or Mailgun), outbound email providers (Gmail, Resend, Postmark, or Mailgun), file storage connections (Google Drive or Dropbox), the AI summary prompt, email templates for reporting asks, analytics (Fathom, Google Analytics, and custom scripts), authorized senders, team members and roles, and the signup allow-list. The current app version is shown at the bottom of Settings, with a link to the Updates page when a newer version is available.
 
 ![Settings](docs/screenshots/settings.png)
 
@@ -389,6 +389,14 @@ Then set the tunnel URL as your inbound webhook (e.g. `https://your-tunnel.ngrok
 - Timing-safe webhook verification
 - Security headers
 - Row Level Security on all database tables
+
+### Updates
+
+The app includes a built-in update checker. It periodically compares your installed version against the latest [GitHub release](https://github.com/tdavidson/reporting/releases). When a newer version is available, admins will see an **Updates** link in the sidebar. Click it to see the current version, the latest version, release notes, and a link to the GitHub release.
+
+Non-admin users do not see the update indicator. The check runs against the public GitHub Releases API (no authentication required) and is cached for one hour.
+
+Each installation has a unique **Installation ID** — a UUID automatically generated in your database when you run migrations. This ID is specific to your deployment and is displayed at the bottom of the Updates page. It lays the groundwork for future license key validation and is not shared externally.
 
 ## Contact
 

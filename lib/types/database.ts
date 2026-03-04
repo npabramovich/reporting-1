@@ -14,6 +14,7 @@ export type Database = {
           id: string
           global_inbound_address: string | null
           global_inbound_token: string | null
+          installation_id: string
           created_at: string
           updated_at: string
         }
@@ -21,6 +22,7 @@ export type Database = {
           id?: string
           global_inbound_address?: string | null
           global_inbound_token?: string | null
+          installation_id?: string
           created_at?: string
           updated_at?: string
         }
@@ -28,6 +30,7 @@ export type Database = {
           id?: string
           global_inbound_address?: string | null
           global_inbound_token?: string | null
+          installation_id?: string
           created_at?: string
           updated_at?: string
         }

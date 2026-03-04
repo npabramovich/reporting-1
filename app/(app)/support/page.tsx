@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose, Sparkles, Shield, Handshake, Users } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose, Sparkles, Shield, Handshake, Users, ArrowDownCircle } from 'lucide-react'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 
@@ -25,6 +25,7 @@ export default function SupportPage() {
       <li><a href="#usage" className="hover:text-foreground underline underline-offset-4">Usage</a></li>
       <li><a href="#analyst" className="hover:text-foreground underline underline-offset-4">Analyst</a></li>
       <li><a href="#file-handling" className="hover:text-foreground underline underline-offset-4">File Handling &amp; Security</a></li>
+      <li><a href="#updates" className="hover:text-foreground underline underline-offset-4">Updates</a></li>
       <li><a href="#sidebar" className="hover:text-foreground underline underline-offset-4">Theme &amp; Sidebar</a></li>
     </ul>
   )
@@ -747,6 +748,29 @@ export default function SupportPage() {
             belonging to their fund. File content sent to AI providers (Anthropic or OpenAI) for processing
             is subject to those providers&apos; data handling policies &mdash; refer to their documentation
             for details on data retention and usage.
+          </p>
+        </div>
+
+        <div id="updates">
+          <h2 className="text-base font-medium mb-2 flex items-center gap-2">
+            <ArrowDownCircle className="h-4 w-4 text-muted-foreground" />
+            Updates
+          </h2>
+          <p className="text-muted-foreground mb-2">
+            The platform includes a built-in update checker that compares your installed version against
+            the latest release on GitHub. When a newer version is available, admins will see an{' '}
+            <strong className="text-foreground">Updates</strong> link in the sidebar with an indicator dot.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            The Updates page shows your current version, the latest available version, release notes, and
+            a link to the GitHub release. The check runs automatically and is cached for one hour, so
+            it does not slow down normal usage.
+          </p>
+          <p className="text-muted-foreground">
+            Each installation has a unique <strong className="text-foreground">Installation ID</strong> &mdash;
+            a UUID generated automatically in your database. This ID is specific to your deployment and is
+            shown at the bottom of the Updates page. Only admins can see the Updates page; non-admin users
+            are not shown the update indicator.
           </p>
         </div>
 

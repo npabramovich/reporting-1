@@ -1,5 +1,6 @@
 import { unstable_cache } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { checkForUpdate } from '@/lib/version'
 
 // Badge counts — short TTL (revalidated on mutation + 60s fallback)
 export const getReviewBadge = unstable_cache(
@@ -76,6 +77,15 @@ export const getFundSettings = unstable_cache(
   },
   ['fund-settings'],
   { tags: ['fund-settings'], revalidate: 300 }
+)
+
+export const getUpdateAvailable = unstable_cache(
+  async () => {
+    const result = await checkForUpdate()
+    return result?.hasUpdate ?? false
+  },
+  ['update-available'],
+  { revalidate: 3600 }
 )
 
 export const getMembership = unstable_cache(
