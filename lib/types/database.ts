@@ -1084,6 +1084,58 @@ export type Database = {
           },
         ]
       }
+      analyst_conversations: {
+        Row: {
+          id: string
+          fund_id: string
+          user_id: string
+          company_id: string | null
+          title: string
+          messages: Json
+          summary: string | null
+          message_count: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          fund_id: string
+          user_id: string
+          company_id?: string | null
+          title?: string
+          messages?: Json
+          summary?: string | null
+          message_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          fund_id?: string
+          user_id?: string
+          company_id?: string | null
+          title?: string
+          messages?: Json
+          summary?: string | null
+          message_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'analyst_conversations_fund_id_fkey'
+            columns: ['fund_id']
+            referencedRelation: 'funds'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'analyst_conversations_company_id_fkey'
+            columns: ['company_id']
+            referencedRelation: 'companies'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -1131,6 +1183,7 @@ export type InvestmentTransaction = Tables<'investment_transactions'>
 export type NoteRead             = Tables<'note_reads'>
 export type NoteNotificationPreference = Tables<'note_notification_preferences'>
 export type NoteCompanySubscription    = Tables<'note_company_subscriptions'>
+export type AnalystConversation        = Tables<'analyst_conversations'>
 
 // Enum-style string literals
 export type CompanyStatus      = 'active' | 'exited' | 'written-off'

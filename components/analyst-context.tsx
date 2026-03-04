@@ -8,6 +8,15 @@ interface AnalystModel {
   provider: 'anthropic' | 'openai'
 }
 
+export interface ConversationListItem {
+  id: string
+  title: string
+  company_id: string | null
+  message_count: number
+  created_at: string
+  updated_at: string
+}
+
 interface AnalystContextValue {
   open: boolean
   toggleOpen: () => void
@@ -21,6 +30,15 @@ interface AnalystContextValue {
   availableModels: AnalystModel[]
   fundName: string
   hasAIKey: boolean
+  conversationId: string | null
+  setConversationId: (id: string | null) => void
+  conversations: ConversationListItem[]
+  loadConversations: () => Promise<void>
+  loadConversation: (id: string) => Promise<void>
+  startNewConversation: () => void
+  deleteConversation: (id: string) => Promise<void>
+  showHistory: boolean
+  setShowHistory: (show: boolean) => void
 }
 
 const AnalystContext = createContext<AnalystContextValue | null>(null)
@@ -38,12 +56,82 @@ export function AnalystProvider({
 }) {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
-  const [companyId, setCompanyId] = useState<string | null>(null)
+  const [companyId, setCompanyIdState] = useState<string | null>(null)
   const [availableModels, setAvailableModels] = useState<AnalystModel[]>([])
   const [selectedModel, setSelectedModel] = useState<AnalystModel | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<ConversationListItem[]>([])
+  const [showHistory, setShowHistory] = useState(false)
 
   const toggleOpen = useCallback(() => setOpen(prev => !prev), [])
   const close = useCallback(() => setOpen(false), [])
+
+  // Reset conversation state when companyId changes
+  const setCompanyId = useCallback((id: string | null) => {
+    setCompanyIdState(prev => {
+      if (prev !== id) {
+        setMessages([])
+        setConversationId(null)
+        setShowHistory(false)
+        setConversations([])
+      }
+      return id
+    })
+  }, [])
+
+  const loadConversations = useCallback(async () => {
+    const params = new URLSearchParams()
+    if (companyId) {
+      params.set('companyId', companyId)
+    } else {
+      params.set('portfolio', 'true')
+    }
+    try {
+      const res = await fetch(`/api/analyst/conversations?${params}`)
+      if (res.ok) {
+        const data = await res.json()
+        setConversations(data.conversations ?? [])
+      }
+    } catch {
+      // Silently fail
+    }
+  }, [companyId])
+
+  const loadConversation = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/analyst/conversations/${id}`)
+      if (res.ok) {
+        const data = await res.json()
+        const conv = data.conversation
+        setConversationId(conv.id)
+        setMessages(Array.isArray(conv.messages) ? conv.messages : [])
+        setShowHistory(false)
+      }
+    } catch {
+      // Silently fail
+    }
+  }, [])
+
+  const startNewConversation = useCallback(() => {
+    setMessages([])
+    setConversationId(null)
+    setShowHistory(false)
+  }, [])
+
+  const deleteConversation = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/analyst/conversations/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        setConversations(prev => prev.filter(c => c.id !== id))
+        if (conversationId === id) {
+          setMessages([])
+          setConversationId(null)
+        }
+      }
+    } catch {
+      // Silently fail
+    }
+  }, [conversationId])
 
   useEffect(() => {
     if (!hasAIKey) return
@@ -95,6 +183,15 @@ export function AnalystProvider({
       availableModels,
       fundName,
       hasAIKey,
+      conversationId,
+      setConversationId,
+      conversations,
+      loadConversations,
+      loadConversation,
+      startNewConversation,
+      deleteConversation,
+      showHistory,
+      setShowHistory,
     }}>
       {children}
     </AnalystContext.Provider>
