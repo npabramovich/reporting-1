@@ -3,6 +3,8 @@ import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
+import { APP_VERSION } from '@/lib/version'
+import { getUpdateAvailable } from '@/lib/cache/layout'
 import { encrypt } from '@/lib/crypto'
 import { randomBytes } from 'crypto'
 import { dbError } from '@/lib/api-error'
@@ -94,6 +96,8 @@ export async function GET() {
     displayName: membership.display_name ?? '',
     isAdmin: membership.role === 'admin',
     userId: user.id,
+    appVersion: APP_VERSION,
+    updateAvailable: membership.role === 'admin' ? await getUpdateAvailable() : false,
   })
 }
 

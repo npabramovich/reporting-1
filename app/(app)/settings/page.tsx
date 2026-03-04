@@ -16,7 +16,8 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { AlertCircle, Check, ChevronDown, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X, Lock } from 'lucide-react'
+import Link from 'next/link'
+import { AlertCircle, Check, ChevronDown, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X, Lock, ArrowDownCircle } from 'lucide-react'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 
@@ -73,6 +74,8 @@ interface Settings {
   currency: string
   displayName: string
   isAdmin: boolean
+  appVersion: string
+  updateAvailable: boolean
 }
 
 export default function SettingsPage() {
@@ -220,6 +223,19 @@ export default function SettingsPage() {
           <DangerZone onDeleted={() => router.push('/auth')} />
         </AdminSectionContext.Provider>
       )}
+
+      <div className="pt-4 border-t text-xs text-muted-foreground flex items-center gap-2">
+        <span>v{settings.appVersion}</span>
+        {settings.isAdmin && settings.updateAvailable && (
+          <>
+            <span>&middot;</span>
+            <Link href="/updates" className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 hover:underline underline-offset-4">
+              <ArrowDownCircle className="h-3 w-3" />
+              New version available
+            </Link>
+          </>
+        )}
+      </div>
     </div>
     <AnalystPanel />
     </div>

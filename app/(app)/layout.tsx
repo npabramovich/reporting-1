@@ -10,6 +10,7 @@ import {
   getFundData,
   getFundSettings,
   getMembership,
+  getUpdateAvailable,
 } from '@/lib/cache/layout'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -33,7 +34,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const isAdmin = membership?.role === 'admin'
   const isViewer = membership?.role === 'viewer'
-  const pendingRequestCount = isAdmin ? await getPendingRequests(fund.id) : 0
+  const [pendingRequestCount, updateAvailable] = await Promise.all([
+    isAdmin ? getPendingRequests(fund.id) : Promise.resolve(0),
+    isAdmin ? getUpdateAvailable() : Promise.resolve(false),
+  ])
 
   const fundCurrency = fundSettings?.currency ?? 'USD'
   const hasAIKey = !!(fundSettings?.claude_api_key_encrypted || fundSettings?.openai_api_key_encrypted)
@@ -69,6 +73,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           currency={fundCurrency}
           hasAIKey={hasAIKey}
           defaultAIProvider={defaultAIProvider}
+          updateAvailable={updateAvailable}
         >
           {children}
         </AppShell>

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, TrendingUp, StickyNote, Lock, Users, Handshake } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, TrendingUp, StickyNote, Lock, Users, Handshake, ArrowDownCircle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -31,10 +31,11 @@ interface AppSidebarProps {
   settingsBadge?: number
   notesBadge?: number
   isAdmin?: boolean
+  updateAvailable?: boolean
   onNavigate?: () => void
 }
 
-export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, onNavigate }: AppSidebarProps) {
+export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, updateAvailable, onNavigate }: AppSidebarProps) {
   const pathname = usePathname()
   const { collapsed, toggle } = useSidebar()
   const { theme, setTheme } = useTheme()
@@ -99,6 +100,33 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, on
             </Link>
           )
         })}
+
+        {/* Update available — admin only */}
+        {isAdmin && updateAvailable && (() => {
+          const isActive = pathname === '/updates' || pathname.startsWith('/updates/')
+          return (
+            <Link
+              href="/updates"
+              onClick={onNavigate}
+              title={collapsed ? 'Updates' : undefined}
+              className={`relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+                collapsed ? 'md:justify-center md:px-0' : ''
+              } ${
+                isActive
+                  ? 'bg-accent text-foreground font-medium'
+                  : 'text-amber-600 dark:text-amber-400 hover:text-foreground hover:bg-accent'
+              }`}
+            >
+              <ArrowDownCircle className="h-5 w-5 shrink-0" />
+              <span className={`${collapsed ? 'md:hidden' : ''}`}>Updates</span>
+              {collapsed ? (
+                <span className="hidden md:block absolute top-1 right-1 h-2 w-2 rounded-full bg-amber-500" />
+              ) : (
+                <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+              )}
+            </Link>
+          )
+        })()}
 
         {/* Theme toggle */}
         <button

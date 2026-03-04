@@ -18,10 +18,11 @@ interface AppShellProps {
   currency?: string
   hasAIKey?: boolean
   defaultAIProvider?: string
+  updateAvailable?: boolean
   children: React.ReactNode
 }
 
-export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, currency, hasAIKey, defaultAIProvider, children }: AppShellProps) {
+export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, currency, hasAIKey, defaultAIProvider, updateAvailable, children }: AppShellProps) {
   return (
     <CurrencyProvider currency={currency ?? 'USD'}>
       <SidebarProvider>
@@ -34,6 +35,7 @@ export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsB
             settingsBadge={settingsBadge}
             notesBadge={notesBadge}
             isAdmin={isAdmin}
+            updateAvailable={updateAvailable}
           >
             {children}
           </AppShellInner>
@@ -43,7 +45,7 @@ export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsB
   )
 }
 
-function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, hasAIKey, children }: AppShellProps) {
+function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, updateAvailable, children }: AppShellProps) {
   const { collapsed } = useSidebar()
 
   return (
@@ -65,7 +67,7 @@ function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBad
             collapsed ? 'w-16' : 'w-56'
           }`}
         >
-          <AppSidebar reviewBadge={reviewBadge} settingsBadge={settingsBadge} notesBadge={notesBadge} isAdmin={isAdmin} />
+          <AppSidebar reviewBadge={reviewBadge} settingsBadge={settingsBadge} notesBadge={notesBadge} isAdmin={isAdmin} updateAvailable={updateAvailable} />
         </aside>
 
         {/* Page content */}
