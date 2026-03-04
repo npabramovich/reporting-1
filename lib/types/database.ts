@@ -884,6 +884,19 @@ export type Database = {
           proceeds_per_share: number | null
           unrealized_value_change: number | null
           current_share_price: number | null
+          postmoney_valuation: number | null
+          latest_postmoney_valuation: number | null
+          exit_valuation: number | null
+          original_currency: string | null
+          original_investment_cost: number | null
+          original_share_price: number | null
+          original_postmoney_valuation: number | null
+          original_proceeds_received: number | null
+          original_proceeds_per_share: number | null
+          original_exit_valuation: number | null
+          original_unrealized_value_change: number | null
+          original_current_share_price: number | null
+          original_latest_postmoney_valuation: number | null
           created_at: string
           updated_at: string
         }
@@ -906,6 +919,19 @@ export type Database = {
           proceeds_per_share?: number | null
           unrealized_value_change?: number | null
           current_share_price?: number | null
+          postmoney_valuation?: number | null
+          latest_postmoney_valuation?: number | null
+          exit_valuation?: number | null
+          original_currency?: string | null
+          original_investment_cost?: number | null
+          original_share_price?: number | null
+          original_postmoney_valuation?: number | null
+          original_proceeds_received?: number | null
+          original_proceeds_per_share?: number | null
+          original_exit_valuation?: number | null
+          original_unrealized_value_change?: number | null
+          original_current_share_price?: number | null
+          original_latest_postmoney_valuation?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -928,6 +954,19 @@ export type Database = {
           proceeds_per_share?: number | null
           unrealized_value_change?: number | null
           current_share_price?: number | null
+          postmoney_valuation?: number | null
+          latest_postmoney_valuation?: number | null
+          exit_valuation?: number | null
+          original_currency?: string | null
+          original_investment_cost?: number | null
+          original_share_price?: number | null
+          original_postmoney_valuation?: number | null
+          original_proceeds_received?: number | null
+          original_proceeds_per_share?: number | null
+          original_exit_valuation?: number | null
+          original_unrealized_value_change?: number | null
+          original_current_share_price?: number | null
+          original_latest_postmoney_valuation?: number | null
           created_at?: string
           updated_at?: string
         }

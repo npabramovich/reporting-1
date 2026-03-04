@@ -36,6 +36,11 @@ function fmtMoic(val: number | null | undefined): string {
   return `${val.toFixed(2)}x`
 }
 
+const CURRENCY_OPTIONS = [
+  'USD', 'EUR', 'GBP', 'CHF', 'CAD', 'AUD', 'JPY', 'CNY', 'INR', 'SGD',
+  'HKD', 'SEK', 'NOK', 'DKK', 'NZD', 'BRL', 'ZAR', 'ILS', 'KRW',
+]
+
 const EMPTY_FORM: Record<string, string> = {
   transaction_type: 'investment',
   round_name: '',
@@ -45,13 +50,26 @@ const EMPTY_FORM: Record<string, string> = {
   interest_converted: '',
   shares_acquired: '',
   share_price: '',
+  postmoney_valuation: '',
   cost_basis_exited: '',
   proceeds_received: '',
   proceeds_escrow: '',
   proceeds_written_off: '',
   proceeds_per_share: '',
+  exit_valuation: '',
   unrealized_value_change: '',
   current_share_price: '',
+  latest_postmoney_valuation: '',
+  original_currency: '',
+  original_investment_cost: '',
+  original_share_price: '',
+  original_postmoney_valuation: '',
+  original_proceeds_received: '',
+  original_proceeds_per_share: '',
+  original_exit_valuation: '',
+  original_unrealized_value_change: '',
+  original_current_share_price: '',
+  original_latest_postmoney_valuation: '',
 }
 
 export function CompanyInvestments({ companyId, companyStatus }: Props) {
@@ -70,6 +88,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showOrigCurrency, setShowOrigCurrency] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -90,6 +109,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setError(null)
+    setShowOrigCurrency(false)
     setDialogOpen(true)
   }
 
@@ -104,15 +124,29 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
       interest_converted: txn.interest_converted?.toString() ?? '',
       shares_acquired: txn.shares_acquired?.toString() ?? '',
       share_price: txn.share_price?.toString() ?? '',
+      postmoney_valuation: txn.postmoney_valuation?.toString() ?? '',
       cost_basis_exited: txn.cost_basis_exited?.toString() ?? '',
       proceeds_received: txn.proceeds_received?.toString() ?? '',
       proceeds_escrow: txn.proceeds_escrow?.toString() ?? '',
       proceeds_written_off: txn.proceeds_written_off?.toString() ?? '',
       proceeds_per_share: txn.proceeds_per_share?.toString() ?? '',
+      exit_valuation: txn.exit_valuation?.toString() ?? '',
       unrealized_value_change: txn.unrealized_value_change?.toString() ?? '',
       current_share_price: txn.current_share_price?.toString() ?? '',
+      latest_postmoney_valuation: txn.latest_postmoney_valuation?.toString() ?? '',
+      original_currency: txn.original_currency ?? '',
+      original_investment_cost: txn.original_investment_cost?.toString() ?? '',
+      original_share_price: txn.original_share_price?.toString() ?? '',
+      original_postmoney_valuation: txn.original_postmoney_valuation?.toString() ?? '',
+      original_proceeds_received: txn.original_proceeds_received?.toString() ?? '',
+      original_proceeds_per_share: txn.original_proceeds_per_share?.toString() ?? '',
+      original_exit_valuation: txn.original_exit_valuation?.toString() ?? '',
+      original_unrealized_value_change: txn.original_unrealized_value_change?.toString() ?? '',
+      original_current_share_price: txn.original_current_share_price?.toString() ?? '',
+      original_latest_postmoney_valuation: txn.original_latest_postmoney_valuation?.toString() ?? '',
     })
     setError(null)
+    setShowOrigCurrency(!!txn.original_currency)
     setDialogOpen(true)
   }
 
@@ -131,13 +165,26 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
       interest_converted: numOrNull(form.interest_converted) ?? 0,
       shares_acquired: numOrNull(form.shares_acquired),
       share_price: numOrNull(form.share_price),
+      postmoney_valuation: numOrNull(form.postmoney_valuation),
       cost_basis_exited: numOrNull(form.cost_basis_exited),
       proceeds_received: numOrNull(form.proceeds_received),
       proceeds_escrow: numOrNull(form.proceeds_escrow) ?? 0,
       proceeds_written_off: numOrNull(form.proceeds_written_off) ?? 0,
       proceeds_per_share: numOrNull(form.proceeds_per_share),
+      exit_valuation: numOrNull(form.exit_valuation),
       unrealized_value_change: numOrNull(form.unrealized_value_change),
       current_share_price: numOrNull(form.current_share_price),
+      latest_postmoney_valuation: numOrNull(form.latest_postmoney_valuation),
+      original_currency: showOrigCurrency && form.original_currency ? form.original_currency : null,
+      original_investment_cost: showOrigCurrency ? numOrNull(form.original_investment_cost) : null,
+      original_share_price: showOrigCurrency ? numOrNull(form.original_share_price) : null,
+      original_postmoney_valuation: showOrigCurrency ? numOrNull(form.original_postmoney_valuation) : null,
+      original_proceeds_received: showOrigCurrency ? numOrNull(form.original_proceeds_received) : null,
+      original_proceeds_per_share: showOrigCurrency ? numOrNull(form.original_proceeds_per_share) : null,
+      original_exit_valuation: showOrigCurrency ? numOrNull(form.original_exit_valuation) : null,
+      original_unrealized_value_change: showOrigCurrency ? numOrNull(form.original_unrealized_value_change) : null,
+      original_current_share_price: showOrigCurrency ? numOrNull(form.original_current_share_price) : null,
+      original_latest_postmoney_valuation: showOrigCurrency ? numOrNull(form.original_latest_postmoney_valuation) : null,
     }
 
     try {
@@ -439,6 +486,17 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                     onChange={e => setForm(f => ({ ...f, share_price: e.target.value }))}
                   />
                 </div>
+                <div className="col-span-2">
+                  <Label>Post-Money Valuation ({symbol.trim()})</Label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="any"
+                    value={form.postmoney_valuation}
+                    onChange={e => setForm(f => ({ ...f, postmoney_valuation: e.target.value }))}
+                    placeholder="Post-money valuation of the round"
+                  />
+                </div>
               </div>
             )}
 
@@ -494,6 +552,17 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                     onChange={e => setForm(f => ({ ...f, proceeds_per_share: e.target.value }))}
                   />
                 </div>
+                <div className="col-span-2">
+                  <Label>Exit Valuation ({symbol.trim()})</Label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="any"
+                    value={form.exit_valuation}
+                    onChange={e => setForm(f => ({ ...f, exit_valuation: e.target.value }))}
+                    placeholder="Total company exit price"
+                  />
+                </div>
               </div>
             )}
 
@@ -519,6 +588,107 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                     onChange={e => setForm(f => ({ ...f, current_share_price: e.target.value }))}
                   />
                 </div>
+                <div className="col-span-2">
+                  <Label>Latest Post-Money Valuation ({symbol.trim()})</Label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="any"
+                    value={form.latest_postmoney_valuation}
+                    onChange={e => setForm(f => ({ ...f, latest_postmoney_valuation: e.target.value }))}
+                    placeholder="Latest post-money valuation"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Multi-currency section */}
+            {!showOrigCurrency ? (
+              <button
+                type="button"
+                onClick={() => setShowOrigCurrency(true)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                + Different currency?
+              </button>
+            ) : (
+              <div className="border rounded-lg p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Original Currency Amounts</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowOrigCurrency(false)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div>
+                  <Label>Currency</Label>
+                  <Select
+                    value={form.original_currency}
+                    onValueChange={v => setForm(f => ({ ...f, original_currency: v }))}
+                  >
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select currency" /></SelectTrigger>
+                    <SelectContent>
+                      {CURRENCY_OPTIONS.map(c => (
+                        <SelectItem key={c} value={c}>{c} ({getCurrencySymbol(c).trim()})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {form.original_currency && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {txnType === 'investment' && (
+                      <>
+                        <div>
+                          <Label>Investment Cost ({getCurrencySymbol(form.original_currency).trim()})</Label>
+                          <Input className="mt-1" type="number" step="any" value={form.original_investment_cost} onChange={e => setForm(f => ({ ...f, original_investment_cost: e.target.value }))} />
+                        </div>
+                        <div>
+                          <Label>Share Price ({getCurrencySymbol(form.original_currency).trim()})</Label>
+                          <Input className="mt-1" type="number" step="any" value={form.original_share_price} onChange={e => setForm(f => ({ ...f, original_share_price: e.target.value }))} />
+                        </div>
+                        <div className="col-span-2">
+                          <Label>Post-Money Valuation ({getCurrencySymbol(form.original_currency).trim()})</Label>
+                          <Input className="mt-1" type="number" step="any" value={form.original_postmoney_valuation} onChange={e => setForm(f => ({ ...f, original_postmoney_valuation: e.target.value }))} />
+                        </div>
+                      </>
+                    )}
+                    {txnType === 'proceeds' && (
+                      <>
+                        <div>
+                          <Label>Proceeds Received ({getCurrencySymbol(form.original_currency).trim()})</Label>
+                          <Input className="mt-1" type="number" step="any" value={form.original_proceeds_received} onChange={e => setForm(f => ({ ...f, original_proceeds_received: e.target.value }))} />
+                        </div>
+                        <div>
+                          <Label>Proceeds Per Share ({getCurrencySymbol(form.original_currency).trim()})</Label>
+                          <Input className="mt-1" type="number" step="any" value={form.original_proceeds_per_share} onChange={e => setForm(f => ({ ...f, original_proceeds_per_share: e.target.value }))} />
+                        </div>
+                        <div className="col-span-2">
+                          <Label>Exit Valuation ({getCurrencySymbol(form.original_currency).trim()})</Label>
+                          <Input className="mt-1" type="number" step="any" value={form.original_exit_valuation} onChange={e => setForm(f => ({ ...f, original_exit_valuation: e.target.value }))} />
+                        </div>
+                      </>
+                    )}
+                    {txnType === 'unrealized_gain_change' && (
+                      <>
+                        <div>
+                          <Label>Value Change ({getCurrencySymbol(form.original_currency).trim()})</Label>
+                          <Input className="mt-1" type="number" step="any" value={form.original_unrealized_value_change} onChange={e => setForm(f => ({ ...f, original_unrealized_value_change: e.target.value }))} />
+                        </div>
+                        <div>
+                          <Label>Current Share Price ({getCurrencySymbol(form.original_currency).trim()})</Label>
+                          <Input className="mt-1" type="number" step="any" value={form.original_current_share_price} onChange={e => setForm(f => ({ ...f, original_current_share_price: e.target.value }))} />
+                        </div>
+                        <div className="col-span-2">
+                          <Label>Latest Post-Money ({getCurrencySymbol(form.original_currency).trim()})</Label>
+                          <Input className="mt-1" type="number" step="any" value={form.original_latest_postmoney_valuation} onChange={e => setForm(f => ({ ...f, original_latest_postmoney_valuation: e.target.value }))} />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

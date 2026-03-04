@@ -25,6 +25,19 @@ interface ParsedTransaction {
   proceeds_per_share?: number
   unrealized_value_change?: number
   current_share_price?: number
+  postmoney_valuation?: number
+  latest_postmoney_valuation?: number
+  exit_valuation?: number
+  original_currency?: string
+  original_investment_cost?: number
+  original_share_price?: number
+  original_postmoney_valuation?: number
+  original_proceeds_received?: number
+  original_proceeds_per_share?: number
+  original_exit_valuation?: number
+  original_unrealized_value_change?: number
+  original_current_share_price?: number
+  original_latest_postmoney_valuation?: number
 }
 
 const VALID_TYPES = new Set(['investment', 'proceeds', 'unrealized_gain_change'])
@@ -137,9 +150,10 @@ Rules:
 - company_status must be one of: "active", "exited", "written-off". Infer from context: if there are proceeds/exit transactions, use "exited"; if marked as written off or loss, use "written-off"; otherwise default to "active"
 - Dates should be in YYYY-MM-DD format
 - All monetary values should be plain numbers (no currency symbols)
-- For investment rows: include investment_cost, shares_acquired, share_price, and optionally interest_converted
-- For proceeds rows: include proceeds_received, and optionally cost_basis_exited, proceeds_escrow, proceeds_written_off, proceeds_per_share
-- For unrealized_gain_change rows: include current_share_price, and optionally unrealized_value_change
+- For investment rows: include investment_cost, shares_acquired, share_price, and optionally interest_converted, postmoney_valuation
+- For proceeds rows: include proceeds_received, and optionally cost_basis_exited, proceeds_escrow, proceeds_written_off, proceeds_per_share, exit_valuation
+- For unrealized_gain_change rows: include current_share_price, and optionally unrealized_value_change, latest_postmoney_valuation
+- If amounts are in a different currency than fund currency, include original_currency (ISO 4217 code like "EUR", "GBP") and the original_* versions of relevant monetary fields
 - Use the company name exactly as it appears in the data
 - If the data has column headers like "Cost", "Amount Invested", "Investment Amount" those map to investment_cost
 - "Shares", "# Shares" maps to shares_acquired
@@ -278,6 +292,19 @@ ${text}`,
         proceeds_per_share: pt.proceeds_per_share ?? null,
         unrealized_value_change: pt.unrealized_value_change ?? null,
         current_share_price: pt.current_share_price ?? null,
+        postmoney_valuation: pt.postmoney_valuation ?? null,
+        latest_postmoney_valuation: pt.latest_postmoney_valuation ?? null,
+        exit_valuation: pt.exit_valuation ?? null,
+        original_currency: pt.original_currency ?? null,
+        original_investment_cost: pt.original_investment_cost ?? null,
+        original_share_price: pt.original_share_price ?? null,
+        original_postmoney_valuation: pt.original_postmoney_valuation ?? null,
+        original_proceeds_received: pt.original_proceeds_received ?? null,
+        original_proceeds_per_share: pt.original_proceeds_per_share ?? null,
+        original_exit_valuation: pt.original_exit_valuation ?? null,
+        original_unrealized_value_change: pt.original_unrealized_value_change ?? null,
+        original_current_share_price: pt.original_current_share_price ?? null,
+        original_latest_postmoney_valuation: pt.original_latest_postmoney_valuation ?? null,
       })
 
     if (insertError) {

@@ -227,6 +227,19 @@ export async function POST(
       proceeds_per_share: body.proceeds_per_share ?? null,
       unrealized_value_change: body.unrealized_value_change ?? null,
       current_share_price: body.current_share_price ?? null,
+      postmoney_valuation: body.postmoney_valuation ?? null,
+      latest_postmoney_valuation: body.latest_postmoney_valuation ?? null,
+      exit_valuation: body.exit_valuation ?? null,
+      original_currency: body.original_currency ?? null,
+      original_investment_cost: body.original_investment_cost ?? null,
+      original_share_price: body.original_share_price ?? null,
+      original_postmoney_valuation: body.original_postmoney_valuation ?? null,
+      original_proceeds_received: body.original_proceeds_received ?? null,
+      original_proceeds_per_share: body.original_proceeds_per_share ?? null,
+      original_exit_valuation: body.original_exit_valuation ?? null,
+      original_unrealized_value_change: body.original_unrealized_value_change ?? null,
+      original_current_share_price: body.original_current_share_price ?? null,
+      original_latest_postmoney_valuation: body.original_latest_postmoney_valuation ?? null,
     })
     .select('*')
     .single() as { data: InvestmentTransaction | null; error: { message: string } | null }
