@@ -91,6 +91,39 @@ export default async function UpdatesPage() {
         </div>
       )}
 
+      {update?.hasUpdate && <div className="rounded-lg border p-6 space-y-3">
+        <h2 className="text-lg font-semibold">How to Update</h2>
+        <div className="text-sm text-muted-foreground space-y-2">
+          <p>To update your deployment, pull the latest code from GitHub and redeploy:</p>
+          <pre className="rounded-md bg-muted p-3 font-mono text-xs overflow-x-auto">
+{`cd reporting
+git pull origin main
+npm install
+`}
+          </pre>
+          <p>
+            Then redeploy on your hosting platform (Netlify, Vercel, etc.). If the new release includes
+            database migrations, run them against your Supabase project:
+          </p>
+          <pre className="rounded-md bg-muted p-3 font-mono text-xs overflow-x-auto">
+{`npx supabase db push`}
+          </pre>
+          <p>
+            Or paste any new migration files from <span className="font-mono">supabase/migrations/</span> into the
+            Supabase SQL Editor in filename order. Check the{' '}
+            <a
+              href="https://github.com/tdavidson/reporting/releases"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground underline underline-offset-4 hover:text-foreground/80"
+            >
+              release notes
+            </a>
+            {' '}for details on what changed in each version.
+          </p>
+        </div>
+      </div>}
+
       {installationId && (
         <p className="text-xs text-muted-foreground/60 font-mono">
           Installation ID: {installationId}

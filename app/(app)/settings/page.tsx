@@ -141,6 +141,7 @@ export default function SettingsPage() {
       <MfaSection />
       {settings.isAdmin && (
         <AdminSectionContext.Provider value={true}>
+          <VersionSection appVersion={settings.appVersion} updateAvailable={settings.updateAvailable} />
           <FundNameSection name={settings.fundName} logo={settings.fundLogo} onSaved={load} />
           <CurrencySection currency={settings.currency} onSaved={load} />
         </AdminSectionContext.Provider>
@@ -224,21 +225,42 @@ export default function SettingsPage() {
         </AdminSectionContext.Provider>
       )}
 
-      <div className="pt-4 border-t text-xs text-muted-foreground flex items-center gap-2">
-        <span>v{settings.appVersion}</span>
-        {settings.isAdmin && settings.updateAvailable && (
-          <>
-            <span>&middot;</span>
-            <Link href="/updates" className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 hover:underline underline-offset-4">
-              <ArrowDownCircle className="h-3 w-3" />
-              New version available
-            </Link>
-          </>
-        )}
-      </div>
     </div>
     <AnalystPanel />
     </div>
+    </div>
+  )
+}
+
+// ──────────────────────────── Version ────────────────────────────
+
+function VersionSection({ appVersion, updateAvailable }: { appVersion: string; updateAvailable: boolean }) {
+  return (
+    <div className="rounded-lg border border-amber-500/30 bg-card p-5">
+      <h2 className="text-sm font-medium mb-1 flex items-center gap-1.5">
+        <Lock className="h-3 w-3 text-amber-500" />
+        Version
+      </h2>
+      {updateAvailable ? (
+        <p className="text-xs text-muted-foreground">
+          You are running <span className="font-mono font-medium text-foreground">v{appVersion}</span>. A newer version is available.{' '}
+          <Link href="/updates" className="text-amber-600 dark:text-amber-400 underline underline-offset-4 hover:text-amber-500">
+            View update details
+          </Link>
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          You are running <span className="font-mono font-medium text-foreground">v{appVersion}</span> and are up to date.{' '}
+          <a
+            href="https://github.com/tdavidson/reporting/releases"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            View releases on GitHub
+          </a>
+        </p>
+      )}
     </div>
   )
 }
