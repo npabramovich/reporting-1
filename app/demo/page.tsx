@@ -28,7 +28,9 @@ export default function DemoPage() {
 
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
-        setError('Unable to load demo.')
+        // Log the actual error for debugging (remove in production)
+        console.error('[demo] signInWithPassword failed:', error.message, error.status)
+        setError(`Unable to load demo. (${error.message})`)
         return
       }
 
