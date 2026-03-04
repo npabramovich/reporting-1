@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
@@ -162,6 +163,8 @@ export async function POST(req: NextRequest) {
   if (error || !note) return dbError(error ?? { message: 'Failed to create note' }, 'dashboard-notes')
 
   logActivity(admin, membership.fund_id, user.id, 'note.create', {})
+
+  revalidateTag('notes-badge')
 
   // Fire-and-forget notification
   sendNoteNotificationsAsync(admin, membership.fund_id, {

@@ -1,56 +1,40 @@
 import { redirect } from 'next/navigation'
 import Script from 'next/script'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { AppShell } from '@/components/app-shell'
 import { DemoSessionGuard } from '@/components/demo-session-guard'
+import {
+  getReviewBadge,
+  getNotesBadge,
+  getPendingRequests,
+  getFundData,
+  getFundSettings,
+  getMembership,
+} from '@/lib/cache/layout'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  // Auth — uncached (uses cookies)
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth')
 
-  const { count: openReviewCount } = await supabase
-    .from('parsing_reviews')
-    .select('id', { count: 'exact', head: true })
-    .is('resolution', null)
+  // Get fund ID (uncached — quick single query, needed to key everything else)
+  const { data: fund } = await supabase.from('funds').select('id').limit(1).single() as { data: { id: string } | null }
+  if (!fund) redirect('/auth')
 
-  const { count: needsReviewEmailCount } = await supabase
-    .from('inbound_emails')
-    .select('id', { count: 'exact', head: true })
-    .eq('processing_status', 'needs_review')
+  // All cached queries in parallel
+  const [fundData, membership, fundSettings, reviewBadge, notesBadge] = await Promise.all([
+    getFundData(fund.id),
+    getMembership(user.id, fund.id),
+    getFundSettings(fund.id),
+    getReviewBadge(fund.id),
+    getNotesBadge(user.id),
+  ])
 
-  const { data: fund } = await supabase
-    .from('funds')
-    .select('id, name, logo_url')
-    .limit(1)
-    .single() as { data: { id: string; name: string; logo_url: string | null } | null }
-
-  // Check if user is admin and count pending join requests
-  const { data: membership } = await supabase
-    .from('fund_members')
-    .select('role')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle() as { data: { role: string } | null }
-
+  const isAdmin = membership?.role === 'admin'
   const isViewer = membership?.role === 'viewer'
+  const pendingRequestCount = isAdmin ? await getPendingRequests(fund.id) : 0
 
-  let pendingRequestCount = 0
-  if (membership?.role === 'admin') {
-    const { count } = await supabase
-      .from('fund_join_requests' as any)
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'pending')
-    pendingRequestCount = count ?? 0
-  }
-
-  // Count unread notes + fetch currency + AI settings via admin client
-  const admin = createAdminClient()
-  const { data: unreadNotesCount } = await admin.rpc('count_unread_notes', { p_user_id: user.id }) as { data: number | null }
-  const { data: fundSettings } = fund?.id
-    ? await admin.from('fund_settings').select('currency, claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, analytics_fathom_site_id, analytics_ga_measurement_id, analytics_custom_head_script').eq('fund_id', fund.id).maybeSingle() as { data: { currency?: string; claude_api_key_encrypted?: string | null; openai_api_key_encrypted?: string | null; default_ai_provider?: string | null; analytics_fathom_site_id?: string | null; analytics_ga_measurement_id?: string | null; analytics_custom_head_script?: string | null } | null }
-    : { data: null }
   const fundCurrency = fundSettings?.currency ?? 'USD'
   const hasAIKey = !!(fundSettings?.claude_api_key_encrypted || fundSettings?.openai_api_key_encrypted)
   const defaultAIProvider = fundSettings?.default_ai_provider ?? 'anthropic'
@@ -58,10 +42,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const gaMeasurementId = fundSettings?.analytics_ga_measurement_id ?? null
   const customHeadScript = fundSettings?.analytics_custom_head_script ?? null
 
-  const reviewBadge = (openReviewCount ?? 0) + (needsReviewEmailCount ?? 0)
-  const notesBadge = unreadNotesCount ?? 0
-  const fundName = fund?.name ?? 'Portfolio Reporting'
-  const fundLogo = fund?.logo_url ?? null
+  const fundName = fundData?.name ?? 'Portfolio Reporting'
+  const fundLogo = fundData?.logo_url ?? null
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -83,7 +65,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           reviewBadge={reviewBadge}
           settingsBadge={pendingRequestCount}
           notesBadge={notesBadge}
-          isAdmin={membership?.role === 'admin'}
+          isAdmin={isAdmin}
           currency={fundCurrency}
           hasAIKey={hasAIKey}
           defaultAIProvider={defaultAIProvider}

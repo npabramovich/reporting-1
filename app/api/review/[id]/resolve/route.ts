@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
@@ -189,6 +190,8 @@ export async function POST(
   }
 
   logActivity(admin, review.fund_id, user.id, 'review.resolve', { reviewId: params.id, resolution })
+
+  revalidateTag('review-badge')
 
   return NextResponse.json({ ok: true })
 }

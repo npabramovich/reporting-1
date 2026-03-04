@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { ParsingReview, Company, Metric, InboundEmail } from '@/lib/types/database'
@@ -128,6 +129,8 @@ export async function POST(
     .update({ processing_status: 'success' })
     .eq('id', params.id)
     .in('processing_status', ['needs_review', 'processing', 'failed'])
+
+  revalidateTag('review-badge')
 
   return NextResponse.json({ ok: true, resolved: reviews?.length ?? 0 })
 }
