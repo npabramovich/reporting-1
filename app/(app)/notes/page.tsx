@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { Building2 } from 'lucide-react'
 import Link from 'next/link'
 import { NoteContent } from '@/components/note-content'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
 
 interface Note {
   id: string
@@ -73,7 +75,8 @@ export default function NotesPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Notes</h1>
           <p className="text-sm text-muted-foreground mt-1">Activity and conversations across your portfolio</p>
         </div>
-        <div className="flex items-center rounded-md border text-xs">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-md border text-xs">
           {(['all', 'mentions', 'general'] as FilterMode[]).map(f => (
             <button
               key={f}
@@ -89,9 +92,13 @@ export default function NotesPage() {
               {f === 'mentions' ? '@Mentions' : f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
           ))}
+          </div>
+          <AnalystToggleButton />
         </div>
       </div>
 
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex-1 min-w-0 w-full">
       {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
 
       {!loading && notes.length === 0 && (
@@ -133,6 +140,9 @@ export default function NotesPage() {
           </div>
         ))}
       </div>
+    </div>
+    <AnalystPanel />
+    </div>
     </div>
   )
 }

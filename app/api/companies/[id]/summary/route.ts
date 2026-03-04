@@ -6,6 +6,7 @@ import { createFundAIProviderWithOverride } from '@/lib/ai'
 import type { ContentBlock } from '@/lib/ai/types'
 import { logAIUsage } from '@/lib/ai/usage'
 import { logActivity } from '@/lib/activity'
+import { buildCompanyContext } from '@/lib/ai/context-builder'
 import {
   extractAttachmentText,
   hydrateAttachments,
@@ -138,14 +139,11 @@ export async function POST(
   const access = await verifyCompanyAccess(supabase, admin, user.id, params.id)
   if ('error' in access) return access.error
 
-  // --- Company ---
-  const { data: company } = await admin
-    .from('companies')
-    .select('id, name, fund_id, stage, industry, notes, overview, why_invested, current_update')
-    .eq('id', params.id)
-    .maybeSingle()
+  // Build shared context
+  const ctx = await buildCompanyContext(admin, params.id)
+  if (!ctx) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  if (!company) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { company, currentPeriodLabel, metricsBlock, reportContentBlock, previousSummariesBlock, documentsBlock } = ctx
 
   // --- AI provider + model + custom prompt ---
   let provider: Awaited<ReturnType<typeof createFundAIProviderWithOverride>>['provider']
@@ -169,23 +167,12 @@ export async function POST(
     .maybeSingle()
   const customPrompt = (promptSettings as unknown as { ai_summary_prompt: string | null } | null)?.ai_summary_prompt ?? null
 
-  // --- Metrics + values ---
-  const { data: metrics } = await admin
-    .from('metrics')
-    .select('id, name, slug, unit, unit_position, value_type, reporting_cadence')
-    .eq('company_id', params.id)
-    .eq('is_active', true)
-    .order('display_order')
+  // -----------------------------------------------------------------------
+  // Build binary content parts (PDFs/images) — summary-specific
+  // -----------------------------------------------------------------------
+  const contentParts: ContentBlock[] = []
 
-  const { data: values } = await admin
-    .from('metric_values')
-    .select('metric_id, period_label, period_year, period_quarter, period_month, value_number, value_text')
-    .eq('company_id', params.id)
-    .order('period_year')
-    .order('period_quarter', { nullsFirst: true })
-    .order('period_month', { nullsFirst: true })
-
-  // --- Latest email with report content ---
+  // Re-fetch email for binary attachments (context builder only extracts text)
   const { data: latestEmail } = await admin
     .from('inbound_emails')
     .select('raw_payload, subject, received_at')
@@ -195,77 +182,16 @@ export async function POST(
     .limit(1)
     .maybeSingle()
 
-  // --- Company documents (uploaded context) ---
-  const { data: companyDocuments } = await admin
-    .from('company_documents' as any)
-    .select('filename, extracted_text, has_native_content, storage_path, file_type')
-    .eq('company_id', params.id)
-    .order('created_at', { ascending: false })
-    .limit(5) as { data: { filename: string; extracted_text: string | null; has_native_content: boolean; storage_path: string; file_type: string }[] | null }
-
-  // --- Previous summaries ---
-  const { data: previousSummaries } = await admin
-    .from('company_summaries')
-    .select('summary_text, period_label, created_at')
-    .eq('company_id', params.id)
-    .order('created_at', { ascending: false })
-    .limit(3) as { data: { summary_text: string; period_label: string | null; created_at: string }[] | null }
-
-  // -----------------------------------------------------------------------
-  // Build context blocks for the prompt
-  // -----------------------------------------------------------------------
-
-  // 1. Metric data table
-  let metricsBlock = ''
-  if (metrics && metrics.length > 0 && values && values.length > 0) {
-    const lines: string[] = []
-    for (const m of metrics) {
-      const mValues = (values ?? []).filter(v => v.metric_id === m.id)
-      if (mValues.length === 0) continue
-      const unitStr = m.unit ? ` (${m.unit})` : ''
-      lines.push(`\n${m.name}${unitStr}:`)
-      for (const v of mValues) {
-        const val = v.value_number !== null ? v.value_number : v.value_text
-        lines.push(`  ${v.period_label}: ${val}`)
-      }
-    }
-    metricsBlock = lines.join('\n')
-  }
-
-  // Determine most recent period label from the data
-  let currentPeriodLabel: string | null = null
-  if (values && values.length > 0) {
-    currentPeriodLabel = values[values.length - 1].period_label
-  }
-
-  // 2. Email body + attachment text from the most recent report
-  let reportContentBlock = ''
-  const contentParts: ContentBlock[] = []
-
   if (latestEmail?.raw_payload) {
     const payload = await hydrateAttachments(latestEmail.raw_payload as unknown as PostmarkPayload)
     const extracted = await extractAttachmentText(payload)
 
-    // Email body
-    if (extracted.emailBody) {
-      reportContentBlock += `[EMAIL BODY]\n${extracted.emailBody.slice(0, 30_000)}\n\n`
-    }
-
-    // Text from office documents (DOCX, PPTX, XLSX, CSV)
-    for (const att of extracted.attachments) {
-      if (!att.skipped && att.extractedText) {
-        reportContentBlock += `[ATTACHMENT: ${att.filename}]\n${att.extractedText.slice(0, 30_000)}\n\n`
-      }
-    }
-
-    // PDFs — send as document blocks
     for (const att of extracted.attachments) {
       if (!att.skipped && att.base64Content && att.contentType === 'application/pdf') {
         contentParts.push({ type: 'document', mediaType: 'application/pdf', data: att.base64Content })
       }
     }
 
-    // Images — send as image blocks
     for (const att of extracted.attachments) {
       if (!att.skipped && att.base64Content && att.contentType.startsWith('image/')) {
         contentParts.push({ type: 'image', mediaType: att.contentType, data: att.base64Content })
@@ -273,25 +199,18 @@ export async function POST(
     }
   }
 
-  // 3. Previous summaries
-  let previousSummariesBlock = ''
-  if (previousSummaries && previousSummaries.length > 0) {
-    const summaryLines = previousSummaries
-      .reverse()
-      .map(s => `[${s.period_label ?? 'Unknown period'} — ${new Date(s.created_at).toLocaleDateString()}]\n${s.summary_text}`)
-      .join('\n\n')
-    previousSummariesBlock = summaryLines
-  }
+  // Binary documents from storage
+  const { data: companyDocuments } = await admin
+    .from('company_documents' as any)
+    .select('filename, has_native_content, storage_path, file_type')
+    .eq('company_id', params.id)
+    .eq('has_native_content', true)
+    .order('created_at', { ascending: false })
+    .limit(5) as { data: { filename: string; has_native_content: boolean; storage_path: string; file_type: string }[] | null }
 
-  // 4. Supplementary documents
-  let documentsBlock = ''
-  if (companyDocuments && companyDocuments.length > 0) {
+  if (companyDocuments) {
     for (const doc of companyDocuments) {
-      if (doc.extracted_text) {
-        documentsBlock += `[DOCUMENT: ${doc.filename}]\n${doc.extracted_text.slice(0, 30_000)}\n\n`
-      }
-      if (doc.has_native_content && doc.storage_path) {
-        // Download PDF/image from Storage and add as native content block
+      if (doc.storage_path) {
         const { data: fileData } = await admin
           .storage
           .from('company-documents')
@@ -335,15 +254,7 @@ Keep it to 2-4 short paragraphs. Be direct and analytical, not promotional. Use 
 
   const taskPrompt = customPrompt ?? DEFAULT_TASK_PROMPT
 
-  let promptText = `You are a senior venture capital analyst at a growth-stage fund preparing an internal portfolio review memo for the investment committee. You think in terms of unit economics, growth efficiency, cash runway, and milestone progress. Your job is to surface what matters for the next board conversation and flag anything that warrants immediate attention.
-
-Company: ${company.name}
-${company.stage ? `Stage: ${company.stage}` : ''}
-${company.industry?.length ? `Industry: ${company.industry.join(', ')}` : ''}
-${company.notes ? `Fund notes: ${company.notes}` : ''}
-${company.overview ? `Overview: ${company.overview}` : ''}
-${company.why_invested ? `Why We Invested: ${company.why_invested}` : ''}
-${company.current_update ? `Current Business Update: ${company.current_update}` : ''}`
+  let promptText = ctx.systemPrompt
 
   if (metricsBlock) {
     promptText += `
@@ -440,4 +351,52 @@ ${documentsBlock ? '\nYou also have access to supplementary documents (strategy 
       error: `Summary generation failed: ${message}`,
     }, { status: 500 })
   }
+}
+
+// ---------------------------------------------------------------------------
+// PUT — save analyst-drafted text as a company summary
+// ---------------------------------------------------------------------------
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = createAdminClient()
+
+  const writeCheck = await assertWriteAccess(admin, user.id)
+  if (writeCheck instanceof NextResponse) return writeCheck
+
+  const access = await verifyCompanyAccess(supabase, admin, user.id, params.id)
+  if ('error' in access) return access.error
+
+  let body: { summary_text?: string }
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  if (!body.summary_text || typeof body.summary_text !== 'string') {
+    return NextResponse.json({ error: 'summary_text is required' }, { status: 400 })
+  }
+
+  const { error: insertError } = await admin.from('company_summaries').insert({
+    company_id: params.id,
+    fund_id: access.fundId,
+    period_label: null,
+    summary_text: body.summary_text.trim(),
+  })
+
+  if (insertError) return dbError(insertError, 'companies-id-summary-put')
+
+  logActivity(admin, access.fundId, user.id, 'company.summary', { companyId: params.id, source: 'analyst' })
+
+  return NextResponse.json({
+    summary: body.summary_text.trim(),
+    generated_at: new Date().toISOString(),
+  })
 }

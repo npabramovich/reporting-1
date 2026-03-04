@@ -130,3 +130,4 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, on
     </div>
   )
 }
+

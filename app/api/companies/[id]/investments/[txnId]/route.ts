@@ -47,6 +47,7 @@ export async function PATCH(
     'original_proceeds_received', 'original_proceeds_per_share', 'original_exit_valuation',
     'original_unrealized_value_change', 'original_current_share_price',
     'original_latest_postmoney_valuation',
+    'portfolio_group',
   ]
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }

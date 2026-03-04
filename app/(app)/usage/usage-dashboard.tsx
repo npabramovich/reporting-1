@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Lock } from 'lucide-react'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
 
 interface DailyRow {
   date: string
@@ -148,11 +150,17 @@ export function UsageDashboard() {
   const activity = data.activity
 
   return (
-    <div className="p-4 md:py-8 md:pl-8 md:pr-4 space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2"><Lock className="h-4 w-4 text-amber-500" />AI Usage</h1>
-        <p className="text-sm text-muted-foreground mt-1">{monthLabel} &mdash; month to date</p>
+    <div className="p-4 md:py-8 md:pl-8 md:pr-4">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2"><Lock className="h-4 w-4 text-amber-500" />AI Usage</h1>
+          <p className="text-sm text-muted-foreground mt-1">{monthLabel} &mdash; month to date</p>
+        </div>
+        <AnalystToggleButton />
       </div>
+
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex-1 min-w-0 w-full space-y-8">
 
       {/* MTD summary cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -281,6 +289,9 @@ export function UsageDashboard() {
           </div>
         </div>
       )}
+    </div>
+    <AnalystPanel />
+    </div>
     </div>
   )
 }

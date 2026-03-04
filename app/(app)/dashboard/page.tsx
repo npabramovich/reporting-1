@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 export const metadata: Metadata = { title: 'Portfolio' }
 import { DashboardCompanies } from './dashboard-companies'
 import { DashboardNotesLayout, DashboardChatButton, DashboardNotesPanel } from './dashboard-notes'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
 
 export default async function DashboardPage() {
   const supabase = createClient()
@@ -104,9 +106,12 @@ export default async function DashboardPage() {
   return (
     <DashboardNotesLayout userId={user.id} isAdmin={isAdmin} companies={companies.map(c => ({ id: c.id, name: c.name }))}>
     <div className="p-4 md:py-8 md:pl-8 md:pr-4">
-      <div className="mb-6 flex items-center gap-3">
+      <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Portfolio Overview</h1>
-        <DashboardChatButton />
+        <div className="flex items-center gap-2">
+          <DashboardChatButton />
+          <AnalystToggleButton />
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -114,6 +119,7 @@ export default async function DashboardPage() {
           <DashboardCompanies companies={companies} allGroups={allGroups} />
         </div>
         <DashboardNotesPanel />
+        <AnalystPanel />
       </div>
     </div>
     </DashboardNotesLayout>

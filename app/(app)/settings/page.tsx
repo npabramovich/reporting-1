@@ -17,6 +17,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { AlertCircle, Check, ChevronDown, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X, Lock } from 'lucide-react'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
 
 const AdminSectionContext = createContext(false)
 
@@ -85,10 +87,18 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-8 max-w-3xl">
-        <h1 className="text-2xl font-semibold tracking-tight mb-6">Settings</h1>
-        <div className="animate-pulse space-y-4">
-          {[1, 2, 3].map(i => <div key={i} className="h-24 bg-muted rounded-lg" />)}
+      <div className="p-4 md:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+          <AnalystToggleButton />
+        </div>
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex-1 min-w-0 max-w-3xl w-full">
+          <div className="animate-pulse space-y-4">
+            {[1, 2, 3].map(i => <div key={i} className="h-24 bg-muted rounded-lg" />)}
+          </div>
+        </div>
+        <AnalystPanel />
         </div>
       </div>
     )
@@ -96,16 +106,30 @@ export default function SettingsPage() {
 
   if (!settings) {
     return (
-      <div className="p-4 md:p-8 max-w-3xl">
-        <h1 className="text-2xl font-semibold tracking-tight mb-6">Settings</h1>
-        <p className="text-muted-foreground">Could not load settings.</p>
+      <div className="p-4 md:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+          <AnalystToggleButton />
+        </div>
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex-1 min-w-0 max-w-3xl w-full">
+          <p className="text-muted-foreground">Could not load settings.</p>
+        </div>
+        <AnalystPanel />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl space-y-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+    <div className="p-4 md:p-8">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <AnalystToggleButton />
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex-1 min-w-0 max-w-3xl w-full space-y-8">
 
       <ProfileSection displayName={settings.displayName} onSaved={load} />
       <MfaSection />
@@ -186,6 +210,9 @@ export default function SettingsPage() {
           <DangerZone onDeleted={() => router.push('/auth')} />
         </AdminSectionContext.Provider>
       )}
+    </div>
+    <AnalystPanel />
+    </div>
     </div>
   )
 }

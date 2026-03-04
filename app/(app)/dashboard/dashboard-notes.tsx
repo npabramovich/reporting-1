@@ -5,6 +5,7 @@ import { MessageSquare, Send, Pencil, X, Check, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NoteContent } from '@/components/note-content'
 import { MentionTextarea, type MentionMember, type MentionTextareaRef } from '@/components/mention-textarea'
+import { useAnalystContext } from '@/components/analyst-context'
 import Link from 'next/link'
 
 interface Note {
@@ -88,9 +89,9 @@ export function DashboardChatButton() {
   const { open, toggle, unreadCount } = ctx
   return (
     <Button
-      variant="ghost"
+      variant="outline"
       size="sm"
-      className={`ml-auto gap-1.5 h-8 py-2 text-muted-foreground hover:text-foreground ${open ? 'bg-accent' : ''}`}
+      className={`gap-1.5 h-8 py-2 text-muted-foreground hover:text-foreground ${open ? 'bg-accent' : ''}`}
       onClick={toggle}
     >
       <span className="relative">
@@ -119,6 +120,7 @@ type FilterMode = 'all' | 'general'
 
 function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
   const { userId, isAdmin, companies, inputRef, toggle, setUnreadCount } = ctx
+  const { fundName } = useAnalystContext()
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(false)
   const [content, setContent] = useState('')
@@ -232,7 +234,8 @@ function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
   }
 
   return (
-    <div className="w-full lg:w-[340px] shrink-0 lg:sticky top-4 max-h-[80vh] lg:max-h-[calc(100vh-6rem)] rounded-lg border bg-card flex flex-col">
+    <div className="w-full lg:w-[340px] shrink-0 lg:sticky top-4">
+    <div className="max-h-[80vh] lg:max-h-[calc(100vh-6rem)] rounded-lg border bg-card flex flex-col">
       <div className="px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-medium text-muted-foreground">Team Notes</h2>
@@ -376,6 +379,10 @@ function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
           </Button>
         </div>
       </div>
+    </div>
+    <p className="text-[10px] text-muted-foreground/60 text-center mt-3 px-4">
+      All chat history is saved by {fundName}.
+    </p>
     </div>
   )
 }

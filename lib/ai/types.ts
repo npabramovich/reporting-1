@@ -24,8 +24,21 @@ export interface AIResult {
   usage: TokenUsage
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface CreateChatParams {
+  model: string
+  maxTokens: number
+  system?: string
+  messages: ChatMessage[]
+}
+
 export interface AIProvider {
   createMessage(params: CreateMessageParams): Promise<AIResult>
+  createChat(params: CreateChatParams): Promise<AIResult>
   testConnection(): Promise<void>
   listModels(): Promise<AIModel[]>
 }

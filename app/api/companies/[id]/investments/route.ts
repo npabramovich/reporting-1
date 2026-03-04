@@ -76,6 +76,15 @@ function computeSummary(
         if (round) round.unrealizedValueChange += txn.unrealized_value_change
       }
     }
+
+    if (txn.transaction_type === 'round_info') {
+      if (txn.share_price != null && txn.transaction_date) {
+        if (!latestSharePriceDate || txn.transaction_date > latestSharePriceDate) {
+          latestSharePrice = txn.share_price
+          latestSharePriceDate = txn.transaction_date
+        }
+      }
+    }
   }
 
   // Compute per-round FMV and sum for company unrealized value
@@ -134,7 +143,7 @@ export async function GET(
   // Verify company exists and user has access
   const { data: company } = await admin
     .from('companies')
-    .select('id, fund_id, status')
+    .select('id, fund_id, status, portfolio_group')
     .eq('id', params.id)
     .maybeSingle()
 
@@ -160,14 +169,14 @@ export async function GET(
   const txns = (transactions ?? []) as InvestmentTransaction[]
   const summary = computeSummary(txns, company.status as CompanyStatus)
 
-  return NextResponse.json({ transactions: txns, summary })
+  return NextResponse.json({ transactions: txns, summary, portfolioGroups: company.portfolio_group ?? [] })
 }
 
 // ---------------------------------------------------------------------------
 // POST — create a new transaction
 // ---------------------------------------------------------------------------
 
-const VALID_TYPES = ['investment', 'proceeds', 'unrealized_gain_change']
+const VALID_TYPES = ['investment', 'proceeds', 'unrealized_gain_change', 'round_info']
 
 export async function POST(
   req: NextRequest,
@@ -240,6 +249,7 @@ export async function POST(
       original_unrealized_value_change: body.original_unrealized_value_change ?? null,
       original_current_share_price: body.original_current_share_price ?? null,
       original_latest_postmoney_valuation: body.original_latest_postmoney_valuation ?? null,
+      portfolio_group: body.portfolio_group ?? null,
     })
     .select('*')
     .single() as { data: InvestmentTransaction | null; error: { message: string } | null }

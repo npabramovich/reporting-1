@@ -130,57 +130,13 @@ export async function GET(req: NextRequest) {
     const company = companyMap.get(companyId)
     if (!company) continue
 
-    let totalInvested = 0
-    let totalShares = 0
-    let totalRealized = 0
+    const companyDefaultGroup = company.portfolio_group?.[0] ?? ''
+
+    // First pass: determine company-wide latestSharePrice from unrealized_gain_change and round_info
     let latestSharePrice: number | null = null
     let latestSharePriceDate: string | null = null
 
-    // Cash flows for per-company XIRR
-    const companyCashFlows: CashFlow[] = []
-
-    // Track rounds for per-round FMV calculation
-    const roundMap = new Map<string, { investmentCost: number; sharesAcquired: number; unrealizedValueChange: number; costBasisExited: number }>()
-
     for (const txn of txns) {
-      if (txn.transaction_type === 'investment') {
-        totalInvested += txn.investment_cost ?? 0
-        totalShares += txn.shares_acquired ?? 0
-
-        if (txn.transaction_date && txn.investment_cost) {
-          const cf: CashFlow = { date: new Date(txn.transaction_date), amount: -(txn.investment_cost) }
-          companyCashFlows.push(cf)
-          allCashFlows.push(cf)
-        }
-
-        const roundName = txn.round_name ?? 'Unknown'
-        const existing = roundMap.get(roundName)
-        if (existing) {
-          existing.investmentCost += txn.investment_cost ?? 0
-          existing.sharesAcquired += txn.shares_acquired ?? 0
-        } else {
-          roundMap.set(roundName, {
-            investmentCost: txn.investment_cost ?? 0,
-            sharesAcquired: txn.shares_acquired ?? 0,
-            unrealizedValueChange: 0,
-            costBasisExited: 0,
-          })
-        }
-      }
-      if (txn.transaction_type === 'proceeds') {
-        const proceedsAmount = (txn.proceeds_received ?? 0) + (txn.proceeds_escrow ?? 0)
-        totalRealized += proceedsAmount
-        if (txn.round_name && txn.cost_basis_exited != null) {
-          const round = roundMap.get(txn.round_name)
-          if (round) round.costBasisExited += txn.cost_basis_exited
-        }
-
-        if (txn.transaction_date && proceedsAmount > 0) {
-          const cf: CashFlow = { date: new Date(txn.transaction_date), amount: proceedsAmount }
-          companyCashFlows.push(cf)
-          allCashFlows.push(cf)
-        }
-      }
       if (txn.transaction_type === 'unrealized_gain_change') {
         if (txn.current_share_price != null && txn.transaction_date) {
           if (!latestSharePriceDate || txn.transaction_date > latestSharePriceDate) {
@@ -188,63 +144,147 @@ export async function GET(req: NextRequest) {
             latestSharePriceDate = txn.transaction_date
           }
         }
-        if (txn.round_name && txn.unrealized_value_change != null) {
-          const round = roundMap.get(txn.round_name)
-          if (round) round.unrealizedValueChange += txn.unrealized_value_change
+      }
+      if (txn.transaction_type === 'round_info') {
+        if (txn.share_price != null && txn.transaction_date) {
+          if (!latestSharePriceDate || txn.transaction_date > latestSharePriceDate) {
+            latestSharePrice = txn.share_price
+            latestSharePriceDate = txn.transaction_date
+          }
         }
       }
     }
 
-    // Sum per-round FMV for company unrealized value
-    let unrealizedValue = 0
-    for (const round of Array.from(roundMap.values())) {
-      if (round.sharesAcquired > 0) {
-        unrealizedValue += latestSharePrice != null ? round.sharesAcquired * latestSharePrice : 0
+    // Second pass: group investment and proceeds transactions by portfolio_group
+    const groupTxns = new Map<string, InvestmentTransaction[]>()
+    for (const txn of txns) {
+      if (txn.transaction_type === 'investment' || txn.transaction_type === 'proceeds') {
+        const group = txn.portfolio_group ?? companyDefaultGroup
+        const list = groupTxns.get(group) ?? []
+        list.push(txn)
+        groupTxns.set(group, list)
+      }
+      // Also bucket unrealized_gain_change with round attribution to the correct group
+      if (txn.transaction_type === 'unrealized_gain_change' && txn.round_name) {
+        // These get processed per-group below via roundMap
+        const group = txn.portfolio_group ?? companyDefaultGroup
+        const list = groupTxns.get(group) ?? []
+        list.push(txn)
+        groupTxns.set(group, list)
+      }
+    }
+
+    // If no investment/proceeds transactions at all, create a single empty-group entry
+    if (groupTxns.size === 0) {
+      groupTxns.set(companyDefaultGroup, [])
+    }
+
+    // Third pass: compute summary per (company, group) pair
+    for (const [group, gTxns] of Array.from(groupTxns.entries())) {
+      let totalInvested = 0
+      let totalShares = 0
+      let totalRealized = 0
+
+      const groupCashFlows: CashFlow[] = []
+      const roundMap = new Map<string, { investmentCost: number; sharesAcquired: number; unrealizedValueChange: number; costBasisExited: number }>()
+
+      for (const txn of gTxns) {
+        if (txn.transaction_type === 'investment') {
+          totalInvested += txn.investment_cost ?? 0
+          totalShares += txn.shares_acquired ?? 0
+
+          if (txn.transaction_date && txn.investment_cost) {
+            const cf: CashFlow = { date: new Date(txn.transaction_date), amount: -(txn.investment_cost) }
+            groupCashFlows.push(cf)
+            allCashFlows.push(cf)
+          }
+
+          const roundName = txn.round_name ?? 'Unknown'
+          const existing = roundMap.get(roundName)
+          if (existing) {
+            existing.investmentCost += txn.investment_cost ?? 0
+            existing.sharesAcquired += txn.shares_acquired ?? 0
+          } else {
+            roundMap.set(roundName, {
+              investmentCost: txn.investment_cost ?? 0,
+              sharesAcquired: txn.shares_acquired ?? 0,
+              unrealizedValueChange: 0,
+              costBasisExited: 0,
+            })
+          }
+        }
+        if (txn.transaction_type === 'proceeds') {
+          const proceedsAmount = (txn.proceeds_received ?? 0) + (txn.proceeds_escrow ?? 0)
+          totalRealized += proceedsAmount
+          if (txn.round_name && txn.cost_basis_exited != null) {
+            const round = roundMap.get(txn.round_name)
+            if (round) round.costBasisExited += txn.cost_basis_exited
+          }
+
+          if (txn.transaction_date && proceedsAmount > 0) {
+            const cf: CashFlow = { date: new Date(txn.transaction_date), amount: proceedsAmount }
+            groupCashFlows.push(cf)
+            allCashFlows.push(cf)
+          }
+        }
+        if (txn.transaction_type === 'unrealized_gain_change') {
+          if (txn.round_name && txn.unrealized_value_change != null) {
+            const round = roundMap.get(txn.round_name)
+            if (round) round.unrealizedValueChange += txn.unrealized_value_change
+          }
+        }
+      }
+
+      // Sum per-round FMV using the company-wide share price
+      let unrealizedValue = 0
+      for (const round of Array.from(roundMap.values())) {
+        if (round.sharesAcquired > 0) {
+          unrealizedValue += latestSharePrice != null ? round.sharesAcquired * latestSharePrice : 0
+        } else {
+          unrealizedValue += round.investmentCost - round.costBasisExited + round.unrealizedValueChange
+        }
+      }
+      let fmv: number
+      if (company.status === 'exited') {
+        fmv = totalRealized
+      } else if (company.status === 'written-off') {
+        fmv = 0
       } else {
-        unrealizedValue += round.investmentCost - round.costBasisExited + round.unrealizedValueChange
+        fmv = unrealizedValue
       }
-    }
-    let fmv: number
-    if (company.status === 'exited') {
-      fmv = totalRealized
-    } else if (company.status === 'written-off') {
-      fmv = 0
-    } else {
-      fmv = unrealizedValue
-    }
 
-    const moic = totalInvested > 0 ? (totalRealized + unrealizedValue) / totalInvested : null
+      const moic = totalInvested > 0 ? (totalRealized + unrealizedValue) / totalInvested : null
 
-    // Compute per-company IRR: add terminal value as positive cash flow at as-of date
-    let companyIRR: number | null = null
-    if (companyCashFlows.length > 0) {
-      const terminalValue = company.status === 'written-off' ? 0 : unrealizedValue
-      if (terminalValue > 0 || totalRealized > 0) {
-        // Only add terminal unrealized value if company is not fully exited/written-off
-        if (company.status !== 'exited' && terminalValue > 0) {
-          companyCashFlows.push({ date: asOfDate, amount: terminalValue })
+      // Compute per-group IRR
+      let groupIRR: number | null = null
+      if (groupCashFlows.length > 0) {
+        const terminalValue = company.status === 'written-off' ? 0 : unrealizedValue
+        if (terminalValue > 0 || totalRealized > 0) {
+          if (company.status !== 'exited' && terminalValue > 0) {
+            groupCashFlows.push({ date: asOfDate, amount: terminalValue })
+          }
+          groupIRR = xirr(groupCashFlows)
         }
-        companyIRR = xirr(companyCashFlows)
       }
+
+      portfolioInvested += totalInvested
+      portfolioRealized += totalRealized
+      portfolioUnrealized += unrealizedValue
+      portfolioFMV += fmv
+
+      companySummaries.push({
+        companyId,
+        companyName: company.name,
+        status: company.status,
+        portfolioGroup: [group].filter(Boolean),
+        totalInvested,
+        totalRealized,
+        unrealizedValue,
+        fmv,
+        moic,
+        irr: groupIRR,
+      })
     }
-
-    portfolioInvested += totalInvested
-    portfolioRealized += totalRealized
-    portfolioUnrealized += unrealizedValue
-    portfolioFMV += fmv
-
-    companySummaries.push({
-      companyId,
-      companyName: company.name,
-      status: company.status,
-      portfolioGroup: company.portfolio_group ?? [],
-      totalInvested,
-      totalRealized,
-      unrealizedValue,
-      fmv,
-      moic,
-      irr: companyIRR,
-    })
   }
 
   // Sort by invested amount descending

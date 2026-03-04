@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import type { AIProvider, AIModel, AIResult, CreateMessageParams, ContentBlock } from './types'
+import type { AIProvider, AIModel, AIResult, CreateMessageParams, CreateChatParams, ContentBlock } from './types'
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI
@@ -20,6 +20,32 @@ export class OpenAIProvider implements AIProvider {
     }
 
     messages.push({ role: 'user', content: userContent })
+
+    const response = await this.client.chat.completions.create({
+      model: params.model,
+      max_tokens: params.maxTokens,
+      messages,
+    })
+
+    return {
+      text: response.choices[0]?.message?.content ?? '',
+      usage: {
+        inputTokens: response.usage?.prompt_tokens ?? 0,
+        outputTokens: response.usage?.completion_tokens ?? 0,
+      },
+    }
+  }
+
+  async createChat(params: CreateChatParams): Promise<AIResult> {
+    const messages: OpenAI.ChatCompletionMessageParam[] = []
+
+    if (params.system) {
+      messages.push({ role: 'system', content: params.system })
+    }
+
+    for (const m of params.messages) {
+      messages.push({ role: m.role, content: m.content })
+    }
 
     const response = await this.client.chat.completions.create({
       model: params.model,

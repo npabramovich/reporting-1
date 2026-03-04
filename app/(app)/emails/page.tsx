@@ -13,6 +13,8 @@ import {
 } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Loader2, Trash2 } from 'lucide-react'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
 import { EmailReviewModal } from '@/components/email-review-modal'
 
 // ---------------------------------------------------------------------------
@@ -164,12 +166,17 @@ export default function EmailsPage() {
             Every inbound email and its processing result.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => load(page)} disabled={loading} className="text-muted-foreground">
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => load(page)} disabled={loading} className="text-muted-foreground">
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <AnalystToggleButton />
+        </div>
       </div>
 
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex-1 min-w-0 w-full">
       {/* Filter bar */}
       <div className="flex flex-wrap items-end gap-3 mb-5">
         <div>
@@ -368,6 +375,9 @@ export default function EmailsPage() {
         open={!!reviewModalEmailId}
         onOpenChange={(open) => { if (!open) { setReviewModalEmailId(null); load(page) } }}
       />
+    </div>
+    <AnalystPanel />
+    </div>
     </div>
   )
 }

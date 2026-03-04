@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose } from 'lucide-react'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
 
 export const metadata: Metadata = { title: 'Support' }
 
@@ -25,10 +27,13 @@ export default function SupportPage() {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="mb-6 max-w-3xl">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Support</h1>
+        <AnalystToggleButton />
       </div>
 
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex-1 min-w-0 w-full">
       <div className="flex gap-16">
         {/* Main content */}
         <div className="flex-1 min-w-0 max-w-3xl space-y-8 text-sm leading-relaxed">
@@ -602,6 +607,9 @@ export default function SupportPage() {
           </div>
         </nav>
       </div>
+    </div>
+    <AnalystPanel />
+    </div>
     </div>
   )
 }

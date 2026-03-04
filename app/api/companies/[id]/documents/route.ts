@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { extractFromBuffer } from '@/lib/parsing/extractAttachmentText'
+import { scanFileAsync } from '@/lib/security/scan-file'
 import { dbError } from '@/lib/api-error'
 import { logActivity } from '@/lib/activity'
 
@@ -124,6 +125,15 @@ export async function POST(
   }
 
   const buffer = Buffer.from(await fileData.arrayBuffer())
+
+  // Scan file for security threats before processing
+  const scanResult = await scanFileAsync(buffer, filename, fileType)
+  if (!scanResult.safe) {
+    // Delete the unsafe file from storage
+    await admin.storage.from('company-documents').remove([storagePath])
+    return NextResponse.json({ error: `File rejected: ${scanResult.reason}` }, { status: 400 })
+  }
+
   const result = await extractFromBuffer(buffer, filename, fileType)
 
   // In textOnly mode, decide whether we can discard the original file.

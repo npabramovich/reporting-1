@@ -44,13 +44,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     pendingRequestCount = count ?? 0
   }
 
-  // Count unread notes + fetch currency via admin client
+  // Count unread notes + fetch currency + AI settings via admin client
   const admin = createAdminClient()
   const { data: unreadNotesCount } = await admin.rpc('count_unread_notes', { p_user_id: user.id }) as { data: number | null }
-  const { data: currencySettings } = fund?.id
-    ? await admin.from('fund_settings').select('currency').eq('fund_id', fund.id).maybeSingle()
+  const { data: fundSettings } = fund?.id
+    ? await admin.from('fund_settings').select('currency, claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider').eq('fund_id', fund.id).maybeSingle() as { data: { currency?: string; claude_api_key_encrypted?: string | null; openai_api_key_encrypted?: string | null; default_ai_provider?: string | null } | null }
     : { data: null }
-  const fundCurrency = (currencySettings as { currency?: string } | null)?.currency ?? 'USD'
+  const fundCurrency = fundSettings?.currency ?? 'USD'
+  const hasAIKey = !!(fundSettings?.claude_api_key_encrypted || fundSettings?.openai_api_key_encrypted)
+  const defaultAIProvider = fundSettings?.default_ai_provider ?? 'anthropic'
 
   const reviewBadge = (openReviewCount ?? 0) + (needsReviewEmailCount ?? 0)
   const notesBadge = unreadNotesCount ?? 0
@@ -79,6 +81,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           notesBadge={notesBadge}
           isAdmin={membership?.role === 'admin'}
           currency={fundCurrency}
+          hasAIKey={hasAIKey}
+          defaultAIProvider={defaultAIProvider}
         >
           {children}
         </AppShell>

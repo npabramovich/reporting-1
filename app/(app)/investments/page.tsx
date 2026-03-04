@@ -6,6 +6,8 @@ import { Loader2, ChevronUp, ChevronDown, Lock } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { useCurrency, formatCurrency, formatCurrencyFull } from '@/components/currency-context'
 import type { CompanyStatus } from '@/lib/types/database'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
 
 interface CompanySummary {
   companyId: string
@@ -158,6 +160,7 @@ export default function InvestmentsPage() {
         onChange={e => setAsOfDate(e.target.value)}
         className="border rounded px-2 py-1 text-sm"
       />
+      <span className="ml-auto"><AnalystToggleButton /></span>
     </div>
   )
 
@@ -165,9 +168,14 @@ export default function InvestmentsPage() {
     return (
       <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
         {heading}
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading...
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex-1 min-w-0 w-full">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading...
+          </div>
+        </div>
+        <AnalystPanel />
         </div>
       </div>
     )
@@ -177,9 +185,14 @@ export default function InvestmentsPage() {
     return (
       <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
         {heading}
-        <p className="text-sm text-muted-foreground">
-          No investment data yet. Add transactions from individual company pages or use the Import page.
-        </p>
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex-1 min-w-0 w-full">
+          <p className="text-sm text-muted-foreground">
+            No investment data yet. Add transactions from individual company pages or use the Import page.
+          </p>
+        </div>
+        <AnalystPanel />
+        </div>
       </div>
     )
   }
@@ -187,6 +200,9 @@ export default function InvestmentsPage() {
   return (
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
       {heading}
+
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex-1 min-w-0 w-full">
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
@@ -297,7 +313,7 @@ export default function InvestmentsPage() {
           </thead>
           <tbody>
             {filtered.map(c => (
-              <tr key={c.companyId} className="border-b last:border-b-0 hover:bg-muted/30">
+              <tr key={`${c.companyId}-${c.portfolioGroup.join('')}`} className="border-b last:border-b-0 hover:bg-muted/30">
                 <td className="px-3 py-2">
                   <Link
                     href={`/companies/${c.companyId}`}
@@ -336,6 +352,9 @@ export default function InvestmentsPage() {
           </tfoot>
         </table>
       </div>
+    </div>
+    <AnalystPanel />
+    </div>
     </div>
   )
 }

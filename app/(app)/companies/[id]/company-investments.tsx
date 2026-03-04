@@ -16,14 +16,16 @@ import type { CompanyInvestmentSummary } from '@/lib/types/investments'
 interface Props {
   companyId: string
   companyStatus: CompanyStatus
+  portfolioGroups: string[]
 }
 
-type TransactionType = 'investment' | 'proceeds' | 'unrealized_gain_change'
+type TransactionType = 'investment' | 'proceeds' | 'unrealized_gain_change' | 'round_info'
 
 const TYPE_LABELS: Record<TransactionType, string> = {
   investment: 'Investment',
   proceeds: 'Proceeds',
   unrealized_gain_change: 'Unrealized Change',
+  round_info: 'Round Info',
 }
 
 function fmtNum(val: number | null | undefined): string {
@@ -70,9 +72,10 @@ const EMPTY_FORM: Record<string, string> = {
   original_unrealized_value_change: '',
   original_current_share_price: '',
   original_latest_postmoney_valuation: '',
+  portfolio_group: '',
 }
 
-export function CompanyInvestments({ companyId, companyStatus }: Props) {
+export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }: Props) {
   const currency = useCurrency()
   const symbol = getCurrencySymbol(currency)
   const fmt = (val: number | null | undefined) => val == null ? '-' : formatCurrencyFull(val, currency)
@@ -144,6 +147,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
       original_unrealized_value_change: txn.original_unrealized_value_change?.toString() ?? '',
       original_current_share_price: txn.original_current_share_price?.toString() ?? '',
       original_latest_postmoney_valuation: txn.original_latest_postmoney_valuation?.toString() ?? '',
+      portfolio_group: txn.portfolio_group ?? '',
     })
     setError(null)
     setShowOrigCurrency(!!txn.original_currency)
@@ -185,6 +189,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
       original_unrealized_value_change: showOrigCurrency ? numOrNull(form.original_unrealized_value_change) : null,
       original_current_share_price: showOrigCurrency ? numOrNull(form.original_current_share_price) : null,
       original_latest_postmoney_valuation: showOrigCurrency ? numOrNull(form.original_latest_postmoney_valuation) : null,
+      portfolio_group: form.portfolio_group || null,
     }
 
     try {
@@ -293,6 +298,9 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                 <th className="text-left px-3 py-2 font-medium">Type</th>
                 <th className="text-left px-3 py-2 font-medium">Round</th>
                 <th className="text-left px-3 py-2 font-medium">Date</th>
+                {portfolioGroups.length > 0 && (
+                  <th className="text-left px-3 py-2 font-medium">Group</th>
+                )}
                 {companyStatus === 'exited' ? (
                   <>
                     <th className="text-right px-3 py-2 font-medium">Cost</th>
@@ -325,6 +333,9 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                         ? new Date(txn.transaction_date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
                         : '-'}
                     </td>
+                    {portfolioGroups.length > 0 && (
+                      <td className="px-3 py-2 text-xs">{txn.portfolio_group ?? '-'}</td>
+                    )}
                     {companyStatus === 'exited' ? (
                       <>
                         <td className="px-3 py-2 text-right font-mono">
@@ -347,6 +358,8 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                             ? fmtPrice(txn.share_price)
                             : txn.transaction_type === 'unrealized_gain_change'
                             ? fmtPrice(txn.current_share_price)
+                            : txn.transaction_type === 'round_info'
+                            ? fmtPrice(txn.share_price)
                             : '-'}
                         </td>
                         <td className="px-3 py-2 text-right font-mono">
@@ -418,6 +431,7 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                     <SelectItem value="investment">Investment</SelectItem>
                     <SelectItem value="proceeds">Proceeds</SelectItem>
                     <SelectItem value="unrealized_gain_change">Unrealized Change</SelectItem>
+                    <SelectItem value="round_info">Round Info</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -443,6 +457,24 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                 />
               </div>
             </div>
+
+            {(txnType === 'investment' || txnType === 'proceeds') && portfolioGroups.length > 0 && (
+              <div>
+                <Label>Portfolio Group</Label>
+                <Select
+                  value={form.portfolio_group}
+                  onValueChange={v => setForm(f => ({ ...f, portfolio_group: v === '__none__' ? '' : v }))}
+                >
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Inherit from company" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Inherit from company</SelectItem>
+                    {portfolioGroups.map(g => (
+                      <SelectItem key={g} value={g}>{g}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {txnType === 'investment' && (
               <div className="grid grid-cols-2 gap-3">
@@ -561,6 +593,32 @@ export function CompanyInvestments({ companyId, companyStatus }: Props) {
                     value={form.exit_valuation}
                     onChange={e => setForm(f => ({ ...f, exit_valuation: e.target.value }))}
                     placeholder="Total company exit price"
+                  />
+                </div>
+              </div>
+            )}
+
+            {txnType === 'round_info' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Share Price ({symbol.trim()})</Label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="any"
+                    value={form.share_price}
+                    onChange={e => setForm(f => ({ ...f, share_price: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>Post-Money Valuation ({symbol.trim()})</Label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="any"
+                    value={form.postmoney_valuation}
+                    onChange={e => setForm(f => ({ ...f, postmoney_valuation: e.target.value }))}
+                    placeholder="Post-money valuation of the round"
                   />
                 </div>
               </div>

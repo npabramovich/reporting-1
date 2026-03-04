@@ -1,10 +1,12 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { MessageSquare, Send, Pencil, X, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NoteContent } from '@/components/note-content'
-import { MentionTextarea, type MentionMember, type MentionTextareaRef } from '@/components/mention-textarea'
+import { MentionTextarea, type MentionMember } from '@/components/mention-textarea'
+import { usePanelContext } from './company-panel-context'
+import { useAnalystContext } from '@/components/analyst-context'
 
 interface Note {
   id: string
@@ -16,17 +18,6 @@ interface Note {
   isRead: boolean
   createdAt: string
   edited: boolean
-}
-
-interface NotesContextValue {
-  open: boolean
-  toggle: () => void
-  companyId: string
-  userId: string
-  isAdmin: boolean
-  unreadCount: number
-  setUnreadCount: (n: number) => void
-  inputRef: React.MutableRefObject<MentionTextareaRef | null>
 }
 
 function formatRelativeTime(dateStr: string) {
@@ -44,55 +35,23 @@ function formatRelativeTime(dateStr: string) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-const NotesContext = createContext<NotesContextValue | null>(null)
-
-export function CompanyNotesLayout({
-  companyId,
-  userId,
-  isAdmin,
-  children,
-}: {
-  companyId: string
-  userId: string
-  isAdmin: boolean
-  children: ReactNode
-}) {
-  const [open, setOpen] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
-  const inputRef = useRef<MentionTextareaRef | null>(null)
-
-  useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 50)
-    }
-  }, [open])
-
-  return (
-    <NotesContext.Provider value={{ open, toggle: () => setOpen(prev => !prev), companyId, userId, isAdmin, unreadCount, setUnreadCount, inputRef }}>
-      {children}
-    </NotesContext.Provider>
-  )
-}
-
 export function ChatButton() {
-  const ctx = useContext(NotesContext)
-  if (!ctx) return null
-  const { open, toggle, unreadCount } = ctx
+  const { notesOpen, toggleNotes, unreadCount } = usePanelContext()
   return (
     <Button
-      variant="ghost"
+      variant="outline"
       size="sm"
-      className={`ml-auto gap-1.5 h-8 py-2 text-muted-foreground hover:text-foreground ${open ? 'bg-accent' : ''}`}
-      onClick={toggle}
+      className={`ml-auto gap-1.5 h-8 py-2 text-muted-foreground hover:text-foreground ${notesOpen ? 'bg-accent' : ''}`}
+      onClick={toggleNotes}
     >
       <span className="relative">
         <MessageSquare className="h-3.5 w-3.5" />
-        {!open && unreadCount > 0 && (
+        {!notesOpen && unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500" />
         )}
       </span>
       Notes
-      {!open && unreadCount > 0 && (
+      {!notesOpen && unreadCount > 0 && (
         <span className="text-[10px] font-medium bg-blue-500 text-white rounded-full px-1 min-w-[16px] text-center">
           {unreadCount}
         </span>
@@ -102,13 +61,14 @@ export function ChatButton() {
 }
 
 export function CompanyNotesPanel() {
-  const ctx = useContext(NotesContext)
-  if (!ctx || !ctx.open) return null
-  return <NotesPanel ctx={ctx} />
+  const ctx = usePanelContext()
+  if (!ctx.notesOpen) return null
+  return <NotesPanel />
 }
 
-function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
-  const { companyId, userId, isAdmin, inputRef, toggle, setUnreadCount } = ctx
+function NotesPanel() {
+  const { companyId, userId, isAdmin, inputRef, closeNotes, setUnreadCount } = usePanelContext()
+  const { fundName } = useAnalystContext()
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(false)
   const [content, setContent] = useState('')
@@ -212,10 +172,11 @@ function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
   }
 
   return (
-    <div className="w-full lg:w-[340px] shrink-0 lg:sticky top-4 max-h-[80vh] lg:max-h-[calc(100vh-6rem)] rounded-lg border bg-card flex flex-col">
+    <div className="w-full lg:w-[340px] shrink-0 lg:sticky top-4">
+    <div className="max-h-[80vh] lg:max-h-[calc(100vh-6rem)] rounded-lg border bg-card flex flex-col">
       <div className="px-4 py-3 flex items-center justify-between">
         <h2 className="text-sm font-medium text-muted-foreground">Notes</h2>
-        <button onClick={toggle}>
+        <button onClick={closeNotes}>
           <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
         </button>
       </div>
@@ -317,6 +278,10 @@ function NotesPanel({ ctx }: { ctx: NotesContextValue }) {
           </Button>
         </div>
       </div>
+    </div>
+    <p className="text-[10px] text-muted-foreground/60 text-center mt-3 px-4">
+      All chat history is saved by {fundName}.
+    </p>
     </div>
   )
 }

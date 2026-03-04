@@ -2,6 +2,7 @@
 
 import { SidebarProvider, useSidebar } from '@/components/sidebar-context'
 import { CurrencyProvider } from '@/components/currency-context'
+import { AnalystProvider } from '@/components/analyst-context'
 import { AppHeader } from '@/components/app-header'
 import { AppSidebar } from '@/components/app-sidebar'
 import { AppFooter } from '@/components/app-footer'
@@ -15,30 +16,34 @@ interface AppShellProps {
   notesBadge?: number
   isAdmin?: boolean
   currency?: string
+  hasAIKey?: boolean
+  defaultAIProvider?: string
   children: React.ReactNode
 }
 
-export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, currency, children }: AppShellProps) {
+export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, currency, hasAIKey, defaultAIProvider, children }: AppShellProps) {
   return (
     <CurrencyProvider currency={currency ?? 'USD'}>
       <SidebarProvider>
-        <AppShellInner
-          fundName={fundName}
-          fundLogo={fundLogo}
-          userEmail={userEmail}
-          reviewBadge={reviewBadge}
-          settingsBadge={settingsBadge}
-          notesBadge={notesBadge}
-          isAdmin={isAdmin}
-        >
-          {children}
-        </AppShellInner>
+        <AnalystProvider hasAIKey={hasAIKey ?? false} defaultAIProvider={defaultAIProvider ?? 'anthropic'} fundName={fundName}>
+          <AppShellInner
+            fundName={fundName}
+            fundLogo={fundLogo}
+            userEmail={userEmail}
+            reviewBadge={reviewBadge}
+            settingsBadge={settingsBadge}
+            notesBadge={notesBadge}
+            isAdmin={isAdmin}
+          >
+            {children}
+          </AppShellInner>
+        </AnalystProvider>
       </SidebarProvider>
     </CurrencyProvider>
   )
 }
 
-function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, children }: AppShellProps) {
+function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, hasAIKey, children }: AppShellProps) {
   const { collapsed } = useSidebar()
 
   return (

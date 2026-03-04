@@ -869,7 +869,7 @@ export type Database = {
           id: string
           company_id: string
           fund_id: string
-          transaction_type: 'investment' | 'proceeds' | 'unrealized_gain_change'
+          transaction_type: 'investment' | 'proceeds' | 'unrealized_gain_change' | 'round_info'
           round_name: string | null
           transaction_date: string | null
           notes: string | null
@@ -897,6 +897,7 @@ export type Database = {
           original_unrealized_value_change: number | null
           original_current_share_price: number | null
           original_latest_postmoney_valuation: number | null
+          portfolio_group: string | null
           created_at: string
           updated_at: string
         }
@@ -904,7 +905,7 @@ export type Database = {
           id?: string
           company_id: string
           fund_id: string
-          transaction_type: 'investment' | 'proceeds' | 'unrealized_gain_change'
+          transaction_type: 'investment' | 'proceeds' | 'unrealized_gain_change' | 'round_info'
           round_name?: string | null
           transaction_date?: string | null
           notes?: string | null
@@ -932,6 +933,7 @@ export type Database = {
           original_unrealized_value_change?: number | null
           original_current_share_price?: number | null
           original_latest_postmoney_valuation?: number | null
+          portfolio_group?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -939,7 +941,7 @@ export type Database = {
           id?: string
           company_id?: string
           fund_id?: string
-          transaction_type?: 'investment' | 'proceeds' | 'unrealized_gain_change'
+          transaction_type?: 'investment' | 'proceeds' | 'unrealized_gain_change' | 'round_info'
           round_name?: string | null
           transaction_date?: string | null
           notes?: string | null
@@ -967,6 +969,7 @@ export type Database = {
           original_unrealized_value_change?: number | null
           original_current_share_price?: number | null
           original_latest_postmoney_valuation?: number | null
+          portfolio_group?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -1145,5 +1148,5 @@ export type IssueType          =
   | 'duplicate_period'
 export type ReviewResolution   = 'accepted' | 'rejected' | 'manually_corrected'
 export type EmailRequestStatus = 'draft' | 'sent' | 'failed'
-export type TransactionType    = 'investment' | 'proceeds' | 'unrealized_gain_change'
+export type TransactionType    = 'investment' | 'proceeds' | 'unrealized_gain_change' | 'round_info'
 export type NotificationLevel  = 'all' | 'mentions' | 'none'

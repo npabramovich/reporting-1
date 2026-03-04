@@ -5,6 +5,7 @@ import { normalizeMailgunPayload, toPostmarkPayload } from '@/lib/pipeline/norma
 import { runPipeline } from '@/lib/pipeline/processEmail'
 import { isAuthorizedSender } from '@/lib/pipeline/isAuthorizedSender'
 import { decrypt } from '@/lib/crypto'
+import { scanFile } from '@/lib/security/scan-file'
 import type { Json } from '@/lib/types/database'
 
 export async function POST(req: NextRequest) {
@@ -142,9 +143,17 @@ async function handleMailgunInbound(req: NextRequest) {
   if (payload.Attachments && payload.Attachments.length > 0) {
     const updatedAttachments = []
     for (const att of payload.Attachments) {
+      const buffer = Buffer.from(att.Content!, 'base64')
+
+      // Scan attachment before uploading
+      const scanResult = scanFile(buffer, att.Name, att.ContentType)
+      if (!scanResult.safe) {
+        console.warn(`[inbound-email/mailgun] Skipping unsafe attachment "${att.Name}": ${scanResult.reason}`)
+        continue
+      }
+
       const storagePath = `${emailId}/${att.Name}`
       try {
-        const buffer = Buffer.from(att.Content!, 'base64')
         await supabase.storage
           .from('email-attachments')
           .upload(storagePath, buffer, { contentType: att.ContentType })

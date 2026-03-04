@@ -7,6 +7,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2, CheckCircle2, AlertCircle, Upload, FileText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
 
 interface ImportResult {
   companiesCreated: number
@@ -300,9 +302,14 @@ export default function ImportPage() {
   const unmatchedCount = docFiles.filter(f => !f.companyId).length
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl">
-      <h1 className="text-2xl font-semibold tracking-tight mb-6">Import</h1>
+    <div className="p-4 md:p-8">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Import</h1>
+        <AnalystToggleButton />
+      </div>
 
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex-1 min-w-0 max-w-3xl w-full">
       {/* Document Upload Section */}
       <div>
         <h2 className="text-xl font-semibold tracking-tight mb-2">Document Upload</h2>
@@ -563,6 +570,9 @@ export default function ImportPage() {
           </div>
         </div>
       </div>
+    </div>
+    <AnalystPanel />
+    </div>
     </div>
   )
 }

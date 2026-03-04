@@ -10,7 +10,7 @@ import { rateLimit } from '@/lib/rate-limit'
 interface ParsedTransaction {
   company_name: string
   company_status?: 'active' | 'exited' | 'written-off'
-  transaction_type: 'investment' | 'proceeds' | 'unrealized_gain_change'
+  transaction_type: 'investment' | 'proceeds' | 'unrealized_gain_change' | 'round_info'
   round_name?: string
   transaction_date?: string
   notes?: string
@@ -38,9 +38,10 @@ interface ParsedTransaction {
   original_unrealized_value_change?: number
   original_current_share_price?: number
   original_latest_postmoney_valuation?: number
+  portfolio_group?: string
 }
 
-const VALID_TYPES = new Set(['investment', 'proceeds', 'unrealized_gain_change'])
+const VALID_TYPES = new Set(['investment', 'proceeds', 'unrealized_gain_change', 'round_info'])
 
 function sanitize(val: string): string {
   return val
@@ -141,18 +142,28 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
       "transaction_date": "2025-12-31",
       "unrealized_value_change": 200000,
       "current_share_price": 14.00
+    },
+    {
+      "company_name": "Company Name",
+      "company_status": "active",
+      "transaction_type": "round_info",
+      "round_name": "Series C",
+      "transaction_date": "2026-01-15",
+      "share_price": 18.00,
+      "postmoney_valuation": 500000000
     }
   ]
 }
 
 Rules:
-- transaction_type must be one of: "investment", "proceeds", "unrealized_gain_change"
+- transaction_type must be one of: "investment", "proceeds", "unrealized_gain_change", "round_info"
 - company_status must be one of: "active", "exited", "written-off". Infer from context: if there are proceeds/exit transactions, use "exited"; if marked as written off or loss, use "written-off"; otherwise default to "active"
 - Dates should be in YYYY-MM-DD format
 - All monetary values should be plain numbers (no currency symbols)
 - For investment rows: include investment_cost, shares_acquired, share_price, and optionally interest_converted, postmoney_valuation
 - For proceeds rows: include proceeds_received, and optionally cost_basis_exited, proceeds_escrow, proceeds_written_off, proceeds_per_share, exit_valuation
 - For unrealized_gain_change rows: include current_share_price, and optionally unrealized_value_change, latest_postmoney_valuation
+- For round_info rows: record a funding round the fund did NOT participate in. Include share_price, and optionally postmoney_valuation. This captures round details for reference and updates the latest share price
 - If amounts are in a different currency than fund currency, include original_currency (ISO 4217 code like "EUR", "GBP") and the original_* versions of relevant monetary fields
 - Use the company name exactly as it appears in the data
 - If the data has column headers like "Cost", "Amount Invested", "Investment Amount" those map to investment_cost
@@ -160,7 +171,18 @@ Rules:
 - "Price/Share", "Share Price" maps to share_price
 - "Proceeds", "Exit Proceeds", "Amount Received" maps to proceeds_received
 - If the data describes valuations or current fair market value, create unrealized_gain_change entries
+- If the data includes a portfolio group, fund name, or vehicle (e.g. "Fund I", "SPV 1"), set portfolio_group to that string value
 - If you can't determine the transaction type, default to "investment"
+
+Schedule of Investments (SOI) handling:
+- SOIs are point-in-time snapshots from fund administrators showing each position's cost basis and current fair value
+- For each position in an SOI, create TWO transactions:
+  1. An "investment" row with investment_cost set to the cost basis (and shares_acquired/share_price if available)
+  2. An "unrealized_gain_change" row with current_share_price set to the fair value per share, or if only total fair value is given, set unrealized_value_change to (fair_value - cost_basis)
+- Common SOI column names: "Cost", "Cost Basis", "Original Cost" → investment_cost; "Fair Value", "FMV", "Market Value", "Carrying Value", "Current Value" → use for unrealized_gain_change; "Unrealized Gain/Loss", "Appreciation/Depreciation" → unrealized_value_change
+- If the SOI has a report date or "as of" date, use that as transaction_date for all rows
+- If a position shows zero cost and zero value, or is marked "written off" / "written down to zero", set company_status to "written-off"
+- If a position shows realized proceeds or is marked as exited/distributed, create a "proceeds" row instead of unrealized_gain_change
 
 Data to parse:
 ${text}`,
@@ -305,6 +327,7 @@ ${text}`,
         original_unrealized_value_change: pt.original_unrealized_value_change ?? null,
         original_current_share_price: pt.original_current_share_price ?? null,
         original_latest_postmoney_valuation: pt.original_latest_postmoney_valuation ?? null,
+        portfolio_group: pt.portfolio_group ?? null,
       })
 
     if (insertError) {
@@ -314,7 +337,7 @@ ${text}`,
 
     if (txnType === 'investment') results.investmentsCreated++
     else if (txnType === 'proceeds') results.proceedsCreated++
-    else results.unrealizedCreated++
+    else if (txnType === 'unrealized_gain_change') results.unrealizedCreated++
   }
 
   logActivity(admin, fundId, user.id, 'import.investments', {

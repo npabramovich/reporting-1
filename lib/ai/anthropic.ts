@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { AIProvider, AIModel, AIResult, CreateMessageParams, ContentBlock } from './types'
+import type { AIProvider, AIModel, AIResult, CreateMessageParams, CreateChatParams, ContentBlock } from './types'
 
 export class AnthropicProvider implements AIProvider {
   private client: Anthropic
@@ -18,6 +18,33 @@ export class AnthropicProvider implements AIProvider {
       max_tokens: params.maxTokens,
       ...(params.system ? { system: params.system } : {}),
       messages: [{ role: 'user', content }],
+    })
+
+    const text = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map(b => b.text)
+      .join('')
+
+    return {
+      text,
+      usage: {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      },
+    }
+  }
+
+  async createChat(params: CreateChatParams): Promise<AIResult> {
+    const messages = params.messages.map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }))
+
+    const response = await this.client.messages.create({
+      model: params.model,
+      max_tokens: params.maxTokens,
+      ...(params.system ? { system: params.system } : {}),
+      messages,
     })
 
     const text = response.content

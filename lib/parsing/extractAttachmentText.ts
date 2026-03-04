@@ -2,6 +2,7 @@ import mammoth from 'mammoth'
 import JSZip from 'jszip'
 import * as XLSX from 'xlsx'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { scanFile } from '@/lib/security/scan-file'
 
 const MAX_CHARS = 50_000
 
@@ -118,6 +119,19 @@ async function extractSingle(attachment: PostmarkAttachment): Promise<Attachment
       extractedText: '',
       skipped: true,
       skipReason: 'No content available (attachment may not have been hydrated)',
+    }
+  }
+
+  // Safety net: scan file before processing
+  const scanBuffer = Buffer.from(base64, 'base64')
+  const scanResult = scanFile(scanBuffer, filename, contentType)
+  if (!scanResult.safe) {
+    return {
+      filename,
+      contentType,
+      extractedText: '',
+      skipped: true,
+      skipReason: scanResult.reason,
     }
   }
 

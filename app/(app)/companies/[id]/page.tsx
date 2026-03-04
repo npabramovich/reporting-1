@@ -15,7 +15,10 @@ import type { Company, Metric } from '@/lib/types/database'
 import { CompanyCharts } from './company-charts'
 import { CompanySummary } from './company-summary'
 import { CompanyEditButton } from './company-edit-button'
-import { CompanyNotesLayout, ChatButton, CompanyNotesPanel } from './company-notes'
+import { CompanyPanelProvider } from './company-panel-context'
+import { ChatButton, CompanyNotesPanel } from './company-notes'
+import { AnalystButton } from './company-analyst'
+import { AnalystPanel } from '@/components/analyst-panel'
 import { CompanyDocuments } from './company-documents'
 import { CompanyInvestments } from './company-investments'
 
@@ -119,7 +122,7 @@ export default async function CompanyDetailPage({
   }
 
   return (
-    <CompanyNotesLayout companyId={company.id} userId={user.id} isAdmin={isAdmin}>
+    <CompanyPanelProvider companyId={company.id} userId={user.id} isAdmin={isAdmin}>
     <div className="p-4 md:p-8">
       {/* Header */}
       <div className="mb-6 max-w-6xl">
@@ -144,6 +147,7 @@ export default async function CompanyDetailPage({
             <Badge key={ind} variant="outline">{ind}</Badge>
           ))}
           <ChatButton />
+          <AnalystButton companyId={company.id} />
         </div>
 
         {(latestMrr || latestCash) && (
@@ -185,7 +189,7 @@ export default async function CompanyDetailPage({
 
           <CompanyDocuments companyId={company.id} />
 
-          <CompanyInvestments companyId={company.id} companyStatus={company.status} />
+          <CompanyInvestments companyId={company.id} companyStatus={company.status} portfolioGroups={company.portfolio_group ?? []} />
 
           {(company.founders || (company.contact_email && company.contact_email.length > 0) || company.overview || company.why_invested || company.current_update) && (
             <div className="mt-6 space-y-3">
@@ -236,8 +240,9 @@ export default async function CompanyDetailPage({
         </div>
 
         <CompanyNotesPanel />
+        <AnalystPanel />
       </div>
     </div>
-    </CompanyNotesLayout>
+    </CompanyPanelProvider>
   )
 }

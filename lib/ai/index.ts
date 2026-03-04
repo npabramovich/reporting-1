@@ -3,7 +3,7 @@ import { OpenAIProvider } from './openai'
 import { getClaudeApiKey, getClaudeModel, getOpenAIApiKey, getOpenAIModel, getDefaultAIProvider } from '@/lib/pipeline/processEmail'
 import type { AIProvider } from './types'
 
-export type { AIProvider, AIModel, AIResult, TokenUsage, CreateMessageParams, ContentBlock, TextBlock, DocumentBlock, ImageBlock, MessageContent } from './types'
+export type { AIProvider, AIModel, AIResult, TokenUsage, CreateMessageParams, CreateChatParams, ChatMessage, ContentBlock, TextBlock, DocumentBlock, ImageBlock, MessageContent } from './types'
 
 type Supabase = Parameters<typeof getClaudeApiKey>[0]
 

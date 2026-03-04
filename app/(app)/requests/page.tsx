@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AlertCircle, Check, Loader2, Send } from 'lucide-react'
 import { ResponseTracker } from './response-tracker'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
 
 interface Company {
   id: string
@@ -226,13 +228,21 @@ export default function RequestsPage() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-8 max-w-3xl">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
-          <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
+      <div className="p-4 md:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
+            <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
+          </div>
+          <AnalystToggleButton />
         </div>
-        <div className="animate-pulse space-y-4">
-          {[1, 2, 3].map((i) => <div key={i} className="h-24 bg-muted rounded-lg" />)}
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex-1 min-w-0 max-w-3xl w-full">
+          <div className="animate-pulse space-y-4">
+            {[1, 2, 3].map((i) => <div key={i} className="h-24 bg-muted rounded-lg" />)}
+          </div>
+        </div>
+        <AnalystPanel />
         </div>
       </div>
     )
@@ -240,23 +250,29 @@ export default function RequestsPage() {
 
   if (!settings?.isAdmin) {
     return (
-      <div className="p-4 md:p-8 max-w-3xl space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
-          <p className="text-sm text-muted-foreground mt-1">Quarterly reporting email program</p>
+      <div className="p-4 md:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
+            <p className="text-sm text-muted-foreground mt-1">Quarterly reporting email program</p>
+          </div>
+          <AnalystToggleButton />
         </div>
-
-        {trackerQuarters.length > 0 && (
-          <ResponseTracker quarters={trackerQuarters} data={trackerData} />
-        )}
-
-        <div className="rounded-lg border border-dashed p-12 text-center space-y-2">
-          <p className="text-muted-foreground">
-            Administrators can configure and send quarterly reporting request emails to portfolio companies from this page.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Contact your fund admin to set up or manage the email program.
-          </p>
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex-1 min-w-0 max-w-3xl w-full space-y-6">
+          {trackerQuarters.length > 0 && (
+            <ResponseTracker quarters={trackerQuarters} data={trackerData} />
+          )}
+          <div className="rounded-lg border border-dashed p-12 text-center space-y-2">
+            <p className="text-muted-foreground">
+              Administrators can configure and send quarterly reporting request emails to portfolio companies from this page.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Contact your fund admin to set up or manage the email program.
+            </p>
+          </div>
+        </div>
+        <AnalystPanel />
         </div>
       </div>
     )
@@ -265,12 +281,17 @@ export default function RequestsPage() {
   const hasEmailProvider = !!settings?.asksEmailProvider
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
-        <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
+    <div className="p-4 md:p-8">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
+          <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
+        </div>
+        <AnalystToggleButton />
       </div>
 
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex-1 min-w-0 max-w-3xl w-full space-y-6">
       {trackerQuarters.length > 0 && (
         <ResponseTracker quarters={trackerQuarters} data={trackerData} />
       )}
@@ -488,6 +509,9 @@ export default function RequestsPage() {
           </div>
         </div>
       )}
+    </div>
+    <AnalystPanel />
+    </div>
     </div>
   )
 }

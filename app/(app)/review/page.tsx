@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Check, X, Pencil, Loader2, Mail } from 'lucide-react'
 import { EmailReviewModal } from '@/components/email-review-modal'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
 
 interface ReviewItem {
   id: string
@@ -112,14 +114,19 @@ export default function ReviewPage() {
   const items = data?.items ?? []
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Review</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Items that need your attention — metrics AI wasn&apos;t sure about, unidentified companies, and more.
-        </p>
+    <div className="p-4 md:p-8">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Review</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Items that need your attention — metrics AI wasn&apos;t sure about, unidentified companies, and more.
+          </p>
+        </div>
+        <AnalystToggleButton />
       </div>
 
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex-1 min-w-0 max-w-4xl w-full">
       {loading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -308,6 +315,9 @@ export default function ReviewPage() {
           }
         }}
       />
+    </div>
+    <AnalystPanel />
+    </div>
     </div>
   )
 }
