@@ -89,6 +89,7 @@ export async function GET() {
     currency: settings?.currency ?? 'USD',
     displayName: membership.display_name ?? '',
     isAdmin: membership.role === 'admin',
+    userId: user.id,
   })
 }
 

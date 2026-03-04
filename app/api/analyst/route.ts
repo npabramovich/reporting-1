@@ -67,10 +67,12 @@ export async function POST(req: NextRequest) {
     if (ctx.documentsBlock) systemPrompt += `\n\n=== DOCUMENTS ===\n${ctx.documentsBlock}`
     if (ctx.investmentBlock) systemPrompt += `\n\n=== INVESTMENT DATA ===\n${ctx.investmentBlock}`
     if (ctx.portfolioBlock) systemPrompt += `\n\n=== PORTFOLIO PEERS (for comparison) ===\n${ctx.portfolioBlock}`
+    if (ctx.teamNotesBlock) systemPrompt += `\n\n=== TEAM DISCUSSION NOTES ===\nRecent internal team notes and discussions about this company:\n${ctx.teamNotesBlock}`
   } else {
     const ctx = await buildPortfolioContext(admin, membership.fund_id)
     systemPrompt = ctx.systemPrompt
     if (ctx.portfolioBlock) systemPrompt += `\n\n=== PORTFOLIO DATA ===\n${ctx.portfolioBlock}`
+    if (ctx.teamNotesBlock) systemPrompt += `\n\n=== TEAM DISCUSSION NOTES ===\nRecent internal team notes and discussions across the portfolio:\n${ctx.teamNotesBlock}`
   }
 
   // Memory injection: fetch recent conversation summaries from same scope

@@ -10,6 +10,7 @@ type Admin = ReturnType<typeof createAdminClient>
 export interface PortfolioContext {
   systemPrompt: string
   portfolioBlock: string
+  teamNotesBlock: string
 }
 
 export async function buildPortfolioContext(
@@ -67,9 +68,47 @@ export async function buildPortfolioContext(
     }
   }
 
+  // Fetch recent team notes (general/portfolio-wide + company-tagged)
+  const { data: portfolioNotes } = await admin
+    .from('company_notes')
+    .select('content, user_id, company_id, created_at')
+    .eq('fund_id', fundId)
+    .order('created_at', { ascending: false })
+    .limit(30) as { data: { content: string; user_id: string; company_id: string | null; created_at: string }[] | null }
+
+  let teamNotesBlock = ''
+  if (portfolioNotes && portfolioNotes.length > 0) {
+    const noteAuthorIds = Array.from(new Set(portfolioNotes.map(n => n.user_id)))
+    const authorNameMap: Record<string, string> = {}
+    if (noteAuthorIds.length > 0) {
+      const { data: noteMembers } = await admin
+        .from('fund_members')
+        .select('user_id, display_name')
+        .in('user_id', noteAuthorIds) as { data: { user_id: string; display_name: string | null }[] | null }
+      for (const m of noteMembers ?? []) {
+        if (m.display_name) authorNameMap[m.user_id] = m.display_name
+      }
+    }
+
+    const companyNameMap: Record<string, string> = {}
+    if (allCompanies) {
+      for (const c of allCompanies) companyNameMap[c.id] = c.name
+    }
+
+    const lines = portfolioNotes
+      .reverse()
+      .map(n => {
+        const author = authorNameMap[n.user_id] ?? 'Team member'
+        const date = new Date(n.created_at).toLocaleDateString()
+        const companyTag = n.company_id && companyNameMap[n.company_id] ? ` [${companyNameMap[n.company_id]}]` : ''
+        return `[${author}, ${date}${companyTag}] ${n.content.slice(0, 500)}`
+      })
+    teamNotesBlock = lines.join('\n')
+  }
+
   const systemPrompt = `You are a senior venture capital analyst at a growth-stage fund. You have access to portfolio-wide data. Answer questions about the overall portfolio, compare companies, and surface insights for the investment committee. Keep responses concise and analytical. Use plain text (no markdown formatting).`
 
-  return { systemPrompt, portfolioBlock }
+  return { systemPrompt, portfolioBlock, teamNotesBlock }
 }
 
 export interface CompanyContext {
@@ -92,6 +131,7 @@ export interface CompanyContext {
   documentsBlock: string
   investmentBlock: string
   portfolioBlock: string
+  teamNotesBlock: string
 }
 
 export async function buildCompanyContext(
@@ -166,6 +206,27 @@ export async function buildCompanyContext(
     .from('investment_transactions')
     .select('company_id, transaction_type, investment_cost, proceeds_received, proceeds_escrow, current_share_price, shares_acquired, unrealized_value_change')
     .eq('fund_id', company.fund_id)
+
+  // --- Team discussion notes ---
+  const { data: teamNotes } = await admin
+    .from('company_notes')
+    .select('content, user_id, created_at')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false })
+    .limit(20) as { data: { content: string; user_id: string; created_at: string }[] | null }
+
+  // Batch-load display names for note authors
+  const noteAuthorIds = Array.from(new Set((teamNotes ?? []).map(n => n.user_id)))
+  const authorNameMap: Record<string, string> = {}
+  if (noteAuthorIds.length > 0) {
+    const { data: noteMembers } = await admin
+      .from('fund_members')
+      .select('user_id, display_name')
+      .in('user_id', noteAuthorIds) as { data: { user_id: string; display_name: string | null }[] | null }
+    for (const m of noteMembers ?? []) {
+      if (m.display_name) authorNameMap[m.user_id] = m.display_name
+    }
+  }
 
   // -----------------------------------------------------------------------
   // Build text blocks
@@ -325,6 +386,19 @@ export async function buildCompanyContext(
     }
   }
 
+  // 7. Team discussion notes
+  let teamNotesBlock = ''
+  if (teamNotes && teamNotes.length > 0) {
+    const lines = teamNotes
+      .reverse()
+      .map(n => {
+        const author = authorNameMap[n.user_id] ?? 'Team member'
+        const date = new Date(n.created_at).toLocaleDateString()
+        return `[${author}, ${date}] ${n.content.slice(0, 500)}`
+      })
+    teamNotesBlock = lines.join('\n')
+  }
+
   // System prompt
   const systemPrompt = `You are a senior venture capital analyst at a growth-stage fund preparing an internal portfolio review memo for the investment committee. You think in terms of unit economics, growth efficiency, cash runway, and milestone progress. Your job is to surface what matters for the next board conversation and flag anything that warrants immediate attention.
 
@@ -346,5 +420,6 @@ ${company.current_update ? `Current Business Update: ${company.current_update}` 
     documentsBlock,
     investmentBlock,
     portfolioBlock,
+    teamNotesBlock,
   }
 }

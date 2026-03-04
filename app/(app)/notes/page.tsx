@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { NoteContent } from '@/components/note-content'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
+import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
 
 interface Note {
   id: string
@@ -69,6 +70,7 @@ export default function NotesPage() {
   }, [filter, markAsRead])
 
   return (
+    <PortfolioNotesProvider>
     <div className="p-4 md:py-8 md:pl-8 md:pr-4">
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -93,6 +95,7 @@ export default function NotesPage() {
             </button>
           ))}
           </div>
+          <PortfolioNotesButton />
           <AnalystToggleButton />
         </div>
       </div>
@@ -141,8 +144,10 @@ export default function NotesPage() {
         ))}
       </div>
     </div>
+    <PortfolioNotesPanel />
     <AnalystPanel />
     </div>
     </div>
+    </PortfolioNotesProvider>
   )
 }

@@ -8,6 +8,7 @@ import { AlertCircle, Check, Loader2, Send } from 'lucide-react'
 import { ResponseTracker } from './response-tracker'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
+import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
 
 interface Company {
   id: string
@@ -228,13 +229,17 @@ export default function RequestsPage() {
 
   if (loading) {
     return (
+      <PortfolioNotesProvider>
       <div className="p-4 md:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
             <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
           </div>
-          <AnalystToggleButton />
+          <div className="flex items-center gap-2">
+            <PortfolioNotesButton />
+            <AnalystToggleButton />
+          </div>
         </div>
         <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 max-w-3xl w-full">
@@ -242,21 +247,27 @@ export default function RequestsPage() {
             {[1, 2, 3].map((i) => <div key={i} className="h-24 bg-muted rounded-lg" />)}
           </div>
         </div>
+        <PortfolioNotesPanel />
         <AnalystPanel />
         </div>
       </div>
+      </PortfolioNotesProvider>
     )
   }
 
   if (!settings?.isAdmin) {
     return (
+      <PortfolioNotesProvider>
       <div className="p-4 md:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
             <p className="text-sm text-muted-foreground mt-1">Quarterly reporting email program</p>
           </div>
-          <AnalystToggleButton />
+          <div className="flex items-center gap-2">
+            <PortfolioNotesButton />
+            <AnalystToggleButton />
+          </div>
         </div>
         <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 max-w-3xl w-full space-y-6">
@@ -272,22 +283,28 @@ export default function RequestsPage() {
             </p>
           </div>
         </div>
+        <PortfolioNotesPanel />
         <AnalystPanel />
         </div>
       </div>
+      </PortfolioNotesProvider>
     )
   }
 
   const hasEmailProvider = !!settings?.asksEmailProvider
 
   return (
+    <PortfolioNotesProvider>
     <div className="p-4 md:p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
           <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
         </div>
-        <AnalystToggleButton />
+        <div className="flex items-center gap-2">
+          <PortfolioNotesButton />
+          <AnalystToggleButton />
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -510,8 +527,10 @@ export default function RequestsPage() {
         </div>
       )}
     </div>
+    <PortfolioNotesPanel />
     <AnalystPanel />
     </div>
     </div>
+    </PortfolioNotesProvider>
   )
 }

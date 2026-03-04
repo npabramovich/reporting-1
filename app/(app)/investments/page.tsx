@@ -8,6 +8,7 @@ import { useCurrency, formatCurrency, formatCurrencyFull } from '@/components/cu
 import type { CompanyStatus } from '@/lib/types/database'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
+import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
 
 interface CompanySummary {
   companyId: string
@@ -160,12 +161,13 @@ export default function InvestmentsPage() {
         onChange={e => setAsOfDate(e.target.value)}
         className="border rounded px-2 py-1 text-sm"
       />
-      <span className="ml-auto"><AnalystToggleButton /></span>
+      <span className="ml-auto flex items-center gap-2"><PortfolioNotesButton /><AnalystToggleButton /></span>
     </div>
   )
 
   if (loading) {
     return (
+      <PortfolioNotesProvider>
       <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
         {heading}
         <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -175,14 +177,17 @@ export default function InvestmentsPage() {
             Loading...
           </div>
         </div>
+        <PortfolioNotesPanel />
         <AnalystPanel />
         </div>
       </div>
+      </PortfolioNotesProvider>
     )
   }
 
   if (!data || data.companies.length === 0) {
     return (
+      <PortfolioNotesProvider>
       <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
         {heading}
         <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -191,13 +196,16 @@ export default function InvestmentsPage() {
             No investment data yet. Add transactions from individual company pages or use the Import page.
           </p>
         </div>
+        <PortfolioNotesPanel />
         <AnalystPanel />
         </div>
       </div>
+      </PortfolioNotesProvider>
     )
   }
 
   return (
+    <PortfolioNotesProvider>
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
       {heading}
 
@@ -353,8 +361,10 @@ export default function InvestmentsPage() {
         </table>
       </div>
     </div>
+    <PortfolioNotesPanel />
     <AnalystPanel />
     </div>
     </div>
+    </PortfolioNotesProvider>
   )
 }

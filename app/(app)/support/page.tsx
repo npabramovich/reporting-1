@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose, Sparkles, Shield } from 'lucide-react'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 
@@ -21,6 +21,8 @@ export default function SupportPage() {
       <li><a href="#asks" className="hover:text-foreground underline underline-offset-4">Asks</a></li>
       <li><a href="#settings" className="hover:text-foreground underline underline-offset-4">Settings</a></li>
       <li><a href="#notes" className="hover:text-foreground underline underline-offset-4">Notes</a></li>
+      <li><a href="#analyst" className="hover:text-foreground underline underline-offset-4">AI Analyst</a></li>
+      <li><a href="#file-handling" className="hover:text-foreground underline underline-offset-4">File Handling &amp; Security</a></li>
       <li><a href="#sidebar" className="hover:text-foreground underline underline-offset-4">Theme &amp; Sidebar</a></li>
     </ul>
   )
@@ -574,6 +576,112 @@ export default function SupportPage() {
             All notes show the author&apos;s display name and timestamp. Team members can edit or
             delete their own notes. Notes are visible to everyone on the team, so they work well as a
             lightweight internal communication tool alongside your existing workflows.
+          </p>
+        </div>
+
+        <div id="analyst">
+          <h2 className="text-base font-medium mb-2 flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-muted-foreground" />
+            AI Analyst
+          </h2>
+          <p className="text-muted-foreground mb-2">
+            The AI Analyst is an interactive chat interface available on every page. It acts as a senior
+            venture capital analyst with full access to your portfolio data, answering questions, surfacing
+            insights, and helping you prepare for board meetings and investment committee discussions.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            On a <strong>company page</strong>, the Analyst has access to that company&apos;s reported metrics,
+            email content, uploaded documents, previous AI summaries, investment transaction history, portfolio
+            peer comparisons, and your team&apos;s internal discussion notes. You can ask it to analyze
+            performance trends, compare the company to peers, identify risks, draft or refine summaries,
+            interpret financial data from reports, or answer any question about the company&apos;s data.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            On <strong>portfolio-wide pages</strong> (Portfolio, Investments, Asks, Notes), the Analyst has
+            access to fund-level data across all companies &mdash; investment amounts, FMV, MOIC, and your
+            team&apos;s discussion notes. Use it to compare companies, get portfolio-level insights, or ask
+            about cross-portfolio trends and themes.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            <strong>Conversations are persistent.</strong> Your chat history is saved to your account and
+            stored in the database. You can close the panel, navigate to other pages, or close the browser
+            entirely &mdash; when you return, click the clock icon to open your conversation history and
+            resume any previous thread. Conversations are scoped by context: company-specific chats stay
+            with that company, and portfolio-wide chats have their own history.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            <strong>Conversation memory</strong> gives the Analyst continuity across sessions. When you
+            start a new conversation, the system automatically summarizes your recent past conversations
+            in the same context and injects those summaries into the AI&apos;s prompt. This means the
+            Analyst remembers what you&apos;ve discussed before &mdash; key questions, conclusions, and
+            concerns &mdash; without you needing to repeat context.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            <strong>Team notes as context:</strong> The Analyst incorporates your team&apos;s internal
+            discussion notes into its analysis. Notes posted on a company page are included when chatting
+            about that company, and portfolio-wide notes are included in fund-level conversations. This
+            means the AI is aware of your team&apos;s observations, follow-up items, and qualitative
+            context alongside the quantitative data.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            Use the header controls to manage conversations: the <strong>clock icon</strong> opens your
+            conversation history, the <strong>plus icon</strong> starts a new conversation, and you can
+            delete old conversations from the history list. If your fund has both Anthropic and OpenAI
+            configured, a model selector lets you choose which AI to use.
+          </p>
+          <p className="text-muted-foreground">
+            The Analyst can also save its responses directly as company summaries using the &ldquo;Save
+            as Summary&rdquo; button that appears below each response on company pages. This lets you
+            use the chat to iteratively refine a summary and then commit it to the company&apos;s record
+            with one click.
+          </p>
+        </div>
+
+        <div id="file-handling">
+          <h2 className="text-base font-medium mb-2 flex items-center gap-2">
+            <Shield className="h-4 w-4 text-muted-foreground" />
+            File Handling &amp; Security
+          </h2>
+          <p className="text-muted-foreground mb-2">
+            The platform accepts a wide range of file types for processing: PDFs, Excel spreadsheets
+            (.xlsx, .xls), Word documents (.docx), PowerPoint presentations (.pptx), CSV files, and
+            images (PNG, JPEG, GIF, WebP). Files can be uploaded through the Import page, attached to
+            inbound emails, or uploaded directly to a company&apos;s documents section.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            <strong>File size limits:</strong> Individual file uploads are limited to 10 MB. This applies
+            to both manual uploads and email attachments. For larger files (such as high-resolution board
+            decks or extensive spreadsheets), consider splitting them into smaller parts, compressing images,
+            or exporting to a more compact format before uploading. The AI processing pipeline works best
+            with focused, well-structured documents rather than very large omnibus files.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            <strong>Text extraction:</strong> The system extracts text content from uploaded files to make
+            them available to the AI for analysis and metric extraction. PDFs and Office documents have
+            their text extracted server-side. Images are processed using the AI&apos;s vision capabilities
+            to read charts, tables, and text directly from screenshots or photos of reports.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            <strong>Virus and safety screening:</strong> The platform does not currently include built-in
+            antivirus or malware scanning of uploaded files. Files are stored in your configured storage
+            provider (Supabase Storage, Google Drive, or Dropbox), which may provide their own scanning
+            capabilities depending on your plan and configuration. If your organization requires virus
+            scanning, we recommend configuring it at the storage provider level or scanning files before
+            uploading them to the platform.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            <strong>File storage:</strong> When file storage is configured (Google Drive or Dropbox),
+            email attachments and uploaded documents are automatically organized into company-specific
+            folders. This provides a backup of all source materials alongside the extracted data. Files
+            stored in Supabase Storage are accessible through the platform&apos;s UI; files in Google
+            Drive or Dropbox can also be accessed directly through those services.
+          </p>
+          <p className="text-muted-foreground">
+            <strong>Data privacy:</strong> Uploaded files and their extracted content are only accessible
+            to members of your fund. Row-level security policies ensure that users can only see data
+            belonging to their fund. File content sent to AI providers (Anthropic or OpenAI) for processing
+            is subject to those providers&apos; data handling policies &mdash; refer to their documentation
+            for details on data retention and usage.
           </p>
         </div>
 
