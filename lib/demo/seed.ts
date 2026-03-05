@@ -336,6 +336,183 @@ const DOCUMENTS = [
   { companyName: 'Verdant', filename: 'Verdant_IP_Overview.pdf', file_type: 'application/pdf', file_size: 650000 },
 ]
 
+type InvestmentDef = {
+  companyName: string
+  transaction_type: 'investment' | 'proceeds' | 'unrealized_gain_change'
+  round_name?: string
+  transaction_date: string
+  notes?: string
+  investment_cost?: number
+  shares_acquired?: number
+  share_price?: number
+  unrealized_value_change?: number
+  current_share_price?: number
+  cost_basis_exited?: number
+  proceeds_received?: number
+}
+
+const INVESTMENTS: InvestmentDef[] = [
+  // NovaTech — Seed + Series A
+  { companyName: 'NovaTech', transaction_type: 'investment', round_name: 'Seed', transaction_date: '2023-06-15', investment_cost: 500000, shares_acquired: 500000, share_price: 1.00, notes: 'Led seed round' },
+  { companyName: 'NovaTech', transaction_type: 'investment', round_name: 'Series A', transaction_date: '2024-09-01', investment_cost: 1500000, shares_acquired: 750000, share_price: 2.00, notes: 'Pro-rata follow-on' },
+  { companyName: 'NovaTech', transaction_type: 'unrealized_gain_change', transaction_date: '2025-12-31', unrealized_value_change: 2500000, current_share_price: 3.60, notes: 'Q4 2025 mark based on Series A+ term sheet' },
+
+  // GreenLeaf Bio — Seed
+  { companyName: 'GreenLeaf Bio', transaction_type: 'investment', round_name: 'Seed', transaction_date: '2024-01-10', investment_cost: 750000, shares_acquired: 750000, share_price: 1.00, notes: 'Co-led seed with BioFund Partners' },
+  { companyName: 'GreenLeaf Bio', transaction_type: 'unrealized_gain_change', transaction_date: '2025-12-31', unrealized_value_change: 250000, current_share_price: 1.33, notes: 'Modest mark-up based on grant milestones' },
+
+  // RouteWise — Seed + Series A + Series B
+  { companyName: 'RouteWise', transaction_type: 'investment', round_name: 'Seed', transaction_date: '2022-03-20', investment_cost: 400000, shares_acquired: 400000, share_price: 1.00 },
+  { companyName: 'RouteWise', transaction_type: 'investment', round_name: 'Series A', transaction_date: '2023-07-15', investment_cost: 1000000, shares_acquired: 333333, share_price: 3.00, notes: 'Full pro-rata' },
+  { companyName: 'RouteWise', transaction_type: 'investment', round_name: 'Series B', transaction_date: '2024-11-01', investment_cost: 2000000, shares_acquired: 285714, share_price: 7.00, notes: 'Led Series B' },
+  { companyName: 'RouteWise', transaction_type: 'unrealized_gain_change', transaction_date: '2025-12-31', unrealized_value_change: 6800000, current_share_price: 12.50, notes: 'Q4 2025 409A valuation' },
+
+  // AdVantage — Series A
+  { companyName: 'AdVantage', transaction_type: 'investment', round_name: 'Series A', transaction_date: '2024-06-01', investment_cost: 2000000, shares_acquired: 800000, share_price: 2.50, notes: 'Co-invested with Growth Capital' },
+  { companyName: 'AdVantage', transaction_type: 'unrealized_gain_change', transaction_date: '2025-12-31', unrealized_value_change: 1200000, current_share_price: 4.00, notes: 'Based on latest revenue multiple' },
+
+  // Verdant — Seed
+  { companyName: 'Verdant', transaction_type: 'investment', round_name: 'Seed', transaction_date: '2024-04-15', investment_cost: 600000, shares_acquired: 600000, share_price: 1.00, notes: 'Led seed round' },
+
+  // TapFin — Seed + Series A
+  { companyName: 'TapFin', transaction_type: 'investment', round_name: 'Seed', transaction_date: '2023-09-01', investment_cost: 350000, shares_acquired: 350000, share_price: 1.00 },
+  { companyName: 'TapFin', transaction_type: 'investment', round_name: 'Series A', transaction_date: '2024-12-01', investment_cost: 1500000, shares_acquired: 500000, share_price: 3.00, notes: 'Co-led with Fintech Africa' },
+  { companyName: 'TapFin', transaction_type: 'unrealized_gain_change', transaction_date: '2025-12-31', unrealized_value_change: 2100000, current_share_price: 5.65, notes: 'Mark based on GMV growth trajectory' },
+
+  // Benchline — Seed + Series A + Series B
+  { companyName: 'Benchline', transaction_type: 'investment', round_name: 'Seed', transaction_date: '2022-01-15', investment_cost: 300000, shares_acquired: 300000, share_price: 1.00 },
+  { companyName: 'Benchline', transaction_type: 'investment', round_name: 'Series A', transaction_date: '2023-04-01', investment_cost: 1200000, shares_acquired: 300000, share_price: 4.00, notes: 'Full pro-rata' },
+  { companyName: 'Benchline', transaction_type: 'investment', round_name: 'Series B', transaction_date: '2024-08-01', investment_cost: 2500000, shares_acquired: 250000, share_price: 10.00, notes: 'Led Series B at $85M pre' },
+  { companyName: 'Benchline', transaction_type: 'unrealized_gain_change', transaction_date: '2025-12-31', unrealized_value_change: 9500000, current_share_price: 18.82, notes: 'Q4 2025 mark based on $10M ARR milestone' },
+
+  // Lattis — Pre-Seed
+  { companyName: 'Lattis', transaction_type: 'investment', round_name: 'Pre-Seed', transaction_date: '2024-08-15', investment_cost: 250000, shares_acquired: 250000, share_price: 1.00, notes: 'Angel round' },
+]
+
+type InteractionDef = {
+  companyName: string | null
+  type: 'email' | 'intro'
+  subject: string
+  summary: string
+  body_preview: string
+  intro_contacts?: Array<{ name: string; email: string; context: string }>
+  days_ago: number
+}
+
+const INTERACTIONS: InteractionDef[] = [
+  {
+    companyName: 'NovaTech',
+    type: 'email',
+    subject: 'Re: Q4 board prep',
+    summary: 'Sarah shared draft board deck and asked for feedback on the ARR bridge slide. Discussed hiring plan for Q1 and whether to bring on a VP Sales now or wait until Series A+ closes.',
+    body_preview: 'Hi Taylor, attaching the draft board deck for Q4. Would love your feedback on the ARR bridge — we debated internally whether to show net new vs. expansion separately...',
+    days_ago: 15,
+  },
+  {
+    companyName: 'NovaTech',
+    type: 'intro',
+    subject: 'Intro: Sarah Chen <> David Park (VP Sales, Datadog)',
+    summary: 'Introduction between Sarah Chen (NovaTech CEO) and David Park (VP Sales at Datadog) to discuss enterprise sales motion and playbook for scaling from $3M to $10M ARR.',
+    body_preview: 'Sarah, David — connecting you two as discussed. David has scaled Datadog\'s mid-market sales team from 5 to 50 reps and has great perspective on the $3-10M ARR journey...',
+    intro_contacts: [
+      { name: 'David Park', email: 'david.park@datadog.com', context: 'VP Sales at Datadog, experienced in scaling mid-market sales teams' },
+    ],
+    days_ago: 22,
+  },
+  {
+    companyName: 'RouteWise',
+    type: 'email',
+    subject: 'Series C timing discussion',
+    summary: 'James wants to start Series C conversations in Q3 2026. Discussed target raise ($30-40M), potential leads (a]6z, Coatue), and whether to hire a CFO before the process.',
+    body_preview: 'Taylor, wanted to get your thoughts on timing for the C. We are tracking toward $8M ARR by mid-year and think that puts us in a strong position...',
+    days_ago: 8,
+  },
+  {
+    companyName: 'RouteWise',
+    type: 'intro',
+    subject: 'Intro: James Okafor <> Maria Santos (COO, Flexport)',
+    summary: 'Introduction between James Okafor (RouteWise CEO) and Maria Santos (COO at Flexport) to explore potential partnership for last-mile delivery optimization.',
+    body_preview: 'James, Maria — making this intro as promised. Maria\'s team at Flexport is looking at last-mile optimization partners and I think there could be a strong fit...',
+    intro_contacts: [
+      { name: 'Maria Santos', email: 'maria.santos@flexport.com', context: 'COO at Flexport, exploring last-mile delivery partnerships' },
+    ],
+    days_ago: 35,
+  },
+  {
+    companyName: 'Benchline',
+    type: 'email',
+    subject: 'Re: Customer expansion update',
+    summary: 'Emily shared that three large enterprise prospects are in late-stage trials. Discussed pricing strategy for annual contracts above $200K and whether to offer multi-year discounts.',
+    body_preview: 'Quick update — we have Stripe, Notion, and Figma all in week 3 of their trials. Usage metrics look strong across all three. Wanted to discuss pricing...',
+    days_ago: 11,
+  },
+  {
+    companyName: 'TapFin',
+    type: 'email',
+    subject: 'FX hedging strategy',
+    summary: 'Kemi flagged Naira volatility impacting USD-reported metrics. Discussed hedging options and whether to open a USD treasury account for operational reserves.',
+    body_preview: 'Taylor, the Naira moved 8% against USD this month which is creating noise in our reported numbers. We want to discuss opening a USD account...',
+    days_ago: 18,
+  },
+  {
+    companyName: 'TapFin',
+    type: 'intro',
+    subject: 'Intro: Kemi Adeyemi <> Rachel Kim (Stripe Atlas)',
+    summary: 'Connected Kemi with Rachel Kim from Stripe Atlas to discuss cross-border payment infrastructure and potential integration for TapFin\'s merchant onboarding flow.',
+    body_preview: 'Kemi, Rachel — making this intro. Rachel runs partnerships at Stripe Atlas and I think there is a natural fit with TapFin\'s merchant onboarding...',
+    intro_contacts: [
+      { name: 'Rachel Kim', email: 'rachel@stripe.com', context: 'Head of Partnerships at Stripe Atlas, focused on emerging market payment infrastructure' },
+    ],
+    days_ago: 40,
+  },
+  {
+    companyName: 'Verdant',
+    type: 'email',
+    subject: 'Grant application update',
+    summary: 'Anna confirmed DOE grant application submitted. $500K grant decision expected Q2. Also discussed adding a sales hire to target CSRD-affected European companies.',
+    body_preview: 'Hi Taylor, good news — we submitted the DOE SBIR Phase II application on Friday. The review committee decisions should come out by end of Q2...',
+    days_ago: 25,
+  },
+  {
+    companyName: 'Lattis',
+    type: 'intro',
+    subject: 'Intro: Elena Vasquez <> Chris Nguyen (CTO, Scale AI)',
+    summary: 'Introduction between Elena Vasquez (Lattis founder) and Chris Nguyen (CTO at Scale AI) to discuss potential design partnership on multimodal embeddings for enterprise RAG use cases.',
+    body_preview: 'Elena, Chris — connecting you two. Chris\'s team at Scale is working on multimodal data pipelines and I think Lattis\'s embedding framework could be a great fit...',
+    intro_contacts: [
+      { name: 'Chris Nguyen', email: 'chris.nguyen@scale.ai', context: 'CTO at Scale AI, working on multimodal data pipelines for enterprise AI' },
+    ],
+    days_ago: 30,
+  },
+  {
+    companyName: null,
+    type: 'email',
+    subject: 'LP meeting follow-up — portfolio allocation discussion',
+    summary: 'Follow-up from LP advisory meeting covering Fund II deployment pace, reserve strategy, and initial Fund III timeline. LPs want to see more detail on Fund I realized returns at next meeting.',
+    body_preview: 'Thanks for the productive discussion yesterday. Summarizing key takeaways: Fund II is 65% deployed with strong early signals...',
+    days_ago: 45,
+  },
+  {
+    companyName: 'GreenLeaf Bio',
+    type: 'email',
+    subject: 'FDA pre-submission feedback',
+    summary: 'Priya shared positive feedback from FDA pre-submission meeting. Regulatory pathway looks clearer than expected. Team targeting Q2 2026 for clearance filing.',
+    body_preview: 'Great news from the FDA meeting. The reviewer was positive about our data package and confirmed that 510(k) is the right pathway...',
+    days_ago: 20,
+  },
+  {
+    companyName: 'AdVantage',
+    type: 'intro',
+    subject: 'Intro: Jamie Lin <> Sam Patel (Head of Growth, HubSpot)',
+    summary: 'Connected Jamie with Sam Patel at HubSpot to discuss potential integration partnership and co-marketing for ad creative optimization in the SMB segment.',
+    body_preview: 'Jamie, Sam — connecting you two as discussed at dinner last week. Sam\'s team is looking for creative optimization partners for HubSpot\'s ad tools...',
+    intro_contacts: [
+      { name: 'Sam Patel', email: 'sam.patel@hubspot.com', context: 'Head of Growth at HubSpot, exploring ad tech integration partners' },
+    ],
+    days_ago: 28,
+  },
+]
+
 const EMAIL_REQUEST = {
   subject: 'Q4 2025 Portfolio Update Request',
   body_html: '<p>Hi team,</p><p>Please send your Q4 2025 metrics update at your earliest convenience. We are preparing our annual LP report and need current numbers for all portfolio companies.</p><p>Best,<br>Hemrock Demo Fund</p>',
@@ -607,6 +784,50 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
     sent_at: new Date(Date.now() - 30 * 86400000).toISOString(),
     send_results: { sent: recipients.length, failed: 0, details: [] },
   })
+
+  // -------------------------------------------------------------------------
+  // Investment Transactions
+  // -------------------------------------------------------------------------
+  for (const inv of INVESTMENTS) {
+    const companyId = companyIdMap[inv.companyName]
+    if (!companyId) continue
+
+    await admin.from('investment_transactions').insert({
+      company_id: companyId,
+      fund_id: fundId,
+      transaction_type: inv.transaction_type,
+      round_name: inv.round_name ?? null,
+      transaction_date: inv.transaction_date,
+      notes: inv.notes ?? null,
+      investment_cost: inv.investment_cost ?? null,
+      shares_acquired: inv.shares_acquired ?? null,
+      share_price: inv.share_price ?? null,
+      unrealized_value_change: inv.unrealized_value_change ?? null,
+      current_share_price: inv.current_share_price ?? null,
+      cost_basis_exited: inv.cost_basis_exited ?? null,
+      proceeds_received: inv.proceeds_received ?? null,
+    })
+  }
+
+  // -------------------------------------------------------------------------
+  // Interactions
+  // -------------------------------------------------------------------------
+  for (const intDef of INTERACTIONS) {
+    const companyId = intDef.companyName ? companyIdMap[intDef.companyName] ?? null : null
+    const interactionDate = new Date(Date.now() - intDef.days_ago * 86400000).toISOString()
+
+    await admin.from('interactions').insert({
+      fund_id: fundId,
+      company_id: companyId,
+      user_id: demoUserId,
+      type: intDef.type,
+      subject: intDef.subject,
+      summary: intDef.summary,
+      body_preview: intDef.body_preview,
+      intro_contacts: intDef.intro_contacts ?? [],
+      interaction_date: interactionDate,
+    })
+  }
 
   console.log('[demo] Demo data seeded successfully')
   return true
