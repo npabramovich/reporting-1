@@ -74,9 +74,9 @@ export default async function CompanyDetailPage({
   // Fetch AI provider settings for the summary component
   const { data: fundSettings } = await supabase
     .from('fund_settings')
-    .select('claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, currency')
+    .select('claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, currency, file_storage_provider, google_drive_folder_id, dropbox_folder_path')
     .eq('fund_id', company.fund_id)
-    .maybeSingle() as { data: { claude_api_key_encrypted: string | null; openai_api_key_encrypted: string | null; default_ai_provider: string | null; currency: string | null } | null }
+    .maybeSingle() as { data: { claude_api_key_encrypted: string | null; openai_api_key_encrypted: string | null; default_ai_provider: string | null; currency: string | null; file_storage_provider: string | null; google_drive_folder_id: string | null; dropbox_folder_path: string | null } | null }
 
   const fundCurrency = fundSettings?.currency ?? 'USD'
 
@@ -188,7 +188,12 @@ export default async function CompanyDetailPage({
             metrics={metrics ?? []}
           />
 
-          <CompanyDocuments companyId={company.id} />
+          <CompanyDocuments
+            companyId={company.id}
+            storageProvider={fundSettings?.file_storage_provider ?? null}
+            googleDriveFolderId={fundSettings?.google_drive_folder_id ?? null}
+            dropboxFolderPath={fundSettings?.dropbox_folder_path ?? null}
+          />
 
           <CompanyInvestments companyId={company.id} companyStatus={company.status} portfolioGroups={company.portfolio_group ?? []} />
 
