@@ -214,10 +214,7 @@ export default function SettingsPage() {
             onSaved={load}
           />
           <GroupHeader label="Access Control" />
-          <InfoSection
-            title="Authentication"
-            description="Prebuilt for Supabase Auth. Email/password authentication is handled by Supabase. To enable email confirmations and password resets, configure an SMTP provider in your Supabase project dashboard under Authentication > Email Templates."
-          />
+          <AuthEmailTemplatesSection />
           <WhitelistSection />
           <TeamSection isAdmin={settings.isAdmin} />
           <DangerZone onDeleted={() => router.push('/auth')} />
@@ -1517,6 +1514,7 @@ function GoogleConnectionUI({
   const [newClientSecret, setNewClientSecret] = useState('')
   const [savingCreds, setSavingCreds] = useState(false)
   const [credsSaved, setCredsSaved] = useState(false)
+  const [showSetupGuide, setShowSetupGuide] = useState(!hasCredentials)
 
   // Keep in sync if parent refreshes
   useEffect(() => { setNewClientId(existingClientId) }, [existingClientId])
@@ -1538,6 +1536,7 @@ function GoogleConnectionUI({
       setNewClientSecret('')
       setEditingCreds(false)
       setCredsSaved(true)
+      setShowSetupGuide(false)
       setTimeout(() => setCredsSaved(false), 2000)
       onChanged()
     }
@@ -1621,13 +1620,42 @@ function GoogleConnectionUI({
               placeholder="GOCSPX-..."
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            Create credentials at{' '}
-            <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline">
-              Google Cloud Console
-            </a>
-            . Add <code className="text-[11px] bg-muted px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}/api/auth/google/callback</code> as an authorized redirect URI.
-          </p>
+          {showSetupGuide ? (
+            <div className="space-y-1.5">
+              <button onClick={() => setShowSetupGuide(false)} className="text-xs font-medium text-muted-foreground hover:text-foreground flex items-center gap-1">
+                <ChevronDown className="h-3 w-3" /> Setup guide
+              </button>
+              <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                <li>Go to{' '}
+                  <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="underline">Google Cloud Console</a>
+                </li>
+                <li><a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener noreferrer" className="underline">Create a project</a> (or select an existing one)</li>
+                <li>Configure the{' '}
+                  <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer" className="underline">OAuth consent screen</a>
+                  <ul className="list-disc list-inside ml-3 mt-0.5 space-y-0.5">
+                    <li>Set User type to <strong>Internal</strong> (avoids 7-day token expiry)</li>
+                    <li>App name & support email — fill in anything</li>
+                    <li>Scopes: add <code className="text-[11px] bg-muted px-1 rounded">drive.file</code> and <code className="text-[11px] bg-muted px-1 rounded">gmail.send</code></li>
+                  </ul>
+                </li>
+                <li>Enable APIs:{' '}
+                  <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener noreferrer" className="underline">Google Drive API</a>,{' '}
+                  <a href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noopener noreferrer" className="underline">Gmail API</a>
+                </li>
+                <li><a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline">Create OAuth credentials</a>
+                  <ul className="list-disc list-inside ml-3 mt-0.5 space-y-0.5">
+                    <li>Type: <strong>Web application</strong></li>
+                    <li>Authorized redirect URI: <code className="text-[11px] bg-muted px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}/api/auth/google/callback</code></li>
+                  </ul>
+                </li>
+                <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> into the fields above</li>
+              </ol>
+            </div>
+          ) : (
+            <button onClick={() => setShowSetupGuide(true)} className="text-xs text-muted-foreground hover:text-foreground underline">
+              Setup guide
+            </button>
+          )}
           <div className="flex gap-2">
             <Button size="sm" onClick={saveCredentials} disabled={savingCreds || !newClientId.trim() || !newClientSecret.trim()}>
               {savingCreds ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save credentials'}
@@ -2511,6 +2539,90 @@ interface WhitelistEntry {
   id: string
   email_pattern: string
   created_at: string
+}
+
+const AUTH_EMAIL_TEMPLATES = [
+  { name: 'Confirm signup', file: 'confirmation.html', desc: 'Sent when a user signs up' },
+  { name: 'Invite user', file: 'invite.html', desc: 'Sent when an admin invites someone' },
+  { name: 'Magic link', file: 'magic_link.html', desc: 'Passwordless sign-in link' },
+  { name: 'Reset password', file: 'recovery.html', desc: 'Password reset request' },
+  { name: 'Change email', file: 'email_change.html', desc: 'Confirm new email address' },
+  { name: 'Reauthentication', file: 'reauthentication.html', desc: 'OTP code for re-verification' },
+  { name: 'Password changed', file: 'password_changed.html', desc: 'Security notification' },
+  { name: 'Email changed', file: 'email_changed.html', desc: 'Security notification' },
+]
+
+function AuthEmailTemplatesSection() {
+  const [showGuide, setShowGuide] = useState(false)
+
+  return (
+    <Section title="Authentication">
+      <p className="text-xs text-muted-foreground mb-3">
+        Email/password authentication is handled by Supabase Auth. This install includes preconfigured email templates for all authentication emails — signup confirmation, invitations, password reset, magic links, email change, and security notifications.
+      </p>
+
+      {showGuide ? (
+        <div className="space-y-3">
+          <button onClick={() => setShowGuide(false)} className="text-xs font-medium text-muted-foreground hover:text-foreground flex items-center gap-1">
+            <ChevronDown className="h-3 w-3" /> Setup instructions
+          </button>
+
+          <div className="text-xs text-muted-foreground space-y-2">
+            <p className="font-medium text-foreground">If self-hosting with Supabase CLI:</p>
+            <p>Templates are applied automatically from <code className="text-[11px] bg-muted px-1 rounded font-mono">supabase/templates/</code> via <code className="text-[11px] bg-muted px-1 rounded font-mono">config.toml</code> — no action needed.</p>
+
+            <p className="font-medium text-foreground pt-2">If using hosted Supabase (dashboard):</p>
+            <ol className="list-decimal list-inside space-y-1">
+              <li>Go to your Supabase project dashboard → <strong>Authentication</strong> → <strong>Email Templates</strong></li>
+              <li>For each template type, copy the HTML from the corresponding file in <code className="text-[11px] bg-muted px-1 rounded font-mono">supabase/templates/</code></li>
+              <li>Update the subject line to match</li>
+            </ol>
+
+            <p className="font-medium text-foreground pt-2">SMTP provider:</p>
+            <p>
+              To send real emails, configure an SMTP provider in your Supabase dashboard under <strong>Project Settings → Auth → SMTP Settings</strong>, or in <code className="text-[11px] bg-muted px-1 rounded font-mono">config.toml</code> under <code className="text-[11px] bg-muted px-1 rounded font-mono">[auth.email.smtp]</code>.
+            </p>
+          </div>
+
+          <div className="border rounded-md overflow-hidden mt-2">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left px-3 py-1.5 font-medium">Template</th>
+                  <th className="text-left px-3 py-1.5 font-medium">File</th>
+                  <th className="text-left px-3 py-1.5 font-medium hidden sm:table-cell">Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {AUTH_EMAIL_TEMPLATES.map((t) => (
+                  <tr key={t.file} className="border-b last:border-0">
+                    <td className="px-3 py-1.5">{t.name}</td>
+                    <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">{t.file}</td>
+                    <td className="px-3 py-1.5 text-muted-foreground hidden sm:table-cell">{t.desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            <a
+              href="https://supabase.com/docs/guides/local-development/customizing-email-templates"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              Supabase email template docs
+            </a>
+          </p>
+        </div>
+      ) : (
+        <button onClick={() => setShowGuide(true)} className="text-xs text-muted-foreground hover:text-foreground underline">
+          Setup instructions
+        </button>
+      )}
+    </Section>
+  )
 }
 
 function WhitelistSection() {

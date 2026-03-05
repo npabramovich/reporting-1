@@ -36,6 +36,8 @@ export function DataPointPopover({
   const [editValue, setEditValue] = useState(
     dataPoint.value_number?.toString() ?? dataPoint.value_text ?? ''
   )
+  const [editYear, setEditYear] = useState(dataPoint.period_year.toString())
+  const [editMonth, setEditMonth] = useState(dataPoint.period_month?.toString() ?? '')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -59,11 +61,24 @@ export function DataPointPopover({
   const confStyle = CONFIDENCE_STYLES[dataPoint.confidence] ?? CONFIDENCE_STYLES.high
 
   const handleSave = async () => {
+    const pYear = parseInt(editYear)
+    if (isNaN(pYear)) return
     setSaving(true)
-    const body: Record<string, unknown> =
-      metric.value_type === 'text'
+
+    const pMonth = editMonth ? parseInt(editMonth) : null
+    const periodLabel = pMonth
+      ? `${new Date(2000, pMonth - 1).toLocaleString('en', { month: 'short' })} ${pYear}`
+      : `FY ${pYear}`
+
+    const body: Record<string, unknown> = {
+      ...(metric.value_type === 'text'
         ? { value_text: editValue }
-        : { value_number: parseFloat(editValue) }
+        : { value_number: parseFloat(editValue) }),
+      period_label: periodLabel,
+      period_year: pYear,
+      period_quarter: pMonth ? Math.ceil(pMonth / 3) : null,
+      period_month: pMonth,
+    }
 
     const res = await fetch(`/api/metric-values/${dataPoint.id}`, {
       method: 'PATCH',
@@ -97,7 +112,7 @@ export function DataPointPopover({
   }
 
   // Position the popover near the click, but keep it on-screen
-  const top = Math.min(position.y - 20, window.innerHeight - 320)
+  const top = Math.min(position.y - 20, window.innerHeight - 400)
   const left = Math.min(position.x + 12, window.innerWidth - 300)
 
   return (
@@ -115,26 +130,54 @@ export function DataPointPopover({
 
       <div className="px-3 pb-3 space-y-2.5">
         {editing ? (
-          <div className="flex items-center gap-2">
-            <input
-              type={metric.value_type === 'text' ? 'text' : 'number'}
-              step="any"
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              className="flex-1 rounded border bg-background px-2 py-1 text-sm"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSave()
-                if (e.key === 'Escape') setEditing(false)
-              }}
-            />
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="text-xs text-primary hover:underline disabled:opacity-50"
-            >
-              {saving ? '...' : 'Save'}
-            </button>
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-muted-foreground">Year</label>
+                <input
+                  type="number"
+                  value={editYear}
+                  onChange={(e) => setEditYear(e.target.value)}
+                  className="w-full rounded border bg-background px-2 py-1 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Month</label>
+                <select
+                  value={editMonth}
+                  onChange={(e) => setEditMonth(e.target.value)}
+                  className="w-full rounded border bg-background px-2 py-1 text-sm h-[30px]"
+                >
+                  <option value="">— (annual)</option>
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i + 1} value={String(i + 1)}>
+                      {new Date(2000, i).toLocaleString('en', { month: 'long' })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type={metric.value_type === 'text' ? 'text' : 'number'}
+                step="any"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                className="flex-1 rounded border bg-background px-2 py-1 text-sm"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSave()
+                  if (e.key === 'Escape') setEditing(false)
+                }}
+              />
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="text-xs text-primary hover:underline disabled:opacity-50"
+              >
+                {saving ? '...' : 'Save'}
+              </button>
+            </div>
           </div>
         ) : (
           <p className="text-lg font-semibold">{formatValue(dataPoint.value_number)}</p>
