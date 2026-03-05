@@ -111,7 +111,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       unit: unit?.trim() || null,
       unit_position: unit_position ?? 'suffix',
       value_type: (value_type ?? 'number') as ValueType,
-      reporting_cadence: (reporting_cadence ?? 'quarterly') as ReportingCadence,
+      reporting_cadence: (reporting_cadence ?? 'monthly') as ReportingCadence,
       display_order: display_order ?? 0,
       is_active: true,
     })

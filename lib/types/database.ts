@@ -912,6 +912,7 @@ export type Database = {
           original_unrealized_value_change: number | null
           original_current_share_price: number | null
           original_latest_postmoney_valuation: number | null
+          ownership_pct: number | null
           portfolio_group: string | null
           created_at: string
           updated_at: string
@@ -948,6 +949,7 @@ export type Database = {
           original_unrealized_value_change?: number | null
           original_current_share_price?: number | null
           original_latest_postmoney_valuation?: number | null
+          ownership_pct?: number | null
           portfolio_group?: string | null
           created_at?: string
           updated_at?: string
@@ -984,6 +986,7 @@ export type Database = {
           original_unrealized_value_change?: number | null
           original_current_share_price?: number | null
           original_latest_postmoney_valuation?: number | null
+          ownership_pct?: number | null
           portfolio_group?: string | null
           created_at?: string
           updated_at?: string

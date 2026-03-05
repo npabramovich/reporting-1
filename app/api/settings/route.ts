@@ -28,7 +28,7 @@ export async function GET() {
 
   const [{ data: fund }, { data: settings }, { data: senders }] = await Promise.all([
     admin.from('funds').select('id, name, logo_url').eq('id', membership.fund_id).single(),
-    admin.from('fund_settings').select('postmark_inbound_address, postmark_webhook_token, postmark_webhook_token_encrypted, encryption_key_encrypted, retain_resolved_reviews, resolved_reviews_ttl_days, claude_api_key_encrypted, claude_model, ai_summary_prompt, google_refresh_token_encrypted, google_drive_folder_id, google_drive_folder_name, google_client_id, google_client_secret_encrypted, outbound_email_provider, asks_email_provider, approval_email_subject, approval_email_body, system_email_from_name, system_email_from_address, resend_api_key_encrypted, postmark_server_token_encrypted, inbound_email_provider, mailgun_inbound_domain, mailgun_signing_key_encrypted, mailgun_api_key_encrypted, mailgun_sending_domain, file_storage_provider, dropbox_app_key, dropbox_app_secret_encrypted, dropbox_refresh_token_encrypted, dropbox_folder_path, openai_api_key_encrypted, openai_model, default_ai_provider, analytics_fathom_site_id, analytics_ga_measurement_id, analytics_custom_head_script, currency').eq('fund_id', membership.fund_id).single(),
+    admin.from('fund_settings').select('postmark_inbound_address, postmark_webhook_token, postmark_webhook_token_encrypted, encryption_key_encrypted, retain_resolved_reviews, resolved_reviews_ttl_days, claude_api_key_encrypted, claude_model, ai_summary_prompt, google_refresh_token_encrypted, google_drive_folder_id, google_drive_folder_name, google_client_id, google_client_secret_encrypted, outbound_email_provider, asks_email_provider, approval_email_subject, approval_email_body, system_email_from_name, system_email_from_address, resend_api_key_encrypted, postmark_server_token_encrypted, inbound_email_provider, mailgun_inbound_domain, mailgun_signing_key_encrypted, mailgun_api_key_encrypted, mailgun_sending_domain, file_storage_provider, dropbox_app_key, dropbox_app_secret_encrypted, dropbox_refresh_token_encrypted, dropbox_folder_path, openai_api_key_encrypted, openai_model, default_ai_provider, analytics_fathom_site_id, analytics_ga_measurement_id, currency').eq('fund_id', membership.fund_id).single(),
     admin.from('authorized_senders').select('id, email, label, created_at').eq('fund_id', membership.fund_id).order('email'),
   ])
 
@@ -91,7 +91,6 @@ export async function GET() {
     dropboxFolderPath: settings?.dropbox_folder_path ?? null,
     analyticsFathomSiteId: settings?.analytics_fathom_site_id ?? null,
     analyticsGaMeasurementId: settings?.analytics_ga_measurement_id ?? null,
-    analyticsCustomHeadScript: settings?.analytics_custom_head_script ?? null,
     currency: settings?.currency ?? 'USD',
     displayName: membership.display_name ?? '',
     isAdmin: membership.role === 'admin',
@@ -426,9 +425,6 @@ export async function PATCH(req: NextRequest) {
   }
   if (analyticsGaMeasurementId !== undefined) {
     settingsUpdates.analytics_ga_measurement_id = analyticsGaMeasurementId?.trim() || null
-  }
-  if (analyticsCustomHeadScript !== undefined) {
-    settingsUpdates.analytics_custom_head_script = analyticsCustomHeadScript?.trim() || null
   }
 
   // Update fund currency

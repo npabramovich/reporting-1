@@ -435,7 +435,7 @@ ${text}`,
                 : 'number',
               reporting_cadence: (['monthly', 'quarterly', 'annual'] as const).includes(m.cadence as 'monthly')
                 ? m.cadence!
-                : 'quarterly',
+                : 'monthly',
               display_order: nextOrder + i,
               is_active: true,
             })

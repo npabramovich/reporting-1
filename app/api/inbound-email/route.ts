@@ -163,7 +163,8 @@ async function handleInbound(req: NextRequest) {
         continue
       }
 
-      const storagePath = `${emailId}/${att.Name}`
+      const safeName = att.Name.replace(/[\/\\]/g, '_').replace(/\.\./g, '_')
+      const storagePath = `${emailId}/${safeName}`
       try {
         await supabase.storage
           .from('email-attachments')

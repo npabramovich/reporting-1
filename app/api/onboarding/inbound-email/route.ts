@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { assertWriteAccess } from '@/lib/api-helpers'
 import { encrypt } from '@/lib/crypto'
 import { randomBytes } from 'crypto'
 
@@ -8,6 +9,11 @@ export async function PATCH(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = createAdminClient()
+
+  const writeCheck = await assertWriteAccess(admin, user.id)
+  if (writeCheck instanceof NextResponse) return writeCheck
 
   const { fundId, provider, postmarkInboundAddress, mailgunInboundDomain, mailgunSigningKey } = await req.json()
 
@@ -18,8 +24,6 @@ export async function PATCH(req: NextRequest) {
   if (provider !== 'postmark' && provider !== 'mailgun') {
     return NextResponse.json({ error: 'Invalid provider' }, { status: 400 })
   }
-
-  const admin = createAdminClient()
 
   // Verify the fund belongs to this user
   const { data: membership } = await admin

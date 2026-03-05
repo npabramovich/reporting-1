@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { assertWriteAccess } from '@/lib/api-helpers'
 
 export async function PATCH(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const admin = createAdminClient()
+
+  const writeCheck = await assertWriteAccess(admin, user.id)
+  if (writeCheck instanceof NextResponse) return writeCheck
+
   const { fundId, postmarkInboundAddress } = await req.json()
   if (!fundId || !postmarkInboundAddress?.trim()) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
-
-  const admin = createAdminClient()
 
   // Verify the fund belongs to this user
   const { data: membership } = await admin

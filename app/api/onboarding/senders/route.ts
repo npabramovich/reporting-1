@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { assertWriteAccess } from '@/lib/api-helpers'
 
 interface Sender {
   email: string
@@ -12,13 +13,16 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const admin = createAdminClient()
+
+  const writeCheck = await assertWriteAccess(admin, user.id)
+  if (writeCheck instanceof NextResponse) return writeCheck
+
   const { fundId, senders } = await req.json() as { fundId: string; senders: Sender[] }
 
   if (!fundId || !Array.isArray(senders) || senders.length === 0) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
-
-  const admin = createAdminClient()
 
   // Verify the fund belongs to this user
   const { data: membership } = await admin

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { assertWriteAccess } from '@/lib/api-helpers'
 import type { ParsingReview, Company, Metric, InboundEmail } from '@/lib/types/database'
 import { dbError } from '@/lib/api-error'
 
@@ -67,6 +68,11 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const admin = createAdminClient()
+
+  const writeCheck = await assertWriteAccess(admin, user.id)
+  if (writeCheck instanceof NextResponse) return writeCheck
+
   const body = await req.json()
   const { action } = body as { action: string }
 
@@ -74,7 +80,6 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   }
 
-  const admin = createAdminClient()
   const resolution = action === 'approve_all' ? 'accepted' as const : 'rejected' as const
 
   // Get all unresolved reviews for this email

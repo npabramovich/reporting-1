@@ -24,6 +24,24 @@ export async function GET(
 
   const admin = createAdminClient()
 
+  // Verify user is a member of the fund that owns this company
+  const { data: company } = await admin
+    .from('companies')
+    .select('id, fund_id')
+    .eq('id', params.id)
+    .maybeSingle()
+
+  if (!company) return NextResponse.json({ error: 'Company not found' }, { status: 404 })
+
+  const { data: membership } = await admin
+    .from('fund_members')
+    .select('id')
+    .eq('fund_id', company.fund_id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!membership) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   const { data: documents, error } = await admin
     .from('company_documents' as any)
     .select('id, filename, file_type, file_size, has_native_content, created_at')

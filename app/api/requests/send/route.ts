@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
+import { sanitizeHtml } from '@/lib/sanitize-html'
 import { getOutboundConfig, sendOutboundEmail } from '@/lib/email'
 import { rateLimit } from '@/lib/rate-limit'
 import { logActivity } from '@/lib/activity'
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
         to: toAddresses,
         from,
         subject: subject.trim(),
-        html: body_html.trim(),
+        html: sanitizeHtml(body_html.trim()),
         cc: cc?.trim() || undefined,
       })
       results.push({ emails: toAddresses, success: true, messageId: result.id?.toString() })
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
   await admin.from('email_requests').insert({
     fund_id: membership.fund_id,
     subject: subject.trim(),
-    body_html: (body_text ?? body_html).trim(),
+    body_html: sanitizeHtml((body_text ?? body_html).trim()),
     recipients,
     quarter_label: quarter_label?.trim() || null,
     sent_by: user.id,

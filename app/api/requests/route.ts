@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
+import { sanitizeHtml } from '@/lib/sanitize-html'
 import { dbError } from '@/lib/api-error'
 
 export async function GET() {
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
     .insert({
       fund_id: membership.fund_id,
       subject: subject.trim(),
-      body_html: body_html.trim(),
+      body_html: sanitizeHtml(body_html.trim()),
       recipients: recipients ?? [],
       quarter_label: quarter_label?.trim() || null,
       sent_by: user.id,

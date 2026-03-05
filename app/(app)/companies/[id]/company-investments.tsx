@@ -53,6 +53,7 @@ const EMPTY_FORM: Record<string, string> = {
   shares_acquired: '',
   share_price: '',
   postmoney_valuation: '',
+  ownership_pct: '',
   cost_basis_exited: '',
   proceeds_received: '',
   proceeds_escrow: '',
@@ -128,6 +129,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
       shares_acquired: txn.shares_acquired?.toString() ?? '',
       share_price: txn.share_price?.toString() ?? '',
       postmoney_valuation: txn.postmoney_valuation?.toString() ?? '',
+      ownership_pct: txn.ownership_pct?.toString() ?? '',
       cost_basis_exited: txn.cost_basis_exited?.toString() ?? '',
       proceeds_received: txn.proceeds_received?.toString() ?? '',
       proceeds_escrow: txn.proceeds_escrow?.toString() ?? '',
@@ -170,6 +172,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
       shares_acquired: numOrNull(form.shares_acquired),
       share_price: numOrNull(form.share_price),
       postmoney_valuation: numOrNull(form.postmoney_valuation),
+      ownership_pct: numOrNull(form.ownership_pct),
       cost_basis_exited: numOrNull(form.cost_basis_exited),
       proceeds_received: numOrNull(form.proceeds_received),
       proceeds_escrow: numOrNull(form.proceeds_escrow) ?? 0,
@@ -290,17 +293,19 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
         </div>
       )}
 
-      {expanded && transactions.length > 0 && (
+      {expanded && transactions.length > 0 && (() => {
+        const hasPostmoney = transactions.some(t => t.postmoney_valuation != null)
+        return (
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="text-left px-3 py-2 font-medium">Type</th>
-                <th className="text-left px-3 py-2 font-medium">Round</th>
-                <th className="text-left px-3 py-2 font-medium">Date</th>
                 {portfolioGroups.length > 0 && (
                   <th className="text-left px-3 py-2 font-medium">Group</th>
                 )}
+                <th className="text-left px-3 py-2 font-medium">Type</th>
+                <th className="text-left px-3 py-2 font-medium">Round</th>
+                <th className="text-left px-3 py-2 font-medium">Date</th>
                 {companyStatus === 'exited' ? (
                   <>
                     <th className="text-right px-3 py-2 font-medium">Cost</th>
@@ -309,6 +314,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
                 ) : (
                   <>
                     <th className="text-right px-3 py-2 font-medium">Invested</th>
+                    {hasPostmoney && <th className="text-right px-3 py-2 font-medium">Postmoney</th>}
                     <th className="text-right px-3 py-2 font-medium">Shares</th>
                     <th className="text-right px-3 py-2 font-medium">Price</th>
                     <th className="text-right px-3 py-2 font-medium">FMV</th>
@@ -322,6 +328,9 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
                 const round = summary?.rounds.find(r => r.roundName === txn.round_name)
                 return (
                   <tr key={txn.id} className="border-b last:border-b-0">
+                    {portfolioGroups.length > 0 && (
+                      <td className="px-3 py-2 text-xs">{txn.portfolio_group ?? '-'}</td>
+                    )}
                     <td className="px-3 py-2">
                       <span className="text-xs text-muted-foreground">
                         {TYPE_LABELS[txn.transaction_type as TransactionType] ?? txn.transaction_type}
@@ -333,9 +342,6 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
                         ? new Date(txn.transaction_date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
                         : '-'}
                     </td>
-                    {portfolioGroups.length > 0 && (
-                      <td className="px-3 py-2 text-xs">{txn.portfolio_group ?? '-'}</td>
-                    )}
                     {companyStatus === 'exited' ? (
                       <>
                         <td className="px-3 py-2 text-right font-mono">
@@ -350,6 +356,13 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
                         <td className="px-3 py-2 text-right font-mono">
                           {txn.transaction_type === 'investment' ? fmt(txn.investment_cost) : '-'}
                         </td>
+                        {hasPostmoney && (
+                          <td className="px-3 py-2 text-right font-mono">
+                            {(txn.transaction_type === 'investment' || txn.transaction_type === 'round_info')
+                              ? fmt(txn.postmoney_valuation)
+                              : '-'}
+                          </td>
+                        )}
                         <td className="px-3 py-2 text-right font-mono">
                           {txn.transaction_type === 'investment' ? fmtNum(txn.shares_acquired) : '-'}
                         </td>
@@ -400,7 +413,8 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
             </tbody>
           </table>
         </div>
-      )}
+        )
+      })()}
 
       {expanded && transactions.length === 0 && (
         <p className="text-xs text-muted-foreground px-3 py-2">
@@ -518,7 +532,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
                     onChange={e => setForm(f => ({ ...f, share_price: e.target.value }))}
                   />
                 </div>
-                <div className="col-span-2">
+                <div>
                   <Label>Post-Money Valuation ({symbol.trim()})</Label>
                   <Input
                     className="mt-1"
@@ -527,6 +541,17 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
                     value={form.postmoney_valuation}
                     onChange={e => setForm(f => ({ ...f, postmoney_valuation: e.target.value }))}
                     placeholder="Post-money valuation of the round"
+                  />
+                </div>
+                <div>
+                  <Label>Ownership %</Label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="any"
+                    value={form.ownership_pct}
+                    onChange={e => setForm(f => ({ ...f, ownership_pct: e.target.value }))}
+                    placeholder="e.g. 15.5"
                   />
                 </div>
               </div>
@@ -619,6 +644,17 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
                     value={form.postmoney_valuation}
                     onChange={e => setForm(f => ({ ...f, postmoney_valuation: e.target.value }))}
                     placeholder="Post-money valuation of the round"
+                  />
+                </div>
+                <div>
+                  <Label>Ownership %</Label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="any"
+                    value={form.ownership_pct}
+                    onChange={e => setForm(f => ({ ...f, ownership_pct: e.target.value }))}
+                    placeholder="e.g. 15.5"
                   />
                 </div>
               </div>

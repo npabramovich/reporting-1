@@ -43,9 +43,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const hasAIKey = !!(fundSettings?.claude_api_key_encrypted || fundSettings?.openai_api_key_encrypted)
   const defaultAIProvider = fundSettings?.default_ai_provider ?? 'anthropic'
   const fathomSiteId = fundSettings?.analytics_fathom_site_id ?? null
-  const gaMeasurementId = fundSettings?.analytics_ga_measurement_id ?? null
-  const customHeadScript = fundSettings?.analytics_custom_head_script ?? null
-
+  const rawGaId = fundSettings?.analytics_ga_measurement_id ?? null
+  const gaMeasurementId = rawGaId && /^[A-Z0-9-]+$/i.test(rawGaId) ? rawGaId : null
   const fundName = fundData?.name ?? 'Portfolio Reporting'
   const fundLogo = fundData?.logo_url ?? null
 
@@ -87,9 +86,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Script src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`} strategy="afterInteractive" />
           <Script id="ga-config" strategy="afterInteractive">{`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${gaMeasurementId}');`}</Script>
         </>
-      )}
-      {customHeadScript && (
-        <Script id="custom-analytics" strategy="afterInteractive" dangerouslySetInnerHTML={{ __html: customHeadScript }} />
       )}
     </div>
   )

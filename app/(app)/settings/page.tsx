@@ -211,7 +211,6 @@ export default function SettingsPage() {
           <AnalyticsSection
             fathomSiteId={settings.analyticsFathomSiteId}
             gaMeasurementId={settings.analyticsGaMeasurementId}
-            customHeadScript={settings.analyticsCustomHeadScript}
             onSaved={load}
           />
           <GroupHeader label="Access Control" />
@@ -2799,24 +2798,20 @@ function DangerZone({ onDeleted }: { onDeleted: () => void }) {
 function AnalyticsSection({
   fathomSiteId,
   gaMeasurementId,
-  customHeadScript,
   onSaved,
 }: {
   fathomSiteId: string | null
   gaMeasurementId: string | null
-  customHeadScript: string | null
   onSaved: () => void
 }) {
   const [fathom, setFathom] = useState(fathomSiteId ?? '')
   const [ga, setGa] = useState(gaMeasurementId ?? '')
-  const [custom, setCustom] = useState(customHeadScript ?? '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const hasChanges =
     fathom !== (fathomSiteId ?? '') ||
-    ga !== (gaMeasurementId ?? '') ||
-    custom !== (customHeadScript ?? '')
+    ga !== (gaMeasurementId ?? '')
 
   const handleSave = async () => {
     setSaving(true)
@@ -2826,7 +2821,6 @@ function AnalyticsSection({
       body: JSON.stringify({
         analyticsFathomSiteId: fathom,
         analyticsGaMeasurementId: ga,
-        analyticsCustomHeadScript: custom,
       }),
     })
     setSaving(false)
@@ -2859,19 +2853,6 @@ function AnalyticsSection({
             onChange={(e) => setGa(e.target.value)}
             placeholder="G-XXXXXXXXXX"
             className="max-w-xs font-mono mt-1"
-          />
-        </div>
-        <div>
-          <Label>Custom head script</Label>
-          <p className="text-xs text-muted-foreground mt-1 mb-1.5">
-            Raw JavaScript injected via a {'<script>'} tag. Do not include {'<script>'} tags.
-          </p>
-          <Textarea
-            value={custom}
-            onChange={(e) => setCustom(e.target.value)}
-            rows={6}
-            className="font-mono"
-            placeholder="// Your custom analytics script"
           />
         </div>
         <Button onClick={handleSave} disabled={saving || !hasChanges} size="sm">

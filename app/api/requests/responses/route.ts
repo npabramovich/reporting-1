@@ -56,18 +56,19 @@ export async function GET() {
 
   const { data: metricValues } = await admin
     .from('metric_values')
-    .select('company_id, period_year, period_quarter')
+    .select('company_id, period_year, period_quarter, period_month')
     .eq('fund_id', membership.fund_id)
     .in('company_id', companyIds)
     .gte('period_year', minYear)
     .lte('period_year', maxYear)
-    .not('period_quarter', 'is', null)
 
   // Build a set for fast lookup: "companyId:year:quarter"
+  // Derive quarter from month when quarter is not explicitly set
   const valueSet = new Set<string>()
   for (const mv of metricValues ?? []) {
-    if (mv.period_quarter != null) {
-      valueSet.add(`${mv.company_id}:${mv.period_year}:${mv.period_quarter}`)
+    const q = mv.period_quarter ?? (mv.period_month ? Math.ceil(mv.period_month / 3) : null)
+    if (q != null) {
+      valueSet.add(`${mv.company_id}:${mv.period_year}:${q}`)
     }
   }
 

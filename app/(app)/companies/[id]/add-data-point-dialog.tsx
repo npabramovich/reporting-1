@@ -29,21 +29,15 @@ export function AddDataPointDialog({
   onSuccess,
 }: Props) {
   const [value, setValue] = useState('')
-  const [periodLabel, setPeriodLabel] = useState('')
   const [periodYear, setPeriodYear] = useState(new Date().getFullYear().toString())
-  const [periodQuarter, setPeriodQuarter] = useState('')
   const [periodMonth, setPeriodMonth] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const cadence = metric.reporting_cadence
-
   const buildPeriodLabel = () => {
-    if (periodLabel) return periodLabel
     const yr = periodYear
-    if (cadence === 'quarterly' && periodQuarter) return `Q${periodQuarter} ${yr}`
-    if (cadence === 'monthly' && periodMonth) {
+    if (periodMonth) {
       const month = new Date(2000, parseInt(periodMonth) - 1).toLocaleString('en', { month: 'short' })
       return `${month} ${yr}`
     }
@@ -63,11 +57,12 @@ export function AddDataPointDialog({
     }
 
     const label = buildPeriodLabel()
+    const pMonth = periodMonth ? parseInt(periodMonth) : null
     const body: Record<string, unknown> = {
       period_label: label,
       period_year: pYear,
-      period_quarter: periodQuarter ? parseInt(periodQuarter) : null,
-      period_month: periodMonth ? parseInt(periodMonth) : null,
+      period_quarter: pMonth ? Math.ceil(pMonth / 3) : null,
+      period_month: pMonth,
       value: metric.value_type === 'text' ? value : parseFloat(value),
       notes: notes || null,
     }
@@ -91,7 +86,6 @@ export function AddDataPointDialog({
     setSaving(false)
     onOpenChange(false)
     setValue('')
-    setPeriodLabel('')
     setNotes('')
     onSuccess()
   }
@@ -114,49 +108,21 @@ export function AddDataPointDialog({
                 required
               />
             </div>
-            {cadence === 'quarterly' && (
-              <div>
-                <Label>Quarter</Label>
-                <select
-                  value={periodQuarter}
-                  onChange={(e) => setPeriodQuarter(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
-                >
-                  <option value="">—</option>
-                  <option value="1">Q1</option>
-                  <option value="2">Q2</option>
-                  <option value="3">Q3</option>
-                  <option value="4">Q4</option>
-                </select>
-              </div>
-            )}
-            {cadence === 'monthly' && (
-              <div>
-                <Label>Month</Label>
-                <select
-                  value={periodMonth}
-                  onChange={(e) => setPeriodMonth(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
-                >
-                  <option value="">—</option>
-                  {Array.from({ length: 12 }, (_, i) => (
-                    <option key={i + 1} value={String(i + 1)}>
-                      {new Date(2000, i).toLocaleString('en', { month: 'long' })}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {cadence === 'annual' && (
-              <div>
-                <Label>Period label (optional)</Label>
-                <Input
-                  value={periodLabel}
-                  onChange={(e) => setPeriodLabel(e.target.value)}
-                  placeholder={`FY ${periodYear}`}
-                />
-              </div>
-            )}
+            <div>
+              <Label>Month</Label>
+              <select
+                value={periodMonth}
+                onChange={(e) => setPeriodMonth(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+              >
+                <option value="">— (annual)</option>
+                {Array.from({ length: 12 }, (_, i) => (
+                  <option key={i + 1} value={String(i + 1)}>
+                    {new Date(2000, i).toLocaleString('en', { month: 'long' })}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>

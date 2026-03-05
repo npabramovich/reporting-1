@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { assertWriteAccess } from '@/lib/api-helpers'
 import { dbError } from '@/lib/api-error'
 
 export async function POST(
@@ -10,6 +11,11 @@ export async function POST(
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = createAdminClient()
+
+  const writeCheck = await assertWriteAccess(admin, user.id)
+  if (writeCheck instanceof NextResponse) return writeCheck
 
   const body = await req.json()
   const { filename, contentType, contentLength, storagePath } = body as {
@@ -33,6 +39,17 @@ export async function POST(
   if (error) return dbError(error, 'emails-id-attachments')
   if (!emailData) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // Verify the email's fund matches the user's fund
+  const { data: emailMeta } = await admin
+    .from('inbound_emails')
+    .select('fund_id')
+    .eq('id', params.id)
+    .maybeSingle()
+
+  if (!emailMeta || emailMeta.fund_id !== writeCheck.fundId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const rawPayload = ((emailData as Record<string, unknown>).raw_payload ?? {}) as Record<string, unknown>
   const existingAttachments = (rawPayload.Attachments ?? []) as Array<Record<string, unknown>>
 
@@ -49,7 +66,6 @@ export async function POST(
     Attachments: [...existingAttachments, newAttachment],
   }
 
-  const admin = createAdminClient()
   const { error: updateError } = await admin
     .from('inbound_emails')
     .update({

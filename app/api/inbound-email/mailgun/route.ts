@@ -8,9 +8,14 @@ import { checkFundMember } from '@/lib/pipeline/checkFundMember'
 import { isAuthorizedSender } from '@/lib/pipeline/isAuthorizedSender'
 import { decrypt } from '@/lib/crypto'
 import { scanFile } from '@/lib/security/scan-file'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import type { Json } from '@/lib/types/database'
 
 export async function POST(req: NextRequest) {
+  // Rate limit inbound webhook: 60 per minute per IP
+  const limited = await rateLimit({ key: `inbound-mailgun:${getClientIp(req)}`, limit: 60, windowSeconds: 60 })
+  if (limited) return limited
+
   try {
     await handleMailgunInbound(req)
   } catch (err) {
@@ -97,6 +102,8 @@ async function handleMailgunInbound(req: NextRequest) {
         return
       }
     }
+  } else {
+    console.warn('[inbound-email/mailgun] Signature verification skipped — no signing key configured')
   }
 
   // Check if sender is a fund member → route to CRM pipeline
@@ -207,7 +214,8 @@ async function handleMailgunInbound(req: NextRequest) {
         continue
       }
 
-      const storagePath = `${emailId}/${att.Name}`
+      const safeName = att.Name.replace(/[\/\\]/g, '_').replace(/\.\./g, '_')
+      const storagePath = `${emailId}/${safeName}`
       try {
         await supabase.storage
           .from('email-attachments')

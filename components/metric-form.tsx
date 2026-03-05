@@ -48,7 +48,6 @@ export function MetricForm({ companyId, metric, onSuccess, onCancel }: Props) {
   const [unit, setUnit] = useState(metric?.unit ?? '')
   const [unitPosition, setUnitPosition] = useState<'prefix' | 'suffix'>(metric?.unit_position ?? 'suffix')
   const [valueType, setValueType] = useState(metric?.value_type ?? 'number')
-  const [cadence, setCadence] = useState(metric?.reporting_cadence ?? 'quarterly')
   const [displayOrder, setDisplayOrder] = useState(String(metric?.display_order ?? 0))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -85,7 +84,6 @@ export function MetricForm({ companyId, metric, onSuccess, onCancel }: Props) {
           unit: unit.trim() === '#' ? null : (unit.trim() || null),
           unit_position: unitPosition,
           value_type: valueType,
-          reporting_cadence: cadence,
           display_order: parseInt(displayOrder) || 0,
         }),
       })
@@ -205,34 +203,19 @@ export function MetricForm({ companyId, metric, onSuccess, onCancel }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label>Value type</Label>
-          <Select value={valueType} onValueChange={(v) => setValueType(v as typeof valueType)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="number">Number</SelectItem>
-              <SelectItem value="currency">Currency</SelectItem>
-              <SelectItem value="percentage">Percentage</SelectItem>
-              <SelectItem value="text">Text</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label>Cadence</Label>
-          <Select value={cadence} onValueChange={(v) => setCadence(v as typeof cadence)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="monthly">Monthly</SelectItem>
-              <SelectItem value="quarterly">Quarterly</SelectItem>
-              <SelectItem value="annual">Annual</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="space-y-2">
+        <Label>Value type</Label>
+        <Select value={valueType} onValueChange={(v) => setValueType(v as typeof valueType)}>
+          <SelectTrigger className="max-w-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="number">Number</SelectItem>
+            <SelectItem value="currency">Currency</SelectItem>
+            <SelectItem value="percentage">Percentage</SelectItem>
+            <SelectItem value="text">Text</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="space-y-2">

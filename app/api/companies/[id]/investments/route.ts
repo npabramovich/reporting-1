@@ -91,10 +91,13 @@ function computeSummary(
   const rounds = Array.from(roundMap.values())
   let unrealizedValue = 0
   for (const round of rounds) {
-    round.currentSharePrice = latestSharePrice
+    // Use the latest share price from unrealized_gain_change / round_info transactions.
+    // If none exists, fall back to the round's own share price from the investment.
+    const effectiveSharePrice = latestSharePrice ?? round.sharePrice ?? null
+    round.currentSharePrice = effectiveSharePrice
     if (round.sharesAcquired > 0) {
       // Equity round: shares * current share price
-      round.currentValue = latestSharePrice != null ? round.sharesAcquired * latestSharePrice : 0
+      round.currentValue = effectiveSharePrice != null ? round.sharesAcquired * effectiveSharePrice : 0
     } else {
       // Convertible / no shares: investment cost - cost basis exited + unrealized changes
       round.currentValue = round.investmentCost - round.costBasisExited + round.unrealizedValueChange
@@ -237,6 +240,7 @@ export async function POST(
       unrealized_value_change: body.unrealized_value_change ?? null,
       current_share_price: body.current_share_price ?? null,
       postmoney_valuation: body.postmoney_valuation ?? null,
+      ownership_pct: body.ownership_pct ?? null,
       latest_postmoney_valuation: body.latest_postmoney_valuation ?? null,
       exit_valuation: body.exit_valuation ?? null,
       original_currency: body.original_currency ?? null,

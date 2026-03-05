@@ -32,6 +32,11 @@ export async function PATCH(
 
   if (!existing) return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
 
+  // Verify the transaction's fund matches the user's fund
+  if (existing.fund_id !== writeCheck.fundId) {
+    return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
+  }
+
   const body = await req.json()
 
   // Only allow updating known fields
@@ -41,7 +46,7 @@ export async function PATCH(
     'cost_basis_exited', 'proceeds_received', 'proceeds_escrow',
     'proceeds_written_off', 'proceeds_per_share',
     'unrealized_value_change', 'current_share_price',
-    'postmoney_valuation', 'latest_postmoney_valuation', 'exit_valuation',
+    'postmoney_valuation', 'ownership_pct', 'latest_postmoney_valuation', 'exit_valuation',
     'original_currency',
     'original_investment_cost', 'original_share_price', 'original_postmoney_valuation',
     'original_proceeds_received', 'original_proceeds_per_share', 'original_exit_valuation',
@@ -98,6 +103,11 @@ export async function DELETE(
     .maybeSingle() as { data: { id: string; company_id: string; fund_id: string } | null }
 
   if (!existing) return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
+
+  // Verify the transaction's fund matches the user's fund
+  if (existing.fund_id !== writeCheck.fundId) {
+    return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
+  }
 
   const { error } = await admin
     .from('investment_transactions' as any)

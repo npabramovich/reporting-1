@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { encrypt } from '@/lib/crypto'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { randomBytes } from 'crypto'
 
 // GET — check onboarding status so the UI can resume where the user left off
@@ -65,6 +66,10 @@ export async function GET() {
 
 // POST — create fund (idempotent: returns existing fund if user already has one)
 export async function POST(req: NextRequest) {
+  // Rate limit: 5 requests per 5 minutes per IP
+  const limited = await rateLimit({ key: `onboard-fund:${getClientIp(req)}`, limit: 5, windowSeconds: 300 })
+  if (limited) return limited
+
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -150,7 +155,6 @@ export async function POST(req: NextRequest) {
       fund_id: fund.id,
       claude_api_key_encrypted: claudeApiKeyEncrypted,
       encryption_key_encrypted: encryptionKeyEncrypted,
-      postmark_webhook_token: webhookToken,
       postmark_webhook_token_encrypted: webhookTokenEncrypted,
     })
 
