@@ -211,6 +211,7 @@ function MetricChartCard({
   onRefresh: () => void
   onDelete: (id: string) => void
 }) {
+  const router = useRouter()
   const [addOpen, setAddOpen] = useState(false)
   const [confirmStep, setConfirmStep] = useState<0 | 1 | 2>(0)
 
@@ -299,7 +300,7 @@ function MetricChartCard({
         onOpenChange={setAddOpen}
         companyId={companyId}
         metric={metric}
-        onSuccess={onRefresh}
+        onSuccess={() => { onRefresh(); router.refresh() }}
       />
     </div>
   )
