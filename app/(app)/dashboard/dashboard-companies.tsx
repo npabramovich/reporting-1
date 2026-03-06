@@ -94,14 +94,17 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
     }
 
     const tailGroups = ['spv', 'other']
-    return Array.from(groups.entries()).sort(([a], [b]) => {
-      const aIdx = tailGroups.indexOf(a.toLowerCase())
-      const bIdx = tailGroups.indexOf(b.toLowerCase())
-      if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx
-      if (aIdx !== -1) return 1
-      if (bIdx !== -1) return -1
-      return a.localeCompare(b)
-    })
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => {
+        const aIdx = tailGroups.indexOf(a.toLowerCase())
+        const bIdx = tailGroups.indexOf(b.toLowerCase())
+        if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx
+        if (aIdx !== -1) return 1
+        if (bIdx !== -1) return -1
+        // Descending so "Fund III" comes before "Fund II" before "Fund I"
+        return b.localeCompare(a)
+      })
+      .map(([name, list]) => [name, [...list].sort((a, b) => a.name.localeCompare(b.name))] as [string, Company[]])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, hasGroups, selectedGroups, sortMode])
 
