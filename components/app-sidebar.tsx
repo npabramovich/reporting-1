@@ -96,7 +96,7 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, up
                 )
               )}
               {beta && !collapsed && (
-                <span className="text-[9px] font-medium text-muted-foreground bg-muted rounded px-1 py-0.5 leading-none uppercase tracking-wider">beta</span>
+                <span className="text-[9px] font-medium text-blue-500 bg-blue-500/10 rounded px-1 py-0.5 leading-none uppercase tracking-wider self-center">beta</span>
               )}
               {showLock && !collapsed && (
                 <Lock className="h-3 w-3 text-amber-500 shrink-0 md:block hidden" />
