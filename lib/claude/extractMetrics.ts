@@ -1,8 +1,5 @@
-import { AnthropicProvider } from '@/lib/ai/anthropic'
-import type { ContentBlock } from '@/lib/ai/types'
+import type { AIProvider, ContentBlock } from '@/lib/ai/types'
 import { logAIUsage } from '@/lib/ai/usage'
-
-const DEFAULT_MODEL = 'claude-sonnet-4-5'
 
 export interface MetricDef {
   id: string
@@ -55,14 +52,14 @@ export async function extractMetrics(
   metrics: MetricDef[],
   pdfBase64s: string[],
   images: ImageInput[],
-  claudeApiKey: string,
-  model: string = DEFAULT_MODEL,
+  provider: AIProvider,
+  providerType: string,
+  model: string,
   logParams?: ExtractMetricsLogParams
 ): Promise<ExtractMetricsResult> {
-  const provider = new AnthropicProvider(claudeApiKey)
   const { system, userContent } = buildMessage(companyName, combinedText, metrics, pdfBase64s, images)
 
-  const raw = await callWithRetry(provider, system, userContent, model, logParams)
+  const raw = await callWithRetry(provider, providerType, system, userContent, model, logParams)
   return raw
 }
 
@@ -154,29 +151,31 @@ Return:
 // ---------------------------------------------------------------------------
 
 async function callWithRetry(
-  provider: AnthropicProvider,
+  provider: AIProvider,
+  providerType: string,
   system: string,
   userContent: ContentBlock[],
   model: string,
   logParams?: ExtractMetricsLogParams
 ): Promise<ExtractMetricsResult> {
-  const first = await call(provider, system, userContent, model, logParams)
+  const first = await call(provider, providerType, system, userContent, model, logParams)
   const parsed = tryParse(first)
   if (parsed) return parsed
 
   // Append strict instruction to the text block on retry
   const strictContent = appendStrictSuffix(userContent)
-  const second = await call(provider, system, strictContent, model, logParams)
+  const second = await call(provider, providerType, system, strictContent, model, logParams)
   const reparsed = tryParse(second)
   if (reparsed) return reparsed
 
   throw new Error(
-    `extractMetrics: Claude returned non-JSON after retry. Last response: ${second.slice(0, 200)}`
+    `extractMetrics: AI returned non-JSON after retry. Last response: ${second.slice(0, 200)}`
   )
 }
 
 async function call(
-  provider: AnthropicProvider,
+  provider: AIProvider,
+  providerType: string,
   system: string,
   userContent: ContentBlock[],
   model: string,
@@ -192,7 +191,7 @@ async function call(
   if (logParams) {
     logAIUsage(logParams.admin, {
       fundId: logParams.fundId,
-      provider: 'anthropic',
+      provider: providerType,
       model,
       feature: 'extract_metrics',
       usage,

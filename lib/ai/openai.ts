@@ -3,9 +3,11 @@ import type { AIProvider, AIModel, AIResult, CreateMessageParams, CreateChatPara
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI
+  private customBaseURL: boolean
 
-  constructor(apiKey: string) {
-    this.client = new OpenAI({ apiKey })
+  constructor(apiKey: string, baseURL?: string) {
+    this.client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) })
+    this.customBaseURL = !!baseURL
   }
 
   async createMessage(params: CreateMessageParams): Promise<AIResult> {
@@ -65,6 +67,17 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async testConnection(): Promise<void> {
+    if (this.customBaseURL) {
+      // For Ollama/custom endpoints, list models to verify connectivity
+      const list = await this.client.models.list()
+      const models: OpenAI.Model[] = []
+      for await (const model of list) {
+        models.push(model)
+        break // just need one to verify
+      }
+      if (models.length === 0) throw new Error('No models available')
+      return
+    }
     await this.client.chat.completions.create({
       model: 'gpt-4o-mini',
       max_tokens: 10,
@@ -77,6 +90,13 @@ export class OpenAIProvider implements AIProvider {
     const models: OpenAI.Model[] = []
     for await (const model of list) {
       models.push(model)
+    }
+
+    if (this.customBaseURL) {
+      // For Ollama/custom endpoints, return all models
+      return models
+        .sort((a, b) => b.created - a.created)
+        .map(m => ({ id: m.id, name: m.id }))
     }
 
     return models

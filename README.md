@@ -37,7 +37,7 @@ Filter by portfolio group and sort by name, cash position, or other criteria. A 
 
 Clicking a company opens its detail page. At the top you'll see the company name, headline metrics, and badges for stage, industry, and portfolio groups. Admins can edit the company's name, aliases, stage, industry, founders, overview, and other details.
 
-The **Analyst** card generates a summary based on all available data — reported metrics, email content, uploaded documents, and previous summaries. The AI acts as a senior analyst preparing a portfolio review memo: it highlights current performance, trends, strengths, risks, and follow-up questions. You can regenerate the summary at any time, clear it to start fresh, or upload additional context documents directly from the card. If your fund has both Anthropic and OpenAI configured, a provider selector lets you choose which AI to use.
+The **Analyst** card generates a summary based on all available data — reported metrics, email content, uploaded documents, and previous summaries. The AI acts as a senior analyst preparing a portfolio review memo: it highlights current performance, trends, strengths, risks, and follow-up questions. You can regenerate the summary at any time, clear it to start fresh, or upload additional context documents directly from the card. If your fund has multiple AI providers configured, a provider selector lets you choose which AI to use.
 
 Below the Analyst is the **metrics section**, where each metric has its own chart card. Charts show data points over time, color-coded by confidence level. Click any data point to view details and edit or delete values. You can also add data points manually using the "Add" button on each card. An export button lets you download all metric data as a CSV.
 
@@ -129,9 +129,37 @@ On each company's detail page, a **Recent Interactions** section shows the lates
 
 Settings is where the platform is configured. Most settings are admin-only, but all users can update their display name and enable two-factor authentication.
 
-For admins, Settings covers: AI provider keys and model selection (Anthropic and/or OpenAI), fund currency, inbound email setup (Postmark or Mailgun), outbound email providers (Gmail, Resend, Postmark, or Mailgun), file storage connections (Google Drive or Dropbox), the AI summary prompt, email templates for reporting asks, analytics (Fathom, Google Analytics, and custom scripts), authorized senders, team members and roles, and the signup allow-list. The current app version is shown at the bottom of Settings, with a link to the Updates page when a newer version is available.
+For admins, Settings covers: AI provider keys and model selection (Anthropic, OpenAI, Google Gemini, and/or Ollama for local models), fund currency, feature visibility (control which features are visible to everyone, admin-only, hidden, or off), inbound email setup (Postmark or Mailgun), outbound email providers (Gmail, Resend, Postmark, or Mailgun), file storage connections (Google Drive or Dropbox), the AI summary prompt, email templates for reporting asks, analytics (Fathom, Google Analytics, and custom scripts), authorized senders, team members and roles, and the signup allow-list. The current app version is shown at the bottom of Settings, with a link to the Updates page when a newer version is available.
 
 ![Settings](docs/screenshots/settings.png)
+
+### AI Providers
+
+The platform supports four AI providers. Configure at least one in Settings, then select the default provider used for email processing, metric extraction, summaries, and imports.
+
+| Provider | Default Model | Key Required | Notes |
+|----------|--------------|-------------|-------|
+| **Anthropic** | `claude-sonnet-4-5` | API key from [console.anthropic.com](https://console.anthropic.com) | Best overall quality for analysis and extraction |
+| **OpenAI** | `gpt-4o` | API key from [platform.openai.com](https://platform.openai.com) | Strong alternative with broad model selection |
+| **Google Gemini** | `gemini-2.0-flash` | API key from [aistudio.google.com](https://aistudio.google.com) | Fast and cost-effective, free tier available |
+| **Ollama** | `llama3.2` | None (runs locally) | Self-hosted models, no data leaves your machine |
+
+Each provider has a model selector in Settings — after saving your API key (or endpoint URL for Ollama), you can fetch the available models and choose which one to use. The **AI Analyst** panel also has a model dropdown that shows models from all configured providers, with an "Auto" option that uses the fund's default.
+
+Ollama connects via its OpenAI-compatible API (default endpoint: `http://localhost:11434/v1`). No API key is needed — just enter the endpoint URL and select a model. Ollama usage is tracked but shows zero cost since it runs locally.
+
+### Feature Visibility
+
+Admins can control which optional features are visible in the sidebar and accessible across the platform. Each feature can be set to one of four visibility levels:
+
+| Level | Behavior |
+|-------|----------|
+| **Everyone** | Visible to all team members in the sidebar and fully accessible |
+| **Admin only** | Only visible to admin users; hidden from members |
+| **Hidden** | Removed from the sidebar for all users, but still accessible via direct URL |
+| **Off** | Functionally disabled — the feature is completely inaccessible |
+
+The features that can be configured are: **Interactions** (CRM-style email logging), **Investments** (fund transaction tracking), **Notes** (team discussion and observations), **LP Letters** (quarterly LP update generation), **Imports** (bulk data import), and **Asks** (portfolio company reporting requests).
 
 ## Setup & Deployment
 
@@ -144,9 +172,11 @@ Designed as a single-tenant deployment per fund. You control your own data, your
 | Hosting platform | Runs the Next.js app — choose **Netlify** or **Vercel** or other platfoms | Yes |
 | [Supabase](https://supabase.com) | Database (PostgreSQL), authentication, file storage, row-level security | Yes — 500 MB database, 1 GB storage |
 | Inbound email provider | Receives portfolio company emails — choose **Postmark** or **Mailgun** | Postmark: 100 emails/mo. Mailgun: 1,000/mo |
-| AI provider — at least one | AI for email processing, metric extraction, and summaries | Pay-as-you-go |
-| ↳ [Anthropic](https://console.anthropic.com) | Claude API | Pay-as-you-go |
-| ↳ [OpenAI](https://platform.openai.com) | OpenAI API | Pay-as-you-go |
+| AI provider — at least one | AI for email processing, metric extraction, and summaries | See below |
+| ↳ [Anthropic](https://console.anthropic.com) | Claude API (default model: `claude-sonnet-4-5`) | Pay-as-you-go |
+| ↳ [OpenAI](https://platform.openai.com) | OpenAI API (default model: `gpt-4o`) | Pay-as-you-go |
+| ↳ [Google Gemini](https://aistudio.google.com) | Gemini API (default model: `gemini-2.0-flash`) | Free tier available |
+| ↳ [Ollama](https://ollama.com) | Local models via OpenAI-compatible API (default model: `llama3.2`) | Free (runs locally) |
 
 ### Optional services
 
@@ -251,7 +281,7 @@ By default the first signup is the admin, with access to the fund-level and tech
 After confirming your email and signing in, the app walks you through:
 
 1. **Fund name** — this appears in the app header
-2. **AI API key** — enter at least one: an Anthropic key from [console.anthropic.com](https://console.anthropic.com) and/or an OpenAI key from [platform.openai.com](https://platform.openai.com). You can configure both and switch between them. Keys are encrypted and stored in your database, not in environment variables.
+2. **AI API key** — enter at least one: an Anthropic key from [console.anthropic.com](https://console.anthropic.com), an OpenAI key from [platform.openai.com](https://platform.openai.com), a Google Gemini key from [aistudio.google.com](https://aistudio.google.com), or configure a local Ollama endpoint. You can configure multiple providers and switch between them. Keys are encrypted and stored in your database, not in environment variables.
 3. **Inbound email address** — see Step 8
 
 ### Step 8: Set up inbound email
@@ -376,7 +406,7 @@ Then set the tunnel URL as your inbound webhook (e.g. `https://your-tunnel.ngrok
 | **Styling** | Tailwind CSS, Radix UI primitives (shadcn/ui) |
 | **Charts** | Recharts |
 | **Database & Auth** | Supabase (PostgreSQL with Row Level Security) |
-| **AI** | Anthropic Claude API and/or OpenAI API |
+| **AI** | Anthropic Claude, OpenAI, Google Gemini, and/or Ollama (local) |
 | **File parsing** | mammoth (DOCX), xlsx (spreadsheets), jszip (PPTX), PDF and images handled natively by the AI provider |
 | **Icons** | Lucide React |
 

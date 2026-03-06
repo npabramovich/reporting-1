@@ -5,7 +5,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 interface AnalystModel {
   id: string
   name: string
-  provider: 'anthropic' | 'openai'
+  provider: string
 }
 
 export interface ConversationListItem {
@@ -137,9 +137,11 @@ export function AnalystProvider({
     if (!hasAIKey) return
 
     const fetchModels = async () => {
-      const [claudeRes, openaiRes] = await Promise.allSettled([
+      const [claudeRes, openaiRes, geminiRes, ollamaRes] = await Promise.allSettled([
         fetch('/api/claude-models').then(r => r.json()),
         fetch('/api/openai-models').then(r => r.json()),
+        fetch('/api/gemini-models').then(r => r.json()),
+        fetch('/api/ollama-models').then(r => r.json()),
       ])
 
       const models: AnalystModel[] = []
@@ -156,12 +158,23 @@ export function AnalystProvider({
         }
       }
 
+      if (geminiRes.status === 'fulfilled' && Array.isArray(geminiRes.value.models)) {
+        for (const m of geminiRes.value.models) {
+          models.push({ id: m.id, name: m.name, provider: 'gemini' })
+        }
+      }
+
+      if (ollamaRes.status === 'fulfilled' && Array.isArray(ollamaRes.value.models)) {
+        for (const m of ollamaRes.value.models) {
+          models.push({ id: m.id, name: m.name, provider: 'ollama' })
+        }
+      }
+
       setAvailableModels(models)
 
-      // Default to first model from the fund's default provider
-      if (models.length > 0 && !selectedModel) {
-        const preferred = models.find(m => m.provider === defaultAIProvider) ?? models[0]
-        setSelectedModel(preferred)
+      // Default to Auto (null selectedModel means use server default)
+      if (!selectedModel) {
+        setSelectedModel(null)
       }
     }
 

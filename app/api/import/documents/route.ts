@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   // Get AI provider
   let provider: Awaited<ReturnType<typeof createFundAIProvider>>['provider']
   let claudeModel: string
-  let aiProviderType: 'anthropic' | 'openai'
+  let aiProviderType: string
   try {
     const result = await createFundAIProvider(admin, fundId)
     provider = result.provider

@@ -11,10 +11,17 @@ const PRICING: Record<string, { input: number; output: number }> = {
   'openai:gpt-4o': { input: 2.5, output: 10.0 },
   'openai:gpt-4.1': { input: 2.0, output: 8.0 },
   'openai:o3-mini': { input: 1.1, output: 4.4 },
+  'gemini:gemini-2.0-flash': { input: 0.1, output: 0.4 },
+  'gemini:gemini-2.5-flash': { input: 0.15, output: 0.6 },
+  'gemini:gemini-2.5-pro': { input: 1.25, output: 10.0 },
 }
+const OLLAMA_PRICING = { input: 0, output: 0 }
 const FALLBACK_PRICING = { input: 5.0, output: 15.0 }
 
 function getPricing(provider: string, model: string) {
+  // Ollama is always free (local)
+  if (provider === 'ollama') return OLLAMA_PRICING
+
   // Try exact provider:model match first
   const exact = PRICING[`${provider}:${model}`]
   if (exact) return exact

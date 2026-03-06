@@ -9,6 +9,7 @@ import {
   type MetricDef,
   type ExtractMetricsResult,
 } from '@/lib/claude/extractMetrics'
+import { createFundAIProvider } from '@/lib/ai'
 import { decryptApiKey, decrypt } from '@/lib/crypto'
 import { getAccessToken as getGoogleAccessToken, findOrCreateFolder as findOrCreateGoogleFolder, uploadFile as uploadGoogleFile } from '@/lib/google/drive'
 import { getGoogleCredentials } from '@/lib/google/credentials'
@@ -52,9 +53,8 @@ export async function runPipeline(
   // Step 4: Extract text from email body and attachments
   const extracted = await extractAttachmentText(payload)
 
-  // Fetch the fund's (decrypted) Claude API key and model preference
-  const claudeApiKey = await getClaudeApiKey(supabase, fundId)
-  const claudeModel = await getClaudeModel(supabase, fundId)
+  // Fetch the fund's AI provider based on default_ai_provider setting
+  const { provider, model, providerType } = await createFundAIProvider(supabase, fundId)
 
   // Step 5: Identify the company (skip if already assigned, e.g. from manual assignment)
   const { data: existingEmail } = await supabase
@@ -75,8 +75,9 @@ export async function runPipeline(
       payload.Subject ?? '',
       extracted.emailBody,
       companies,
-      claudeApiKey,
-      claudeModel,
+      provider,
+      providerType,
+      model,
       { admin: supabase, fundId }
     )
 
@@ -136,8 +137,9 @@ export async function runPipeline(
     metrics,
     pdfBase64s,
     images,
-    claudeApiKey,
-    claudeModel,
+    provider,
+    providerType,
+    model,
     { admin: supabase, fundId }
   )
 
@@ -345,7 +347,7 @@ export async function getOpenAIModel(supabase: Supabase, fundId: string): Promis
   return data?.openai_model || 'gpt-4o'
 }
 
-export async function getDefaultAIProvider(supabase: Supabase, fundId: string): Promise<'anthropic' | 'openai'> {
+export async function getDefaultAIProvider(supabase: Supabase, fundId: string): Promise<'anthropic' | 'openai' | 'gemini' | 'ollama'> {
   const { data } = await supabase
     .from('fund_settings')
     .select('default_ai_provider')
@@ -353,7 +355,45 @@ export async function getDefaultAIProvider(supabase: Supabase, fundId: string): 
     .single()
 
   const provider = data?.default_ai_provider
-  return provider === 'openai' ? 'openai' : 'anthropic'
+  if (provider === 'openai' || provider === 'gemini' || provider === 'ollama') return provider
+  return 'anthropic'
+}
+
+export async function getGeminiApiKey(supabase: Supabase, fundId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('fund_settings')
+    .select('gemini_api_key_encrypted, encryption_key_encrypted')
+    .eq('fund_id', fundId)
+    .single()
+
+  if (error || !data?.gemini_api_key_encrypted || !data?.encryption_key_encrypted) {
+    throw new Error(`Gemini API key not configured for fund ${fundId}`)
+  }
+
+  return decryptApiKey(data.gemini_api_key_encrypted, data.encryption_key_encrypted)
+}
+
+export async function getGeminiModel(supabase: Supabase, fundId: string): Promise<string> {
+  const { data } = await supabase
+    .from('fund_settings')
+    .select('gemini_model')
+    .eq('fund_id', fundId)
+    .single()
+
+  return data?.gemini_model || 'gemini-2.0-flash'
+}
+
+export async function getOllamaConfig(supabase: Supabase, fundId: string): Promise<{ baseUrl: string; model: string }> {
+  const { data } = await supabase
+    .from('fund_settings')
+    .select('ollama_base_url, ollama_model')
+    .eq('fund_id', fundId)
+    .single()
+
+  return {
+    baseUrl: data?.ollama_base_url || 'http://localhost:11434/v1',
+    model: data?.ollama_model || 'llama3.2',
+  }
 }
 
 export async function getCompanies(supabase: Supabase, fundId: string): Promise<CompanyRef[]> {

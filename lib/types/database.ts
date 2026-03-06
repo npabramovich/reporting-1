@@ -161,6 +161,10 @@ export type Database = {
           openai_api_key_encrypted: string | null
           openai_model: string
           default_ai_provider: string
+          gemini_api_key_encrypted: string | null
+          gemini_model: string
+          ollama_base_url: string | null
+          ollama_model: string
           analytics_fathom_site_id: string | null
           analytics_ga_measurement_id: string | null
           analytics_custom_head_script: string | null
@@ -206,6 +210,10 @@ export type Database = {
           openai_api_key_encrypted?: string | null
           openai_model?: string
           default_ai_provider?: string
+          gemini_api_key_encrypted?: string | null
+          gemini_model?: string
+          ollama_base_url?: string | null
+          ollama_model?: string
           analytics_fathom_site_id?: string | null
           analytics_ga_measurement_id?: string | null
           analytics_custom_head_script?: string | null
@@ -251,6 +259,10 @@ export type Database = {
           openai_api_key_encrypted?: string | null
           openai_model?: string
           default_ai_provider?: string
+          gemini_api_key_encrypted?: string | null
+          gemini_model?: string
+          ollama_base_url?: string | null
+          ollama_model?: string
           analytics_fathom_site_id?: string | null
           analytics_ga_measurement_id?: string | null
           analytics_custom_head_script?: string | null

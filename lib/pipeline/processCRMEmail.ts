@@ -2,9 +2,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { extractAttachmentText } from '@/lib/parsing/extractAttachmentText'
 import { identifyCompany } from '@/lib/claude/identifyCompany'
 import { extractInteraction } from '@/lib/claude/extractInteraction'
+import { createFundAIProvider } from '@/lib/ai'
 import {
-  getClaudeApiKey,
-  getClaudeModel,
   getCompanies,
   finalizeEmail,
   type PostmarkPayload,
@@ -36,9 +35,8 @@ export async function runCRMPipeline(
   const extracted = await extractAttachmentText(payload)
   const bodyText = extracted.emailBody
 
-  // Step 2: Get AI credentials
-  const claudeApiKey = await getClaudeApiKey(supabase, fundId)
-  const claudeModel = await getClaudeModel(supabase, fundId)
+  // Step 2: Get AI provider based on default setting
+  const { provider, model, providerType } = await createFundAIProvider(supabase, fundId)
   const logParams = { admin: supabase, fundId }
 
   // Step 3: Identify company
@@ -51,8 +49,9 @@ export async function runCRMPipeline(
         payload.Subject ?? '',
         bodyText,
         companies,
-        claudeApiKey,
-        claudeModel,
+        provider,
+        providerType,
+        model,
         logParams
       )
 
@@ -74,8 +73,9 @@ export async function runCRMPipeline(
     payload.Subject ?? '',
     bodyText,
     senderName,
-    claudeApiKey,
-    claudeModel,
+    provider,
+    providerType,
+    model,
     logParams
   )
 
