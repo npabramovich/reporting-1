@@ -3,50 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { dbError } from '@/lib/api-error'
 import type { InvestmentTransaction, CompanyStatus } from '@/lib/types/database'
-
-// ---------------------------------------------------------------------------
-// XIRR — Newton-Raphson method
-// ---------------------------------------------------------------------------
-
-interface CashFlow {
-  date: Date
-  amount: number
-}
-
-function xirr(flows: CashFlow[]): number | null {
-  if (flows.length < 2) return null
-
-  // Need at least one positive and one negative cash flow
-  const hasPos = flows.some(f => f.amount > 0)
-  const hasNeg = flows.some(f => f.amount < 0)
-  if (!hasPos || !hasNeg) return null
-
-  const daysFromFirst = flows.map(f => (f.date.getTime() - flows[0].date.getTime()) / (365.25 * 86400000))
-
-  function npv(rate: number): number {
-    return flows.reduce((sum, f, i) => sum + f.amount / Math.pow(1 + rate, daysFromFirst[i]), 0)
-  }
-
-  function dnpv(rate: number): number {
-    return flows.reduce((sum, f, i) => {
-      const t = daysFromFirst[i]
-      return sum - t * f.amount / Math.pow(1 + rate, t + 1)
-    }, 0)
-  }
-
-  let rate = 0.1
-  for (let iter = 0; iter < 100; iter++) {
-    const val = npv(rate)
-    const deriv = dnpv(rate)
-    if (Math.abs(deriv) < 1e-12) break
-    const next = rate - val / deriv
-    if (Math.abs(next - rate) < 1e-8) return next
-    rate = next
-    // Guard against divergence
-    if (rate < -0.999 || rate > 100) return null
-  }
-  return Math.abs(npv(rate)) < 1 ? rate : null
-}
+import { xirr, type CashFlow } from '@/lib/xirr'
 
 // ---------------------------------------------------------------------------
 // GET — portfolio-wide investment summary
@@ -137,9 +94,17 @@ export async function GET(req: NextRequest) {
     let latestSharePriceDate: string | null = null
 
     for (const txn of txns) {
+      if (txn.transaction_type === 'investment') {
+        if (txn.share_price != null && txn.transaction_date) {
+          if (!latestSharePriceDate || txn.transaction_date > latestSharePriceDate) {
+            latestSharePrice = txn.share_price
+            latestSharePriceDate = txn.transaction_date
+          }
+        }
+      }
       if (txn.transaction_type === 'unrealized_gain_change') {
         if (txn.current_share_price != null && txn.transaction_date) {
-          if (!latestSharePriceDate || txn.transaction_date > latestSharePriceDate) {
+          if (!latestSharePriceDate || txn.transaction_date >= latestSharePriceDate) {
             latestSharePrice = txn.current_share_price
             latestSharePriceDate = txn.transaction_date
           }
@@ -147,7 +112,7 @@ export async function GET(req: NextRequest) {
       }
       if (txn.transaction_type === 'round_info') {
         if (txn.share_price != null && txn.transaction_date) {
-          if (!latestSharePriceDate || txn.transaction_date > latestSharePriceDate) {
+          if (!latestSharePriceDate || txn.transaction_date >= latestSharePriceDate) {
             latestSharePrice = txn.share_price
             latestSharePriceDate = txn.transaction_date
           }

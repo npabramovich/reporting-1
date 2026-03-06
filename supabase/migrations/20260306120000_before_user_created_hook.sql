@@ -5,6 +5,8 @@
 create or replace function public.hook_before_user_created(event jsonb)
 returns jsonb
 language plpgsql
+security definer
+set search_path = public
 as $$
 declare
   user_email text;
@@ -48,6 +50,10 @@ $$;
 
 -- Grant execute to supabase_auth_admin (required for auth hooks)
 grant execute on function public.hook_before_user_created(jsonb) to supabase_auth_admin;
+
+-- The hook queries allowed_signups, which has RLS enabled with no policies.
+-- Grant select to supabase_auth_admin so the hook can read the whitelist.
+grant select on table public.allowed_signups to supabase_auth_admin;
 
 -- Revoke from public for security
 revoke execute on function public.hook_before_user_created(jsonb) from public;

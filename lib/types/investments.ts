@@ -20,5 +20,6 @@ export interface CompanyInvestmentSummary {
   unrealizedValue: number
   fmv: number
   moic: number | null
+  grossIrr: number | null
   rounds: InvestmentRoundSummary[]
 }

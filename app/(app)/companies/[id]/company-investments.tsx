@@ -94,10 +94,12 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showOrigCurrency, setShowOrigCurrency] = useState(false)
+  const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10))
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/companies/${companyId}/investments`)
+      const params = asOfDate ? `?asOf=${asOfDate}` : ''
+      const res = await fetch(`/api/companies/${companyId}/investments${params}`)
       if (res.ok) {
         const data = await res.json()
         setTransactions(data.transactions)
@@ -106,7 +108,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
     } finally {
       setLoading(false)
     }
-  }, [companyId])
+  }, [companyId, asOfDate])
 
   useEffect(() => { load() }, [load])
 
@@ -272,7 +274,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
       </div>
 
       {expanded && summary && summary.totalInvested > 0 && (
-        <div className="flex items-center gap-4 mb-3 text-sm">
+        <div className="flex items-center gap-4 mb-3 text-sm flex-wrap">
           <span>
             <span className="text-muted-foreground">Invested:</span>{' '}
             <span className="font-medium">{fmt(summary.totalInvested)}</span>
@@ -287,12 +289,27 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
               <span className="font-medium">{fmtMoic(summary.moic)}</span>
             </span>
           )}
+          {summary.grossIrr != null && (
+            <span>
+              <span className="text-muted-foreground">IRR:</span>{' '}
+              <span className="font-medium">{(summary.grossIrr * 100).toFixed(1)}%</span>
+            </span>
+          )}
           {summary.totalRealized > 0 && (
             <span>
               <span className="text-muted-foreground">Realized:</span>{' '}
               <span className="font-medium">{fmt(summary.totalRealized)}</span>
             </span>
           )}
+          <span className="flex items-center gap-1">
+            <span className="text-muted-foreground">as of</span>
+            <input
+              type="date"
+              value={asOfDate}
+              onChange={e => setAsOfDate(e.target.value)}
+              className="text-xs border rounded px-1.5 py-0.5 bg-background"
+            />
+          </span>
         </div>
       )}
 

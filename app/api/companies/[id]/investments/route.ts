@@ -6,6 +6,7 @@ import { dbError } from '@/lib/api-error'
 import { logActivity } from '@/lib/activity'
 import type { InvestmentTransaction, CompanyStatus } from '@/lib/types/database'
 import type { CompanyInvestmentSummary, InvestmentRoundSummary } from '@/lib/types/investments'
+import { xirr, type CashFlow } from '@/lib/xirr'
 
 // ---------------------------------------------------------------------------
 // Compute summary from raw transactions
@@ -13,7 +14,8 @@ import type { CompanyInvestmentSummary, InvestmentRoundSummary } from '@/lib/typ
 
 function computeSummary(
   transactions: InvestmentTransaction[],
-  companyStatus: CompanyStatus
+  companyStatus: CompanyStatus,
+  asOfDate: Date = new Date()
 ): CompanyInvestmentSummary {
   let totalInvested = 0
   let totalShares = 0
@@ -23,11 +25,16 @@ function computeSummary(
   let latestSharePriceDate: string | null = null
 
   const roundMap = new Map<string, InvestmentRoundSummary>()
+  const cashFlows: CashFlow[] = []
 
   for (const txn of transactions) {
     if (txn.transaction_type === 'investment') {
       totalInvested += txn.investment_cost ?? 0
       totalShares += txn.shares_acquired ?? 0
+
+      if (txn.transaction_date && txn.investment_cost) {
+        cashFlows.push({ date: new Date(txn.transaction_date), amount: -(txn.investment_cost) })
+      }
 
       const roundName = txn.round_name ?? 'Unknown'
       const existing = roundMap.get(roundName)
@@ -51,11 +58,23 @@ function computeSummary(
           costBasisExited: 0,
         })
       }
+      // Also track share price for latest determination
+      if (txn.share_price != null && txn.transaction_date) {
+        if (!latestSharePriceDate || txn.transaction_date > latestSharePriceDate) {
+          latestSharePrice = txn.share_price
+          latestSharePriceDate = txn.transaction_date
+        }
+      }
     }
 
     if (txn.transaction_type === 'proceeds') {
-      totalRealized += (txn.proceeds_received ?? 0) + (txn.proceeds_escrow ?? 0)
+      const proceedsAmount = (txn.proceeds_received ?? 0) + (txn.proceeds_escrow ?? 0)
+      totalRealized += proceedsAmount
       totalWrittenOff += txn.proceeds_written_off ?? 0
+
+      if (txn.transaction_date && proceedsAmount > 0) {
+        cashFlows.push({ date: new Date(txn.transaction_date), amount: proceedsAmount })
+      }
       // Attribute cost basis exited to the round if specified
       if (txn.round_name && txn.cost_basis_exited != null) {
         const round = roundMap.get(txn.round_name)
@@ -65,7 +84,7 @@ function computeSummary(
 
     if (txn.transaction_type === 'unrealized_gain_change') {
       if (txn.current_share_price != null && txn.transaction_date) {
-        if (!latestSharePriceDate || txn.transaction_date > latestSharePriceDate) {
+        if (!latestSharePriceDate || txn.transaction_date >= latestSharePriceDate) {
           latestSharePrice = txn.current_share_price
           latestSharePriceDate = txn.transaction_date
         }
@@ -79,7 +98,7 @@ function computeSummary(
 
     if (txn.transaction_type === 'round_info') {
       if (txn.share_price != null && txn.transaction_date) {
-        if (!latestSharePriceDate || txn.transaction_date > latestSharePriceDate) {
+        if (!latestSharePriceDate || txn.transaction_date >= latestSharePriceDate) {
           latestSharePrice = txn.share_price
           latestSharePriceDate = txn.transaction_date
         }
@@ -116,6 +135,18 @@ function computeSummary(
 
   const moic = totalInvested > 0 ? (totalRealized + unrealizedValue) / totalInvested : null
 
+  // Compute gross IRR
+  let grossIrr: number | null = null
+  if (cashFlows.length > 0) {
+    const terminalValue = companyStatus === 'written-off' ? 0 : unrealizedValue
+    if (terminalValue > 0 || totalRealized > 0) {
+      if (companyStatus !== 'exited' && terminalValue > 0) {
+        cashFlows.push({ date: asOfDate, amount: terminalValue })
+      }
+      grossIrr = xirr(cashFlows)
+    }
+  }
+
   return {
     totalInvested,
     totalShares,
@@ -125,6 +156,7 @@ function computeSummary(
     unrealizedValue,
     fmv,
     moic,
+    grossIrr,
     rounds,
   }
 }
@@ -170,7 +202,9 @@ export async function GET(
   if (error) return dbError(error, 'companies-id-investments')
 
   const txns = (transactions ?? []) as InvestmentTransaction[]
-  const summary = computeSummary(txns, company.status as CompanyStatus)
+  const asOf = _req.nextUrl.searchParams.get('asOf')
+  const asOfDate = asOf ? new Date(asOf) : new Date()
+  const summary = computeSummary(txns, company.status as CompanyStatus, asOfDate)
 
   return NextResponse.json({ transactions: txns, summary, portfolioGroups: company.portfolio_group ?? [] })
 }
