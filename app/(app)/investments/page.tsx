@@ -154,7 +154,7 @@ export default function InvestmentsPage() {
 
   const heading = (
     <div className="flex items-center gap-4 mb-6">
-      <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.investments === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Investments</h1>
+      <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.investments === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Investments <span className="text-[10px] font-medium text-muted-foreground bg-muted rounded px-1.5 py-0.5 leading-none uppercase tracking-wider">beta</span></h1>
       <span className="text-sm text-muted-foreground">As of</span>
       <input
         type="date"

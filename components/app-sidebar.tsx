@@ -14,12 +14,12 @@ const THEME_CYCLE = ['system', 'light', 'dark'] as const
 const THEME_ICONS = { system: Monitor, light: Sun, dark: Moon }
 const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' }
 
-const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badgeKey?: 'review' | 'settings' | 'notes'; adminOnly?: boolean; featureKey?: FeatureKey }[] = [
+const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badgeKey?: 'review' | 'settings' | 'notes'; adminOnly?: boolean; featureKey?: FeatureKey; beta?: boolean }[] = [
   { href: '/dashboard', label: 'Portfolio', icon: Building2 },
   { href: '/review', label: 'Review', icon: ClipboardCheck, badgeKey: 'review' },
   { href: '/emails', label: 'Inbound', icon: Mail },
   { href: '/import', label: 'Import', icon: Upload, featureKey: 'imports' },
-  { href: '/investments', label: 'Investments', icon: BarChart3, featureKey: 'investments' },
+  { href: '/investments', label: 'Investments', icon: BarChart3, featureKey: 'investments', beta: true },
   { href: '/requests', label: 'Asks', icon: Send, featureKey: 'asks' },
   { href: '/notes', label: 'Notes', icon: StickyNote, badgeKey: 'notes', featureKey: 'notes' },
   { href: '/interactions', label: 'Interactions', icon: Handshake, featureKey: 'interactions' },
@@ -63,7 +63,7 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, up
           if (item.featureKey && !isFeatureVisible(featureVisibility, item.featureKey, !!isAdmin)) return false
           if (item.badgeKey === 'review' && reviewBadge === 0) return false
           return true
-        }).map(({ href, label, icon: Icon, badgeKey, adminOnly, featureKey }) => {
+        }).map(({ href, label, icon: Icon, badgeKey, adminOnly, featureKey, beta }) => {
           const isActive = pathname === href || pathname.startsWith(href + '/')
           const badgeCount = badgeKey === 'review' ? reviewBadge
             : badgeKey === 'settings' ? (settingsBadge ?? 0)
@@ -94,6 +94,9 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, up
                     {badgeCount > 99 ? '99+' : badgeCount}
                   </span>
                 )
+              )}
+              {beta && !collapsed && (
+                <span className="text-[9px] font-medium text-muted-foreground bg-muted rounded px-1 py-0.5 leading-none uppercase tracking-wider">beta</span>
               )}
               {showLock && !collapsed && (
                 <Lock className="h-3 w-3 text-amber-500 shrink-0 md:block hidden" />
