@@ -166,6 +166,7 @@ export type Database = {
           analytics_custom_head_script: string | null
           disable_user_tracking: boolean
           currency: string
+          feature_visibility: Json | null
           created_at: string
           updated_at: string
         }
@@ -210,6 +211,7 @@ export type Database = {
           analytics_custom_head_script?: string | null
           disable_user_tracking?: boolean
           currency?: string
+          feature_visibility?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -254,6 +256,7 @@ export type Database = {
           analytics_custom_head_script?: string | null
           disable_user_tracking?: boolean
           currency?: string
+          feature_visibility?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -1224,6 +1227,134 @@ export type Database = {
           },
         ]
       }
+      lp_letter_templates: {
+        Row: {
+          id: string
+          fund_id: string
+          name: string
+          style_guide: string | null
+          source_filename: string | null
+          source_type: 'upload' | 'google_doc' | 'default' | null
+          source_format: 'docx' | 'pdf' | 'google_doc' | null
+          source_text: string | null
+          is_default: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          fund_id: string
+          name?: string
+          style_guide?: string | null
+          source_filename?: string | null
+          source_type?: 'upload' | 'google_doc' | 'default' | null
+          source_format?: 'docx' | 'pdf' | 'google_doc' | null
+          source_text?: string | null
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          fund_id?: string
+          name?: string
+          style_guide?: string | null
+          source_filename?: string | null
+          source_type?: 'upload' | 'google_doc' | 'default' | null
+          source_format?: 'docx' | 'pdf' | 'google_doc' | null
+          source_text?: string | null
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'lp_letter_templates_fund_id_fkey'
+            columns: ['fund_id']
+            referencedRelation: 'funds'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      lp_letters: {
+        Row: {
+          id: string
+          fund_id: string
+          template_id: string | null
+          period_year: number
+          period_quarter: number
+          is_year_end: boolean
+          period_label: string
+          portfolio_group: string
+          portfolio_table_html: string | null
+          company_narratives: Json
+          full_draft: string | null
+          generation_prompt: string | null
+          generation_error: string | null
+          portfolio_summary: Json | null
+          company_prompts: Record<string, { prompt: string; mode: 'add' | 'replace' }> | null
+          status: 'generating' | 'draft' | 'final'
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          fund_id: string
+          template_id?: string | null
+          period_year: number
+          period_quarter: number
+          is_year_end?: boolean
+          period_label: string
+          portfolio_group: string
+          portfolio_table_html?: string | null
+          company_narratives?: CompanyNarrative[]
+          full_draft?: string | null
+          generation_prompt?: string | null
+          generation_error?: string | null
+          portfolio_summary?: Json | null
+          company_prompts?: Record<string, { prompt: string; mode: 'add' | 'replace' }> | null
+          status?: 'generating' | 'draft' | 'final'
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          fund_id?: string
+          template_id?: string | null
+          period_year?: number
+          period_quarter?: number
+          is_year_end?: boolean
+          period_label?: string
+          portfolio_group?: string
+          portfolio_table_html?: string | null
+          company_narratives?: CompanyNarrative[]
+          full_draft?: string | null
+          generation_prompt?: string | null
+          generation_error?: string | null
+          portfolio_summary?: Json | null
+          company_prompts?: Record<string, { prompt: string; mode: 'add' | 'replace' }> | null
+          status?: 'generating' | 'draft' | 'final'
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'lp_letters_fund_id_fkey'
+            columns: ['fund_id']
+            referencedRelation: 'funds'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'lp_letters_template_id_fkey'
+            columns: ['template_id']
+            referencedRelation: 'lp_letter_templates'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -1277,6 +1408,18 @@ export type NoteNotificationPreference = Tables<'note_notification_preferences'>
 export type NoteCompanySubscription    = Tables<'note_company_subscriptions'>
 export type AnalystConversation        = Tables<'analyst_conversations'>
 export type Interaction                = Tables<'interactions'>
+export type LpLetterTemplate           = Tables<'lp_letter_templates'>
+export type LpLetter                   = Tables<'lp_letters'>
+
+export interface CompanyNarrative {
+  company_id: string
+  company_name: string
+  narrative: string
+  updated_by: string | null
+  updated_at: string
+}
+
+export type LpLetterStatus = 'generating' | 'draft' | 'final'
 
 // Enum-style string literals
 export type CompanyStatus      = 'active' | 'exited' | 'written-off'

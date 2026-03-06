@@ -20,6 +20,18 @@ export async function runCRMPipeline(
   userId: string,
   payload: PostmarkPayload
 ): Promise<void> {
+  // Check if interactions feature is turned off
+  const { data: fSettings } = await supabase
+    .from('fund_settings')
+    .select('feature_visibility')
+    .eq('fund_id', fundId)
+    .maybeSingle()
+  const fv = fSettings?.feature_visibility as Record<string, string> | null
+  if (fv?.interactions === 'off') {
+    await finalizeEmail(supabase, emailId, { status: 'success', metricsExtracted: 0 })
+    return
+  }
+
   // Step 1: Extract text from email body
   const extracted = await extractAttachmentText(payload)
   const bodyText = extracted.emailBody

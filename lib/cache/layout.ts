@@ -69,7 +69,7 @@ export const getFundSettings = unstable_cache(
     const { data } = await admin
       .from('fund_settings')
       .select(
-        'currency, claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, analytics_fathom_site_id, analytics_ga_measurement_id'
+        'currency, claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, analytics_fathom_site_id, analytics_ga_measurement_id, feature_visibility'
       )
       .eq('fund_id', fundId)
       .maybeSingle()

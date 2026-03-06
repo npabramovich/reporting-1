@@ -17,7 +17,9 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import Link from 'next/link'
-import { AlertCircle, Check, ChevronDown, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X, Lock, ArrowDownCircle } from 'lucide-react'
+import { AlertCircle, Check, ChevronDown, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X, Lock, ArrowDownCircle, Eye } from 'lucide-react'
+import { DEFAULT_FEATURE_VISIBILITY, FEATURES_WITH_OFF } from '@/lib/types/features'
+import type { FeatureKey, FeatureVisibility } from '@/lib/types/features'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 
@@ -73,6 +75,7 @@ interface Settings {
   analyticsCustomHeadScript: string | null
   disableUserTracking: boolean
   currency: string
+  featureVisibility: Record<string, string>
   displayName: string
   isAdmin: boolean
   appVersion: string
@@ -145,6 +148,7 @@ export default function SettingsPage() {
           <VersionSection appVersion={settings.appVersion} updateAvailable={settings.updateAvailable} />
           <FundNameSection name={settings.fundName} logo={settings.fundLogo} onSaved={load} />
           <CurrencySection currency={settings.currency} onSaved={load} />
+          <FeatureVisibilitySection featureVisibility={settings.featureVisibility} onSaved={load} />
         </AdminSectionContext.Provider>
       )}
       <GroupHeader label="Notes" />
@@ -580,6 +584,96 @@ function CurrencySection({ currency, onSaved }: { currency: string; onSaved: () 
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5" /> : 'Save'}
         </Button>
       </div>
+    </Section>
+  )
+}
+
+// ──────────────────────────── Feature Visibility ────────────────────────────
+
+const FEATURE_META: Record<FeatureKey, { label: string; description: string; href: string }> = {
+  interactions: { label: 'Interactions', description: 'Track emails, intros, and meetings with portfolio companies', href: '/interactions' },
+  investments: { label: 'Investments', description: 'Fund investments, ownership, and round details per company', href: '/investments' },
+  notes: { label: 'Notes', description: 'Internal team notes and comments on companies', href: '/notes' },
+  lp_letters: { label: 'LP Letters', description: 'Generate and manage quarterly LP update letters', href: '/letters' },
+  imports: { label: 'Imports', description: 'Bulk import companies and metrics from CSV files', href: '/import' },
+  asks: { label: 'Asks', description: 'Track and send portfolio company requests to your network', href: '/requests' },
+}
+
+const VISIBILITY_OPTIONS: { value: FeatureVisibility; label: string; description: string }[] = [
+  { value: 'everyone', label: 'Everyone', description: 'Visible to all team members' },
+  { value: 'admin', label: 'Admin only', description: 'Only visible to admins' },
+  { value: 'hidden', label: 'Hidden', description: 'Removed from sidebar, still accessible via URL' },
+  { value: 'off', label: 'Off', description: 'Functionally disabled' },
+]
+
+function FeatureVisibilitySection({ featureVisibility, onSaved }: { featureVisibility: Record<string, string>; onSaved: () => void }) {
+  const [values, setValues] = useState<Record<string, string>>(featureVisibility)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const handleChange = async (key: FeatureKey, level: FeatureVisibility) => {
+    const next = { ...values, [key]: level }
+    setValues(next)
+    setSaving(true)
+    const res = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ featureVisibility: next }),
+    })
+    setSaving(false)
+    if (res.ok) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      onSaved()
+    }
+  }
+
+  const features = Object.keys(DEFAULT_FEATURE_VISIBILITY) as FeatureKey[]
+
+  return (
+    <Section title="Feature visibility">
+      <p className="text-xs text-muted-foreground mb-4">
+        Control which features are visible to your team. Hidden features can still be accessed directly by URL. Only Interactions supports being fully turned off.
+      </p>
+      <div className="space-y-4">
+        {features.map(key => {
+          const current = (values[key] ?? DEFAULT_FEATURE_VISIBILITY[key]) as FeatureVisibility
+          const options = FEATURES_WITH_OFF.includes(key)
+            ? VISIBILITY_OPTIONS
+            : VISIBILITY_OPTIONS.filter(o => o.value !== 'off')
+
+          const meta = FEATURE_META[key]
+          return (
+            <div key={key}>
+              <div className="mb-1.5">
+                <p className="text-sm font-medium">{meta.label}</p>
+                <p className="text-xs text-muted-foreground">
+                  {meta.description}{' '}
+                  <Link href={meta.href} className="underline underline-offset-2 hover:text-foreground">Learn more</Link>
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {options.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleChange(key, opt.value)}
+                    title={opt.description}
+                    className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${
+                      current === opt.value
+                        ? 'border-foreground/30 bg-accent font-medium'
+                        : 'hover:bg-accent/30'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {saving && <p className="text-xs text-muted-foreground mt-3">Saving...</p>}
+      {saved && <p className="text-xs text-green-600 mt-3">Saved</p>}
     </Section>
   )
 }
@@ -2865,7 +2959,7 @@ function DangerZone({ onDeleted }: { onDeleted: () => void }) {
 
   return (
     <div className="rounded-lg border border-destructive/30 p-5">
-      <h2 className="text-sm font-medium text-destructive mb-1 flex items-center gap-1.5"><Lock className="h-3 w-3 text-amber-500" />Danger zone</h2>
+      <h2 className="text-sm font-medium text-destructive mb-1 flex items-center gap-1.5"><Lock className="h-3 w-3 text-destructive" />Danger zone</h2>
       <p className="text-xs text-muted-foreground mb-3">
         Permanently delete your fund and all associated data. This cannot be undone.
       </p>

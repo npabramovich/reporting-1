@@ -12,6 +12,8 @@ import {
   getMembership,
   getUpdateAvailable,
 } from '@/lib/cache/layout'
+import { DEFAULT_FEATURE_VISIBILITY } from '@/lib/types/features'
+import type { FeatureVisibilityMap } from '@/lib/types/features'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Auth — uncached (uses cookies)
@@ -39,6 +41,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     isAdmin ? getUpdateAvailable() : Promise.resolve(false),
   ])
 
+  const featureVisibility = { ...DEFAULT_FEATURE_VISIBILITY, ...(fundSettings?.feature_visibility as Partial<FeatureVisibilityMap> | null) }
   const fundCurrency = fundSettings?.currency ?? 'USD'
   const hasAIKey = !!(fundSettings?.claude_api_key_encrypted || fundSettings?.openai_api_key_encrypted)
   const defaultAIProvider = fundSettings?.default_ai_provider ?? 'anthropic'
@@ -73,6 +76,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           hasAIKey={hasAIKey}
           defaultAIProvider={defaultAIProvider}
           updateAvailable={updateAvailable}
+          featureVisibility={featureVisibility}
         >
           {children}
         </AppShell>

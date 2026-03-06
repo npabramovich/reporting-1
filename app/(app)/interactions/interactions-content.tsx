@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
+import { useFeatureVisibility } from '@/components/feature-visibility-context'
+import { Lock } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { RelationshipsList } from './relationships-list'
 
@@ -24,6 +26,7 @@ interface Interaction {
 }
 
 export function InteractionsContent({ interactions }: { interactions: Interaction[] }) {
+  const fv = useFeatureVisibility()
   const [inboundAddress, setInboundAddress] = useState('')
 
   useEffect(() => {
@@ -36,7 +39,7 @@ export function InteractionsContent({ interactions }: { interactions: Interactio
     <PortfolioNotesProvider>
       <div className="p-4 md:py-8 md:pl-8 md:pr-4">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
-          <h1 className="text-2xl font-semibold tracking-tight">Interactions</h1>
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.interactions === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Interactions</h1>
           <div className="flex items-center gap-2">
             <PortfolioNotesButton />
             <AnalystToggleButton />

@@ -6,6 +6,9 @@ import { AnalystProvider } from '@/components/analyst-context'
 import { AppHeader } from '@/components/app-header'
 import { AppSidebar } from '@/components/app-sidebar'
 import { AppFooter } from '@/components/app-footer'
+import { FeatureVisibilityProvider } from '@/components/feature-visibility-context'
+import { DEFAULT_FEATURE_VISIBILITY } from '@/lib/types/features'
+import type { FeatureVisibilityMap } from '@/lib/types/features'
 
 interface AppShellProps {
   fundName: string
@@ -19,11 +22,13 @@ interface AppShellProps {
   hasAIKey?: boolean
   defaultAIProvider?: string
   updateAvailable?: boolean
+  featureVisibility?: FeatureVisibilityMap
   children: React.ReactNode
 }
 
-export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, currency, hasAIKey, defaultAIProvider, updateAvailable, children }: AppShellProps) {
+export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, currency, hasAIKey, defaultAIProvider, updateAvailable, featureVisibility, children }: AppShellProps) {
   return (
+    <FeatureVisibilityProvider value={featureVisibility ?? DEFAULT_FEATURE_VISIBILITY}>
     <CurrencyProvider currency={currency ?? 'USD'}>
       <SidebarProvider>
         <AnalystProvider hasAIKey={hasAIKey ?? false} defaultAIProvider={defaultAIProvider ?? 'anthropic'} fundName={fundName}>
@@ -36,16 +41,18 @@ export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsB
             notesBadge={notesBadge}
             isAdmin={isAdmin}
             updateAvailable={updateAvailable}
+            featureVisibility={featureVisibility}
           >
             {children}
           </AppShellInner>
         </AnalystProvider>
       </SidebarProvider>
     </CurrencyProvider>
+    </FeatureVisibilityProvider>
   )
 }
 
-function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, updateAvailable, children }: AppShellProps) {
+function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, updateAvailable, featureVisibility, children }: AppShellProps) {
   const { collapsed } = useSidebar()
 
   return (
@@ -58,6 +65,7 @@ function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBad
         settingsBadge={settingsBadge}
         notesBadge={notesBadge}
         isAdmin={isAdmin}
+        featureVisibility={featureVisibility}
       />
 
       <div className="flex flex-1">
@@ -67,7 +75,7 @@ function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBad
             collapsed ? 'w-16' : 'w-56'
           }`}
         >
-          <AppSidebar reviewBadge={reviewBadge} settingsBadge={settingsBadge} notesBadge={notesBadge} isAdmin={isAdmin} updateAvailable={updateAvailable} />
+          <AppSidebar reviewBadge={reviewBadge} settingsBadge={settingsBadge} notesBadge={notesBadge} isAdmin={isAdmin} updateAvailable={updateAvailable} featureVisibility={featureVisibility} />
         </aside>
 
         {/* Page content */}

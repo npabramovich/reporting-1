@@ -22,6 +22,8 @@ import { AnalystPanel } from '@/components/analyst-panel'
 import { CompanyDocuments } from './company-documents'
 import { CompanyInvestments } from './company-investments'
 import { CompanyInteractions } from './company-interactions'
+import { isFeatureVisible, DEFAULT_FEATURE_VISIBILITY } from '@/lib/types/features'
+import type { FeatureVisibilityMap } from '@/lib/types/features'
 
 function formatHighlightValue(value: number, metric: Metric, fundCurrency: string) {
   let formatted: string
@@ -75,11 +77,12 @@ export default async function CompanyDetailPage({
   // Fetch AI provider settings for the summary component
   const { data: fundSettings } = await supabase
     .from('fund_settings')
-    .select('claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, currency, file_storage_provider, google_drive_folder_id, dropbox_folder_path')
+    .select('claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, currency, file_storage_provider, google_drive_folder_id, dropbox_folder_path, feature_visibility')
     .eq('fund_id', company.fund_id)
-    .maybeSingle() as { data: { claude_api_key_encrypted: string | null; openai_api_key_encrypted: string | null; default_ai_provider: string | null; currency: string | null; file_storage_provider: string | null; google_drive_folder_id: string | null; dropbox_folder_path: string | null } | null }
+    .maybeSingle() as { data: { claude_api_key_encrypted: string | null; openai_api_key_encrypted: string | null; default_ai_provider: string | null; currency: string | null; file_storage_provider: string | null; google_drive_folder_id: string | null; dropbox_folder_path: string | null; feature_visibility: Record<string, string> | null } | null }
 
   const fundCurrency = fundSettings?.currency ?? 'USD'
+  const featureVisibility = { ...DEFAULT_FEATURE_VISIBILITY, ...(fundSettings?.feature_visibility as Partial<FeatureVisibilityMap> | null) }
 
   const { data: metrics } = await supabase
     .from('metrics')
@@ -148,8 +151,8 @@ export default async function CompanyDetailPage({
           {(company.industry ?? []).map((ind) => (
             <Badge key={ind} variant="outline">{ind}</Badge>
           ))}
-          <ChatButton />
-          <AnalystButton companyId={company.id} />
+          {isFeatureVisible(featureVisibility, 'notes', isAdmin) && <ChatButton />}
+          <AnalystButton companyId={company.id} pushRight={!isFeatureVisible(featureVisibility, 'notes', isAdmin)} />
         </div>
 
         {(latestMrr || latestCash) && (
@@ -196,9 +199,13 @@ export default async function CompanyDetailPage({
             dropboxFolderPath={fundSettings?.dropbox_folder_path ?? null}
           />
 
-          <CompanyInvestments companyId={company.id} companyStatus={company.status} portfolioGroups={company.portfolio_group ?? []} />
+          {isFeatureVisible(featureVisibility, 'investments', isAdmin) && (
+            <CompanyInvestments companyId={company.id} companyStatus={company.status} portfolioGroups={company.portfolio_group ?? []} adminOnly={featureVisibility.investments === 'admin'} />
+          )}
 
-          <CompanyInteractions companyId={company.id} />
+          {isFeatureVisible(featureVisibility, 'interactions', isAdmin) && (
+            <CompanyInteractions companyId={company.id} adminOnly={featureVisibility.interactions === 'admin'} />
+          )}
 
           {(company.founders || (company.contact_email && company.contact_email.length > 0) || company.overview || company.why_invested || company.current_update) && (
             <div className="mt-6 space-y-3">
@@ -248,7 +255,7 @@ export default async function CompanyDetailPage({
           )}
         </div>
 
-        <CompanyNotesPanel />
+        {isFeatureVisible(featureVisibility, 'notes', isAdmin) && <CompanyNotesPanel />}
         <AnalystPanel />
       </div>
     </div>

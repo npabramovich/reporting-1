@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { DollarSign, Plus, Trash2, Pencil, Loader2, ChevronDown, ChevronRight } from 'lucide-react'
+import { DollarSign, Plus, Trash2, Pencil, Loader2, ChevronDown, ChevronRight, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,6 +17,7 @@ interface Props {
   companyId: string
   companyStatus: CompanyStatus
   portfolioGroups: string[]
+  adminOnly?: boolean
 }
 
 type TransactionType = 'investment' | 'proceeds' | 'unrealized_gain_change' | 'round_info'
@@ -76,7 +77,7 @@ const EMPTY_FORM: Record<string, string> = {
   portfolio_group: '',
 }
 
-export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }: Props) {
+export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, adminOnly }: Props) {
   const currency = useCurrency()
   const symbol = getCurrencySymbol(currency)
   const fmt = (val: number | null | undefined) => val == null ? '-' : formatCurrencyFull(val, currency)
@@ -240,6 +241,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
         <div className="flex items-center gap-2 mb-2">
           <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-sm font-medium text-muted-foreground">Investment Details</span>
+          {adminOnly && <Lock className="h-3 w-3 text-amber-500" />}
         </div>
         <div className="animate-pulse space-y-2">
           <div className="h-8 bg-muted rounded w-full" />
@@ -259,6 +261,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups }
           {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           <DollarSign className="h-3.5 w-3.5" />
           Investment Details
+          {adminOnly && <Lock className="h-3 w-3 text-amber-500" />}
           {transactions.length > 0 && (
             <span className="text-xs bg-muted rounded-full px-1.5 py-0.5">{transactions.length}</span>
           )}
