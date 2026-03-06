@@ -114,7 +114,7 @@ export default function SignUpPage() {
               </Alert>
             )}
             {error === 'not_whitelisted' && (
-              <Alert className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200">
+              <Alert className="!border-amber-500/50 !bg-amber-50 dark:!bg-amber-950/30 !text-amber-900 dark:!text-amber-200">
                 <AlertDescription className="text-sm space-y-2">
                   <p>This email is not authorized for the hosted platform.</p>
                   <p>
@@ -127,7 +127,7 @@ export default function SignUpPage() {
               </Alert>
             )}
             {info && (
-              <Alert className="border-green-500/50 bg-green-50 dark:bg-green-950/30 text-green-900 dark:text-green-200">
+              <Alert className="!border-green-500/50 !bg-green-50 dark:!bg-green-950/30 !text-green-900 dark:!text-green-200">
                 <AlertDescription>{info}</AlertDescription>
               </Alert>
             )}
