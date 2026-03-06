@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { AppSidebar } from '@/components/app-sidebar'
 import { useSidebar } from '@/components/sidebar-context'
+import type { FeatureVisibilityMap } from '@/lib/types/features'
 
 interface AppHeaderProps {
   fundName: string
@@ -15,9 +16,10 @@ interface AppHeaderProps {
   settingsBadge?: number
   notesBadge?: number
   isAdmin?: boolean
+  featureVisibility?: FeatureVisibilityMap
 }
 
-export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin }: AppHeaderProps) {
+export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, featureVisibility }: AppHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { collapsed } = useSidebar()
 
@@ -83,6 +85,7 @@ export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge, settings
             settingsBadge={settingsBadge}
             notesBadge={notesBadge}
             isAdmin={isAdmin}
+            featureVisibility={featureVisibility}
             onNavigate={() => setDrawerOpen(false)}
           />
         </SheetContent>

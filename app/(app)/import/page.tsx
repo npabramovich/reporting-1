@@ -5,10 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2, CheckCircle2, AlertCircle, Upload, FileText } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, Upload, FileText, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
+import { useFeatureVisibility } from '@/components/feature-visibility-context'
 
 interface ImportResult {
   companiesCreated: number
@@ -51,6 +52,7 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 MB
 const TEXT_ONLY_THRESHOLD = 10 * 1024 * 1024 // 10 MB — files above this get text-only extraction
 
 export default function ImportPage() {
+  const fv = useFeatureVisibility()
   const [text, setText] = useState('')
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
@@ -315,7 +317,7 @@ export default function ImportPage() {
   return (
     <div className="p-4 md:p-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Import</h1>
+        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.imports === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Import</h1>
         <AnalystToggleButton />
       </div>
 

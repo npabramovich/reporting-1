@@ -51,11 +51,9 @@ export async function GET() {
 
   const fundId = membership.fund_id
 
-  // Get current month boundaries
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
-  // Fetch all usage logs for current month
   interface UsageLog {
     provider: string
     model: string
@@ -65,18 +63,18 @@ export async function GET() {
     created_at: string
   }
 
-  const { data: logs, error } = await admin
+  // Single query: fetch all usage logs (all time) for monthly summary + current month daily
+  const { data: allLogs, error } = await admin
     .from('ai_usage_logs' as any)
     .select('provider, model, feature, input_tokens, output_tokens, created_at')
     .eq('fund_id', fundId)
-    .gte('created_at', monthStart)
     .order('created_at', { ascending: false }) as { data: UsageLog[] | null; error: any }
 
   if (error) {
     return NextResponse.json({ error: 'Failed to fetch usage data' }, { status: 500 })
   }
 
-  // Group by date + provider + model for daily breakdown
+  // Process all logs in a single pass
   const dailyMap = new Map<string, {
     date: string
     provider: string
@@ -84,47 +82,58 @@ export async function GET() {
     input_tokens: number
     output_tokens: number
   }>()
-
   const mtdByProvider: Record<string, { input_tokens: number; output_tokens: number; estimated_cost: number }> = {}
+  const monthlyMap = new Map<string, {
+    month: string
+    input_tokens: number
+    output_tokens: number
+    estimated_cost: number
+  }>()
 
-  for (const log of logs ?? []) {
+  for (const log of allLogs ?? []) {
     const date = log.created_at.slice(0, 10)
-    const key = `${date}|${log.provider}|${log.model}`
+    const month = log.created_at.slice(0, 7)
+    const cost = estimateCost(log.provider, log.model, log.input_tokens, log.output_tokens)
+    const isCurrentMonth = log.created_at >= monthStart
 
-    const existing = dailyMap.get(key)
-    if (existing) {
-      existing.input_tokens += log.input_tokens
-      existing.output_tokens += log.output_tokens
+    // Monthly summary (all time)
+    const monthEntry = monthlyMap.get(month)
+    if (monthEntry) {
+      monthEntry.input_tokens += log.input_tokens
+      monthEntry.output_tokens += log.output_tokens
+      monthEntry.estimated_cost += cost
     } else {
-      dailyMap.set(key, {
-        date,
-        provider: log.provider,
-        model: log.model,
-        input_tokens: log.input_tokens,
-        output_tokens: log.output_tokens,
-      })
+      monthlyMap.set(month, { month, input_tokens: log.input_tokens, output_tokens: log.output_tokens, estimated_cost: cost })
     }
 
-    // MTD aggregation by provider
-    if (!mtdByProvider[log.provider]) {
-      mtdByProvider[log.provider] = { input_tokens: 0, output_tokens: 0, estimated_cost: 0 }
+    // Daily breakdown + MTD (current month only)
+    if (isCurrentMonth) {
+      const key = `${date}|${log.provider}|${log.model}`
+      const existing = dailyMap.get(key)
+      if (existing) {
+        existing.input_tokens += log.input_tokens
+        existing.output_tokens += log.output_tokens
+      } else {
+        dailyMap.set(key, { date, provider: log.provider, model: log.model, input_tokens: log.input_tokens, output_tokens: log.output_tokens })
+      }
+
+      if (!mtdByProvider[log.provider]) {
+        mtdByProvider[log.provider] = { input_tokens: 0, output_tokens: 0, estimated_cost: 0 }
+      }
+      mtdByProvider[log.provider].input_tokens += log.input_tokens
+      mtdByProvider[log.provider].output_tokens += log.output_tokens
+      mtdByProvider[log.provider].estimated_cost += cost
     }
-    mtdByProvider[log.provider].input_tokens += log.input_tokens
-    mtdByProvider[log.provider].output_tokens += log.output_tokens
-    mtdByProvider[log.provider].estimated_cost += estimateCost(
-      log.provider, log.model, log.input_tokens, log.output_tokens
-    )
   }
 
-  // Build daily array with cost estimates
   const daily = Array.from(dailyMap.values())
-    .map(d => ({
-      ...d,
-      estimated_cost: estimateCost(d.provider, d.model, d.input_tokens, d.output_tokens),
-    }))
+    .map(d => ({ ...d, estimated_cost: estimateCost(d.provider, d.model, d.input_tokens, d.output_tokens) }))
     .sort((a, b) => b.date.localeCompare(a.date))
 
   const totalEstimatedCost = Object.values(mtdByProvider).reduce((sum, p) => sum + p.estimated_cost, 0)
+
+  const monthly = Array.from(monthlyMap.values())
+    .sort((a, b) => b.month.localeCompare(a.month))
 
   // Check if user tracking is disabled
   const { data: fundSettings } = await admin
@@ -138,6 +147,7 @@ export async function GET() {
   if (trackingDisabled) {
     return NextResponse.json({
       daily,
+      monthly,
       mtd: {
         ...mtdByProvider,
         total_estimated_cost: totalEstimatedCost,
@@ -213,6 +223,7 @@ export async function GET() {
 
   return NextResponse.json({
     daily,
+    monthly,
     mtd: {
       ...mtdByProvider,
       total_estimated_cost: totalEstimatedCost,

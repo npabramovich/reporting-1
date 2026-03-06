@@ -43,8 +43,16 @@ interface ActivityData {
   recent: RecentActivity[]
 }
 
+interface MonthlyRow {
+  month: string
+  input_tokens: number
+  output_tokens: number
+  estimated_cost: number
+}
+
 interface UsageData {
   daily: DailyRow[]
+  monthly: MonthlyRow[]
   mtd: Record<string, ProviderMTD | number> & { total_estimated_cost: number }
   activity?: ActivityData
 }
@@ -177,14 +185,17 @@ export function UsageDashboard() {
             </CardContent>
           </Card>
         ))}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total (estimated)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{formatCost(totalCost)}</p>
-          </CardContent>
-        </Card>
+        {providers.length > 1 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Month total (estimated)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">{formatCost(totalCost)}</p>
+              <p className="text-xs text-muted-foreground">All providers combined</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Daily breakdown table */}
@@ -217,10 +228,59 @@ export function UsageDashboard() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="bg-muted/50 font-medium">
+                  <td className="px-4 py-2.5" colSpan={3}>Total</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{data.daily.reduce((s, r) => s + r.input_tokens, 0).toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{data.daily.reduce((s, r) => s + r.output_tokens, 0).toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{formatCost(data.daily.reduce((s, r) => s + r.estimated_cost, 0))}</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
       </div>
+
+      {/* Monthly summary table */}
+      {data.monthly.length > 0 && (
+        <div>
+          <h2 className="text-lg font-medium mb-3">Monthly Summary</h2>
+          <div className="rounded-lg border overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left font-medium px-4 py-2.5">Month</th>
+                  <th className="text-right font-medium px-4 py-2.5">Input Tokens</th>
+                  <th className="text-right font-medium px-4 py-2.5">Output Tokens</th>
+                  <th className="text-right font-medium px-4 py-2.5">Est. Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.monthly.map((row) => {
+                  const [y, m] = row.month.split('-')
+                  const label = new Date(parseInt(y), parseInt(m) - 1).toLocaleString('default', { month: 'long', year: 'numeric' })
+                  return (
+                    <tr key={row.month} className="border-b last:border-0">
+                      <td className="px-4 py-2.5">{label}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{row.input_tokens.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{row.output_tokens.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{formatCost(row.estimated_cost)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-muted/50 font-medium">
+                  <td className="px-4 py-2.5">Total</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{data.monthly.reduce((s, r) => s + r.input_tokens, 0).toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{data.monthly.reduce((s, r) => s + r.output_tokens, 0).toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{formatCost(data.monthly.reduce((s, r) => s + r.estimated_cost, 0))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* User activity disabled notice */}
       {!activity && (

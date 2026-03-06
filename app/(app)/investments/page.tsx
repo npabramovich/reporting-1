@@ -9,6 +9,7 @@ import type { CompanyStatus } from '@/lib/types/database'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
+import { useFeatureVisibility } from '@/components/feature-visibility-context'
 
 interface CompanySummary {
   companyId: string
@@ -55,6 +56,7 @@ const STATUS_COLORS: Record<CompanyStatus, string> = {
 const TEXT_SORT_KEYS: SortKey[] = ['companyName', 'status', 'portfolioGroup']
 
 export default function InvestmentsPage() {
+  const fv = useFeatureVisibility()
   const currency = useCurrency()
   const fmt = (val: number) => formatCurrency(val, currency)
   const fmtFull = (val: number) => formatCurrencyFull(val, currency)
@@ -152,8 +154,7 @@ export default function InvestmentsPage() {
 
   const heading = (
     <div className="flex items-center gap-4 mb-6">
-      <Lock className="h-4 w-4 text-amber-500" />
-      <h1 className="text-2xl font-semibold tracking-tight">Investments</h1>
+      <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.investments === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Investments</h1>
       <span className="text-sm text-muted-foreground">As of</span>
       <input
         type="date"

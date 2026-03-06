@@ -1,11 +1,12 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
-import { MessageSquare, Send, Pencil, X, Check, Building2 } from 'lucide-react'
+import { MessageSquare, Send, Pencil, X, Check, Building2, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NoteContent } from '@/components/note-content'
 import { MentionTextarea, type MentionMember, type MentionTextareaRef } from '@/components/mention-textarea'
 import { useAnalystContext } from '@/components/analyst-context'
+import { useFeatureVisibility } from '@/components/feature-visibility-context'
 import Link from 'next/link'
 
 interface Note {
@@ -59,8 +60,10 @@ export function PortfolioNotesProvider({ children }: { children: ReactNode }) {
 
 export function PortfolioNotesButton() {
   const ctx = useContext(PortfolioNotesContext)
+  const fv = useFeatureVisibility()
   if (!ctx) return null
   const { open, toggle, unreadCount } = ctx
+  const notesAdminOnly = fv.notes === 'admin'
   return (
     <Button
       variant="outline"
@@ -75,6 +78,7 @@ export function PortfolioNotesButton() {
         )}
       </span>
       Notes
+      {notesAdminOnly && <Lock className="h-3 w-3 text-amber-500" />}
       {!open && unreadCount > 0 && (
         <span className="text-[10px] font-medium bg-blue-500 text-white rounded-full px-1 min-w-[16px] text-center">
           {unreadCount}

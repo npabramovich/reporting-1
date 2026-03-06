@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Users, Mail, ChevronDown, ChevronRight } from 'lucide-react'
+import { Users, Mail, ChevronDown, ChevronRight, Lock } from 'lucide-react'
 
 interface IntroContact {
   name: string
@@ -34,7 +34,7 @@ function formatRelativeTime(dateStr: string) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export function CompanyInteractions({ companyId }: { companyId: string }) {
+export function CompanyInteractions({ companyId, adminOnly }: { companyId: string; adminOnly?: boolean }) {
   const [interactions, setInteractions] = useState<Interaction[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -52,7 +52,7 @@ export function CompanyInteractions({ companyId }: { companyId: string }) {
   if (loading) {
     return (
       <div className="mt-6">
-        <h2 className="text-sm font-medium text-muted-foreground mb-2">Recent Interactions</h2>
+        <h2 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">Recent Interactions{adminOnly && <Lock className="h-3 w-3 text-amber-500" />}</h2>
         <p className="text-xs text-muted-foreground">Loading...</p>
       </div>
     )
@@ -63,7 +63,7 @@ export function CompanyInteractions({ companyId }: { companyId: string }) {
   return (
     <div className="mt-6">
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-medium text-muted-foreground">Recent Interactions</h2>
+        <h2 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">Recent Interactions{adminOnly && <Lock className="h-3 w-3 text-amber-500" />}</h2>
         <Link
           href={`/interactions?company_id=${companyId}`}
           className="text-xs text-muted-foreground hover:text-foreground"

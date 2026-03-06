@@ -4,11 +4,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { AlertCircle, Check, Loader2, Send } from 'lucide-react'
+import { AlertCircle, Check, Loader2, Send, Lock } from 'lucide-react'
 import { ResponseTracker } from './response-tracker'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
+import { useFeatureVisibility } from '@/components/feature-visibility-context'
 
 interface Company {
   id: string
@@ -69,6 +70,7 @@ function plainTextToHtml(text: string): string {
 }
 
 export default function RequestsPage() {
+  const fv = useFeatureVisibility()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
@@ -233,7 +235,7 @@ export default function RequestsPage() {
       <div className="p-4 md:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
+            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.asks === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Asks</h1>
             <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
           </div>
           <div className="flex items-center gap-2">
@@ -261,7 +263,7 @@ export default function RequestsPage() {
       <div className="p-4 md:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
+            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.asks === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Asks</h1>
             <p className="text-sm text-muted-foreground mt-1">Quarterly reporting email program</p>
           </div>
           <div className="flex items-center gap-2">
@@ -298,7 +300,7 @@ export default function RequestsPage() {
     <div className="p-4 md:p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Asks</h1>
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.asks === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Asks</h1>
           <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
         </div>
         <div className="flex items-center gap-2">

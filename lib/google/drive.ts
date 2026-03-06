@@ -117,11 +117,19 @@ export async function uploadFile(
   folderId: string,
   filename: string,
   content: Buffer | string,
-  mimeType: string
+  mimeType: string,
+  options?: { convert?: boolean }
 ): Promise<string> {
-  const metadata = {
+  const metadata: Record<string, unknown> = {
     name: filename,
     parents: [folderId],
+  }
+
+  // When convert is true, set the target mimeType in metadata so Drive auto-converts
+  if (options?.convert) {
+    if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      metadata.mimeType = 'application/vnd.google-apps.document'
+    }
   }
 
   const boundary = '----DriveUploadBoundary' + Date.now()

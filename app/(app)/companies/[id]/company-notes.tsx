@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { MessageSquare, Send, Pencil, X, Check } from 'lucide-react'
+import { MessageSquare, Send, Pencil, X, Check, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NoteContent } from '@/components/note-content'
 import { MentionTextarea, type MentionMember } from '@/components/mention-textarea'
 import { usePanelContext } from './company-panel-context'
 import { useAnalystContext } from '@/components/analyst-context'
+import { useFeatureVisibility } from '@/components/feature-visibility-context'
 
 interface Note {
   id: string
@@ -37,6 +38,8 @@ function formatRelativeTime(dateStr: string) {
 
 export function ChatButton() {
   const { notesOpen, toggleNotes, unreadCount } = usePanelContext()
+  const fv = useFeatureVisibility()
+  const notesAdminOnly = fv.notes === 'admin'
   return (
     <Button
       variant="outline"
@@ -51,6 +54,7 @@ export function ChatButton() {
         )}
       </span>
       Notes
+      {notesAdminOnly && <Lock className="h-3 w-3 text-amber-500" />}
       {!notesOpen && unreadCount > 0 && (
         <span className="text-[10px] font-medium bg-blue-500 text-white rounded-full px-1 min-w-[16px] text-center">
           {unreadCount}
