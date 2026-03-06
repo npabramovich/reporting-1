@@ -1,11 +1,13 @@
 # License
 
-**Version 1.0**
+**Version 1.1**
 
 Copyright © 2026 Unstructured Ventures, LLC. All rights reserved.
 
 
 ## Summary
+
+This license applies to the portfolio fund reporting software developed by Unstructured Ventures, LLC and available at https://github.com/tdavidson/reporting. It covers the source code in that repository, any instance deployed from it (including installations on hemrock.com, self-hosted deployments, and managed deployments), and all associated documentation, database schemas, and configuration files.
 
 This software is free to use if you are a single fund management company running your own operations — that includes all of your funds, SPVs, and internal team members. You can modify it and deploy it on your own infrastructure. If you are a fund administrator, outsourced CFO, consultant, or any kind of service provider using this software across multiple clients or management companies, you need a paid commercial license. You also cannot resell it, white-label it, offer it as SaaS, or bundle it into another product. All intellectual property stays with Unstructured Ventures, LLC. The software is provided as-is with no warranties, and liability is capped at $100. If you violate the terms, your license ends immediately. For commercial licensing, reach out to hello@hemrock.com.
 
@@ -13,7 +15,7 @@ This software is free to use if you are a single fund management company running
 
 ## 1. Definitions
 
-**"Software"** means the source code, object code, documentation, configuration files, database schema, and all related materials provided under this License.
+**"Software"** means the portfolio fund reporting software originally published at https://github.com/tdavidson/reporting, including all source code, object code, documentation, configuration files, database schema, and related materials provided under this License. This definition includes any fork, copy, or deployment derived from the repository, whether self-hosted, managed by a third party, or hosted at any domain (including but not limited to hemrock.com and its subdomains).
 
 **"Licensor"** means Unstructured Ventures, LLC.
 

@@ -20,7 +20,7 @@ export default function LicensePage() {
       <div className="mb-6 max-w-3xl w-full">
         <h1 className="text-2xl font-semibold tracking-tight">License</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Version 1.0 &mdash; Copyright &copy; 2026 Unstructured Ventures, LLC. All rights reserved.
+          Version 1.1 &mdash; Copyright &copy; 2026 Unstructured Ventures, LLC. All rights reserved.
         </p>
       </div>
 
@@ -36,6 +36,21 @@ export default function LicensePage() {
           {/* Summary */}
           <div id="summary">
             <h2 className="text-base font-medium mb-2">Summary</h2>
+            <p className="text-muted-foreground mb-2">
+              This license applies to the portfolio fund reporting software developed by
+              Unstructured Ventures, LLC and available at{' '}
+              <a
+                href="https://github.com/tdavidson/reporting"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground underline underline-offset-4 hover:text-foreground/80"
+              >
+                github.com/tdavidson/reporting
+              </a>
+              . It covers the source code in that repository, any instance deployed from it (including
+              installations on hemrock.com, self-hosted deployments, and managed deployments), and all
+              associated documentation, database schemas, and configuration files.
+            </p>
             <p className="text-muted-foreground mb-2">
               This software is free to use if you are a single fund management company running your own
               operations &mdash; that includes all of your funds, SPVs, and internal team members. You can
@@ -65,8 +80,20 @@ export default function LicensePage() {
           <div id="definitions">
             <h2 className="text-base font-medium mb-2">1. Definitions</h2>
             <p className="text-muted-foreground mb-2">
-              <strong className="text-foreground">&ldquo;Software&rdquo;</strong> means the source code, object code,
-              documentation, configuration files, database schema, and all related materials provided under this License.
+              <strong className="text-foreground">&ldquo;Software&rdquo;</strong> means the portfolio fund reporting
+              software originally published at{' '}
+              <a
+                href="https://github.com/tdavidson/reporting"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground underline underline-offset-4 hover:text-foreground/80"
+              >
+                github.com/tdavidson/reporting
+              </a>
+              , including all source code, object code, documentation, configuration files, database schema, and related
+              materials provided under this License. This definition includes any fork, copy, or deployment derived from
+              the repository, whether self-hosted, managed by a third party, or hosted at any domain (including but not
+              limited to hemrock.com and its subdomains).
             </p>
             <p className="text-muted-foreground mb-2">
               <strong className="text-foreground">&ldquo;Licensor&rdquo;</strong> means Unstructured Ventures, LLC.

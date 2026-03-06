@@ -1347,6 +1347,7 @@ function GeminiKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<'idle' | 'valid' | 'invalid' | 'saved'>('idle')
+  const [errorMsg, setErrorMsg] = useState('')
 
   const [models, setModels] = useState<{ id: string; name: string }[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
@@ -1383,13 +1384,20 @@ function GeminiKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
   const testKey = async () => {
     setTesting(true)
     setStatus('idle')
+    setErrorMsg('')
     const res = await fetch('/api/test-gemini-key', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ apiKey: newKey }),
     })
+    if (res.ok) {
+      setStatus('valid')
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setErrorMsg(data.error || 'Key is invalid')
+      setStatus('invalid')
+    }
     setTesting(false)
-    setStatus(res.ok ? 'valid' : 'invalid')
   }
 
   const saveKey = async () => {
@@ -1453,7 +1461,7 @@ function GeminiKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
       )}
       {status === 'invalid' && (
         <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-          <AlertCircle className="h-3 w-3" /> Key is invalid
+          <AlertCircle className="h-3 w-3" /> {errorMsg}
         </p>
       )}
       {status === 'saved' && (

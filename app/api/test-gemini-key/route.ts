@@ -21,7 +21,21 @@ export async function POST(req: NextRequest) {
     await provider.testConnection()
     return NextResponse.json({ ok: true })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Invalid API key'
-    return NextResponse.json({ error: message }, { status: 400 })
+    const raw = err instanceof Error ? err.message : String(err)
+    const lower = raw.toLowerCase()
+
+    let error: string
+    if (lower.includes('api key not valid') || lower.includes('api_key_invalid')) {
+      error = 'API key is invalid. Check that the key is correct and active in Google AI Studio.'
+    } else if (lower.includes('quota') || lower.includes('resource_exhausted') || lower.includes('429')) {
+      error = 'API key is valid, but quota exceeded. Check your billing and plan at ai.google.dev.'
+    } else if (lower.includes('permission') || lower.includes('forbidden') || lower.includes('403')) {
+      error = 'API key is valid, but lacks permission. Ensure the Generative Language API is enabled in your Google Cloud project.'
+    } else {
+      error = raw
+    }
+
+    const status = lower.includes('quota') || lower.includes('resource_exhausted') ? 429 : 400
+    return NextResponse.json({ error }, { status })
   }
 }
