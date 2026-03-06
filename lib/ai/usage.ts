@@ -5,7 +5,7 @@ type SupabaseAdmin = { from: (table: string) => any }
 export async function logAIUsage(admin: SupabaseAdmin, params: {
   fundId: string
   userId?: string
-  provider: 'anthropic' | 'openai'
+  provider: string
   model: string
   feature: string
   usage: TokenUsage

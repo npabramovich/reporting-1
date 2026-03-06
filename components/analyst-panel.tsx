@@ -123,7 +123,7 @@ export function AnalystPanel() {
     return d.toLocaleDateString()
   }
 
-  const modelKey = selectedModel ? `${selectedModel.provider}:${selectedModel.id}` : ''
+  const modelKey = selectedModel ? `${selectedModel.provider}:${selectedModel.id}` : 'auto'
 
   return (
     <div className="w-full lg:w-[340px] shrink-0 lg:sticky top-4">
@@ -138,14 +138,19 @@ export function AnalystPanel() {
             <Select
               value={modelKey}
               onValueChange={(val) => {
-                const model = availableModels.find(m => `${m.provider}:${m.id}` === val)
-                if (model) setSelectedModel(model)
+                if (val === 'auto') {
+                  setSelectedModel(null)
+                } else {
+                  const model = availableModels.find(m => `${m.provider}:${m.id}` === val)
+                  if (model) setSelectedModel(model)
+                }
               }}
             >
               <SelectTrigger className="h-7 text-[11px] flex-1 min-w-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="auto">Auto</SelectItem>
                 {availableModels.map((m) => (
                   <SelectItem key={`${m.provider}:${m.id}`} value={`${m.provider}:${m.id}`}>
                     {m.name}

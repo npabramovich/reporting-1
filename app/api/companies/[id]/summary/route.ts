@@ -123,10 +123,11 @@ export async function POST(
   if (limited) return limited
 
   // Read optional provider override from body
-  let providerOverride: 'anthropic' | 'openai' | undefined
+  let providerOverride: import('@/lib/ai').ProviderType | undefined
   try {
     const body = await req.json()
-    if (body.provider === 'anthropic' || body.provider === 'openai') {
+    const validProviders = ['anthropic', 'openai', 'gemini', 'ollama']
+    if (validProviders.includes(body.provider)) {
       providerOverride = body.provider
     }
   } catch {
@@ -148,7 +149,7 @@ export async function POST(
   // --- AI provider + model + custom prompt ---
   let provider: Awaited<ReturnType<typeof createFundAIProviderWithOverride>>['provider']
   let aiModel: string
-  let aiProviderType: 'anthropic' | 'openai'
+  let aiProviderType: string
   try {
     const result = await createFundAIProviderWithOverride(admin, company.fund_id, providerOverride)
     provider = result.provider

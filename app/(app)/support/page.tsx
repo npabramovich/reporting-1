@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose, Sparkles, Shield, Handshake, Users, ArrowDownCircle } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose, Sparkles, Shield, Handshake, Users, ArrowDownCircle, DollarSign, FileText } from 'lucide-react'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 
@@ -22,6 +22,8 @@ export default function SupportPage() {
       <li><a href="#settings" className="hover:text-foreground underline underline-offset-4">Settings</a></li>
       <li><a href="#notes" className="hover:text-foreground underline underline-offset-4">Notes</a></li>
       <li><a href="#interactions" className="hover:text-foreground underline underline-offset-4">Interactions</a></li>
+      <li><a href="#investments" className="hover:text-foreground underline underline-offset-4">Investments</a></li>
+      <li><a href="#lp-letters" className="hover:text-foreground underline underline-offset-4">LP Letters</a></li>
       <li><a href="#usage" className="hover:text-foreground underline underline-offset-4">Usage</a></li>
       <li><a href="#analyst" className="hover:text-foreground underline underline-offset-4">Analyst</a></li>
       <li><a href="#file-handling" className="hover:text-foreground underline underline-offset-4">File Handling &amp; Security</a></li>
@@ -279,7 +281,7 @@ export default function SupportPage() {
             strengths, risks, and follow-up questions. You can regenerate the summary at any time as new
             data comes in, clear it to start fresh, or upload additional context documents (board decks,
             strategy memos, investor updates) directly from this card to give the AI more to work with.
-            If your fund has both Anthropic and OpenAI configured, a provider selector lets you choose
+            If your fund has multiple AI providers configured, a provider selector lets you choose
             which AI to use for each generation.
           </p>
           <p className="text-muted-foreground mb-2">
@@ -506,10 +508,10 @@ export default function SupportPage() {
           </p>
           <p className="text-muted-foreground mb-2">
             For admins, Settings covers the full platform configuration: AI provider keys and model
-            selection (Anthropic and/or OpenAI), the default AI provider for the fund, inbound email
-            setup (Postmark or Mailgun), outbound email providers (Gmail, Resend, Postmark, or Mailgun),
-            file storage connections (Google Drive or Dropbox), the AI summary prompt, and email
-            templates for reporting asks.
+            selection (Anthropic, OpenAI, Google Gemini, and/or Ollama for local models), the default AI provider
+            for the fund, feature visibility controls, inbound email setup (Postmark or Mailgun), outbound email
+            providers (Gmail, Resend, Postmark, or Mailgun), file storage connections (Google Drive or Dropbox),
+            the AI summary prompt, and email templates for reporting asks.
           </p>
           <p className="text-muted-foreground mb-2">
             Admins also manage the authorized senders list (email addresses allowed to submit reports
@@ -622,6 +624,49 @@ export default function SupportPage() {
           </p>
         </div>
 
+        <div id="investments">
+          <h2 className="text-base font-medium mb-2 flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            Investments
+          </h2>
+          <p className="text-muted-foreground mb-2">
+            The Investments page provides a fund-level view of all investment transactions across your portfolio.
+            It aggregates data from each company&apos;s individual Investments section into a single table,
+            showing total invested, current fair market value (FMV), MOIC, and total realized across the entire fund.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            On each <strong>company detail page</strong>, the Investments section tracks the fund&apos;s transaction
+            history with that specific company. You can record investment rounds (with date, round name, amount invested,
+            shares acquired, and cost per share), proceeds from exits or distributions (including escrowed amounts),
+            and unrealized gain changes (current share price updates). Summary metrics &mdash; total invested,
+            current FMV, MOIC, and total realized &mdash; are displayed above the transaction table.
+          </p>
+          <p className="text-muted-foreground">
+            Admins can add, edit, and delete transactions directly. For exited companies the FMV reflects total
+            realized proceeds; for written-off companies it shows zero; and for active companies it uses the latest
+            share price multiplied by total shares held. Investment data can also be bulk-imported via the
+            Import page by pasting transaction data from a spreadsheet.
+          </p>
+        </div>
+
+        <div id="lp-letters">
+          <h2 className="text-base font-medium mb-2 flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            LP Letters
+          </h2>
+          <p className="text-muted-foreground mb-2">
+            LP Letters helps you generate and manage quarterly update letters for your limited partners.
+            Using AI and your portfolio data &mdash; reported metrics, company summaries, investment
+            performance, and team notes &mdash; the system drafts professional LP communications that
+            you can review, edit, and finalize.
+          </p>
+          <p className="text-muted-foreground">
+            Each letter is saved with a period label and can be edited after generation. The LP Letters
+            page shows all previously generated letters for reference, so you can track how your fund
+            communications evolve over time.
+          </p>
+        </div>
+
         <div id="usage">
           <h2 className="text-base font-medium mb-2 flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -632,8 +677,9 @@ export default function SupportPage() {
             and how team members are using the platform.
           </p>
           <p className="text-muted-foreground mb-2">
-            The top section displays <strong>AI token usage</strong> broken down by provider (Anthropic
-            and/or OpenAI), with month-to-date totals for input tokens, output tokens, and estimated cost.
+            The top section displays <strong>AI token usage</strong> broken down by provider (Anthropic,
+            OpenAI, Gemini, and/or Ollama), with month-to-date totals for input tokens, output tokens, and estimated cost.
+            Ollama usage is tracked but shown at zero cost since it runs locally.
             A daily breakdown table shows usage by model, so you can see exactly where tokens are being
             spent &mdash; email processing, metric extraction, company identification, summaries, or
             analyst conversations.

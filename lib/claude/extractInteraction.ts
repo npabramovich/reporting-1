@@ -1,7 +1,5 @@
-import { AnthropicProvider } from '@/lib/ai/anthropic'
+import type { AIProvider } from '@/lib/ai/types'
 import { logAIUsage } from '@/lib/ai/usage'
-
-const DEFAULT_MODEL = 'claude-sonnet-4-5'
 
 export interface InteractionExtraction {
   summary: string
@@ -23,14 +21,14 @@ export async function extractInteraction(
   subject: string,
   bodyText: string,
   senderName: string,
-  claudeApiKey: string,
-  model: string = DEFAULT_MODEL,
+  provider: AIProvider,
+  providerType: string,
+  model: string,
   logParams?: ExtractInteractionLogParams
 ): Promise<InteractionExtraction> {
-  const provider = new AnthropicProvider(claudeApiKey)
   const prompt = buildPrompt(subject, bodyText, senderName)
 
-  const raw = await callWithRetry(provider, prompt, model, logParams)
+  const raw = await callWithRetry(provider, providerType, prompt, model, logParams)
   return raw
 }
 
@@ -66,26 +64,28 @@ const STRICT_SUFFIX =
 // ---------------------------------------------------------------------------
 
 async function callWithRetry(
-  provider: AnthropicProvider,
+  provider: AIProvider,
+  providerType: string,
   prompt: string,
   model: string,
   logParams?: ExtractInteractionLogParams
 ): Promise<InteractionExtraction> {
-  const first = await call(provider, prompt, model, logParams)
+  const first = await call(provider, providerType, prompt, model, logParams)
   const parsed = tryParse(first)
   if (parsed) return parsed
 
-  const second = await call(provider, prompt + STRICT_SUFFIX, model, logParams)
+  const second = await call(provider, providerType, prompt + STRICT_SUFFIX, model, logParams)
   const reparsed = tryParse(second)
   if (reparsed) return reparsed
 
   throw new Error(
-    `extractInteraction: Claude returned non-JSON after retry. Last response: ${second.slice(0, 200)}`
+    `extractInteraction: AI returned non-JSON after retry. Last response: ${second.slice(0, 200)}`
   )
 }
 
 async function call(
-  provider: AnthropicProvider,
+  provider: AIProvider,
+  providerType: string,
   userPrompt: string,
   model: string,
   logParams?: ExtractInteractionLogParams
@@ -100,7 +100,7 @@ async function call(
   if (logParams) {
     logAIUsage(logParams.admin, {
       fundId: logParams.fundId,
-      provider: 'anthropic',
+      provider: providerType,
       model,
       feature: 'extract_interaction',
       usage,

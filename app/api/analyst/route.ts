@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   let body: {
     messages?: ChatMessage[]
     companyId?: string
-    model?: { id: string; provider: 'anthropic' | 'openai' }
+    model?: { id: string; provider: string }
     conversationId?: string
   }
   try {
@@ -41,6 +41,30 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 404 })
+
+  // Build a case-insensitive lookup map of company names/aliases → company IDs
+  const { data: allFundCompanies } = await admin
+    .from('companies')
+    .select('id, name, aliases')
+    .eq('fund_id', membership.fund_id)
+
+  const companyNameLookup = new Map<string, string>()
+  const companyIdToName = new Map<string, string>()
+  if (allFundCompanies) {
+    for (const c of allFundCompanies) {
+      companyIdToName.set(c.id, c.name)
+      if (c.name && c.name.length > 2) {
+        companyNameLookup.set(c.name.toLowerCase(), c.id)
+      }
+      if (c.aliases) {
+        for (const alias of c.aliases) {
+          if (alias && alias.length > 2) {
+            companyNameLookup.set(alias.toLowerCase(), c.id)
+          }
+        }
+      }
+    }
+  }
 
   let systemPrompt: string
 
@@ -73,6 +97,38 @@ export async function POST(req: NextRequest) {
     systemPrompt = ctx.systemPrompt
     if (ctx.portfolioBlock) systemPrompt += `\n\n=== PORTFOLIO DATA ===\n${ctx.portfolioBlock}`
     if (ctx.teamNotesBlock) systemPrompt += `\n\n=== TEAM DISCUSSION NOTES ===\nRecent internal team notes and discussions across the portfolio:\n${ctx.teamNotesBlock}`
+    systemPrompt += `\n\nIf detailed data about a specific company is included below in a "REFERENCED COMPANY" section, use that data to answer questions about that company.`
+  }
+
+  // Dynamic context: detect company references in messages and inject their data
+  const referencedCompanyIds = detectReferencedCompanies(
+    body.messages,
+    companyNameLookup,
+    body.companyId ?? null
+  )
+
+  if (referencedCompanyIds.length > 0) {
+    // Tighter rate limit for cross-company lookups (heavier DB load)
+    const crossCompanyLimit = await rateLimit({
+      key: `ai-analyst-xref:${user.id}`,
+      limit: 10,
+      windowSeconds: 300,
+    })
+    if (crossCompanyLimit) return crossCompanyLimit
+
+    const refContexts = await Promise.all(
+      referencedCompanyIds.map(id => buildCompanyContext(admin, id))
+    )
+    for (const refCtx of refContexts) {
+      if (!refCtx) continue
+      const name = refCtx.company.name
+      let block = `\n\n=== REFERENCED COMPANY: ${name} ===\n(This data was loaded because the user mentioned this company. Use it to answer their question.)`
+      if (refCtx.metricsBlock) block += `\n\nMetrics:\n${refCtx.metricsBlock}`
+      if (refCtx.investmentBlock) block += `\n\nInvestment data:\n${refCtx.investmentBlock}`
+      if (refCtx.reportContentBlock) block += `\n\nLatest report:\n${refCtx.reportContentBlock}`
+      if (refCtx.documentsBlock) block += `\n\nDocuments:\n${refCtx.documentsBlock}`
+      systemPrompt += block
+    }
   }
 
   // Memory injection: fetch recent conversation summaries from same scope
@@ -113,7 +169,7 @@ export async function POST(req: NextRequest) {
   const providerOverride = body.model?.provider
   let provider: Awaited<ReturnType<typeof createFundAIProviderWithOverride>>['provider']
   let aiModel: string
-  let aiProviderType: 'anthropic' | 'openai'
+  let aiProviderType: string
   try {
     const result = await createFundAIProviderWithOverride(admin, membership.fund_id, providerOverride)
     provider = result.provider
@@ -272,4 +328,40 @@ async function summarizePreviousConversation(
   } catch {
     // Summarization is best-effort
   }
+}
+
+function detectReferencedCompanies(
+  messages: ChatMessage[],
+  lookup: Map<string, string>,
+  currentCompanyId: string | null
+): string[] {
+  // Concatenate user messages in reverse order so recent mentions win
+  const userTexts: string[] = []
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') {
+      userTexts.push(String(messages[i].content))
+    }
+  }
+  const combined = userTexts.join(' ').toLowerCase()
+
+  const matched = new Map<string, number>() // companyId → earliest position in combined text
+
+  lookup.forEach((companyId, name) => {
+    if (currentCompanyId && companyId === currentCompanyId) return
+    if (matched.has(companyId)) return
+
+    // Word-boundary match to avoid partial matches
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const regex = new RegExp(`\\b${escaped}\\b`, 'i')
+    const match = regex.exec(combined)
+    if (match) {
+      matched.set(companyId, match.index)
+    }
+  })
+
+  // Sort by position (earliest in combined = most recently mentioned, since we reversed)
+  return Array.from(matched.entries())
+    .sort((a, b) => a[1] - b[1])
+    .slice(0, 2)
+    .map(([id]) => id)
 }

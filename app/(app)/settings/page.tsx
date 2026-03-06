@@ -43,6 +43,10 @@ interface Settings {
   hasOpenAIKey: boolean
   openaiModel: string
   defaultAIProvider: string
+  hasGeminiKey: boolean
+  geminiModel: string
+  ollamaBaseUrl: string
+  ollamaModel: string
   retainResolvedReviews: boolean
   resolvedReviewsTtlDays: number | null
   senders: Sender[]
@@ -193,6 +197,10 @@ export default function SettingsPage() {
             claudeModel={settings.claudeModel}
             hasOpenAIKey={settings.hasOpenAIKey}
             openaiModel={settings.openaiModel}
+            hasGeminiKey={settings.hasGeminiKey}
+            geminiModel={settings.geminiModel}
+            ollamaBaseUrl={settings.ollamaBaseUrl}
+            ollamaModel={settings.ollamaModel}
             defaultAIProvider={settings.defaultAIProvider}
             onSaved={load}
           />
@@ -591,12 +599,12 @@ function CurrencySection({ currency, onSaved }: { currency: string; onSaved: () 
 // ──────────────────────────── Feature Visibility ────────────────────────────
 
 const FEATURE_META: Record<FeatureKey, { label: string; description: string; href: string }> = {
-  interactions: { label: 'Interactions', description: 'Track emails, intros, and meetings with portfolio companies', href: '/interactions' },
-  investments: { label: 'Investments', description: 'Fund investments, ownership, and round details per company', href: '/investments' },
-  notes: { label: 'Notes', description: 'Internal team notes and comments on companies', href: '/notes' },
-  lp_letters: { label: 'LP Letters', description: 'Generate and manage quarterly LP update letters', href: '/letters' },
-  imports: { label: 'Imports', description: 'Bulk import companies and metrics from CSV files', href: '/import' },
-  asks: { label: 'Asks', description: 'Track and send portfolio company requests to your network', href: '/requests' },
+  interactions: { label: 'Interactions', description: 'Track emails, intros, and meetings with portfolio companies', href: '/support#interactions' },
+  investments: { label: 'Investments', description: 'Fund investments, ownership, and round details per company', href: '/support#investments' },
+  notes: { label: 'Notes', description: 'Internal team notes and comments on companies', href: '/support#notes' },
+  lp_letters: { label: 'LP Letters', description: 'Generate and manage quarterly LP update letters', href: '/support#lp-letters' },
+  imports: { label: 'Imports', description: 'Bulk import companies and metrics from CSV files', href: '/support#import' },
+  asks: { label: 'Asks', description: 'Track and send portfolio company requests to your network', href: '/support#asks' },
 }
 
 const VISIBILITY_OPTIONS: { value: FeatureVisibility; label: string; description: string }[] = [
@@ -943,12 +951,16 @@ function FundNameSection({ name, logo, onSaved }: { name: string; logo: string |
 // ──────────────────────────── AI Providers ────────────────────────────
 
 function AIProvidersSection({
-  hasClaudeKey, claudeModel, hasOpenAIKey, openaiModel, defaultAIProvider, onSaved,
+  hasClaudeKey, claudeModel, hasOpenAIKey, openaiModel, hasGeminiKey, geminiModel, ollamaBaseUrl, ollamaModel, defaultAIProvider, onSaved,
 }: {
   hasClaudeKey: boolean
   claudeModel: string
   hasOpenAIKey: boolean
   openaiModel: string
+  hasGeminiKey: boolean
+  geminiModel: string
+  ollamaBaseUrl: string
+  ollamaModel: string
   defaultAIProvider: string
   onSaved: () => void
 }) {
@@ -989,6 +1001,12 @@ function AIProvidersSection({
             <option value="openai" disabled={!hasOpenAIKey}>
               OpenAI{!hasOpenAIKey ? ' — no key configured' : ''}
             </option>
+            <option value="gemini" disabled={!hasGeminiKey}>
+              Google Gemini{!hasGeminiKey ? ' — no key configured' : ''}
+            </option>
+            <option value="ollama">
+              Ollama (Local)
+            </option>
           </select>
           {savingDefault && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
         </div>
@@ -996,6 +1014,8 @@ function AIProvidersSection({
 
       <ClaudeKeySection hasKey={hasClaudeKey} currentModel={claudeModel} onSaved={onSaved} />
       <OpenAIKeySection hasKey={hasOpenAIKey} currentModel={openaiModel} onSaved={onSaved} />
+      <GeminiKeySection hasKey={hasGeminiKey} currentModel={geminiModel} onSaved={onSaved} />
+      <OllamaSection baseUrl={ollamaBaseUrl} currentModel={ollamaModel} onSaved={onSaved} />
     </>
   )
 }
@@ -1316,6 +1336,322 @@ function OpenAIKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
           )}
         </div>
       )}
+    </Section>
+  )
+}
+
+// ──────────────────────────── Gemini Key ────────────────────────────
+
+function GeminiKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; currentModel: string; onSaved: () => void }) {
+  const [newKey, setNewKey] = useState('')
+  const [testing, setTesting] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'valid' | 'invalid' | 'saved'>('idle')
+
+  const [models, setModels] = useState<{ id: string; name: string }[]>([])
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [modelsError, setModelsError] = useState<string | null>(null)
+  const [selectedModel, setSelectedModel] = useState(currentModel)
+  const [modelSaving, setModelSaving] = useState(false)
+  const [modelsFetched, setModelsFetched] = useState(false)
+
+  const fetchModels = useCallback(async () => {
+    if (modelsFetched) return
+    setModelsLoading(true)
+    setModelsError(null)
+    try {
+      const res = await fetch('/api/gemini-models')
+      const data = await res.json()
+      if (data.error) setModelsError(data.error)
+      setModels(data.models ?? [])
+      setModelsFetched(true)
+    } catch {
+      setModelsError('Failed to fetch models')
+    } finally {
+      setModelsLoading(false)
+    }
+  }, [modelsFetched])
+
+  useEffect(() => {
+    if (hasKey) fetchModels()
+  }, [hasKey, fetchModels])
+
+  useEffect(() => {
+    setSelectedModel(currentModel)
+  }, [currentModel])
+
+  const testKey = async () => {
+    setTesting(true)
+    setStatus('idle')
+    const res = await fetch('/api/test-gemini-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: newKey }),
+    })
+    setTesting(false)
+    setStatus(res.ok ? 'valid' : 'invalid')
+  }
+
+  const saveKey = async () => {
+    setSaving(true)
+    const res = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ geminiApiKey: newKey }),
+    })
+    setSaving(false)
+    if (res.ok) {
+      setStatus('saved')
+      setNewKey('')
+      setModelsFetched(false)
+      onSaved()
+    }
+  }
+
+  const saveModel = async (modelId: string) => {
+    setSelectedModel(modelId)
+    setModelSaving(true)
+    const res = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ geminiModel: modelId }),
+    })
+    setModelSaving(false)
+    if (res.ok) onSaved()
+  }
+
+  return (
+    <Section title="Google Gemini API key">
+      <p className="text-xs text-muted-foreground mb-3">
+        {hasKey
+          ? 'A Gemini API key is configured. Enter a new key below to replace it.'
+          : 'No Gemini API key configured. Add one to enable Google Gemini as an AI provider.'}
+      </p>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+        <div className="flex-1">
+          <Label>API key</Label>
+          <Input
+            type="password"
+            value={newKey}
+            onChange={(e) => { setNewKey(e.target.value); setStatus('idle') }}
+            placeholder="AIza..."
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={testKey} disabled={!newKey.trim() || testing} variant="outline" size="sm">
+            {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Test'}
+          </Button>
+          <Button onClick={saveKey} disabled={!newKey.trim() || saving} size="sm">
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Update'}
+          </Button>
+        </div>
+      </div>
+      {status === 'valid' && (
+        <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+          <Check className="h-3 w-3" /> Key is valid
+        </p>
+      )}
+      {status === 'invalid' && (
+        <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+          <AlertCircle className="h-3 w-3" /> Key is invalid
+        </p>
+      )}
+      {status === 'saved' && (
+        <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+          <Check className="h-3 w-3" /> Key updated
+        </p>
+      )}
+
+      {hasKey && (
+        <div className="mt-4 pt-4 border-t">
+          <Label>Model</Label>
+          <p className="text-xs text-muted-foreground mb-2">
+            Choose which Gemini model to use.
+          </p>
+          {modelsLoading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading models…
+            </div>
+          ) : modelsError ? (
+            <p className="text-xs text-destructive">{modelsError}</p>
+          ) : (
+            <div className="flex items-center gap-2">
+              <select
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={selectedModel}
+                onChange={(e) => saveModel(e.target.value)}
+                disabled={modelSaving}
+              >
+                {models.length === 0 && (
+                  <option value={selectedModel}>{selectedModel}</option>
+                )}
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.id})
+                  </option>
+                ))}
+              </select>
+              {modelSaving && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+            </div>
+          )}
+        </div>
+      )}
+    </Section>
+  )
+}
+
+// ──────────────────────────── Ollama ────────────────────────────
+
+function OllamaSection({ baseUrl, currentModel, onSaved }: { baseUrl: string; currentModel: string; onSaved: () => void }) {
+  const [url, setUrl] = useState(baseUrl || 'http://localhost:11434/v1')
+  const [testing, setTesting] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [testStatus, setTestStatus] = useState<'idle' | 'ok' | 'error'>('idle')
+  const [testError, setTestError] = useState('')
+
+  const [models, setModels] = useState<{ id: string; name: string }[]>([])
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [modelsError, setModelsError] = useState<string | null>(null)
+  const [selectedModel, setSelectedModel] = useState(currentModel)
+  const [modelSaving, setModelSaving] = useState(false)
+
+  useEffect(() => {
+    setUrl(baseUrl || 'http://localhost:11434/v1')
+  }, [baseUrl])
+
+  useEffect(() => {
+    setSelectedModel(currentModel)
+  }, [currentModel])
+
+  const testConnection = async () => {
+    setTesting(true)
+    setTestStatus('idle')
+    setTestError('')
+    try {
+      const res = await fetch('/api/test-ollama', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseUrl: url }),
+      })
+      if (res.ok) {
+        setTestStatus('ok')
+        fetchModels()
+      } else {
+        const data = await res.json()
+        setTestStatus('error')
+        setTestError(data.error || 'Connection failed')
+      }
+    } catch {
+      setTestStatus('error')
+      setTestError('Connection failed')
+    }
+    setTesting(false)
+  }
+
+  const saveUrl = async () => {
+    setSaving(true)
+    const res = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ollamaBaseUrl: url }),
+    })
+    setSaving(false)
+    if (res.ok) onSaved()
+  }
+
+  const fetchModels = async () => {
+    setModelsLoading(true)
+    setModelsError(null)
+    try {
+      const res = await fetch('/api/ollama-models')
+      const data = await res.json()
+      if (data.error) setModelsError(data.error)
+      setModels(data.models ?? [])
+    } catch {
+      setModelsError('Failed to fetch models')
+    } finally {
+      setModelsLoading(false)
+    }
+  }
+
+  const saveModel = async (modelId: string) => {
+    setSelectedModel(modelId)
+    setModelSaving(true)
+    const res = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ollamaModel: modelId }),
+    })
+    setModelSaving(false)
+    if (res.ok) onSaved()
+  }
+
+  return (
+    <Section title="Ollama (Local AI)">
+      <p className="text-xs text-muted-foreground mb-3">
+        Connect to a local Ollama instance. No API key needed — models run on your machine.
+      </p>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+        <div className="flex-1">
+          <Label>Base URL</Label>
+          <Input
+            value={url}
+            onChange={(e) => { setUrl(e.target.value); setTestStatus('idle') }}
+            placeholder="http://localhost:11434/v1"
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={testConnection} disabled={!url.trim() || testing} variant="outline" size="sm">
+            {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Test'}
+          </Button>
+          <Button onClick={saveUrl} disabled={!url.trim() || saving} size="sm">
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+          </Button>
+        </div>
+      </div>
+      {testStatus === 'ok' && (
+        <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+          <Check className="h-3 w-3" /> Connected
+        </p>
+      )}
+      {testStatus === 'error' && (
+        <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+          <AlertCircle className="h-3 w-3" /> {testError}
+        </p>
+      )}
+
+      <div className="mt-4 pt-4 border-t">
+        <Label>Model</Label>
+        <p className="text-xs text-muted-foreground mb-2">
+          Choose which Ollama model to use. Test the connection first to load available models.
+        </p>
+        {modelsLoading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading models…
+          </div>
+        ) : modelsError ? (
+          <p className="text-xs text-destructive">{modelsError}</p>
+        ) : (
+          <div className="flex items-center gap-2">
+            <select
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              value={selectedModel}
+              onChange={(e) => saveModel(e.target.value)}
+              disabled={modelSaving}
+            >
+              {models.length === 0 && (
+                <option value={selectedModel}>{selectedModel}</option>
+              )}
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            {modelSaving && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+          </div>
+        )}
+      </div>
     </Section>
   )
 }

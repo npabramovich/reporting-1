@@ -1,7 +1,5 @@
-import { AnthropicProvider } from '@/lib/ai/anthropic'
+import type { AIProvider } from '@/lib/ai/types'
 import { logAIUsage } from '@/lib/ai/usage'
-
-const DEFAULT_MODEL = 'claude-sonnet-4-5'
 
 export interface CompanyRef {
   id: string
@@ -25,14 +23,14 @@ export async function identifyCompany(
   subject: string,
   bodyExcerpt: string,
   companies: CompanyRef[],
-  claudeApiKey: string,
-  model: string = DEFAULT_MODEL,
+  provider: AIProvider,
+  providerType: string,
+  model: string,
   logParams?: IdentifyCompanyLogParams
 ): Promise<IdentifyCompanyResult> {
-  const provider = new AnthropicProvider(claudeApiKey)
   const prompt = buildPrompt(subject, bodyExcerpt, companies)
 
-  const raw = await callWithRetry(provider, prompt, model, logParams)
+  const raw = await callWithRetry(provider, providerType, prompt, model, logParams)
   return raw
 }
 
@@ -77,26 +75,27 @@ const STRICT_SUFFIX =
 // ---------------------------------------------------------------------------
 
 async function callWithRetry(
-  provider: AnthropicProvider,
+  provider: AIProvider,
+  providerType: string,
   prompt: string,
   model: string,
   logParams?: IdentifyCompanyLogParams
 ): Promise<IdentifyCompanyResult> {
-  const first = await call(provider, prompt, model, logParams)
+  const first = await call(provider, providerType, prompt, model, logParams)
   const parsed = tryParse(first)
   if (parsed) return parsed
 
   // Retry with stricter instruction appended
-  const second = await call(provider, prompt + STRICT_SUFFIX, model, logParams)
+  const second = await call(provider, providerType, prompt + STRICT_SUFFIX, model, logParams)
   const reparsed = tryParse(second)
   if (reparsed) return reparsed
 
   throw new Error(
-    `identifyCompany: Claude returned non-JSON after retry. Last response: ${second.slice(0, 200)}`
+    `identifyCompany: AI returned non-JSON after retry. Last response: ${second.slice(0, 200)}`
   )
 }
 
-async function call(provider: AnthropicProvider, userPrompt: string, model: string, logParams?: IdentifyCompanyLogParams): Promise<string> {
+async function call(provider: AIProvider, providerType: string, userPrompt: string, model: string, logParams?: IdentifyCompanyLogParams): Promise<string> {
   const { text, usage } = await provider.createMessage({
     model,
     maxTokens: 512,
@@ -107,7 +106,7 @@ async function call(provider: AnthropicProvider, userPrompt: string, model: stri
   if (logParams) {
     logAIUsage(logParams.admin, {
       fundId: logParams.fundId,
-      provider: 'anthropic',
+      provider: providerType,
       model,
       feature: 'identify_company',
       usage,
