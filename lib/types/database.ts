@@ -391,7 +391,7 @@ export type Database = {
           subject: string | null
           received_at: string
           raw_payload: Json | null
-          processing_status: 'pending' | 'processing' | 'success' | 'failed' | 'needs_review'
+          processing_status: 'pending' | 'processing' | 'success' | 'failed' | 'needs_review' | 'not_processed'
           processing_error: string | null
           claude_response: Json | null
           metrics_extracted: number
@@ -407,7 +407,7 @@ export type Database = {
           subject?: string | null
           received_at?: string
           raw_payload?: Json | null
-          processing_status?: 'pending' | 'processing' | 'success' | 'failed' | 'needs_review'
+          processing_status?: 'pending' | 'processing' | 'success' | 'failed' | 'needs_review' | 'not_processed'
           processing_error?: string | null
           claude_response?: Json | null
           metrics_extracted?: number
@@ -423,7 +423,7 @@ export type Database = {
           subject?: string | null
           received_at?: string
           raw_payload?: Json | null
-          processing_status?: 'pending' | 'processing' | 'success' | 'failed' | 'needs_review'
+          processing_status?: 'pending' | 'processing' | 'success' | 'failed' | 'needs_review' | 'not_processed'
           processing_error?: string | null
           claude_response?: Json | null
           metrics_extracted?: number
@@ -1435,7 +1435,7 @@ export type LpLetterStatus = 'generating' | 'draft' | 'final'
 
 // Enum-style string literals
 export type CompanyStatus      = 'active' | 'exited' | 'written-off'
-export type ProcessingStatus   = 'pending' | 'processing' | 'success' | 'failed' | 'needs_review'
+export type ProcessingStatus   = 'pending' | 'processing' | 'success' | 'failed' | 'needs_review' | 'not_processed' | 'not_processed'
 export type Confidence         = 'high' | 'medium' | 'low'
 export type ValueType          = 'number' | 'currency' | 'percentage' | 'text'
 export type UnitPosition       = 'prefix' | 'suffix'
