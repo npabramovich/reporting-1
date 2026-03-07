@@ -20,18 +20,19 @@ interface AppShellProps {
   isAdmin?: boolean
   currency?: string
   hasAIKey?: boolean
+  configuredProviders?: string[]
   defaultAIProvider?: string
   updateAvailable?: boolean
   featureVisibility?: FeatureVisibilityMap
   children: React.ReactNode
 }
 
-export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, currency, hasAIKey, defaultAIProvider, updateAvailable, featureVisibility, children }: AppShellProps) {
+export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, currency, hasAIKey, configuredProviders, defaultAIProvider, updateAvailable, featureVisibility, children }: AppShellProps) {
   return (
     <FeatureVisibilityProvider value={featureVisibility ?? DEFAULT_FEATURE_VISIBILITY}>
     <CurrencyProvider currency={currency ?? 'USD'}>
       <SidebarProvider>
-        <AnalystProvider hasAIKey={hasAIKey ?? false} defaultAIProvider={defaultAIProvider ?? 'anthropic'} fundName={fundName}>
+        <AnalystProvider hasAIKey={hasAIKey ?? false} configuredProviders={configuredProviders ?? []} defaultAIProvider={defaultAIProvider ?? 'anthropic'} fundName={fundName}>
           <AppShellInner
             fundName={fundName}
             fundLogo={fundLogo}

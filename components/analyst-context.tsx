@@ -45,11 +45,13 @@ const AnalystContext = createContext<AnalystContextValue | null>(null)
 
 export function AnalystProvider({
   hasAIKey,
+  configuredProviders,
   defaultAIProvider,
   fundName,
   children,
 }: {
   hasAIKey: boolean
+  configuredProviders: string[]
   defaultAIProvider: string
   fundName: string
   children: ReactNode
@@ -133,54 +135,39 @@ export function AnalystProvider({
     }
   }, [conversationId])
 
+  // Fetch models lazily — only when the analyst panel is first opened
+  const modelsFetched = useCallback(() => availableModels.length > 0, [availableModels])
+
   useEffect(() => {
-    if (!hasAIKey) return
+    if (!open || !hasAIKey || modelsFetched()) return
 
     const fetchModels = async () => {
-      const [claudeRes, openaiRes, geminiRes, ollamaRes] = await Promise.allSettled([
-        fetch('/api/claude-models').then(r => r.json()),
-        fetch('/api/openai-models').then(r => r.json()),
-        fetch('/api/gemini-models').then(r => r.json()),
-        fetch('/api/ollama-models').then(r => r.json()),
-      ])
+      const providerEndpoints: { provider: string; url: string }[] = [
+        { provider: 'anthropic', url: '/api/claude-models' },
+        { provider: 'openai', url: '/api/openai-models' },
+        { provider: 'gemini', url: '/api/gemini-models' },
+        { provider: 'ollama', url: '/api/ollama-models' },
+      ].filter(p => configuredProviders.includes(p.provider))
+
+      const results = await Promise.allSettled(
+        providerEndpoints.map(p => fetch(p.url).then(r => r.json()))
+      )
 
       const models: AnalystModel[] = []
-
-      if (claudeRes.status === 'fulfilled' && Array.isArray(claudeRes.value.models)) {
-        for (const m of claudeRes.value.models) {
-          models.push({ id: m.id, name: m.name, provider: 'anthropic' })
+      results.forEach((res, i) => {
+        if (res.status === 'fulfilled' && Array.isArray(res.value.models)) {
+          for (const m of res.value.models) {
+            models.push({ id: m.id, name: m.name, provider: providerEndpoints[i].provider })
+          }
         }
-      }
-
-      if (openaiRes.status === 'fulfilled' && Array.isArray(openaiRes.value.models)) {
-        for (const m of openaiRes.value.models) {
-          models.push({ id: m.id, name: m.name, provider: 'openai' })
-        }
-      }
-
-      if (geminiRes.status === 'fulfilled' && Array.isArray(geminiRes.value.models)) {
-        for (const m of geminiRes.value.models) {
-          models.push({ id: m.id, name: m.name, provider: 'gemini' })
-        }
-      }
-
-      if (ollamaRes.status === 'fulfilled' && Array.isArray(ollamaRes.value.models)) {
-        for (const m of ollamaRes.value.models) {
-          models.push({ id: m.id, name: m.name, provider: 'ollama' })
-        }
-      }
+      })
 
       setAvailableModels(models)
-
-      // Default to Auto (null selectedModel means use server default)
-      if (!selectedModel) {
-        setSelectedModel(null)
-      }
     }
 
     fetchModels()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasAIKey])
+  }, [open, hasAIKey])
 
   return (
     <AnalystContext.Provider value={{

@@ -177,20 +177,28 @@ export default async function CompanyDetailPage({
 
       {/* Content + Notes panel side by side */}
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        <div className="flex-1 min-w-0 max-w-6xl w-full">
-          <CompanySummary
-            companyId={company.id}
-            fundId={company.fund_id}
-            hasClaudeKey={!!fundSettings?.claude_api_key_encrypted}
-            hasOpenAIKey={!!fundSettings?.openai_api_key_encrypted}
-            defaultAIProvider={fundSettings?.default_ai_provider ?? 'anthropic'}
-          />
+        <div className="flex-1 min-w-0 max-w-6xl w-full [&>*:first-child]:mt-0">
+          {company.status !== 'exited' && company.status !== 'written-off' && (
+            <>
+              <CompanySummary
+                companyId={company.id}
+                fundId={company.fund_id}
+                hasClaudeKey={!!fundSettings?.claude_api_key_encrypted}
+                hasOpenAIKey={!!fundSettings?.openai_api_key_encrypted}
+                defaultAIProvider={fundSettings?.default_ai_provider ?? 'anthropic'}
+              />
 
-          <CompanyCharts
-            companyId={company.id}
-            companyName={company.name}
-            metrics={metrics ?? []}
-          />
+              <CompanyCharts
+                companyId={company.id}
+                companyName={company.name}
+                metrics={metrics ?? []}
+              />
+            </>
+          )}
+
+          {isFeatureVisible(featureVisibility, 'investments', isAdmin) && (
+            <CompanyInvestments companyId={company.id} companyStatus={company.status} portfolioGroups={company.portfolio_group ?? []} adminOnly={featureVisibility.investments === 'admin'} />
+          )}
 
           <CompanyDocuments
             companyId={company.id}
@@ -198,10 +206,6 @@ export default async function CompanyDetailPage({
             googleDriveFolderId={fundSettings?.google_drive_folder_id ?? null}
             dropboxFolderPath={fundSettings?.dropbox_folder_path ?? null}
           />
-
-          {isFeatureVisible(featureVisibility, 'investments', isAdmin) && (
-            <CompanyInvestments companyId={company.id} companyStatus={company.status} portfolioGroups={company.portfolio_group ?? []} adminOnly={featureVisibility.investments === 'admin'} />
-          )}
 
           {isFeatureVisible(featureVisibility, 'interactions', isAdmin) && (
             <CompanyInteractions companyId={company.id} adminOnly={featureVisibility.interactions === 'admin'} />

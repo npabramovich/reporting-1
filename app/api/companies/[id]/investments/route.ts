@@ -25,6 +25,7 @@ function computeSummary(
   let latestSharePriceDate: string | null = null
 
   const roundMap = new Map<string, InvestmentRoundSummary>()
+  const roundCashFlows = new Map<string, CashFlow[]>()
   const cashFlows: CashFlow[] = []
 
   for (const txn of transactions) {
@@ -33,7 +34,11 @@ function computeSummary(
       totalShares += txn.shares_acquired ?? 0
 
       if (txn.transaction_date && txn.investment_cost) {
-        cashFlows.push({ date: new Date(txn.transaction_date), amount: -(txn.investment_cost) })
+        const cf = { date: new Date(txn.transaction_date), amount: -(txn.investment_cost) }
+        cashFlows.push(cf)
+        const rn = txn.round_name ?? 'Unknown'
+        if (!roundCashFlows.has(rn)) roundCashFlows.set(rn, [])
+        roundCashFlows.get(rn)!.push({ ...cf })
       }
 
       const roundName = txn.round_name ?? 'Unknown'
@@ -43,24 +48,28 @@ function computeSummary(
         existing.sharesAcquired += txn.shares_acquired ?? 0
         existing.interestConverted += txn.interest_converted ?? 0
         if (!existing.date && txn.transaction_date) existing.date = txn.transaction_date
-        if (txn.share_price != null) existing.sharePrice = txn.share_price
+        if (txn.share_price != null && txn.share_price > 0) existing.sharePrice = txn.share_price
       } else {
         roundMap.set(roundName, {
           roundName,
           date: txn.transaction_date,
           investmentCost: txn.investment_cost ?? 0,
           sharesAcquired: txn.shares_acquired ?? 0,
-          sharePrice: txn.share_price,
+          sharePrice: (txn.share_price != null && txn.share_price > 0) ? txn.share_price : null,
           currentSharePrice: null,
           currentValue: 0,
           interestConverted: txn.interest_converted ?? 0,
           unrealizedValueChange: 0,
           costBasisExited: 0,
+          totalRealized: 0,
+          totalEscrow: 0,
+          proceedsDate: null,
+          grossIrr: null,
         })
       }
       // Also track share price for latest determination
-      // Skip zero-cost, zero-price entries (e.g. warrants) — they shouldn't override the share price
-      if (txn.share_price != null && txn.transaction_date && (txn.share_price > 0 || (txn.investment_cost ?? 0) > 0)) {
+      // Only use positive share prices (skip $0 from SAFEs, warrants, etc.)
+      if (txn.share_price != null && txn.share_price > 0 && txn.transaction_date) {
         if (!latestSharePriceDate || txn.transaction_date > latestSharePriceDate) {
           latestSharePrice = txn.share_price
           latestSharePriceDate = txn.transaction_date
@@ -74,12 +83,26 @@ function computeSummary(
       totalWrittenOff += txn.proceeds_written_off ?? 0
 
       if (txn.transaction_date && proceedsAmount > 0) {
-        cashFlows.push({ date: new Date(txn.transaction_date), amount: proceedsAmount })
+        const cf = { date: new Date(txn.transaction_date), amount: proceedsAmount }
+        cashFlows.push(cf)
+        if (txn.round_name) {
+          if (!roundCashFlows.has(txn.round_name)) roundCashFlows.set(txn.round_name, [])
+          roundCashFlows.get(txn.round_name)!.push({ ...cf })
+        }
       }
-      // Attribute cost basis exited to the round if specified
-      if (txn.round_name && txn.cost_basis_exited != null) {
+      // Attribute cost basis exited and proceeds to the round if specified
+      if (txn.round_name) {
         const round = roundMap.get(txn.round_name)
-        if (round) round.costBasisExited += txn.cost_basis_exited
+        if (round) {
+          if (txn.cost_basis_exited != null) round.costBasisExited += Math.abs(txn.cost_basis_exited)
+          round.totalRealized += txn.proceeds_received ?? 0
+          round.totalEscrow += txn.proceeds_escrow ?? 0
+          if (txn.transaction_date) {
+            if (!round.proceedsDate || txn.transaction_date > round.proceedsDate) {
+              round.proceedsDate = txn.transaction_date
+            }
+          }
+        }
       }
     }
 
@@ -115,14 +138,41 @@ function computeSummary(
     // If none exists, fall back to the round's own share price from the investment.
     const effectiveSharePrice = latestSharePrice ?? round.sharePrice ?? null
     round.currentSharePrice = effectiveSharePrice
-    if (round.sharesAcquired > 0) {
-      // Equity round: shares * current share price
-      round.currentValue = effectiveSharePrice != null ? round.sharesAcquired * effectiveSharePrice : 0
+    const isPricedEquity = round.sharesAcquired > 0 && ((round.sharePrice != null && round.sharePrice > 0) || round.investmentCost > 0)
+    // If all cost basis has been exited, there's no remaining unrealized position
+    const remainingBasis = round.investmentCost - round.costBasisExited
+    if (remainingBasis <= 0) {
+      round.currentValue = 0
+    } else if (isPricedEquity) {
+      // Equity round: prorate shares by remaining basis fraction
+      const fraction = round.investmentCost > 0 ? remainingBasis / round.investmentCost : 0
+      round.currentValue = effectiveSharePrice != null ? round.sharesAcquired * fraction * effectiveSharePrice : 0
     } else {
-      // Convertible / no shares: investment cost - cost basis exited + unrealized changes
-      round.currentValue = round.investmentCost - round.costBasisExited + round.unrealizedValueChange
+      // Convertible / warrant / no shares: remaining basis + unrealized changes
+      round.currentValue = Math.max(0, remainingBasis + round.unrealizedValueChange)
     }
     unrealizedValue += round.currentValue
+  }
+
+  // Compute per-round IRR
+  for (const round of rounds) {
+    const rcf = roundCashFlows.get(round.roundName) ?? []
+    const hasInvestment = rcf.some(cf => cf.amount < 0)
+    const hasProceeds = rcf.some(cf => cf.amount > 0)
+
+    if (hasInvestment && hasProceeds) {
+      // Full cash flow data available
+      round.grossIrr = xirr(rcf)
+    } else if (hasInvestment && !hasProceeds) {
+      // Investment cash flows exist but proceeds aren't attributed to this round yet.
+      // Fall back to round-level totals if we have proceeds date + amounts.
+      const totalRoundProceeds = round.totalRealized + round.totalEscrow
+      if (totalRoundProceeds > 0 && round.proceedsDate) {
+        round.grossIrr = xirr([...rcf, { date: new Date(round.proceedsDate), amount: totalRoundProceeds }])
+      } else if (companyStatus !== 'exited' && round.currentValue > 0) {
+        round.grossIrr = xirr([...rcf, { date: asOfDate, amount: round.currentValue }])
+      }
+    }
   }
 
   let fmv: number

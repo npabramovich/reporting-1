@@ -25,8 +25,8 @@ type TransactionType = 'investment' | 'proceeds' | 'unrealized_gain_change' | 'r
 const TYPE_LABELS: Record<TransactionType, string> = {
   investment: 'Investment',
   proceeds: 'Proceeds',
-  unrealized_gain_change: 'Unrealized Change',
-  round_info: 'Round Info',
+  unrealized_gain_change: 'Valuation Update',
+  round_info: 'Round',
 }
 
 function fmtNum(val: number | null | undefined): string {
@@ -268,8 +268,9 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
             <span className="text-xs bg-muted rounded-full px-1.5 py-0.5">{transactions.length}</span>
           )}
         </button>
-        <Button size="sm" variant="ghost" onClick={openAdd} className="h-7 px-2">
-          <Plus className="h-3.5 w-3.5" />
+        <Button size="sm" variant="outline" onClick={openAdd} className="h-7 px-2 text-xs">
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          Add
         </Button>
       </div>
 
@@ -279,10 +280,25 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
             <span className="text-muted-foreground">Invested:</span>{' '}
             <span className="font-medium">{fmt(summary.totalInvested)}</span>
           </span>
-          <span>
-            <span className="text-muted-foreground">FMV:</span>{' '}
-            <span className="font-medium">{fmt(summary.fmv)}</span>
-          </span>
+          {summary.totalRealized > 0 ? (
+            <>
+              <span>
+                <span className="text-muted-foreground">Realized:</span>{' '}
+                <span className="font-medium">{fmt(summary.totalRealized)}</span>
+              </span>
+              {summary.unrealizedValue > 0 && (
+                <span>
+                  <span className="text-muted-foreground">Unrealized:</span>{' '}
+                  <span className="font-medium">{fmt(summary.unrealizedValue)}</span>
+                </span>
+              )}
+            </>
+          ) : (
+            <span>
+              <span className="text-muted-foreground">FMV:</span>{' '}
+              <span className="font-medium">{fmt(summary.fmv)}</span>
+            </span>
+          )}
           {summary.moic != null && (
             <span>
               <span className="text-muted-foreground">MOIC:</span>{' '}
@@ -295,13 +311,13 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
               <span className="font-medium">{(summary.grossIrr * 100).toFixed(1)}%</span>
             </span>
           )}
-          {summary.totalRealized > 0 && (
+          {summary.rounds.reduce((sum, r) => sum + r.totalEscrow, 0) > 0 && (
             <span>
-              <span className="text-muted-foreground">Realized:</span>{' '}
-              <span className="font-medium">{fmt(summary.totalRealized)}</span>
+              <span className="text-muted-foreground">Escrow:</span>{' '}
+              <span className="font-medium">{fmt(summary.rounds.reduce((sum, r) => sum + r.totalEscrow, 0))}</span>
             </span>
           )}
-          {summary.grossIrr != null && Math.abs(summary.grossIrr) >= 0.0005 && (
+          {summary.grossIrr != null && Math.abs(summary.grossIrr) >= 0.0005 && summary.unrealizedValue > 0 && (
             <span className="flex items-center gap-1">
               <span className="text-muted-foreground">as of</span>
               <input
@@ -367,7 +383,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
                     {companyStatus === 'exited' ? (
                       <>
                         <td className="px-3 py-2 text-right font-mono">
-                          {txn.transaction_type === 'investment' ? fmt(txn.investment_cost) : fmt(txn.cost_basis_exited)}
+                          {txn.transaction_type === 'investment' ? fmt(txn.investment_cost) : '-'}
                         </td>
                         <td className="px-3 py-2 text-right font-mono">
                           {txn.transaction_type === 'proceeds' ? fmt(txn.proceeds_received) : '-'}
@@ -399,7 +415,18 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
                         </td>
                         <td className="px-3 py-2 text-right font-mono">
                           {txn.transaction_type === 'investment' && round
-                            ? fmt(round.currentValue)
+                            ? (() => {
+                                const isPricedEquity = (txn.shares_acquired ?? 0) > 0 && ((txn.share_price != null && txn.share_price > 0) || (txn.investment_cost ?? 0) > 0)
+                                if (isPricedEquity) {
+                                  return fmt((txn.shares_acquired ?? 0) * (round.currentSharePrice ?? txn.share_price ?? 0))
+                                }
+                                // Convertible / warrant: show proportional share of round value
+                                return fmt(
+                                  round.investmentCost > 0
+                                    ? (txn.investment_cost ?? 0) / round.investmentCost * round.currentValue
+                                    : txn.investment_cost ?? 0
+                                )
+                              })()
                             : txn.transaction_type === 'unrealized_gain_change'
                             ? fmt(txn.unrealized_value_change)
                             : '-'}
@@ -438,6 +465,74 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
         )
       })()}
 
+      {expanded && companyStatus === 'exited' && summary && summary.rounds.length > 0 && (() => {
+        const rounds = summary.rounds
+        const totInvested = rounds.reduce((s, r) => s + r.investmentCost, 0)
+        const totRealized = rounds.reduce((s, r) => s + r.totalRealized, 0)
+        const totEscrow = rounds.reduce((s, r) => s + r.totalEscrow, 0)
+        const totMoic = totInvested > 0 ? (totRealized + totEscrow) / totInvested : null
+        // Find portfolio group per round from investment transactions
+        const roundGroupMap = new Map<string, string>()
+        for (const txn of transactions) {
+          if (txn.transaction_type === 'investment' && txn.round_name && txn.portfolio_group) {
+            roundGroupMap.set(txn.round_name, txn.portfolio_group)
+          }
+        }
+        const hasGroups = portfolioGroups.length > 0
+        return (
+          <div className="border rounded-lg overflow-hidden mt-3">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  {hasGroups && <th className="text-left px-3 py-2 font-medium">Group</th>}
+                  <th className="text-left px-3 py-2 font-medium">Round</th>
+                  <th className="text-right px-3 py-2 font-medium">Invested</th>
+                  <th className="text-right px-3 py-2 font-medium">Proceeds</th>
+                  <th className="text-right px-3 py-2 font-medium">Escrow</th>
+                  <th className="text-right px-3 py-2 font-medium">MOIC</th>
+                  <th className="text-right px-3 py-2 font-medium">IRR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rounds.map(r => {
+                  const roundMoic = r.investmentCost > 0 ? (r.totalRealized + r.totalEscrow) / r.investmentCost : null
+                  return (
+                    <tr key={r.roundName} className="border-b last:border-b-0">
+                      {hasGroups && <td className="px-3 py-2 text-xs">{roundGroupMap.get(r.roundName) ?? '-'}</td>}
+                      <td className="px-3 py-2">{r.roundName}</td>
+                      <td className="px-3 py-2 text-right font-mono">{fmt(r.investmentCost)}</td>
+                      <td className="px-3 py-2 text-right font-mono">{fmt(r.totalRealized)}</td>
+                      <td className="px-3 py-2 text-right font-mono">{r.totalEscrow > 0 ? fmt(r.totalEscrow) : '-'}</td>
+                      <td className="px-3 py-2 text-right font-mono">{fmtMoic(roundMoic)}</td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        {r.grossIrr != null && Math.abs(r.grossIrr) >= 0.0005
+                          ? `${(r.grossIrr * 100).toFixed(1)}%`
+                          : '-'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-muted/30 font-medium">
+                  {hasGroups && <td className="px-3 py-2" />}
+                  <td className="px-3 py-2">Total</td>
+                  <td className="px-3 py-2 text-right font-mono">{fmt(totInvested)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{fmt(totRealized)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{totEscrow > 0 ? fmt(totEscrow) : '-'}</td>
+                  <td className="px-3 py-2 text-right font-mono">{fmtMoic(totMoic)}</td>
+                  <td className="px-3 py-2 text-right font-mono">
+                    {summary.grossIrr != null && Math.abs(summary.grossIrr) >= 0.0005
+                      ? `${(summary.grossIrr * 100).toFixed(1)}%`
+                      : '-'}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )
+      })()}
+
       {expanded && transactions.length === 0 && (
         <p className="text-xs text-muted-foreground px-3 py-2">
           No investment transactions recorded yet.
@@ -446,7 +541,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? 'Edit Transaction' : 'Add Transaction'}</DialogTitle>
             <DialogDescription>
@@ -466,8 +561,8 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
                   <SelectContent>
                     <SelectItem value="investment">Investment</SelectItem>
                     <SelectItem value="proceeds">Proceeds</SelectItem>
-                    <SelectItem value="unrealized_gain_change">Unrealized Change</SelectItem>
-                    <SelectItem value="round_info">Round Info</SelectItem>
+                    <SelectItem value="unrealized_gain_change">Valuation Update</SelectItem>
+                    <SelectItem value="round_info">Round</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -476,12 +571,26 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Round Name</Label>
-                <Input
-                  className="mt-1"
-                  value={form.round_name}
-                  onChange={e => setForm(f => ({ ...f, round_name: e.target.value }))}
-                  placeholder="e.g. Series A"
-                />
+                {txnType === 'investment' ? (
+                  <Input
+                    className="mt-1"
+                    value={form.round_name}
+                    onChange={e => setForm(f => ({ ...f, round_name: e.target.value }))}
+                    placeholder="e.g. Series A"
+                  />
+                ) : (
+                  <Select
+                    value={form.round_name || undefined}
+                    onValueChange={v => setForm(f => ({ ...f, round_name: v }))}
+                  >
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select round" /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from(new Set(transactions.filter(t => t.transaction_type === 'investment' && t.round_name).map(t => t.round_name!))).map(name => (
+                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div>
                 <Label>Date</Label>
@@ -494,16 +603,15 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
               </div>
             </div>
 
-            {(txnType === 'investment' || txnType === 'proceeds') && portfolioGroups.length > 0 && (
+            {portfolioGroups.length > 0 && (
               <div>
                 <Label>Portfolio Group</Label>
                 <Select
-                  value={form.portfolio_group}
-                  onValueChange={v => setForm(f => ({ ...f, portfolio_group: v === '__none__' ? '' : v }))}
+                  value={form.portfolio_group || undefined}
+                  onValueChange={v => setForm(f => ({ ...f, portfolio_group: v }))}
                 >
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Inherit from company" /></SelectTrigger>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="None" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">Inherit from company</SelectItem>
                     {portfolioGroups.map(g => (
                       <SelectItem key={g} value={g}>{g}</SelectItem>
                     ))}
