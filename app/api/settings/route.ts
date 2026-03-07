@@ -213,26 +213,31 @@ export async function PATCH(req: NextRequest) {
   if (googleClientId !== undefined) {
     settingsUpdates.google_client_id = googleClientId?.trim() || null
   }
-  if (googleClientSecret !== undefined && googleClientSecret.trim()) {
-    const kek = process.env.ENCRYPTION_KEY
-    if (!kek) return NextResponse.json({ error: 'Server misconfiguration: ENCRYPTION_KEY not set' }, { status: 500 })
-
-    // Ensure we have an encryption key; reuse existing or create new
-    const { data: existing } = await admin
-      .from('fund_settings')
-      .select('encryption_key_encrypted')
-      .eq('fund_id', membership.fund_id)
-      .single()
-
-    let dek: string
-    if (existing?.encryption_key_encrypted) {
-      const { decrypt } = await import('@/lib/crypto')
-      dek = decrypt(existing.encryption_key_encrypted, kek)
+  if (googleClientSecret !== undefined) {
+    if (!googleClientSecret.trim()) {
+      // Clear the secret
+      settingsUpdates.google_client_secret_encrypted = null
     } else {
-      dek = randomBytes(32).toString('hex')
-      settingsUpdates.encryption_key_encrypted = encrypt(dek, kek)
+      const kek = process.env.ENCRYPTION_KEY
+      if (!kek) return NextResponse.json({ error: 'Server misconfiguration: ENCRYPTION_KEY not set' }, { status: 500 })
+
+      // Ensure we have an encryption key; reuse existing or create new
+      const { data: existing } = await admin
+        .from('fund_settings')
+        .select('encryption_key_encrypted')
+        .eq('fund_id', membership.fund_id)
+        .single()
+
+      let dek: string
+      if (existing?.encryption_key_encrypted) {
+        const { decrypt } = await import('@/lib/crypto')
+        dek = decrypt(existing.encryption_key_encrypted, kek)
+      } else {
+        dek = randomBytes(32).toString('hex')
+        settingsUpdates.encryption_key_encrypted = encrypt(dek, kek)
+      }
+      settingsUpdates.google_client_secret_encrypted = encrypt(googleClientSecret.trim(), dek)
     }
-    settingsUpdates.google_client_secret_encrypted = encrypt(googleClientSecret.trim(), dek)
   }
 
   // Update outbound email provider

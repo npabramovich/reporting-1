@@ -17,7 +17,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import Link from 'next/link'
-import { AlertCircle, Check, ChevronDown, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X, Lock, ArrowDownCircle, Eye } from 'lucide-react'
+import { AlertCircle, Check, ChevronDown, ChevronRight, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X, Lock, ArrowDownCircle, Eye } from 'lucide-react'
 import { DEFAULT_FEATURE_VISIBILITY, FEATURES_WITH_OFF } from '@/lib/types/features'
 import type { FeatureKey, FeatureVisibility } from '@/lib/types/features'
 import { AnalystToggleButton } from '@/components/analyst-button'
@@ -1941,6 +1941,100 @@ function InboundEmailSection({
 
 // ──────────────────────────── Google Connection (shared) ────────────────────────────
 
+function GoogleSetupGuide({ show, onToggle }: { show: boolean; onToggle: () => void }) {
+  if (!show) {
+    return (
+      <button onClick={onToggle} className="text-xs text-muted-foreground hover:text-foreground underline">
+        Setup guide
+      </button>
+    )
+  }
+  return (
+    <div className="space-y-1.5">
+      <button onClick={onToggle} className="text-xs font-medium text-muted-foreground hover:text-foreground flex items-center gap-1">
+        <ChevronDown className="h-3 w-3" /> Setup guide
+      </button>
+      <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+        <li>Go to{' '}
+          <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="underline">Google Cloud Console</a>
+        </li>
+        <li><a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener noreferrer" className="underline">Create a project</a> (or select an existing one)</li>
+        <li>Configure the{' '}
+          <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer" className="underline">OAuth consent screen</a>
+          <ul className="list-disc list-inside ml-3 mt-0.5 space-y-0.5">
+            <li>Set User type to <strong>Internal</strong> (avoids 7-day token expiry)</li>
+            <li>App name & support email — fill in anything</li>
+            <li>Scopes: add <code className="text-[11px] bg-muted px-1 rounded">drive.file</code> and <code className="text-[11px] bg-muted px-1 rounded">gmail.send</code></li>
+          </ul>
+        </li>
+        <li>Enable APIs:{' '}
+          <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener noreferrer" className="underline">Google Drive API</a>,{' '}
+          <a href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noopener noreferrer" className="underline">Gmail API</a>
+        </li>
+        <li><a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline">Create OAuth credentials</a>
+          <ul className="list-disc list-inside ml-3 mt-0.5 space-y-0.5">
+            <li>Type: <strong>Web application</strong></li>
+            <li>Authorized redirect URI: <code className="text-[11px] bg-muted px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}/api/auth/google/callback</code></li>
+          </ul>
+        </li>
+        <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> into the fields above</li>
+      </ol>
+    </div>
+  )
+}
+
+function GoogleCredentialsForm({
+  clientId,
+  onSave,
+  onCancel,
+  saving,
+}: {
+  clientId: string
+  onSave: (clientId: string, clientSecret: string) => void
+  onCancel?: () => void
+  saving: boolean
+}) {
+  const [newClientId, setNewClientId] = useState(clientId)
+  const [newClientSecret, setNewClientSecret] = useState('')
+  const [showSetupGuide, setShowSetupGuide] = useState(!clientId)
+
+  useEffect(() => { setNewClientId(clientId) }, [clientId])
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium">Google OAuth credentials</p>
+      <div>
+        <Label>Client ID</Label>
+        <Input
+          value={newClientId}
+          onChange={(e) => setNewClientId(e.target.value)}
+          placeholder="123456789.apps.googleusercontent.com"
+        />
+      </div>
+      <div>
+        <Label>Client secret</Label>
+        <Input
+          type="password"
+          value={newClientSecret}
+          onChange={(e) => setNewClientSecret(e.target.value)}
+          placeholder="GOCSPX-..."
+        />
+      </div>
+      <GoogleSetupGuide show={showSetupGuide} onToggle={() => setShowSetupGuide(!showSetupGuide)} />
+      <div className="flex gap-2">
+        <Button size="sm" onClick={() => onSave(newClientId, newClientSecret)} disabled={saving || !newClientId.trim() || !newClientSecret.trim()}>
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save credentials'}
+        </Button>
+        {onCancel && (
+          <Button size="sm" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function GoogleConnectionUI({
   connected,
   hasCredentials,
@@ -1953,41 +2047,46 @@ function GoogleConnectionUI({
   onChanged: () => void
 }) {
   const [editingCreds, setEditingCreds] = useState(!hasCredentials)
-  const [newClientId, setNewClientId] = useState(existingClientId)
-  const [newClientSecret, setNewClientSecret] = useState('')
   const [savingCreds, setSavingCreds] = useState(false)
   const [credsSaved, setCredsSaved] = useState(false)
-  const [showSetupGuide, setShowSetupGuide] = useState(!hasCredentials)
+  const [removingCreds, setRemovingCreds] = useState(false)
 
-  // Keep in sync if parent refreshes
-  useEffect(() => { setNewClientId(existingClientId) }, [existingClientId])
   useEffect(() => { if (hasCredentials && editingCreds && credsSaved) setEditingCreds(false) }, [hasCredentials, editingCreds, credsSaved])
 
-  const saveCredentials = async () => {
-    if (!newClientId.trim() || !newClientSecret.trim()) return
+  const saveCredentials = async (clientId: string, clientSecret: string) => {
     setSavingCreds(true)
     const res = await fetch('/api/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        googleClientId: newClientId.trim(),
-        googleClientSecret: newClientSecret.trim(),
+        googleClientId: clientId.trim(),
+        googleClientSecret: clientSecret.trim(),
       }),
     })
     setSavingCreds(false)
     if (res.ok) {
-      setNewClientSecret('')
       setEditingCreds(false)
       setCredsSaved(true)
-      setShowSetupGuide(false)
       setTimeout(() => setCredsSaved(false), 2000)
       onChanged()
     }
   }
 
-  const handleDisconnect = async () => {
-    const res = await fetch('/api/settings/drive', { method: 'DELETE' })
-    if (res.ok) onChanged()
+  const removeCredentials = async () => {
+    if (!confirm('Remove Google OAuth credentials? This will also disconnect your Google account.')) return
+    setRemovingCreds(true)
+    // Clear credentials and disconnect
+    await Promise.all([
+      fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ googleClientId: '', googleClientSecret: '' }),
+      }),
+      fetch('/api/settings/drive', { method: 'DELETE' }),
+    ])
+    setRemovingCreds(false)
+    setEditingCreds(true)
+    onChanged()
   }
 
   if (connected) {
@@ -1997,35 +2096,13 @@ function GoogleConnectionUI({
           <Check className="h-4 w-4 text-green-600 shrink-0" />
           <span>Google account connected.</span>
         </div>
-        {(editingCreds && hasCredentials) ? (
-          <div className="space-y-2">
-            <p className="text-xs font-medium">Google OAuth credentials</p>
-            <div>
-              <Label>Client ID</Label>
-              <Input
-                value={newClientId}
-                onChange={(e) => setNewClientId(e.target.value)}
-                placeholder="123456789.apps.googleusercontent.com"
-              />
-            </div>
-            <div>
-              <Label>Client secret</Label>
-              <Input
-                type="password"
-                value={newClientSecret}
-                onChange={(e) => setNewClientSecret(e.target.value)}
-                placeholder="GOCSPX-..."
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={saveCredentials} disabled={savingCreds || !newClientId.trim() || !newClientSecret.trim()}>
-                {savingCreds ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save credentials'}
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setEditingCreds(false)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
+        {editingCreds ? (
+          <GoogleCredentialsForm
+            clientId={existingClientId}
+            onSave={saveCredentials}
+            onCancel={() => setEditingCreds(false)}
+            saving={savingCreds}
+          />
         ) : (
           <div className="flex items-center gap-2">
             <p className="text-xs text-muted-foreground flex-1">
@@ -2035,6 +2112,9 @@ function GoogleConnectionUI({
             <Button size="sm" variant="outline" onClick={() => setEditingCreds(true)} className="text-xs h-7">
               Update credentials
             </Button>
+            <Button size="sm" variant="outline" onClick={removeCredentials} disabled={removingCreds} className="text-xs h-7 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30">
+              {removingCreds ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Remove'}
+            </Button>
           </div>
         )}
       </div>
@@ -2043,73 +2123,13 @@ function GoogleConnectionUI({
 
   return (
     <div className="space-y-3">
-      {(editingCreds || !hasCredentials) ? (
-        <div className="space-y-2">
-          <p className="text-xs font-medium">Google OAuth credentials</p>
-          <div>
-            <Label>Client ID</Label>
-            <Input
-              value={newClientId}
-              onChange={(e) => setNewClientId(e.target.value)}
-              placeholder="123456789.apps.googleusercontent.com"
-            />
-          </div>
-          <div>
-            <Label>Client secret</Label>
-            <Input
-              type="password"
-              value={newClientSecret}
-              onChange={(e) => setNewClientSecret(e.target.value)}
-              placeholder="GOCSPX-..."
-            />
-          </div>
-          {showSetupGuide ? (
-            <div className="space-y-1.5">
-              <button onClick={() => setShowSetupGuide(false)} className="text-xs font-medium text-muted-foreground hover:text-foreground flex items-center gap-1">
-                <ChevronDown className="h-3 w-3" /> Setup guide
-              </button>
-              <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                <li>Go to{' '}
-                  <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="underline">Google Cloud Console</a>
-                </li>
-                <li><a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener noreferrer" className="underline">Create a project</a> (or select an existing one)</li>
-                <li>Configure the{' '}
-                  <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer" className="underline">OAuth consent screen</a>
-                  <ul className="list-disc list-inside ml-3 mt-0.5 space-y-0.5">
-                    <li>Set User type to <strong>Internal</strong> (avoids 7-day token expiry)</li>
-                    <li>App name & support email — fill in anything</li>
-                    <li>Scopes: add <code className="text-[11px] bg-muted px-1 rounded">drive.file</code> and <code className="text-[11px] bg-muted px-1 rounded">gmail.send</code></li>
-                  </ul>
-                </li>
-                <li>Enable APIs:{' '}
-                  <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener noreferrer" className="underline">Google Drive API</a>,{' '}
-                  <a href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noopener noreferrer" className="underline">Gmail API</a>
-                </li>
-                <li><a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline">Create OAuth credentials</a>
-                  <ul className="list-disc list-inside ml-3 mt-0.5 space-y-0.5">
-                    <li>Type: <strong>Web application</strong></li>
-                    <li>Authorized redirect URI: <code className="text-[11px] bg-muted px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}/api/auth/google/callback</code></li>
-                  </ul>
-                </li>
-                <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> into the fields above</li>
-              </ol>
-            </div>
-          ) : (
-            <button onClick={() => setShowSetupGuide(true)} className="text-xs text-muted-foreground hover:text-foreground underline">
-              Setup guide
-            </button>
-          )}
-          <div className="flex gap-2">
-            <Button size="sm" onClick={saveCredentials} disabled={savingCreds || !newClientId.trim() || !newClientSecret.trim()}>
-              {savingCreds ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save credentials'}
-            </Button>
-            {hasCredentials && (
-              <Button size="sm" variant="outline" onClick={() => setEditingCreds(false)}>
-                Cancel
-              </Button>
-            )}
-          </div>
-        </div>
+      {editingCreds || !hasCredentials ? (
+        <GoogleCredentialsForm
+          clientId={existingClientId}
+          onSave={saveCredentials}
+          onCancel={hasCredentials ? () => setEditingCreds(false) : undefined}
+          saving={savingCreds}
+        />
       ) : (
         <div className="flex items-center gap-2">
           <p className="text-xs text-muted-foreground flex-1">
@@ -2118,6 +2138,9 @@ function GoogleConnectionUI({
           </p>
           <Button size="sm" variant="outline" onClick={() => setEditingCreds(true)} className="text-xs h-7">
             Update credentials
+          </Button>
+          <Button size="sm" variant="outline" onClick={removeCredentials} disabled={removingCreds} className="text-xs h-7 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30">
+            {removingCreds ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Remove'}
           </Button>
         </div>
       )}
@@ -2632,6 +2655,7 @@ function OutboundEmailSection({
   const [mgDomain, setMgDomain] = useState(existingMailgunDomain)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [showApprovalEmail, setShowApprovalEmail] = useState(false)
 
   // Determine which providers are actively selected (deduplicated)
   const activeProviders = new Set<string>()
@@ -2733,29 +2757,46 @@ function OutboundEmailSection({
               />
             </div>
             <div>
-              <Label>Approval email subject</Label>
-              <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
-                Subject line for the member approval email. Use {'{{fundName}}'} as a placeholder.
+              <button
+                type="button"
+                onClick={() => setShowApprovalEmail(!showApprovalEmail)}
+                className="flex items-center gap-1.5 text-sm font-medium hover:text-foreground transition-colors"
+              >
+                {showApprovalEmail ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                Member accepted email
+              </button>
+              <p className="text-xs text-muted-foreground mt-0.5 ml-5">
+                Sent when a new member is approved to join the fund.
               </p>
-              <Input
-                value={approvalSubject}
-                onChange={(e) => setApprovalSubject(e.target.value)}
-                placeholder={defaultSubject}
-              />
             </div>
-            <div>
-              <Label>Approval email body</Label>
-              <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
-                HTML body for the member approval email. Use {'{{fundName}}'} and {'{{siteUrl}}'} as placeholders.
-              </p>
-              <Textarea
-                value={approvalBody}
-                onChange={(e) => setApprovalBody(e.target.value)}
-                placeholder={defaultBody}
-                rows={5}
-                className="font-mono text-xs"
-              />
-            </div>
+            {showApprovalEmail && (
+              <>
+                <div>
+                  <Label>Subject</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
+                    Use {'{{fundName}}'} as a placeholder.
+                  </p>
+                  <Input
+                    value={approvalSubject}
+                    onChange={(e) => setApprovalSubject(e.target.value)}
+                    placeholder={defaultSubject}
+                  />
+                </div>
+                <div>
+                  <Label>Body</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
+                    HTML body. Use {'{{fundName}}'} and {'{{siteUrl}}'} as placeholders.
+                  </p>
+                  <Textarea
+                    value={approvalBody}
+                    onChange={(e) => setApprovalBody(e.target.value)}
+                    placeholder={defaultBody}
+                    rows={5}
+                    className="font-mono text-xs"
+                  />
+                </div>
+              </>
+            )}
           </div>
         )}
 

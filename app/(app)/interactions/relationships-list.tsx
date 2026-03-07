@@ -57,7 +57,31 @@ function formatRelativeTime(dateStr: string) {
 export function RelationshipsList({ interactions, inboundAddress }: { interactions: Interaction[]; inboundAddress?: string }) {
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [emailExpandedId, setEmailExpandedId] = useState<string | null>(null)
+  const [fetchedBodies, setFetchedBodies] = useState<Record<string, string>>({})
+  const [emailLoading, setEmailLoading] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  const toggleEmailBody = async (interactionId: string, emailId: string) => {
+    if (emailExpandedId === interactionId) {
+      setEmailExpandedId(null)
+      return
+    }
+    setEmailExpandedId(interactionId)
+    if (fetchedBodies[emailId]) return
+    setEmailLoading(interactionId)
+    try {
+      const res = await fetch(`/api/emails/${emailId}`)
+      const data = await res.json()
+      const payload = data.raw_payload ?? {}
+      const body = payload.TextBody || payload.HtmlBody || ''
+      setFetchedBodies(prev => ({ ...prev, [emailId]: body }))
+    } catch {
+      setFetchedBodies(prev => ({ ...prev, [emailId]: 'Failed to load email body.' }))
+    } finally {
+      setEmailLoading(null)
+    }
+  }
 
   // Only show tag filters for tags that exist in the data
   const usedTags = KNOWN_TAGS.filter(tag =>
@@ -206,6 +230,30 @@ export function RelationshipsList({ interactions, inboundAddress }: { interactio
                             )}
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {/* Expandable email body */}
+                    {interaction.email_id && (
+                      <button
+                        onClick={() => toggleEmailBody(interaction.id, interaction.email_id!)}
+                        className="flex items-center gap-1 mt-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        {emailExpandedId === interaction.id ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                        <Mail className="h-3 w-3" />
+                        View email
+                      </button>
+                    )}
+
+                    {emailExpandedId === interaction.id && interaction.email_id && (
+                      <div className="mt-2 border rounded-md bg-muted/30 p-3">
+                        {emailLoading === interaction.id ? (
+                          <p className="text-xs text-muted-foreground animate-pulse">Loading email...</p>
+                        ) : (
+                          <pre className="text-xs whitespace-pre-wrap break-words max-h-96 overflow-y-auto">
+                            {fetchedBodies[interaction.email_id] || ''}
+                          </pre>
+                        )}
                       </div>
                     )}
                   </div>
