@@ -95,8 +95,8 @@ export async function GET(req: NextRequest) {
 
     for (const txn of txns) {
       if (txn.transaction_type === 'investment') {
-        // Skip zero-cost, zero-price entries (e.g. warrants) — they shouldn't override the share price
-        if (txn.share_price != null && txn.transaction_date && (txn.share_price > 0 || (txn.investment_cost ?? 0) > 0)) {
+        // Only use positive share prices (skip $0 from SAFEs, warrants, etc.)
+        if (txn.share_price != null && txn.share_price > 0 && txn.transaction_date) {
           if (!latestSharePriceDate || txn.transaction_date > latestSharePriceDate) {
             latestSharePrice = txn.share_price
             latestSharePriceDate = txn.transaction_date
@@ -204,7 +204,8 @@ export async function GET(req: NextRequest) {
       // Sum per-round FMV using the company-wide share price
       let unrealizedValue = 0
       for (const round of Array.from(roundMap.values())) {
-        if (round.sharesAcquired > 0) {
+        const isPricedEquity = round.sharesAcquired > 0 && (round.investmentCost > 0)
+        if (isPricedEquity) {
           unrealizedValue += latestSharePrice != null ? round.sharesAcquired * latestSharePrice : 0
         } else {
           unrealizedValue += round.investmentCost - round.costBasisExited + round.unrealizedValueChange

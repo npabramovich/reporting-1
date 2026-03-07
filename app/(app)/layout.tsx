@@ -43,7 +43,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const featureVisibility = { ...DEFAULT_FEATURE_VISIBILITY, ...(fundSettings?.feature_visibility as Partial<FeatureVisibilityMap> | null) }
   const fundCurrency = fundSettings?.currency ?? 'USD'
-  const hasAIKey = !!(fundSettings?.claude_api_key_encrypted || fundSettings?.openai_api_key_encrypted)
+  const configuredProviders = [
+    fundSettings?.claude_api_key_encrypted ? 'anthropic' : null,
+    fundSettings?.openai_api_key_encrypted ? 'openai' : null,
+    fundSettings?.gemini_api_key_encrypted ? 'gemini' : null,
+    fundSettings?.ollama_base_url ? 'ollama' : null,
+  ].filter(Boolean) as string[]
+  const hasAIKey = configuredProviders.length > 0
   const defaultAIProvider = fundSettings?.default_ai_provider ?? 'anthropic'
   const fathomSiteId = fundSettings?.analytics_fathom_site_id ?? null
   const rawGaId = fundSettings?.analytics_ga_measurement_id ?? null
@@ -74,6 +80,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           isAdmin={isAdmin}
           currency={fundCurrency}
           hasAIKey={hasAIKey}
+          configuredProviders={configuredProviders}
           defaultAIProvider={defaultAIProvider}
           updateAvailable={updateAvailable}
           featureVisibility={featureVisibility}

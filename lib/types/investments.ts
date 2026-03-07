@@ -9,6 +9,10 @@ export interface InvestmentRoundSummary {
   interestConverted: number
   unrealizedValueChange: number
   costBasisExited: number
+  totalRealized: number
+  totalEscrow: number
+  proceedsDate: string | null
+  grossIrr: number | null
 }
 
 export interface CompanyInvestmentSummary {
