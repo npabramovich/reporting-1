@@ -95,7 +95,8 @@ export async function GET(req: NextRequest) {
 
     for (const txn of txns) {
       if (txn.transaction_type === 'investment') {
-        if (txn.share_price != null && txn.transaction_date) {
+        // Skip zero-cost, zero-price entries (e.g. warrants) — they shouldn't override the share price
+        if (txn.share_price != null && txn.transaction_date && (txn.share_price > 0 || (txn.investment_cost ?? 0) > 0)) {
           if (!latestSharePriceDate || txn.transaction_date > latestSharePriceDate) {
             latestSharePrice = txn.share_price
             latestSharePriceDate = txn.transaction_date
