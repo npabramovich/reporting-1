@@ -531,13 +531,11 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
     .maybeSingle()
 
   if (existingFund) {
-    // Fund exists — backfill investment transactions if missing
-    const { count } = await admin
-      .from('investment_transactions' as any)
-      .select('id', { count: 'exact', head: true })
+    // Fund exists — clear and re-seed investment transactions
+    await admin
+      .from('investment_transactions')
+      .delete()
       .eq('fund_id', existingFund.id)
-
-    if (count && count > 0) return false
 
     // Look up company IDs for this fund
     const { data: companies } = await admin
