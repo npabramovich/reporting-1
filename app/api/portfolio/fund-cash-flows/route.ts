@@ -68,6 +68,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'flowType must be commitment, called_capital, or distribution' }, { status: 400 })
   }
 
+  const parsedAmount = parseFloat(amount)
+  if (isNaN(parsedAmount) || parsedAmount <= 0) {
+    return NextResponse.json({ error: 'amount must be a positive number' }, { status: 400 })
+  }
+
   const { data, error } = await admin
     .from('fund_cash_flows' as any)
     .insert({
@@ -75,7 +80,7 @@ export async function POST(req: NextRequest) {
       portfolio_group: portfolioGroup,
       flow_date: flowDate,
       flow_type: flowType,
-      amount: parseFloat(amount),
+      amount: parsedAmount,
       notes: notes ?? null,
     })
     .select('*')
@@ -119,7 +124,13 @@ export async function PUT(req: NextRequest) {
   const updates: Record<string, any> = { updated_at: new Date().toISOString() }
   if (flowDate !== undefined) updates.flow_date = flowDate
   if (flowType !== undefined) updates.flow_type = flowType
-  if (amount !== undefined) updates.amount = parseFloat(amount)
+  if (amount !== undefined) {
+    const parsedAmount = parseFloat(amount)
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return NextResponse.json({ error: 'amount must be a positive number' }, { status: 400 })
+    }
+    updates.amount = parsedAmount
+  }
   if (notes !== undefined) updates.notes = notes
   if (portfolioGroup !== undefined) updates.portfolio_group = portfolioGroup
 

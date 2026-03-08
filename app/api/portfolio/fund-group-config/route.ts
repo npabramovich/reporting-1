@@ -65,9 +65,18 @@ export async function PUT(req: NextRequest) {
     portfolio_group: portfolioGroup,
     updated_at: new Date().toISOString(),
   }
-  if (cashOnHand !== undefined) row.cash_on_hand = parseFloat(cashOnHand ?? 0)
-  if (carryRate !== undefined) row.carry_rate = parseFloat(carryRate ?? 0.2)
-  if (gpCommitPct !== undefined) row.gp_commit_pct = parseFloat(gpCommitPct ?? 0)
+  if (cashOnHand !== undefined) {
+    const v = parseFloat(cashOnHand ?? 0)
+    row.cash_on_hand = isNaN(v) ? 0 : v
+  }
+  if (carryRate !== undefined) {
+    const v = parseFloat(carryRate ?? 0.2)
+    row.carry_rate = isNaN(v) ? 0.2 : v
+  }
+  if (gpCommitPct !== undefined) {
+    const v = parseFloat(gpCommitPct ?? 0)
+    row.gp_commit_pct = isNaN(v) ? 0 : v
+  }
 
   const { data, error } = await admin
     .from('fund_group_config' as any)

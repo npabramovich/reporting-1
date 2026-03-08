@@ -51,7 +51,8 @@ export async function GET(req: NextRequest) {
 
   try {
     const parent = req.nextUrl.searchParams.get('parent') || undefined
-    const folders = await listFolders(result.accessToken, parent)
+    const shared = req.nextUrl.searchParams.get('shared') === 'true'
+    const folders = await listFolders(result.accessToken, shared ? undefined : parent, shared)
     return NextResponse.json({ folders })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to list folders'
@@ -64,6 +65,17 @@ export async function POST(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Admin-only: check role before modifying fund settings
+  const adminCheck = createAdminClient()
+  const { data: memberRole } = await adminCheck
+    .from('fund_members')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (!memberRole || memberRole.role !== 'admin') {
+    return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+  }
 
   const { folderName } = await req.json()
   if (!folderName?.trim()) {
