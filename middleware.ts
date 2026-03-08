@@ -30,7 +30,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const isAuthRoute = pathname.startsWith('/auth')
   const isApiRoute = pathname.startsWith('/api')
-  const isPublicRoute = pathname === '/license' || pathname === '/demo'
+  const isPublicRoute = pathname === '/' || pathname === '/license' || pathname === '/demo'
 
   // Unauthenticated users can only access /auth, API, and public routes
   if (!user && !isAuthRoute && !isApiRoute && !isPublicRoute) {
