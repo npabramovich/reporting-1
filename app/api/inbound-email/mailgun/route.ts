@@ -167,19 +167,26 @@ async function handleMailgunInbound(req: NextRequest) {
 
       const safeName = att.Name.replace(/[\/\\]/g, '_').replace(/\.\./g, '_')
       const storagePath = `${emailId}/${safeName}`
-      try {
-        await supabase.storage
-          .from('email-attachments')
-          .upload(storagePath, buffer, { contentType: att.ContentType })
-      } catch (err) {
-        console.error(`[inbound-email/mailgun] Failed to upload attachment ${att.Name} to storage:`, err)
+      const { error: uploadError } = await supabase.storage
+        .from('email-attachments')
+        .upload(storagePath, buffer, { contentType: att.ContentType })
+
+      if (uploadError) {
+        console.error(`[inbound-email/mailgun] Failed to upload attachment "${att.Name}" to storage:`, uploadError.message)
+        updatedAttachments.push({
+          Name: att.Name,
+          ContentType: att.ContentType,
+          ContentLength: att.ContentLength,
+          Content: att.Content,
+        })
+      } else {
+        updatedAttachments.push({
+          Name: att.Name,
+          ContentType: att.ContentType,
+          ContentLength: att.ContentLength,
+          StoragePath: storagePath,
+        })
       }
-      updatedAttachments.push({
-        Name: att.Name,
-        ContentType: att.ContentType,
-        ContentLength: att.ContentLength,
-        StoragePath: storagePath,
-      })
     }
 
     await supabase
