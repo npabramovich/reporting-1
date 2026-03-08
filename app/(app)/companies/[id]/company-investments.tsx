@@ -301,13 +301,13 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
           )}
           {summary.moic != null && (
             <span>
-              <span className="text-muted-foreground">MOIC:</span>{' '}
+              <span className="text-muted-foreground">Gross MOIC:</span>{' '}
               <span className="font-medium">{fmtMoic(summary.moic)}</span>
             </span>
           )}
           {summary.grossIrr != null && Math.abs(summary.grossIrr) >= 0.0005 && (
             <span>
-              <span className="text-muted-foreground">IRR:</span>{' '}
+              <span className="text-muted-foreground">Gross IRR:</span>{' '}
               <span className="font-medium">{(summary.grossIrr * 100).toFixed(1)}%</span>
             </span>
           )}
@@ -489,8 +489,8 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
                   <th className="text-right px-3 py-2 font-medium">Invested</th>
                   <th className="text-right px-3 py-2 font-medium">Proceeds</th>
                   <th className="text-right px-3 py-2 font-medium">Escrow</th>
-                  <th className="text-right px-3 py-2 font-medium">MOIC</th>
-                  <th className="text-right px-3 py-2 font-medium">IRR</th>
+                  <th className="text-right px-3 py-2 font-medium">Gross MOIC</th>
+                  <th className="text-right px-3 py-2 font-medium">Gross IRR</th>
                 </tr>
               </thead>
               <tbody>

@@ -6,6 +6,7 @@ import { Loader2, ChevronUp, ChevronDown, Lock } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { useCurrency, formatCurrency, formatCurrencyFull } from '@/components/currency-context'
 import type { CompanyStatus } from '@/lib/types/database'
+import { xirr, type CashFlow } from '@/lib/xirr'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
@@ -22,6 +23,89 @@ interface CompanySummary {
   fmv: number
   moic: number | null
   irr: number | null
+  proceedsReceived: number
+  proceedsEscrow: number
+  totalCostBasisExited: number
+}
+
+interface GroupSummary {
+  group: string
+  totalInvested: number
+  proceedsReceived: number
+  proceedsEscrow: number
+  totalRealized: number
+  unrealizedValue: number
+  totalCostBasisExited: number
+  moic: number | null
+  irr: number | null
+}
+
+interface FundCashFlow {
+  id: string
+  portfolio_group: string
+  flow_date: string
+  flow_type: 'commitment' | 'called_capital' | 'distribution'
+  amount: number
+}
+
+interface FundGroupMetrics {
+  tvpi: number | null
+  dpi: number | null
+  rvpi: number | null
+  netIrr: number | null
+}
+
+function computeFundMetricsByGroup(
+  cashFlows: FundCashFlow[],
+  grossResidualByGroup: Map<string, number>,
+  configsByGroup: Record<string, { cashOnHand: number; carryRate: number; gpCommitPct: number }>
+): Map<string, FundGroupMetrics> {
+  // Group cash flows by portfolio_group
+  const byGroup = new Map<string, FundCashFlow[]>()
+  for (const cf of cashFlows) {
+    const list = byGroup.get(cf.portfolio_group) ?? []
+    list.push(cf)
+    byGroup.set(cf.portfolio_group, list)
+  }
+
+  const result = new Map<string, FundGroupMetrics>()
+  for (const [group, flows] of Array.from(byGroup.entries())) {
+    let called = 0
+    let distributions = 0
+    for (const cf of flows) {
+      if (cf.flow_type === 'called_capital') called += cf.amount
+      if (cf.flow_type === 'distribution') distributions += cf.amount
+    }
+
+    const grossResidual = grossResidualByGroup.get(group) ?? 0
+    const config = configsByGroup[group] ?? { cashOnHand: 0, carryRate: 0.20, gpCommitPct: 0 }
+    const grossAssets = grossResidual + config.cashOnHand
+
+    // GP commit portion of called capital is not subject to carry
+    const gpCapital = called * config.gpCommitPct
+    const lpCapital = called - gpCapital
+    const lpDistributions = distributions * (1 - config.gpCommitPct)
+    const lpRemainingCapital = lpCapital - lpDistributions
+    const estimatedCarry = Math.max(0, config.carryRate * (grossAssets * (1 - config.gpCommitPct) - lpRemainingCapital))
+    const netResidual = grossAssets - estimatedCarry
+    const totalValue = distributions + netResidual
+
+    const tvpi = called > 0 ? totalValue / called : null
+    const dpi = called > 0 ? distributions / called : null
+    const rvpi = called > 0 ? netResidual / called : null
+
+    // Net IRR
+    const xirrFlows: CashFlow[] = []
+    for (const cf of flows) {
+      if (cf.flow_type === 'called_capital') xirrFlows.push({ date: new Date(cf.flow_date), amount: -cf.amount })
+      if (cf.flow_type === 'distribution') xirrFlows.push({ date: new Date(cf.flow_date), amount: cf.amount })
+    }
+    if (netResidual > 0) xirrFlows.push({ date: new Date(), amount: netResidual })
+    const netIrr = xirrFlows.length >= 2 ? xirr(xirrFlows) : null
+
+    result.set(group, { tvpi, dpi, rvpi, netIrr })
+  }
+  return result
 }
 
 interface PortfolioData {
@@ -32,10 +116,37 @@ interface PortfolioData {
   portfolioMOIC: number | null
   portfolioIRR: number | null
   companies: CompanySummary[]
+  groups: GroupSummary[]
 }
 
-type SortKey = 'companyName' | 'status' | 'portfolioGroup' | 'totalInvested' | 'fmv' | 'totalRealized' | 'moic' | 'irr'
+type SortKey = 'companyName' | 'status' | 'portfolioGroup' | 'totalInvested' | 'currentCost' | 'proceedsReceived' | 'proceedsEscrow' | 'unrealizedValue' | 'totalValue' | 'realizedGL' | 'unrealizedGL' | 'totalGL' | 'moic' | 'realizedMoic' | 'unrealizedMoic' | 'irr' | 'pctUnrealized' | 'pctTotalValue'
 type SortDir = 'asc' | 'desc'
+
+type GroupSortKey = 'group' | 'totalInvested' | 'currentCost' | 'proceedsReceived' | 'proceedsEscrow' | 'unrealizedValue' | 'totalValue' | 'realizedGL' | 'unrealizedGL' | 'totalGL' | 'moic' | 'realizedMoic' | 'unrealizedMoic' | 'irr'
+
+// Derived metric helpers
+function currentCost(row: { totalInvested: number; totalCostBasisExited: number }) {
+  return row.totalInvested - row.totalCostBasisExited
+}
+function totalValue(row: { totalRealized: number; unrealizedValue: number }) {
+  return row.totalRealized + row.unrealizedValue
+}
+function realizedGL(row: { totalRealized: number; totalCostBasisExited: number }) {
+  return row.totalRealized - row.totalCostBasisExited
+}
+function unrealizedGL(row: { totalInvested: number; totalCostBasisExited: number; unrealizedValue: number }) {
+  return row.unrealizedValue - currentCost(row)
+}
+function totalGL(row: { totalInvested: number; totalRealized: number; unrealizedValue: number }) {
+  return totalValue(row) - row.totalInvested
+}
+function realizedMoic(row: { totalRealized: number; totalCostBasisExited: number }) {
+  return row.totalCostBasisExited > 0 ? row.totalRealized / row.totalCostBasisExited : null
+}
+function unrealizedMoic(row: { totalInvested: number; totalCostBasisExited: number; unrealizedValue: number }) {
+  const cc = currentCost(row)
+  return cc > 0 ? row.unrealizedValue / cc : null
+}
 
 function fmtMoic(val: number | null): string {
   if (val == null) return '-'
@@ -44,7 +155,9 @@ function fmtMoic(val: number | null): string {
 
 function fmtIrr(val: number | null): string {
   if (val == null) return '-'
-  return `${(val * 100).toFixed(1)}%`
+  let pct = val * 100
+  if (Object.is(pct, -0) || (pct < 0 && pct > -0.05)) pct = 0
+  return `${pct.toFixed(1)}%`
 }
 
 const STATUS_COLORS: Record<CompanyStatus, string> = {
@@ -54,6 +167,46 @@ const STATUS_COLORS: Record<CompanyStatus, string> = {
 }
 
 const TEXT_SORT_KEYS: SortKey[] = ['companyName', 'status', 'portfolioGroup']
+
+function getDerivedValue(row: CompanySummary, key: SortKey, helpers?: { pctUnrealized: (c: CompanySummary) => number | null; pctTotalValue: (c: CompanySummary) => number | null }): number {
+  switch (key) {
+    case 'currentCost': return currentCost(row)
+    case 'proceedsReceived': return row.proceedsReceived
+    case 'proceedsEscrow': return row.proceedsEscrow
+    case 'unrealizedValue': return row.unrealizedValue
+    case 'totalValue': return totalValue(row)
+    case 'realizedGL': return realizedGL(row)
+    case 'unrealizedGL': return unrealizedGL(row)
+    case 'totalGL': return totalGL(row)
+    case 'realizedMoic': return realizedMoic(row) ?? -Infinity
+    case 'unrealizedMoic': return unrealizedMoic(row) ?? -Infinity
+    case 'totalInvested': return row.totalInvested
+    case 'moic': return row.moic ?? -Infinity
+    case 'irr': return row.irr ?? -Infinity
+    case 'pctUnrealized': return helpers?.pctUnrealized(row) ?? -Infinity
+    case 'pctTotalValue': return helpers?.pctTotalValue(row) ?? -Infinity
+    default: return 0
+  }
+}
+
+function getGroupDerivedValue(row: GroupSummary, key: GroupSortKey): number {
+  switch (key) {
+    case 'currentCost': return currentCost(row)
+    case 'proceedsReceived': return row.proceedsReceived
+    case 'proceedsEscrow': return row.proceedsEscrow
+    case 'unrealizedValue': return row.unrealizedValue
+    case 'totalValue': return totalValue(row)
+    case 'realizedGL': return realizedGL(row)
+    case 'unrealizedGL': return unrealizedGL(row)
+    case 'totalGL': return totalGL(row)
+    case 'realizedMoic': return realizedMoic(row) ?? -Infinity
+    case 'unrealizedMoic': return unrealizedMoic(row) ?? -Infinity
+    case 'totalInvested': return row.totalInvested
+    case 'moic': return row.moic ?? -Infinity
+    case 'irr': return row.irr ?? -Infinity
+    default: return 0
+  }
+}
 
 export default function InvestmentsPage() {
   const fv = useFeatureVisibility()
@@ -65,17 +218,41 @@ export default function InvestmentsPage() {
   const [loading, setLoading] = useState(true)
   const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().split('T')[0])
 
-  const [sortKey, setSortKey] = useState<SortKey>('totalInvested')
+  const [sortKey, setSortKey] = useState<SortKey>('totalValue')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [statusFilter, setStatusFilter] = useState('')
   const [groupFilter, setGroupFilter] = useState('')
+
+  const [groupSortKey, setGroupSortKey] = useState<GroupSortKey>('totalInvested')
+  const [groupSortDir, setGroupSortDir] = useState<SortDir>('desc')
+
+  // Fund cash flows for computed LP metrics
+  const [fundCashFlows, setFundCashFlows] = useState<FundCashFlow[]>([])
+  const [groupConfigs, setGroupConfigs] = useState<Record<string, { cashOnHand: number; carryRate: number; gpCommitPct: number }>>({})
 
   useEffect(() => {
     async function load() {
       setLoading(true)
       try {
-        const res = await fetch(`/api/portfolio/investments?asOf=${asOfDate}`)
-        if (res.ok) setData(await res.json())
+        const [invRes, cfRes, gcRes] = await Promise.all([
+          fetch(`/api/portfolio/investments?asOf=${asOfDate}`),
+          fetch('/api/portfolio/fund-cash-flows'),
+          fetch('/api/portfolio/fund-group-config'),
+        ])
+        if (invRes.ok) setData(await invRes.json())
+        if (cfRes.ok) setFundCashFlows(await cfRes.json())
+        if (gcRes.ok) {
+          const configs = await gcRes.json()
+          const map: Record<string, { cashOnHand: number; carryRate: number; gpCommitPct: number }> = {}
+          for (const c of configs) {
+            map[c.portfolio_group] = {
+              cashOnHand: Number(c.cash_on_hand) || 0,
+              carryRate: c.carry_rate != null ? Number(c.carry_rate) : 0.20,
+              gpCommitPct: Number(c.gp_commit_pct) || 0,
+            }
+          }
+          setGroupConfigs(map)
+        }
       } finally {
         setLoading(false)
       }
@@ -93,7 +270,41 @@ export default function InvestmentsPage() {
     return Array.from(groups).sort()
   }, [data])
 
-  // Filter + sort
+  // Compute LP metrics (TVPI/DPI/RVPI/Net IRR) from fund cash flows
+  const fundMetricsByGroup = useMemo(() => {
+    if (!data) return new Map<string, FundGroupMetrics>()
+    const grossResidualByGroup = new Map<string, number>()
+    for (const g of data.groups ?? []) {
+      grossResidualByGroup.set(g.group, g.unrealizedValue)
+    }
+    return computeFundMetricsByGroup(fundCashFlows, grossResidualByGroup, groupConfigs)
+  }, [fundCashFlows, data, groupConfigs])
+
+  // Group-level totals for percentage columns
+  const groupTotalsMap = useMemo(() => {
+    const map = new Map<string, { unrealized: number; totalVal: number }>()
+    if (!data) return map
+    for (const g of data.groups ?? []) {
+      map.set(g.group, { unrealized: g.unrealizedValue, totalVal: totalValue(g) })
+    }
+    return map
+  }, [data])
+
+  function pctOfGroupUnrealized(c: CompanySummary): number | null {
+    const groupName = c.portfolioGroup[0] ?? ''
+    const gt = groupTotalsMap.get(groupName)
+    if (!gt || gt.unrealized === 0) return null
+    return c.unrealizedValue / gt.unrealized
+  }
+
+  function pctOfGroupTotalValue(c: CompanySummary): number | null {
+    const groupName = c.portfolioGroup[0] ?? ''
+    const gt = groupTotalsMap.get(groupName)
+    if (!gt || gt.totalVal === 0) return null
+    return totalValue(c) / gt.totalVal
+  }
+
+  // Filter + sort companies
   const filtered = useMemo(() => {
     if (!data) return []
     let list = data.companies
@@ -112,28 +323,57 @@ export default function InvestmentsPage() {
       if (sortKey === 'status') return dir * a.status.localeCompare(b.status)
       if (sortKey === 'portfolioGroup') return dir * (a.portfolioGroup.join(', ')).localeCompare(b.portfolioGroup.join(', '))
 
-      const av = a[sortKey] ?? -Infinity
-      const bv = b[sortKey] ?? -Infinity
+      const helpers = { pctUnrealized: pctOfGroupUnrealized, pctTotalValue: pctOfGroupTotalValue }
+      const av = getDerivedValue(a, sortKey, helpers)
+      const bv = getDerivedValue(b, sortKey, helpers)
       return dir * (av - bv)
     })
 
     return list
-  }, [data, statusFilter, groupFilter, sortKey, sortDir])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, statusFilter, groupFilter, sortKey, sortDir, groupTotalsMap])
 
-  // Footer totals from filtered data
-  const totals = useMemo(() => {
-    let totalInvested = 0
-    let totalFMV = 0
-    let totalRealized = 0
-    let totalUnrealized = 0
-    for (const c of filtered) {
-      totalInvested += c.totalInvested
-      totalFMV += c.fmv
-      totalRealized += c.totalRealized
-      totalUnrealized += c.unrealizedValue
+  // Sort groups
+  const sortedGroups = useMemo(() => {
+    if (!data || !data.groups || data.groups.length === 0) return []
+    const dir = groupSortDir === 'asc' ? 1 : -1
+    return [...data.groups].sort((a, b) => {
+      if (groupSortKey === 'group') return dir * a.group.localeCompare(b.group)
+      const av = getGroupDerivedValue(a, groupSortKey)
+      const bv = getGroupDerivedValue(b, groupSortKey)
+      return dir * (av - bv)
+    })
+  }, [data, groupSortKey, groupSortDir])
+
+  // Group totals for footer
+  const groupTotals = useMemo(() => {
+    if (sortedGroups.length === 0) return null
+    const t = { totalInvested: 0, proceedsReceived: 0, proceedsEscrow: 0, totalRealized: 0, unrealizedValue: 0, totalCostBasisExited: 0 }
+    for (const g of sortedGroups) {
+      t.totalInvested += g.totalInvested
+      t.proceedsReceived += g.proceedsReceived
+      t.proceedsEscrow += g.proceedsEscrow
+      t.totalRealized += g.totalRealized
+      t.unrealizedValue += g.unrealizedValue
+      t.totalCostBasisExited += g.totalCostBasisExited
     }
-    const moic = totalInvested > 0 ? (totalRealized + totalUnrealized) / totalInvested : null
-    return { totalInvested, totalFMV, totalRealized, moic }
+    const moic = t.totalInvested > 0 ? (t.totalRealized + t.unrealizedValue) / t.totalInvested : null
+    return { ...t, moic }
+  }, [sortedGroups])
+
+  // Footer totals from filtered company data
+  const totals = useMemo(() => {
+    const t = { totalInvested: 0, totalRealized: 0, unrealizedValue: 0, proceedsReceived: 0, proceedsEscrow: 0, totalCostBasisExited: 0 }
+    for (const c of filtered) {
+      t.totalInvested += c.totalInvested
+      t.totalRealized += c.totalRealized
+      t.unrealizedValue += c.unrealizedValue
+      t.proceedsReceived += c.proceedsReceived
+      t.proceedsEscrow += c.proceedsEscrow
+      t.totalCostBasisExited += c.totalCostBasisExited
+    }
+    const moic = t.totalInvested > 0 ? (t.totalRealized + t.unrealizedValue) / t.totalInvested : null
+    return { ...t, moic }
   }, [filtered])
 
   function handleSort(key: SortKey) {
@@ -145,6 +385,15 @@ export default function InvestmentsPage() {
     }
   }
 
+  function handleGroupSort(key: GroupSortKey) {
+    if (groupSortKey === key) {
+      setGroupSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setGroupSortKey(key)
+      setGroupSortDir(key === 'group' ? 'asc' : 'desc')
+    }
+  }
+
   function SortIcon({ col }: { col: SortKey }) {
     if (sortKey !== col) return null
     return sortDir === 'asc'
@@ -152,9 +401,52 @@ export default function InvestmentsPage() {
       : <ChevronDown className="inline h-3 w-3 ml-0.5" />
   }
 
+  function GroupSortIcon({ col }: { col: GroupSortKey }) {
+    if (groupSortKey !== col) return null
+    return groupSortDir === 'asc'
+      ? <ChevronUp className="inline h-3 w-3 ml-0.5" />
+      : <ChevronDown className="inline h-3 w-3 ml-0.5" />
+  }
+
+  // Shared numeric column definitions (used by both group summary and company table)
+  const numericColumns: { label: string; sortKey: string; getValue: (row: { totalInvested: number; totalRealized: number; unrealizedValue: number; totalCostBasisExited: number; proceedsReceived: number; proceedsEscrow: number; moic?: number | null; irr?: number | null }) => number | null; format: 'currency' | 'moic' | 'irr' }[] = [
+    { label: 'Invested', sortKey: 'totalInvested', getValue: r => r.totalInvested, format: 'currency' },
+    { label: 'Current Cost', sortKey: 'currentCost', getValue: r => currentCost(r), format: 'currency' },
+    { label: 'Proceeds', sortKey: 'proceedsReceived', getValue: r => r.proceedsReceived, format: 'currency' },
+    { label: 'Escrow', sortKey: 'proceedsEscrow', getValue: r => r.proceedsEscrow, format: 'currency' },
+    { label: 'Unrealized', sortKey: 'unrealizedValue', getValue: r => r.unrealizedValue, format: 'currency' },
+    { label: 'Total Value', sortKey: 'totalValue', getValue: r => totalValue(r), format: 'currency' },
+    { label: 'Realized G/L', sortKey: 'realizedGL', getValue: r => realizedGL(r), format: 'currency' },
+    { label: 'Unrealized G/L', sortKey: 'unrealizedGL', getValue: r => unrealizedGL(r), format: 'currency' },
+    { label: 'Total G/L', sortKey: 'totalGL', getValue: r => totalGL(r), format: 'currency' },
+    { label: 'Gross MOIC', sortKey: 'moic', getValue: r => r.moic ?? null, format: 'moic' },
+    { label: 'Realized / Cost MOIC', sortKey: 'realizedMoic', getValue: r => realizedMoic(r), format: 'moic' },
+    { label: 'Unrealized / Cost MOIC', sortKey: 'unrealizedMoic', getValue: r => unrealizedMoic(r), format: 'moic' },
+    { label: 'Gross IRR', sortKey: 'irr', getValue: r => r.irr ?? null, format: 'irr' },
+  ]
+
+  // Company-only columns: insert % columns after their absolute counterparts
+  const companyColumns: { label: string; sortKey: string; type: 'numeric' | 'pct'; colIdx?: number }[] = []
+  for (let i = 0; i < numericColumns.length; i++) {
+    companyColumns.push({ label: numericColumns[i].label, sortKey: numericColumns[i].sortKey, type: 'numeric', colIdx: i })
+    if (numericColumns[i].sortKey === 'unrealizedValue') {
+      companyColumns.push({ label: '% Unrealized', sortKey: 'pctUnrealized', type: 'pct' })
+    }
+    if (numericColumns[i].sortKey === 'totalValue') {
+      companyColumns.push({ label: '% Total Value', sortKey: 'pctTotalValue', type: 'pct' })
+    }
+  }
+
+  function fmtVal(val: number | null, format: 'currency' | 'moic' | 'irr'): string {
+    if (val == null) return '-'
+    if (format === 'moic') return fmtMoic(val)
+    if (format === 'irr') return fmtIrr(val)
+    return fmtFull(val)
+  }
+
   const heading = (
     <div className="flex items-center gap-4 mb-6">
-      <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.investments === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}<span className="text-[10px] font-medium text-blue-500 bg-blue-500/10 rounded px-1.5 py-0.5 leading-none uppercase tracking-wider">beta</span> Investments</h1>
+      <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.investments === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Investments</h1>
       <span className="text-sm text-muted-foreground">As of</span>
       <input
         type="date"
@@ -235,17 +527,83 @@ export default function InvestmentsPage() {
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3 px-4">
-            <p className="text-xs text-muted-foreground mb-1">MOIC</p>
+            <p className="text-xs text-muted-foreground mb-1">Gross MOIC</p>
             <p className="text-xl font-semibold">{fmtMoic(data.portfolioMOIC)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3 px-4">
-            <p className="text-xs text-muted-foreground mb-1">IRR</p>
+            <p className="text-xs text-muted-foreground mb-1">Gross IRR</p>
             <p className="text-xl font-semibold">{fmtIrr(data.portfolioIRR)}</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Group summary table — only shown when multiple groups exist */}
+      {sortedGroups.length > 0 && groupTotals && (
+        <div className="mb-8">
+          <h2 className="text-sm font-medium text-muted-foreground mb-2">Portfolio Groups</h2>
+          <div className="border rounded-lg overflow-x-auto">
+            <table className="w-full text-sm whitespace-nowrap">
+              <thead>
+                <tr className="border-b bg-muted">
+                  <th className="text-left px-3 py-2 font-medium sticky left-0 bg-muted z-10">
+                    <button onClick={() => handleGroupSort('group')} className="hover:text-foreground">
+                      Group<GroupSortIcon col="group" />
+                    </button>
+                  </th>
+                  {numericColumns.map(col => (
+                    <th key={col.sortKey} className="text-right px-3 py-2 font-medium">
+                      <button onClick={() => handleGroupSort(col.sortKey as GroupSortKey)} className="hover:text-foreground">
+                        {col.label}<GroupSortIcon col={col.sortKey as GroupSortKey} />
+                      </button>
+                    </th>
+                  ))}
+                  <th className="text-right px-3 py-2 font-medium">TVPI</th>
+                  <th className="text-right px-3 py-2 font-medium">DPI</th>
+                  <th className="text-right px-3 py-2 font-medium">RVPI</th>
+                  <th className="text-right px-3 py-2 font-medium">Net IRR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedGroups.map(g => {
+                  const fm = fundMetricsByGroup.get(g.group)
+                  return (
+                    <tr key={g.group} className="border-b last:border-b-0 hover:bg-muted/30">
+                      <td className="px-3 py-2 font-medium sticky left-0 bg-background z-10">{g.group || '(none)'}</td>
+                      {numericColumns.map(col => (
+                        <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtVal(col.getValue(g), col.format)}</td>
+                      ))}
+                      <td className="px-3 py-2 text-right font-mono">{fmtMoic(fm?.tvpi ?? null)}</td>
+                      <td className="px-3 py-2 text-right font-mono">{fmtMoic(fm?.dpi ?? null)}</td>
+                      <td className="px-3 py-2 text-right font-mono">{fmtMoic(fm?.rvpi ?? null)}</td>
+                      <td className="px-3 py-2 text-right font-mono">{fmtIrr(fm?.netIrr ?? null)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              {sortedGroups.length > 1 && (
+              <tfoot>
+                <tr className="border-t bg-muted font-medium">
+                  <td className="px-3 py-2 sticky left-0 bg-muted z-10">Total</td>
+                  {numericColumns.map(col => {
+                    if (col.format === 'irr') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtIrr(data.portfolioIRR)}</td>
+                    if (col.sortKey === 'moic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(groupTotals.moic)}</td>
+                    if (col.sortKey === 'realizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(realizedMoic(groupTotals))}</td>
+                    if (col.sortKey === 'unrealizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(unrealizedMoic(groupTotals))}</td>
+                    return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtVal(col.getValue(groupTotals), col.format)}</td>
+                  })}
+                  <td className="px-3 py-2" />
+                  <td className="px-3 py-2" />
+                  <td className="px-3 py-2" />
+                  <td className="px-3 py-2" />
+                </tr>
+              </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="flex items-center gap-4 mb-4">
@@ -275,10 +633,10 @@ export default function InvestmentsPage() {
 
       {/* Company table */}
       <div className="border rounded-lg overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm whitespace-nowrap">
           <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="text-left px-3 py-2 font-medium">
+            <tr className="border-b bg-muted">
+              <th className="text-left px-3 py-2 font-medium sticky left-0 bg-muted z-10">
                 <button onClick={() => handleSort('companyName')} className="hover:text-foreground">
                   Company<SortIcon col="companyName" />
                 </button>
@@ -293,37 +651,22 @@ export default function InvestmentsPage() {
                   Group<SortIcon col="portfolioGroup" />
                 </button>
               </th>
-              <th className="text-right px-3 py-2 font-medium">
-                <button onClick={() => handleSort('totalInvested')} className="hover:text-foreground">
-                  Invested<SortIcon col="totalInvested" />
-                </button>
-              </th>
-              <th className="text-right px-3 py-2 font-medium">
-                <button onClick={() => handleSort('fmv')} className="hover:text-foreground">
-                  FMV<SortIcon col="fmv" />
-                </button>
-              </th>
-              <th className="text-right px-3 py-2 font-medium">
-                <button onClick={() => handleSort('totalRealized')} className="hover:text-foreground">
-                  Realized<SortIcon col="totalRealized" />
-                </button>
-              </th>
-              <th className="text-right px-3 py-2 font-medium">
-                <button onClick={() => handleSort('moic')} className="hover:text-foreground">
-                  MOIC<SortIcon col="moic" />
-                </button>
-              </th>
-              <th className="text-right px-3 py-2 font-medium">
-                <button onClick={() => handleSort('irr')} className="hover:text-foreground">
-                  IRR<SortIcon col="irr" />
-                </button>
-              </th>
+              {companyColumns.map(col => (
+                <th key={col.sortKey} className="text-right px-3 py-2 font-medium">
+                  <button onClick={() => handleSort(col.sortKey as SortKey)} className="hover:text-foreground">
+                    {col.label}<SortIcon col={col.sortKey as SortKey} />
+                  </button>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => (
+            {filtered.map(c => {
+              const pctUnr = pctOfGroupUnrealized(c)
+              const pctTV = pctOfGroupTotalValue(c)
+              return (
               <tr key={`${c.companyId}-${c.portfolioGroup.join('')}`} className="border-b last:border-b-0 hover:bg-muted/30">
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 sticky left-0 bg-background z-10">
                   <Link
                     href={`/companies/${c.companyId}`}
                     className="font-medium hover:underline"
@@ -339,24 +682,32 @@ export default function InvestmentsPage() {
                 <td className="px-3 py-2 text-xs">
                   {c.portfolioGroup.length > 0 ? c.portfolioGroup.join(', ') : '-'}
                 </td>
-                <td className="px-3 py-2 text-right font-mono">{fmtFull(c.totalInvested)}</td>
-                <td className="px-3 py-2 text-right font-mono">{fmtFull(c.fmv)}</td>
-                <td className="px-3 py-2 text-right font-mono">{c.totalRealized > 0 ? fmtFull(c.totalRealized) : '-'}</td>
-                <td className="px-3 py-2 text-right font-mono">{fmtMoic(c.moic)}</td>
-                <td className="px-3 py-2 text-right font-mono">{fmtIrr(c.irr)}</td>
+                {companyColumns.map(col => {
+                  if (col.type === 'pct') {
+                    const val = col.sortKey === 'pctUnrealized' ? pctUnr : pctTV
+                    return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{val != null ? `${(val * 100).toFixed(1)}%` : '-'}</td>
+                  }
+                  const numCol = numericColumns[col.colIdx!]
+                  return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtVal(numCol.getValue(c), numCol.format)}</td>
+                })}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
           <tfoot>
-            <tr className="border-t bg-muted/30 font-medium">
-              <td className="px-3 py-2">Total ({filtered.length})</td>
+            <tr className="border-t bg-muted font-medium">
+              <td className="px-3 py-2 sticky left-0 bg-muted z-10">Total ({filtered.length})</td>
               <td className="px-3 py-2" />
               <td className="px-3 py-2" />
-              <td className="px-3 py-2 text-right font-mono">{fmtFull(totals.totalInvested)}</td>
-              <td className="px-3 py-2 text-right font-mono">{fmtFull(totals.totalFMV)}</td>
-              <td className="px-3 py-2 text-right font-mono">{totals.totalRealized > 0 ? fmtFull(totals.totalRealized) : '-'}</td>
-              <td className="px-3 py-2 text-right font-mono">{fmtMoic(totals.moic)}</td>
-              <td className="px-3 py-2" />
+              {companyColumns.map(col => {
+                if (col.type === 'pct') return <td key={col.sortKey} className="px-3 py-2" />
+                const numCol = numericColumns[col.colIdx!]
+                if (numCol.format === 'irr') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtIrr(data.portfolioIRR)}</td>
+                if (numCol.sortKey === 'moic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(totals.moic)}</td>
+                if (numCol.sortKey === 'realizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(realizedMoic(totals))}</td>
+                if (numCol.sortKey === 'unrealizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(unrealizedMoic(totals))}</td>
+                return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtVal(numCol.getValue(totals), numCol.format)}</td>
+              })}
             </tr>
           </tfoot>
         </table>

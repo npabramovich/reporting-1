@@ -1,0 +1,172 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { assertWriteAccess } from '@/lib/api-helpers'
+import { dbError } from '@/lib/api-error'
+
+// ---------------------------------------------------------------------------
+// GET — list all fund cash flows for this fund, ordered by flow_date ASC
+// ---------------------------------------------------------------------------
+
+export async function GET() {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = createAdminClient()
+  const { data: membership } = await admin
+    .from('fund_members')
+    .select('fund_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+
+  const { data, error } = await admin
+    .from('fund_cash_flows' as any)
+    .select('*')
+    .eq('fund_id', membership.fund_id)
+    .order('flow_date', { ascending: true }) as {
+      data: { id: string; fund_id: string; portfolio_group: string; flow_date: string; flow_type: string; amount: number; notes: string | null; created_at: string; updated_at: string }[] | null
+      error: { message: string } | null
+    }
+
+  if (error) return dbError(error, 'fund-cash-flows')
+
+  return NextResponse.json(data ?? [])
+}
+
+// ---------------------------------------------------------------------------
+// POST — create a new fund cash flow
+// ---------------------------------------------------------------------------
+
+export async function POST(req: NextRequest) {
+  const supabase = createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const writeCheck = await assertWriteAccess(admin, user.id)
+  if (writeCheck instanceof NextResponse) return writeCheck
+
+  const { data: membership } = await admin
+    .from('fund_members')
+    .select('fund_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+
+  const body = await req.json()
+  const { portfolioGroup, flowDate, flowType, amount, notes } = body
+
+  if (!portfolioGroup || !flowDate || !flowType || !amount) {
+    return NextResponse.json({ error: 'portfolioGroup, flowDate, flowType, and amount are required' }, { status: 400 })
+  }
+
+  if (!['commitment', 'called_capital', 'distribution'].includes(flowType)) {
+    return NextResponse.json({ error: 'flowType must be commitment, called_capital, or distribution' }, { status: 400 })
+  }
+
+  const { data, error } = await admin
+    .from('fund_cash_flows' as any)
+    .insert({
+      fund_id: membership.fund_id,
+      portfolio_group: portfolioGroup,
+      flow_date: flowDate,
+      flow_type: flowType,
+      amount: parseFloat(amount),
+      notes: notes ?? null,
+    })
+    .select('*')
+    .single() as { data: any; error: { message: string } | null }
+
+  if (error) return dbError(error, 'fund-cash-flows-create')
+
+  return NextResponse.json(data)
+}
+
+// ---------------------------------------------------------------------------
+// PUT — update an existing fund cash flow by id
+// ---------------------------------------------------------------------------
+
+export async function PUT(req: NextRequest) {
+  const supabase = createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const writeCheck = await assertWriteAccess(admin, user.id)
+  if (writeCheck instanceof NextResponse) return writeCheck
+
+  const { data: membership } = await admin
+    .from('fund_members')
+    .select('fund_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+
+  const body = await req.json()
+  const { id, flowDate, flowType, amount, notes, portfolioGroup } = body
+
+  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
+
+  if (flowType && !['commitment', 'called_capital', 'distribution'].includes(flowType)) {
+    return NextResponse.json({ error: 'flowType must be commitment, called_capital, or distribution' }, { status: 400 })
+  }
+
+  const updates: Record<string, any> = { updated_at: new Date().toISOString() }
+  if (flowDate !== undefined) updates.flow_date = flowDate
+  if (flowType !== undefined) updates.flow_type = flowType
+  if (amount !== undefined) updates.amount = parseFloat(amount)
+  if (notes !== undefined) updates.notes = notes
+  if (portfolioGroup !== undefined) updates.portfolio_group = portfolioGroup
+
+  const { data, error } = await admin
+    .from('fund_cash_flows' as any)
+    .update(updates)
+    .eq('id', id)
+    .eq('fund_id', membership.fund_id)
+    .select('*')
+    .single() as { data: any; error: { message: string } | null }
+
+  if (error) return dbError(error, 'fund-cash-flows-update')
+
+  return NextResponse.json(data)
+}
+
+// ---------------------------------------------------------------------------
+// DELETE — remove a fund cash flow by id
+// ---------------------------------------------------------------------------
+
+export async function DELETE(req: NextRequest) {
+  const supabase = createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const writeCheck = await assertWriteAccess(admin, user.id)
+  if (writeCheck instanceof NextResponse) return writeCheck
+
+  const { data: membership } = await admin
+    .from('fund_members')
+    .select('fund_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+
+  const id = req.nextUrl.searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
+
+  const { error } = await admin
+    .from('fund_cash_flows' as any)
+    .delete()
+    .eq('id', id)
+    .eq('fund_id', membership.fund_id)
+
+  if (error) return dbError(error, 'fund-cash-flows-delete')
+
+  return NextResponse.json({ ok: true })
+}

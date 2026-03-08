@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose, Sparkles, Shield, Handshake, Users, ArrowDownCircle, DollarSign, FileText } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose, Sparkles, Shield, Handshake, Users, ArrowDownCircle, DollarSign, FileText, Briefcase } from 'lucide-react'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 
@@ -23,6 +23,7 @@ export default function SupportPage() {
       <li><a href="#notes" className="hover:text-foreground underline underline-offset-4">Notes</a></li>
       <li><a href="#interactions" className="hover:text-foreground underline underline-offset-4">Interactions</a></li>
       <li><a href="#investments" className="hover:text-foreground underline underline-offset-4">Investments</a></li>
+      <li><a href="#funds" className="hover:text-foreground underline underline-offset-4">Funds</a></li>
       <li><a href="#lp-letters" className="hover:text-foreground underline underline-offset-4">LP Letters</a></li>
       <li><a href="#usage" className="hover:text-foreground underline underline-offset-4">Usage</a></li>
       <li><a href="#analyst" className="hover:text-foreground underline underline-offset-4">Analyst</a></li>
@@ -458,6 +459,13 @@ export default function SupportPage() {
             or onboarding an entire portfolio&apos;s investment data at once. Transactions are written to
             each company&apos;s Investments section automatically.
           </p>
+          <p className="text-muted-foreground mb-2">
+            You can also paste fund-level cash flow data &mdash; commitments, capital calls, and
+            distributions per portfolio group. Each row uses the format: date, group, type, amount,
+            notes (optional). Type accepts full names (commitment, called_capital, distribution)
+            or abbreviations (com, cc, dist). These cash flows power the computed LP metrics
+            (TVPI, DPI, RVPI, Net IRR) shown on the Funds and Investments pages.
+          </p>
           <p className="text-muted-foreground">
             Tip: for best results, include the company name and reporting period somewhere in the pasted
             text or attachment. The AI uses these cues to match the report to the correct company and
@@ -646,6 +654,36 @@ export default function SupportPage() {
             realized proceeds; for written-off companies it shows zero; and for active companies it uses the latest
             share price multiplied by total shares held. Investment data can also be bulk-imported via the
             Import page by pasting transaction data from a spreadsheet.
+          </p>
+        </div>
+
+        <div id="funds">
+          <h2 className="text-base font-medium mb-2 flex items-center gap-2">
+            <Briefcase className="h-4 w-4 text-muted-foreground" />
+            Funds
+          </h2>
+          <p className="text-muted-foreground mb-2">
+            The Funds page provides fund-level LP metrics computed from cash flow data. Each portfolio
+            group gets its own tab showing committed capital, called capital (paid-in capital), uncalled
+            capital, distributions, gross residual value, estimated carry, net residual value, and total
+            value &mdash; along with calculated TVPI, DPI, RVPI, and Net IRR.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            Cash flows are recorded per portfolio group with three types: <strong>commitments</strong> (capital
+            committed by LPs), <strong>called capital</strong> (capital actually called from LPs), and
+            <strong> distributions</strong> (capital returned to LPs). Each tab shows a chronological table
+            of cash flows with running cumulative totals for committed, called, uncalled, and distributed amounts.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            The LP metrics are calculated automatically: TVPI (total value to paid-in capital), DPI (distributions
+            to paid-in capital), RVPI (net residual value to paid-in capital), and Net IRR (using XIRR with
+            capital calls as negative flows, distributions as positive, and net residual as a terminal value).
+            Estimated carry is computed as 20% of profit above remaining invested capital.
+          </p>
+          <p className="text-muted-foreground">
+            Cash flows can be added individually from the Funds page or bulk-imported via the Import page
+            by pasting tab or comma-separated data. The same computed metrics also appear in the group summary
+            table on the Investments page.
           </p>
         </div>
 

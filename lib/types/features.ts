@@ -1,4 +1,4 @@
-export type FeatureKey = 'interactions' | 'investments' | 'notes' | 'lp_letters' | 'imports' | 'asks'
+export type FeatureKey = 'interactions' | 'investments' | 'funds' | 'notes' | 'lp_letters' | 'imports' | 'asks'
 
 export type FeatureVisibility = 'everyone' | 'admin' | 'hidden' | 'off'
 
@@ -7,6 +7,7 @@ export type FeatureVisibilityMap = Record<FeatureKey, FeatureVisibility>
 export const DEFAULT_FEATURE_VISIBILITY: FeatureVisibilityMap = {
   interactions: 'everyone',
   investments: 'everyone',
+  funds: 'everyone',
   notes: 'everyone',
   lp_letters: 'everyone',
   imports: 'everyone',

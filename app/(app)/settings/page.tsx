@@ -601,6 +601,7 @@ function CurrencySection({ currency, onSaved }: { currency: string; onSaved: () 
 const FEATURE_META: Record<FeatureKey, { label: string; description: string; href: string }> = {
   interactions: { label: 'Interactions', description: 'Track emails, intros, and meetings with portfolio companies', href: '/support#interactions' },
   investments: { label: 'Investments', description: 'Fund investments, ownership, and round details per company', href: '/support#investments' },
+  funds: { label: 'Funds', description: 'Fund-level cash flows, LP metrics (TVPI/DPI/RVPI/Net IRR) computed from capital calls and distributions', href: '/support#funds' },
   notes: { label: 'Notes', description: 'Internal team notes and comments on companies', href: '/support#notes' },
   lp_letters: { label: 'LP Letters', description: 'Generate and manage quarterly LP update letters', href: '/support#lp-letters' },
   imports: { label: 'Imports', description: 'Bulk import companies and metrics from CSV files', href: '/support#import' },
@@ -966,12 +967,15 @@ function AIProvidersSection({
 }) {
   const [defaultProvider, setDefaultProvider] = useState(defaultAIProvider)
   const [savingDefault, setSavingDefault] = useState(false)
+  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set([defaultAIProvider]))
 
   useEffect(() => { setDefaultProvider(defaultAIProvider) }, [defaultAIProvider])
 
   const saveDefaultProvider = async (value: string) => {
     setDefaultProvider(value)
     setSavingDefault(true)
+    // Open the newly selected provider section
+    setOpenSections(prev => new Set(prev).add(value))
     const res = await fetch('/api/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -981,52 +985,132 @@ function AIProvidersSection({
     if (res.ok) onSaved()
   }
 
-  return (
-    <>
-      <Section title="Default AI provider">
-        <p className="text-xs text-muted-foreground mb-3">
-          Choose which AI provider to use by default for report parsing, summaries, and imports.
-          Configure at least one provider below.
-        </p>
-        <div className="flex items-center gap-2">
-          <select
-            className="flex h-9 w-full max-w-xs rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            value={defaultProvider}
-            onChange={(e) => saveDefaultProvider(e.target.value)}
-            disabled={savingDefault}
-          >
-            <option value="anthropic" disabled={!hasClaudeKey}>
-              Anthropic (Claude){!hasClaudeKey ? ' — no key configured' : ''}
-            </option>
-            <option value="openai" disabled={!hasOpenAIKey}>
-              OpenAI{!hasOpenAIKey ? ' — no key configured' : ''}
-            </option>
-            <option value="gemini" disabled={!hasGeminiKey}>
-              Google Gemini{!hasGeminiKey ? ' — no key configured' : ''}
-            </option>
-            <option value="ollama">
-              Ollama (Local)
-            </option>
-          </select>
-          {savingDefault && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
-        </div>
-      </Section>
+  const toggleSection = (key: string) => {
+    setOpenSections(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
-      <ClaudeKeySection hasKey={hasClaudeKey} currentModel={claudeModel} onSaved={onSaved} />
-      <OpenAIKeySection hasKey={hasOpenAIKey} currentModel={openaiModel} onSaved={onSaved} />
-      <GeminiKeySection hasKey={hasGeminiKey} currentModel={geminiModel} onSaved={onSaved} />
-      <OllamaSection baseUrl={ollamaBaseUrl} currentModel={ollamaModel} onSaved={onSaved} />
-    </>
+  return (
+    <Section title="AI Providers">
+      <p className="text-xs text-muted-foreground mb-3">
+        Choose which AI provider to use by default for report parsing, summaries, and imports.
+        Configure at least one provider below.
+      </p>
+      <div className="flex items-center gap-2 mb-4">
+        <Label className="text-xs text-muted-foreground shrink-0">Default provider</Label>
+        <select
+          className="flex h-9 w-full max-w-xs rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          value={defaultProvider}
+          onChange={(e) => saveDefaultProvider(e.target.value)}
+          disabled={savingDefault}
+        >
+          <option value="anthropic" disabled={!hasClaudeKey}>
+            Anthropic (Claude){!hasClaudeKey ? ' — no key configured' : ''}
+          </option>
+          <option value="openai" disabled={!hasOpenAIKey}>
+            OpenAI{!hasOpenAIKey ? ' — no key configured' : ''}
+          </option>
+          <option value="gemini" disabled={!hasGeminiKey}>
+            Google Gemini{!hasGeminiKey ? ' — no key configured' : ''}
+          </option>
+          <option value="ollama" disabled={!ollamaBaseUrl}>
+            Ollama (Local){!ollamaBaseUrl ? ' — not configured' : ''}
+          </option>
+        </select>
+        {savingDefault && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+      </div>
+
+      <div className="space-y-0 border rounded-lg overflow-hidden">
+        <AIProviderDisclosure
+          label="Anthropic (Claude)"
+          providerKey="anthropic"
+          isDefault={defaultProvider === 'anthropic'}
+          isOpen={openSections.has('anthropic')}
+          onToggle={() => toggleSection('anthropic')}
+          hasKey={hasClaudeKey}
+        >
+          <ClaudeKeyContent hasKey={hasClaudeKey} currentModel={claudeModel} onSaved={onSaved} />
+        </AIProviderDisclosure>
+        <AIProviderDisclosure
+          label="OpenAI"
+          providerKey="openai"
+          isDefault={defaultProvider === 'openai'}
+          isOpen={openSections.has('openai')}
+          onToggle={() => toggleSection('openai')}
+          hasKey={hasOpenAIKey}
+        >
+          <OpenAIKeyContent hasKey={hasOpenAIKey} currentModel={openaiModel} onSaved={onSaved} />
+        </AIProviderDisclosure>
+        <AIProviderDisclosure
+          label="Google Gemini"
+          providerKey="gemini"
+          isDefault={defaultProvider === 'gemini'}
+          isOpen={openSections.has('gemini')}
+          onToggle={() => toggleSection('gemini')}
+          hasKey={hasGeminiKey}
+        >
+          <GeminiKeyContent hasKey={hasGeminiKey} currentModel={geminiModel} onSaved={onSaved} />
+        </AIProviderDisclosure>
+        <AIProviderDisclosure
+          label="Ollama (Local)"
+          providerKey="ollama"
+          isDefault={defaultProvider === 'ollama'}
+          isOpen={openSections.has('ollama')}
+          onToggle={() => toggleSection('ollama')}
+          hasKey={!!ollamaBaseUrl}
+        >
+          <OllamaContent baseUrl={ollamaBaseUrl} currentModel={ollamaModel} onSaved={onSaved} />
+        </AIProviderDisclosure>
+      </div>
+    </Section>
   )
 }
 
-function ClaudeKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; currentModel: string; onSaved: () => void }) {
+function AIProviderDisclosure({ label, providerKey, isDefault, isOpen, onToggle, hasKey, children }: {
+  label: string
+  providerKey: string
+  isDefault: boolean
+  isOpen: boolean
+  onToggle: () => void
+  hasKey: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div className="border-b last:border-b-0">
+      <button
+        onClick={onToggle}
+        className="flex items-center gap-2 w-full px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors text-left"
+      >
+        {isOpen ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+        <span className="flex-1">{label}</span>
+        {isDefault && (
+          <span className="text-[9px] font-medium text-emerald-600 bg-emerald-500/10 rounded px-1.5 py-0.5 leading-none uppercase tracking-wider">default</span>
+        )}
+        {hasKey ? (
+          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+        ) : (
+          <span className="text-[10px] text-muted-foreground">Not configured</span>
+        )}
+      </button>
+      {isOpen && (
+        <div className="px-4 pb-4">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ClaudeKeyContent({ hasKey, currentModel, onSaved }: { hasKey: boolean; currentModel: string; onSaved: () => void }) {
   const [newKey, setNewKey] = useState('')
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<'idle' | 'valid' | 'invalid' | 'saved'>('idle')
 
-  // Model selector state
   const [models, setModels] = useState<{ id: string; name: string }[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelsError, setModelsError] = useState<string | null>(null)
@@ -1055,9 +1139,7 @@ function ClaudeKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
     if (hasKey) fetchModels()
   }, [hasKey, fetchModels])
 
-  useEffect(() => {
-    setSelectedModel(currentModel)
-  }, [currentModel])
+  useEffect(() => { setSelectedModel(currentModel) }, [currentModel])
 
   const testKey = async () => {
     setTesting(true)
@@ -1082,7 +1164,7 @@ function ClaudeKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
     if (res.ok) {
       setStatus('saved')
       setNewKey('')
-      setModelsFetched(false) // re-fetch models with new key
+      setModelsFetched(false)
       onSaved()
     }
   }
@@ -1100,7 +1182,7 @@ function ClaudeKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
   }
 
   return (
-    <Section title="Claude API key">
+    <>
       <p className="text-xs text-muted-foreground mb-3">
         {hasKey
           ? 'A Claude API key is configured. Enter a new key below to replace it.'
@@ -1125,69 +1207,39 @@ function ClaudeKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
           </Button>
         </div>
       </div>
-      {status === 'valid' && (
-        <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
-          <Check className="h-3 w-3" /> Key is valid
-        </p>
-      )}
-      {status === 'invalid' && (
-        <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-          <AlertCircle className="h-3 w-3" /> Key is invalid
-        </p>
-      )}
-      {status === 'saved' && (
-        <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
-          <Check className="h-3 w-3" /> Key updated
-        </p>
-      )}
+      {status === 'valid' && <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1"><Check className="h-3 w-3" /> Key is valid</p>}
+      {status === 'invalid' && <p className="text-xs text-destructive mt-1 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Key is invalid</p>}
+      {status === 'saved' && <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1"><Check className="h-3 w-3" /> Key updated</p>}
 
       {hasKey && (
         <div className="mt-4 pt-4 border-t">
           <Label>Model</Label>
-          <p className="text-xs text-muted-foreground mb-2">
-            Choose which Claude model to use for report parsing, summaries, and imports.
-          </p>
+          <p className="text-xs text-muted-foreground mb-2">Choose which Claude model to use.</p>
           {modelsLoading ? (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading models…
-            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading models…</div>
           ) : modelsError ? (
             <p className="text-xs text-destructive">{modelsError}</p>
           ) : (
             <div className="flex items-center gap-2">
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                value={selectedModel}
-                onChange={(e) => saveModel(e.target.value)}
-                disabled={modelSaving}
-              >
-                {models.length === 0 && (
-                  <option value={selectedModel}>{selectedModel}</option>
-                )}
-                {models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.id})
-                  </option>
-                ))}
+              <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={selectedModel} onChange={(e) => saveModel(e.target.value)} disabled={modelSaving}>
+                {models.length === 0 && <option value={selectedModel}>{selectedModel}</option>}
+                {models.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.id})</option>)}
               </select>
               {modelSaving && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
             </div>
           )}
         </div>
       )}
-    </Section>
+    </>
   )
 }
 
-// ──────────────────────────── OpenAI Key ────────────────────────────
-
-function OpenAIKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; currentModel: string; onSaved: () => void }) {
+function OpenAIKeyContent({ hasKey, currentModel, onSaved }: { hasKey: boolean; currentModel: string; onSaved: () => void }) {
   const [newKey, setNewKey] = useState('')
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<'idle' | 'valid' | 'invalid' | 'saved'>('idle')
 
-  // Model selector state
   const [models, setModels] = useState<{ id: string; name: string }[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelsError, setModelsError] = useState<string | null>(null)
@@ -1212,13 +1264,8 @@ function OpenAIKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
     }
   }, [modelsFetched])
 
-  useEffect(() => {
-    if (hasKey) fetchModels()
-  }, [hasKey, fetchModels])
-
-  useEffect(() => {
-    setSelectedModel(currentModel)
-  }, [currentModel])
+  useEffect(() => { if (hasKey) fetchModels() }, [hasKey, fetchModels])
+  useEffect(() => { setSelectedModel(currentModel) }, [currentModel])
 
   const testKey = async () => {
     setTesting(true)
@@ -1261,7 +1308,7 @@ function OpenAIKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
   }
 
   return (
-    <Section title="OpenAI API key">
+    <>
       <p className="text-xs text-muted-foreground mb-3">
         {hasKey
           ? 'An OpenAI API key is configured. Enter a new key below to replace it.'
@@ -1270,12 +1317,7 @@ function OpenAIKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
         <div className="flex-1">
           <Label>API key</Label>
-          <Input
-            type="password"
-            value={newKey}
-            onChange={(e) => { setNewKey(e.target.value); setStatus('idle') }}
-            placeholder="sk-..."
-          />
+          <Input type="password" value={newKey} onChange={(e) => { setNewKey(e.target.value); setStatus('idle') }} placeholder="sk-..." />
         </div>
         <div className="flex gap-2">
           <Button onClick={testKey} disabled={!newKey.trim() || testing} variant="outline" size="sm">
@@ -1286,63 +1328,34 @@ function OpenAIKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
           </Button>
         </div>
       </div>
-      {status === 'valid' && (
-        <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
-          <Check className="h-3 w-3" /> Key is valid
-        </p>
-      )}
-      {status === 'invalid' && (
-        <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-          <AlertCircle className="h-3 w-3" /> Key is invalid
-        </p>
-      )}
-      {status === 'saved' && (
-        <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
-          <Check className="h-3 w-3" /> Key updated
-        </p>
-      )}
+      {status === 'valid' && <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1"><Check className="h-3 w-3" /> Key is valid</p>}
+      {status === 'invalid' && <p className="text-xs text-destructive mt-1 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Key is invalid</p>}
+      {status === 'saved' && <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1"><Check className="h-3 w-3" /> Key updated</p>}
 
       {hasKey && (
         <div className="mt-4 pt-4 border-t">
           <Label>Model</Label>
-          <p className="text-xs text-muted-foreground mb-2">
-            Choose which OpenAI model to use for report parsing, summaries, and imports.
-          </p>
+          <p className="text-xs text-muted-foreground mb-2">Choose which OpenAI model to use.</p>
           {modelsLoading ? (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading models…
-            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading models…</div>
           ) : modelsError ? (
             <p className="text-xs text-destructive">{modelsError}</p>
           ) : (
             <div className="flex items-center gap-2">
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                value={selectedModel}
-                onChange={(e) => saveModel(e.target.value)}
-                disabled={modelSaving}
-              >
-                {models.length === 0 && (
-                  <option value={selectedModel}>{selectedModel}</option>
-                )}
-                {models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
+              <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={selectedModel} onChange={(e) => saveModel(e.target.value)} disabled={modelSaving}>
+                {models.length === 0 && <option value={selectedModel}>{selectedModel}</option>}
+                {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
               {modelSaving && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
             </div>
           )}
         </div>
       )}
-    </Section>
+    </>
   )
 }
 
-// ──────────────────────────── Gemini Key ────────────────────────────
-
-function GeminiKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; currentModel: string; onSaved: () => void }) {
+function GeminiKeyContent({ hasKey, currentModel, onSaved }: { hasKey: boolean; currentModel: string; onSaved: () => void }) {
   const [newKey, setNewKey] = useState('')
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -1373,13 +1386,8 @@ function GeminiKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
     }
   }, [modelsFetched])
 
-  useEffect(() => {
-    if (hasKey) fetchModels()
-  }, [hasKey, fetchModels])
-
-  useEffect(() => {
-    setSelectedModel(currentModel)
-  }, [currentModel])
+  useEffect(() => { if (hasKey) fetchModels() }, [hasKey, fetchModels])
+  useEffect(() => { setSelectedModel(currentModel) }, [currentModel])
 
   const testKey = async () => {
     setTesting(true)
@@ -1429,7 +1437,7 @@ function GeminiKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
   }
 
   return (
-    <Section title="Google Gemini API key">
+    <>
       <p className="text-xs text-muted-foreground mb-3">
         {hasKey
           ? 'A Gemini API key is configured. Enter a new key below to replace it.'
@@ -1438,12 +1446,7 @@ function GeminiKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
         <div className="flex-1">
           <Label>API key</Label>
-          <Input
-            type="password"
-            value={newKey}
-            onChange={(e) => { setNewKey(e.target.value); setStatus('idle') }}
-            placeholder="AIza..."
-          />
+          <Input type="password" value={newKey} onChange={(e) => { setNewKey(e.target.value); setStatus('idle') }} placeholder="AIza..." />
         </div>
         <div className="flex gap-2">
           <Button onClick={testKey} disabled={!newKey.trim() || testing} variant="outline" size="sm">
@@ -1454,63 +1457,34 @@ function GeminiKeySection({ hasKey, currentModel, onSaved }: { hasKey: boolean; 
           </Button>
         </div>
       </div>
-      {status === 'valid' && (
-        <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
-          <Check className="h-3 w-3" /> Key is valid
-        </p>
-      )}
-      {status === 'invalid' && (
-        <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-          <AlertCircle className="h-3 w-3" /> {errorMsg}
-        </p>
-      )}
-      {status === 'saved' && (
-        <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
-          <Check className="h-3 w-3" /> Key updated
-        </p>
-      )}
+      {status === 'valid' && <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1"><Check className="h-3 w-3" /> Key is valid</p>}
+      {status === 'invalid' && <p className="text-xs text-destructive mt-1 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> {errorMsg}</p>}
+      {status === 'saved' && <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1"><Check className="h-3 w-3" /> Key updated</p>}
 
       {hasKey && (
         <div className="mt-4 pt-4 border-t">
           <Label>Model</Label>
-          <p className="text-xs text-muted-foreground mb-2">
-            Choose which Gemini model to use.
-          </p>
+          <p className="text-xs text-muted-foreground mb-2">Choose which Gemini model to use.</p>
           {modelsLoading ? (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading models…
-            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading models…</div>
           ) : modelsError ? (
             <p className="text-xs text-destructive">{modelsError}</p>
           ) : (
             <div className="flex items-center gap-2">
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                value={selectedModel}
-                onChange={(e) => saveModel(e.target.value)}
-                disabled={modelSaving}
-              >
-                {models.length === 0 && (
-                  <option value={selectedModel}>{selectedModel}</option>
-                )}
-                {models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.id})
-                  </option>
-                ))}
+              <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={selectedModel} onChange={(e) => saveModel(e.target.value)} disabled={modelSaving}>
+                {models.length === 0 && <option value={selectedModel}>{selectedModel}</option>}
+                {models.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.id})</option>)}
               </select>
               {modelSaving && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
             </div>
           )}
         </div>
       )}
-    </Section>
+    </>
   )
 }
 
-// ──────────────────────────── Ollama ────────────────────────────
-
-function OllamaSection({ baseUrl, currentModel, onSaved }: { baseUrl: string; currentModel: string; onSaved: () => void }) {
+function OllamaContent({ baseUrl, currentModel, onSaved }: { baseUrl: string; currentModel: string; onSaved: () => void }) {
   const [url, setUrl] = useState(baseUrl || 'http://localhost:11434/v1')
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -1523,13 +1497,8 @@ function OllamaSection({ baseUrl, currentModel, onSaved }: { baseUrl: string; cu
   const [selectedModel, setSelectedModel] = useState(currentModel)
   const [modelSaving, setModelSaving] = useState(false)
 
-  useEffect(() => {
-    setUrl(baseUrl || 'http://localhost:11434/v1')
-  }, [baseUrl])
-
-  useEffect(() => {
-    setSelectedModel(currentModel)
-  }, [currentModel])
+  useEffect(() => { setUrl(baseUrl || 'http://localhost:11434/v1') }, [baseUrl])
+  useEffect(() => { setSelectedModel(currentModel) }, [currentModel])
 
   const testConnection = async () => {
     setTesting(true)
@@ -1595,18 +1564,14 @@ function OllamaSection({ baseUrl, currentModel, onSaved }: { baseUrl: string; cu
   }
 
   return (
-    <Section title="Ollama (Local AI)">
+    <>
       <p className="text-xs text-muted-foreground mb-3">
         Connect to a local Ollama instance. No API key needed — models run on your machine.
       </p>
       <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
         <div className="flex-1">
           <Label>Base URL</Label>
-          <Input
-            value={url}
-            onChange={(e) => { setUrl(e.target.value); setTestStatus('idle') }}
-            placeholder="http://localhost:11434/v1"
-          />
+          <Input value={url} onChange={(e) => { setUrl(e.target.value); setTestStatus('idle') }} placeholder="http://localhost:11434/v1" />
         </div>
         <div className="flex gap-2">
           <Button onClick={testConnection} disabled={!url.trim() || testing} variant="outline" size="sm">
@@ -1617,50 +1582,27 @@ function OllamaSection({ baseUrl, currentModel, onSaved }: { baseUrl: string; cu
           </Button>
         </div>
       </div>
-      {testStatus === 'ok' && (
-        <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
-          <Check className="h-3 w-3" /> Connected
-        </p>
-      )}
-      {testStatus === 'error' && (
-        <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-          <AlertCircle className="h-3 w-3" /> {testError}
-        </p>
-      )}
+      {testStatus === 'ok' && <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1"><Check className="h-3 w-3" /> Connected</p>}
+      {testStatus === 'error' && <p className="text-xs text-destructive mt-1 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> {testError}</p>}
 
       <div className="mt-4 pt-4 border-t">
         <Label>Model</Label>
-        <p className="text-xs text-muted-foreground mb-2">
-          Choose which Ollama model to use. Test the connection first to load available models.
-        </p>
+        <p className="text-xs text-muted-foreground mb-2">Choose which Ollama model to use. Test the connection first to load available models.</p>
         {modelsLoading ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading models…
-          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading models…</div>
         ) : modelsError ? (
           <p className="text-xs text-destructive">{modelsError}</p>
         ) : (
           <div className="flex items-center gap-2">
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              value={selectedModel}
-              onChange={(e) => saveModel(e.target.value)}
-              disabled={modelSaving}
-            >
-              {models.length === 0 && (
-                <option value={selectedModel}>{selectedModel}</option>
-              )}
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
+            <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={selectedModel} onChange={(e) => saveModel(e.target.value)} disabled={modelSaving}>
+              {models.length === 0 && <option value={selectedModel}>{selectedModel}</option>}
+              {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
             {modelSaving && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
           </div>
         )}
       </div>
-    </Section>
+    </>
   )
 }
 
@@ -2160,47 +2102,98 @@ function GoogleDriveSection({
   folderId,
   folderName,
   hasCredentials,
-  clientId,
   onChanged,
 }: {
   connected: boolean
   folderId: string | null
   folderName: string | null
   hasCredentials: boolean
-  clientId: string
   onChanged: () => void
 }) {
-  const [disconnecting, setDisconnecting] = useState(false)
-  const [newFolderName, setNewFolderName] = useState('')
-  const [creatingFolder, setCreatingFolder] = useState(false)
   const [folderError, setFolderError] = useState<string | null>(null)
-  const [showFolderInput, setShowFolderInput] = useState(false)
+  const [showPicker, setShowPicker] = useState(false)
+  const [folders, setFolders] = useState<{ id: string; name: string }[]>([])
+  const [loadingFolders, setLoadingFolders] = useState(false)
+  const [breadcrumbs, setBreadcrumbs] = useState<{ id: string | null; name: string }[]>([{ id: null, name: 'My Drive' }])
+  const [saving, setSaving] = useState(false)
 
-  const createFolder = async () => {
-    if (!newFolderName.trim()) return
-    setCreatingFolder(true)
+  const loadFolders = async (parentId?: string) => {
+    setLoadingFolders(true)
     setFolderError(null)
-    const res = await fetch('/api/settings/drive/folders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folderName: newFolderName.trim() }),
-    })
-    setCreatingFolder(false)
-    if (res.ok) {
-      setNewFolderName('')
-      setShowFolderInput(false)
-      onChanged()
-    } else {
-      const data = await res.json().catch(() => ({}))
-      setFolderError(data.error || 'Failed to create folder')
+    try {
+      const url = parentId
+        ? `/api/settings/drive/folders?parent=${parentId}`
+        : '/api/settings/drive/folders'
+      const res = await fetch(url)
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setFolderError(data.error || 'Failed to list folders')
+        return
+      }
+      const data = await res.json()
+      setFolders(data.folders ?? [])
+    } catch {
+      setFolderError('Failed to list folders')
+    } finally {
+      setLoadingFolders(false)
     }
   }
 
-  const handleDisconnect = async () => {
-    setDisconnecting(true)
-    const res = await fetch('/api/settings/drive', { method: 'DELETE' })
-    setDisconnecting(false)
-    if (res.ok) onChanged()
+  const openPicker = () => {
+    setShowPicker(true)
+    setBreadcrumbs([{ id: null, name: 'My Drive' }])
+    loadFolders()
+  }
+
+  const navigateInto = (folder: { id: string; name: string }) => {
+    setBreadcrumbs(prev => [...prev, { id: folder.id, name: folder.name }])
+    loadFolders(folder.id)
+  }
+
+  const navigateToBreadcrumb = (index: number) => {
+    const crumb = breadcrumbs[index]
+    setBreadcrumbs(prev => prev.slice(0, index + 1))
+    loadFolders(crumb.id ?? undefined)
+  }
+
+  const selectFolder = async (folder: { id: string; name: string }) => {
+    setSaving(true)
+    setFolderError(null)
+    const res = await fetch('/api/settings/drive', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder_id: folder.id, folder_name: folder.name }),
+    })
+    setSaving(false)
+    if (res.ok) {
+      setShowPicker(false)
+      onChanged()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setFolderError(data.error || 'Failed to select folder')
+    }
+  }
+
+  const selectCurrentFolder = async () => {
+    const current = breadcrumbs[breadcrumbs.length - 1]
+    if (!current.id) {
+      // Root — use 'root' as the ID
+      setSaving(true)
+      setFolderError(null)
+      const res = await fetch('/api/settings/drive', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder_id: 'root', folder_name: 'My Drive' }),
+      })
+      setSaving(false)
+      if (res.ok) { setShowPicker(false); onChanged() }
+      else {
+        const data = await res.json().catch(() => ({}))
+        setFolderError(data.error || 'Failed to select folder')
+      }
+    } else {
+      await selectFolder({ id: current.id, name: current.name })
+    }
   }
 
   if (!connected) {
@@ -2208,14 +2201,15 @@ function GoogleDriveSection({
       <div className="space-y-3">
         <p className="text-xs font-medium">Google Drive</p>
         <p className="text-xs text-muted-foreground">
-          Connect Google Drive to automatically save email attachments and reports to a folder.
+          {hasCredentials
+            ? 'Google credentials are configured. Connect your Google account to enable Drive storage.'
+            : 'Set up your Google OAuth credentials in the Google section in Email settings, then connect your account to enable Drive storage.'}
         </p>
-        <GoogleConnectionUI
-          connected={false}
-          hasCredentials={hasCredentials}
-          clientId={clientId}
-          onChanged={onChanged}
-        />
+        {hasCredentials && (
+          <Button size="sm" onClick={() => { window.location.href = '/api/auth/google' }}>
+            Connect Google account
+          </Button>
+        )}
       </div>
     )
   }
@@ -2227,15 +2221,6 @@ function GoogleDriveSection({
         Google Drive is connected. Attachments from processed emails will be saved automatically.
       </p>
 
-      <div className="mb-1">
-        <GoogleConnectionUI
-          connected={true}
-          hasCredentials={hasCredentials}
-          clientId={clientId}
-          onChanged={onChanged}
-        />
-      </div>
-
       {folderName ? (
         <div className="flex items-center gap-2 text-sm">
           <FolderOpen className="h-4 w-4 text-muted-foreground" />
@@ -2243,55 +2228,80 @@ function GoogleDriveSection({
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">
-          No folder selected. Create or specify a folder to start saving reports.
+          No folder selected. Pick a folder to start saving reports.
         </p>
       )}
 
-      {showFolderInput ? (
+      {showPicker ? (
         <div className="border rounded-lg p-3 space-y-3">
-          <div>
-            <Label>Folder name</Label>
-            <Input
-              value={newFolderName}
-              onChange={(e) => { setNewFolderName(e.target.value); setFolderError(null) }}
-              placeholder="Portfolio Reports"
-              onKeyDown={(e) => { if (e.key === 'Enter') createFolder() }}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              A folder with this name will be created in your Google Drive root. If it already exists, the existing folder will be used.
-            </p>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground flex-wrap">
+            {breadcrumbs.map((crumb, i) => (
+              <span key={i} className="flex items-center gap-1">
+                {i > 0 && <ChevronRight className="h-3 w-3" />}
+                <button
+                  onClick={() => navigateToBreadcrumb(i)}
+                  className={`hover:text-foreground ${i === breadcrumbs.length - 1 ? 'text-foreground font-medium' : ''}`}
+                >
+                  {crumb.name}
+                </button>
+              </span>
+            ))}
           </div>
+
+          <div className="border rounded max-h-48 overflow-y-auto">
+            {loadingFolders ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            ) : folders.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">No folders found</p>
+            ) : (
+              folders.map(f => (
+                <div
+                  key={f.id}
+                  className="flex items-center justify-between px-3 py-2 hover:bg-muted/50 group"
+                >
+                  <button
+                    className="flex items-center gap-2 text-sm flex-1 text-left"
+                    onClick={() => navigateInto(f)}
+                  >
+                    <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                    {f.name}
+                  </button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="opacity-0 group-hover:opacity-100 h-7 text-xs"
+                    onClick={() => selectFolder(f)}
+                    disabled={saving}
+                  >
+                    Select
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+
           {folderError && (
             <p className="text-xs text-destructive flex items-center gap-1">
               <AlertCircle className="h-3 w-3" /> {folderError}
             </p>
           )}
+
           <div className="flex gap-2 justify-end">
-            <Button size="sm" variant="outline" onClick={() => { setShowFolderInput(false); setFolderError(null) }}>
+            <Button size="sm" variant="outline" onClick={() => { setShowPicker(false); setFolderError(null) }}>
               Cancel
             </Button>
-            <Button size="sm" onClick={createFolder} disabled={creatingFolder || !newFolderName.trim()}>
-              {creatingFolder ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-              {folderId ? 'Update folder' : 'Create folder'}
+            <Button size="sm" onClick={selectCurrentFolder} disabled={saving}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+              Use this folder
             </Button>
           </div>
         </div>
       ) : (
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setShowFolderInput(true)}>
-            {folderId ? 'Change folder' : 'Set folder'}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleDisconnect}
-            disabled={disconnecting}
-            className="text-destructive hover:text-destructive"
-          >
-            {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5 mr-1" />}
-            Disconnect
-          </Button>
-        </div>
+        <Button size="sm" variant="outline" onClick={openPicker}>
+          {folderId ? 'Change folder' : 'Pick folder'}
+        </Button>
       )}
     </div>
   )
@@ -2376,7 +2386,6 @@ function StorageSection({
               folderId={googleDriveFolderId}
               folderName={googleDriveFolderName}
               hasCredentials={hasGoogleCredentials}
-              clientId={googleClientId}
               onChanged={onChanged}
             />
           </div>
@@ -2736,27 +2745,6 @@ function OutboundEmailSection({
         {systemProvider && (
           <div className="border rounded-lg p-3 space-y-3">
             <div>
-              <Label>From name</Label>
-              <Input
-                value={fromName}
-                onChange={(e) => setFromName(e.target.value)}
-                placeholder="e.g. Acme Ventures"
-              />
-            </div>
-            <div>
-              <Label>From address</Label>
-              <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
-                Must be a verified sender address for your email provider.{systemProvider === 'gmail' ? ' Ignored when using Gmail — emails are sent from your connected Google account.' : ''}
-              </p>
-              <Input
-                type="email"
-                value={fromAddress}
-                onChange={(e) => setFromAddress(e.target.value)}
-                placeholder="notifications@yourdomain.com"
-                disabled={systemProvider === 'gmail'}
-              />
-            </div>
-            <div>
               <button
                 type="button"
                 onClick={() => setShowApprovalEmail(!showApprovalEmail)}
@@ -2771,6 +2759,27 @@ function OutboundEmailSection({
             </div>
             {showApprovalEmail && (
               <>
+                <div>
+                  <Label>From name</Label>
+                  <Input
+                    value={fromName}
+                    onChange={(e) => setFromName(e.target.value)}
+                    placeholder="e.g. Acme Ventures"
+                  />
+                </div>
+                <div>
+                  <Label>From address</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
+                    Must be a verified sender address for your email provider.{systemProvider === 'gmail' ? ' Ignored when using Gmail — emails are sent from your connected Google account.' : ''}
+                  </p>
+                  <Input
+                    type="email"
+                    value={fromAddress}
+                    onChange={(e) => setFromAddress(e.target.value)}
+                    placeholder="notifications@yourdomain.com"
+                    disabled={systemProvider === 'gmail'}
+                  />
+                </div>
                 <div>
                   <Label>Subject</Label>
                   <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">

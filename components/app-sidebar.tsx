@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, TrendingUp, StickyNote, Lock, Users, Handshake, ArrowDownCircle, FileText } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, TrendingUp, StickyNote, Lock, Users, Handshake, ArrowDownCircle, FileText, Briefcase } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -19,7 +19,8 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; badgeKey?: 're
   { href: '/review', label: 'Review', icon: ClipboardCheck, badgeKey: 'review' },
   { href: '/emails', label: 'Inbound', icon: Mail },
   { href: '/import', label: 'Import', icon: Upload, featureKey: 'imports' },
-  { href: '/investments', label: 'Investments', icon: BarChart3, featureKey: 'investments', beta: true },
+  { href: '/investments', label: 'Investments', icon: BarChart3, featureKey: 'investments' },
+  { href: '/funds', label: 'Funds', icon: Briefcase, featureKey: 'funds' },
   { href: '/requests', label: 'Asks', icon: Send, featureKey: 'asks' },
   { href: '/notes', label: 'Notes', icon: StickyNote, badgeKey: 'notes', featureKey: 'notes' },
   { href: '/interactions', label: 'Interactions', icon: Handshake, featureKey: 'interactions' },
@@ -95,19 +96,30 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, up
                   </span>
                 )
               )}
-              {beta && (
+              {beta && !showLock && (
                 collapsed ? (
                   <span className="hidden md:block absolute top-1 right-1 h-2 w-2 rounded-full bg-blue-500" />
                 ) : (
                   <span className="text-[9px] font-medium text-blue-500 bg-blue-500/10 rounded px-1 py-0.5 leading-none uppercase tracking-wider self-center">beta</span>
                 )
               )}
-              {showLock && !collapsed && (
+              {showLock && !beta && !collapsed && (
                 <Lock className="h-3 w-3 text-amber-500 shrink-0 md:block hidden" />
               )}
-              {showLock && collapsed && (
+              {showLock && !beta && collapsed && (
                 <span className="hidden md:block absolute top-1 right-1">
                   <Lock className="h-2.5 w-2.5 text-amber-500" />
+                </span>
+              )}
+              {beta && showLock && !collapsed && (
+                <>
+                  <span className="text-[9px] font-medium text-blue-500 bg-blue-500/10 rounded px-1 py-0.5 leading-none uppercase tracking-wider self-center hidden md:inline">beta</span>
+                  <Lock className="h-3 w-3 text-amber-500 shrink-0 md:block hidden" />
+                </>
+              )}
+              {beta && showLock && collapsed && (
+                <span className="hidden md:block absolute top-1 right-1">
+                  <Lock className="h-2.5 w-2.5 text-blue-500" />
                 </span>
               )}
             </Link>

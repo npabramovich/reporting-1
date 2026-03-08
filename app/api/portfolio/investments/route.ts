@@ -66,8 +66,9 @@ export async function GET(req: NextRequest) {
   let portfolioUnrealized = 0
   let portfolioFMV = 0
 
-  // Collect all cash flows for portfolio-level IRR
+  // Collect all cash flows for portfolio-level IRR + per-group IRR
   const allCashFlows: CashFlow[] = []
+  const portfolioGroupCashFlows = new Map<string, CashFlow[]>()
   const asOfDate = asOf ? new Date(asOf) : new Date()
 
   const companySummaries: {
@@ -81,6 +82,9 @@ export async function GET(req: NextRequest) {
     fmv: number
     moic: number | null
     irr: number | null
+    proceedsReceived: number
+    proceedsEscrow: number
+    totalCostBasisExited: number
   }[] = []
 
   for (const [companyId, txns] of Array.from(byCompany.entries())) {
@@ -150,6 +154,9 @@ export async function GET(req: NextRequest) {
       let totalInvested = 0
       let totalShares = 0
       let totalRealized = 0
+      let proceedsReceived = 0
+      let proceedsEscrow = 0
+      let totalCostBasisExited = 0
 
       const groupCashFlows: CashFlow[] = []
       const roundMap = new Map<string, { investmentCost: number; sharesAcquired: number; unrealizedValueChange: number; costBasisExited: number }>()
@@ -180,11 +187,18 @@ export async function GET(req: NextRequest) {
           }
         }
         if (txn.transaction_type === 'proceeds') {
-          const proceedsAmount = (txn.proceeds_received ?? 0) + (txn.proceeds_escrow ?? 0)
+          const pr = txn.proceeds_received ?? 0
+          const pe = txn.proceeds_escrow ?? 0
+          proceedsReceived += pr
+          proceedsEscrow += pe
+          const proceedsAmount = pr + pe
           totalRealized += proceedsAmount
+          if (txn.cost_basis_exited != null) {
+            totalCostBasisExited += Math.abs(txn.cost_basis_exited)
+          }
           if (txn.round_name && txn.cost_basis_exited != null) {
             const round = roundMap.get(txn.round_name)
-            if (round) round.costBasisExited += txn.cost_basis_exited
+            if (round) round.costBasisExited += Math.abs(txn.cost_basis_exited)
           }
 
           if (txn.transaction_date && proceedsAmount > 0) {
@@ -205,10 +219,14 @@ export async function GET(req: NextRequest) {
       let unrealizedValue = 0
       for (const round of Array.from(roundMap.values())) {
         const isPricedEquity = round.sharesAcquired > 0 && (round.investmentCost > 0)
-        if (isPricedEquity) {
-          unrealizedValue += latestSharePrice != null ? round.sharesAcquired * latestSharePrice : 0
+        const remainingBasis = round.investmentCost - round.costBasisExited
+        if (remainingBasis <= 0) {
+          // All cost basis exited — no unrealized value
+        } else if (isPricedEquity) {
+          const fraction = round.investmentCost > 0 ? remainingBasis / round.investmentCost : 0
+          unrealizedValue += latestSharePrice != null ? round.sharesAcquired * fraction * latestSharePrice : 0
         } else {
-          unrealizedValue += round.investmentCost - round.costBasisExited + round.unrealizedValueChange
+          unrealizedValue += remainingBasis + round.unrealizedValueChange
         }
       }
       let fmv: number
@@ -222,7 +240,13 @@ export async function GET(req: NextRequest) {
 
       const moic = totalInvested > 0 ? (totalRealized + unrealizedValue) / totalInvested : null
 
-      // Compute per-group IRR
+      // Track cash flows per portfolio group for group-level IRR
+      // Must happen BEFORE per-company terminal value is pushed into groupCashFlows
+      const pgFlows = portfolioGroupCashFlows.get(group) ?? []
+      for (const cf of groupCashFlows) pgFlows.push(cf)
+      portfolioGroupCashFlows.set(group, pgFlows)
+
+      // Compute per-company IRR (pushes terminal value into groupCashFlows)
       let groupIRR: number | null = null
       if (groupCashFlows.length > 0) {
         const terminalValue = company.status === 'written-off' ? 0 : unrealizedValue
@@ -250,6 +274,9 @@ export async function GET(req: NextRequest) {
         fmv,
         moic,
         irr: groupIRR,
+        proceedsReceived,
+        proceedsEscrow,
+        totalCostBasisExited,
       })
     }
   }
@@ -263,10 +290,44 @@ export async function GET(req: NextRequest) {
 
   // Portfolio-level IRR: add total unrealized as terminal cash flow
   let portfolioIRR: number | null = null
-  if (allCashFlows.length > 0 && portfolioUnrealized > 0) {
-    allCashFlows.push({ date: asOfDate, amount: portfolioUnrealized })
+  if (allCashFlows.length > 0 && (portfolioUnrealized > 0 || portfolioRealized > 0)) {
+    if (portfolioUnrealized > 0) {
+      allCashFlows.push({ date: asOfDate, amount: portfolioUnrealized })
+    }
     portfolioIRR = xirr(allCashFlows)
   }
+
+  // Build group summaries
+  const groupAgg = new Map<string, { totalInvested: number; proceedsReceived: number; proceedsEscrow: number; totalRealized: number; unrealizedValue: number; totalCostBasisExited: number }>()
+
+  for (const cs of companySummaries) {
+    const groupName = cs.portfolioGroup[0] ?? ''
+    const existing = groupAgg.get(groupName) ?? { totalInvested: 0, proceedsReceived: 0, proceedsEscrow: 0, totalRealized: 0, unrealizedValue: 0, totalCostBasisExited: 0 }
+    existing.totalInvested += cs.totalInvested
+    existing.proceedsReceived += cs.proceedsReceived
+    existing.proceedsEscrow += cs.proceedsEscrow
+    existing.totalRealized += cs.totalRealized
+    existing.unrealizedValue += cs.unrealizedValue
+    existing.totalCostBasisExited += cs.totalCostBasisExited
+    groupAgg.set(groupName, existing)
+  }
+
+  const groups = Array.from(groupAgg.entries()).map(([group, g]) => {
+    const moic = g.totalInvested > 0 ? (g.totalRealized + g.unrealizedValue) / g.totalInvested : null
+
+    // Group-level IRR from aggregated cash flows
+    let irr: number | null = null
+    const gFlows = portfolioGroupCashFlows.get(group)
+    if (gFlows && gFlows.length > 0 && (g.unrealizedValue > 0 || g.totalRealized > 0)) {
+      const flows = [...gFlows]
+      if (g.unrealizedValue > 0) {
+        flows.push({ date: asOfDate, amount: g.unrealizedValue })
+      }
+      irr = xirr(flows)
+    }
+
+    return { group, ...g, moic, irr }
+  }).sort((a, b) => b.totalInvested - a.totalInvested)
 
   return NextResponse.json({
     totalInvested: portfolioInvested,
@@ -276,5 +337,6 @@ export async function GET(req: NextRequest) {
     portfolioMOIC,
     portfolioIRR,
     companies: companySummaries,
+    groups,
   })
 }
