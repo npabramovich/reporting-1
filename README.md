@@ -111,6 +111,20 @@ Key calculations:
 
 Cash flow data can be bulk-imported from the Import page using freeform text — the AI parses dates, amounts, types, and group assignments automatically.
 
+## LP Letters
+
+LP Letters helps you generate quarterly update letters for your limited partners. Using AI and your portfolio data — reported metrics, company summaries, investment performance, and team notes — the system drafts professional LP communications scoped to a specific portfolio group and reporting period.
+
+**Creating a letter** — click "New letter" and select the year, quarter, portfolio group, and template. Optionally toggle "year-end summary" for Q4 letters and add custom instructions to guide the AI. A preview step shows the companies and data that will be included before generation begins.
+
+**Templates** — upload a previous LP letter (.docx or .pdf) and AI analyzes it to match your writing style, tone, and structure. Or use the built-in default template. Templates are reusable across letters and managed from the Templates dialog on the LP Letters page.
+
+**Generation** — the AI generates a narrative for each company in the portfolio group, drawing on reported metrics, recent trends, company summaries, investment data, and team notes. A portfolio summary table with investment performance is also generated. The full letter is assembled from these sections.
+
+**Editing** — after generation, the letter opens in an editor with two views: "Sections" shows each company narrative individually for targeted editing, and "Full" shows the complete assembled letter. Edit narratives inline, regenerate individual company sections or the entire letter, and add per-company or global custom prompts to refine the output. Per-company prompts can either add to or replace the default generation prompt.
+
+**Export** — export the finished letter as a .docx file for final formatting and distribution. If Google Drive is connected, export directly to Drive.
+
 ## Asks
 
 Asks lets you send reporting request emails to portfolio companies. Compose a message, select which companies should receive it, and send it out. The system tracks each request so you know what was sent and when.
