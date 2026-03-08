@@ -530,7 +530,50 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
     .eq('name', DEMO_FUND_NAME)
     .maybeSingle()
 
-  if (existingFund) return false
+  if (existingFund) {
+    // Fund exists — backfill investment transactions if missing
+    const { count } = await admin
+      .from('investment_transactions' as any)
+      .select('id', { count: 'exact', head: true })
+      .eq('fund_id', existingFund.id)
+
+    if (count && count > 0) return false
+
+    // Look up company IDs for this fund
+    const { data: companies } = await admin
+      .from('companies')
+      .select('id, name')
+      .eq('fund_id', existingFund.id)
+
+    if (!companies) return false
+
+    const companyIdMap: Record<string, string> = {}
+    for (const c of companies) companyIdMap[c.name] = c.id
+
+    for (const inv of INVESTMENTS) {
+      const companyId = companyIdMap[inv.companyName]
+      if (!companyId) continue
+
+      await admin.from('investment_transactions').insert({
+        company_id: companyId,
+        fund_id: existingFund.id,
+        transaction_type: inv.transaction_type,
+        round_name: inv.round_name ?? null,
+        transaction_date: inv.transaction_date,
+        notes: inv.notes ?? null,
+        investment_cost: inv.investment_cost ?? null,
+        shares_acquired: inv.shares_acquired ?? null,
+        share_price: inv.share_price ?? null,
+        unrealized_value_change: inv.unrealized_value_change ?? null,
+        current_share_price: inv.current_share_price ?? null,
+        cost_basis_exited: inv.cost_basis_exited ?? null,
+        proceeds_received: inv.proceeds_received ?? null,
+      })
+    }
+
+    console.log('[demo] Backfilled investment transactions')
+    return true
+  }
 
   // -------------------------------------------------------------------------
   // Find or create the demo user
