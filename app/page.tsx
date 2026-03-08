@@ -14,8 +14,12 @@ const screenshots = [
   { src: '/screenshots/inbound.png', label: 'Inbound Emails' },
   { src: '/screenshots/email-detail.png', label: 'Email Detail' },
   { src: '/screenshots/import.png', label: 'Import' },
+  { src: '/screenshots/investments.png', label: 'Investments' },
+  { src: '/screenshots/funds.png', label: 'Funds' },
   { src: '/screenshots/asks.png', label: 'Asks' },
   { src: '/screenshots/notes.png', label: 'Notes' },
+  { src: '/screenshots/interactions.png', label: 'Interactions' },
+  { src: '/screenshots/letters.png', label: 'LP Letters' },
   { src: '/screenshots/settings.png', label: 'Settings' },
 ]
 
@@ -79,12 +83,13 @@ export default function LandingPage() {
             </a>
           </p>
           <p className="text-base text-muted-foreground max-w-2xl">
-            A portfolio reporting tool for venture capital funds. Portfolio companies send
-            their quarterly updates in any format — PDF, Excel, PowerPoint, or plain text —
-            and AI automatically identifies the company, extracts the metrics you&apos;ve
-            configured, stores everything as time-series data, and creates an analysis of
-            new updates and trends. The dashboard gives you a live view of your portfolio
-            with fund-level, portfolio-level, and individual company details.
+            Portfolio reporting for venture capital firms, accelerators, and angel investors.
+            Forward your investor updates in any format — PDF, Excel, PowerPoint, plain
+            text — and AI identifies the company, extracts the metrics you care about, and
+            creates an analysis of the current state of the company. Track investments at a
+            per company, per fund, and overall perspective alongside your fund administrator.
+            Lightweight CRM to track your intros, strategy guidance, qualitative value-adds.
+            Complete your limited partner reporting process faster, easier, and better.
           </p>
         </div>
 
@@ -241,6 +246,15 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
+
+        {/* Fractional CFO */}
+        <div className="text-center text-sm text-muted-foreground">
+          Need a fractional CFO?{' '}
+          <a href="https://foresight.is/fractional-cfo/" className="underline hover:text-foreground">
+            Learn more here
+          </a>
+          .
+        </div>
       </div>
     </div>
   )

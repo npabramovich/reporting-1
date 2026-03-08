@@ -1,6 +1,6 @@
 # Fund Portfolio Reporting
 
-A portfolio reporting tool for venture capital funds, available for self-hosting, managed deployments, and as a hosted solution. Portfolio companies send their quarterly updates in any format — PDF, Excel, PowerPoint, or plain text — to you via email or directly to the platform, and AI automatically identifies the company, extracts the metrics you've configured, stores everything as time-series data, and creates an analysis of the new updates and trends. Add investment details to see investments and returns on a per-company basis. The dashboard gives you a live view of your portfolio, with the ability to see fund-level, portfolio-level, and individual company details. Simplify the data collection process and build portfolio intelligence easier.
+Portfolio reporting for venture capital firms, accelerators, and angel investors. Forward your investor updates in any format — PDF, Excel, PowerPoint, plain text — and AI identifies the company, extracts the metrics you care about, and creates an analysis of the current state of the company. Track investments at a per company, per fund, and overall perspective alongside your fund administrator. Lightweight CRM to track your intros, strategy guidance, qualitative value-adds. Complete your limited partner reporting process faster, easier, and better.
 
 Built by Taylor Davidson at [Hemrock](https://www.hemrock.com). For setup assistance, managed deployments, or general questions, [contact Taylor](https://www.hemrock.com/contact).
 
@@ -93,6 +93,8 @@ The Investments page provides a fund-level view of all investment transactions a
 
 Realized/Cost MOIC is calculated as realized proceeds divided by the cost basis exited. Unrealized/Cost MOIC is unrealized value divided by current cost (total invested minus cost basis exited). These provide a more precise view of returns relative to the capital actually at work, rather than total invested capital.
 
+![Investments](docs/screenshots/investments.png)
+
 ## Funds
 
 The Funds page tracks fund-level cash flows and computes LP return metrics per portfolio group. Each portfolio group gets its own tab showing:
@@ -111,6 +113,8 @@ Key calculations:
 
 Cash flow data can be bulk-imported from the Import page using freeform text — the AI parses dates, amounts, types, and group assignments automatically.
 
+![Funds](docs/screenshots/funds.png)
+
 ## LP Letters
 
 LP Letters helps you generate quarterly update letters for your limited partners. Using AI and your portfolio data — reported metrics, company summaries, investment performance, and team notes — the system drafts professional LP communications scoped to a specific portfolio group and reporting period.
@@ -124,6 +128,8 @@ LP Letters helps you generate quarterly update letters for your limited partners
 **Editing** — after generation, the letter opens in an editor with two views: "Sections" shows each company narrative individually for targeted editing, and "Full" shows the complete assembled letter. Edit narratives inline, regenerate individual company sections or the entire letter, and add per-company or global custom prompts to refine the output. Per-company prompts can either add to or replace the default generation prompt.
 
 **Export** — export the finished letter as a .docx file for final formatting and distribution. If Google Drive is connected, export directly to Drive.
+
+![LP Letters](docs/screenshots/letters.png)
 
 ## Asks
 
@@ -168,6 +174,8 @@ For each interaction, AI generates a short summary, detects whether the email co
 The Interactions page shows all logged interactions with filter tabs for **All** and **Intros**. Each entry displays the date, linked company, subject, AI summary, and an intro badge when introductions were detected. Expand intro details to see names, emails, and context of introduced contacts.
 
 On each company's detail page, a **Recent Interactions** section shows the latest interactions for that company, with intro entries highlighted. The fund's inbound email address is shown at the top of the Interactions page for easy copy-and-paste into BCC.
+
+![Interactions](docs/screenshots/interactions.png)
 
 ## Settings
 
