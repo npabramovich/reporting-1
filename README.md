@@ -79,7 +79,37 @@ You can also paste data covering multiple companies at once — rows from a spre
 
 Investment transaction data can also be pasted — rounds, proceeds, valuations, and share prices — and the AI will match entries to your portfolio companies.
 
+Fund cash flow data (commitments, called capital, distributions) can be pasted in freeform format — the AI parses dates, amounts, flow types, and portfolio group assignments automatically.
+
 ![Import](docs/screenshots/import.png)
+
+## Investments
+
+The Investments page provides a fund-level view of all investment transactions across the portfolio. Two tables organize the data:
+
+**Portfolio group summary** — one row per portfolio group (e.g. Fund I, Fund II) showing aggregate invested capital, current cost, realized and unrealized values, total value, gain/loss breakdowns, gross MOIC, realized/cost MOIC, unrealized/cost MOIC, and gross IRR. When fund cash flows are configured, computed LP metrics (TVPI, DPI, RVPI, Net IRR) appear alongside each group.
+
+**Company detail table** — every company with its investment cost, current cost, proceeds, unrealized value, total value, MOIC, IRR, and percentage allocation. The first column (company name) is sticky during horizontal scrolling. Both tables support column sorting, and a group filter lets you focus on a single portfolio group.
+
+Realized/Cost MOIC is calculated as realized proceeds divided by the cost basis exited. Unrealized/Cost MOIC is unrealized value divided by current cost (total invested minus cost basis exited). These provide a more precise view of returns relative to the capital actually at work, rather than total invested capital.
+
+## Funds
+
+The Funds page tracks fund-level cash flows and computes LP return metrics per portfolio group. Each portfolio group gets its own tab showing:
+
+**Summary cards** — Committed Capital, Called Capital (PIC), Uncalled Capital, Distributions, Net Assets (editable — represents cash and other assets held by the fund excluding investment portfolio value), Gross Residual (investment unrealized value plus net assets), Net Residual, Total Value, TVPI, DPI, RVPI, and Net IRR.
+
+**Cash flow table** — chronological list of all fund cash flows (commitments, called capital, distributions) with cumulative running totals for committed, called, uncalled, and distributed amounts. Cash flows can be added, edited, and deleted inline.
+
+**Per-group settings** — a settings dialog (pencil icon) lets admins configure carry rate and GP commit percentage for each portfolio group. The GP commit percentage represents the portion of called capital funded by the general partner, which is excluded from carried interest calculations. Carry is calculated only on the LP portion of profits above remaining LP capital.
+
+Key calculations:
+- **Gross Assets** = investment unrealized value + net assets
+- **Estimated Carry** = carry rate × max(0, gross assets × LP share − LP remaining capital)
+- **Net Residual** = gross assets − estimated carry
+- **Net IRR** = XIRR of called capital (negative), distributions (positive), and net residual as terminal value
+
+Cash flow data can be bulk-imported from the Import page using freeform text — the AI parses dates, amounts, types, and group assignments automatically.
 
 ## Asks
 
@@ -159,7 +189,7 @@ Admins can control which optional features are visible in the sidebar and access
 | **Hidden** | Removed from the sidebar for all users, but still accessible via direct URL |
 | **Off** | Functionally disabled — the feature is completely inaccessible |
 
-The features that can be configured are: **Interactions** (CRM-style email logging), **Investments** (fund transaction tracking), **Notes** (team discussion and observations), **LP Letters** (quarterly LP update generation), **Imports** (bulk data import), and **Asks** (portfolio company reporting requests).
+The features that can be configured are: **Interactions** (CRM-style email logging), **Investments** (fund transaction tracking), **Funds** (fund-level cash flows and LP metrics), **Notes** (team discussion and observations), **LP Letters** (quarterly LP update generation), **Imports** (bulk data import), and **Asks** (portfolio company reporting requests).
 
 ## Setup & Deployment
 
@@ -349,7 +379,7 @@ To automatically archive processed emails and attachments:
 3. Configure an **OAuth consent screen** (External is fine for personal use)
 4. Create **OAuth 2.0 credentials** (Web application type)
 5. Add `https://your-app.com/api/auth/google/callback` as an authorized redirect URI
-6. In the app, go to **Settings**, enter your Google Client ID and Client Secret, and connect Google
+6. In the app, go to **Settings**, enter your Google Client ID and Client Secret, connect Google, and use the folder picker to select a Drive folder for archiving
 
 **Dropbox:**
 1. Create an app at [dropbox.com/developers](https://www.dropbox.com/developers)

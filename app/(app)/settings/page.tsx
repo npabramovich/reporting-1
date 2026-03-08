@@ -2114,16 +2114,20 @@ function GoogleDriveSection({
   const [showPicker, setShowPicker] = useState(false)
   const [folders, setFolders] = useState<{ id: string; name: string }[]>([])
   const [loadingFolders, setLoadingFolders] = useState(false)
-  const [breadcrumbs, setBreadcrumbs] = useState<{ id: string | null; name: string }[]>([{ id: null, name: 'My Drive' }])
+  const [breadcrumbs, setBreadcrumbs] = useState<{ id: string | null; name: string; shared?: boolean }[]>([{ id: null, name: 'My Drive' }])
   const [saving, setSaving] = useState(false)
+  const [browseMode, setBrowseMode] = useState<'my' | 'shared'>('my')
 
-  const loadFolders = async (parentId?: string) => {
+  const loadFolders = async (parentId?: string, shared?: boolean) => {
     setLoadingFolders(true)
     setFolderError(null)
     try {
-      const url = parentId
-        ? `/api/settings/drive/folders?parent=${parentId}`
-        : '/api/settings/drive/folders'
+      let url = '/api/settings/drive/folders'
+      if (shared) {
+        url += '?shared=true'
+      } else if (parentId) {
+        url += `?parent=${parentId}`
+      }
       const res = await fetch(url)
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -2141,6 +2145,19 @@ function GoogleDriveSection({
 
   const openPicker = () => {
     setShowPicker(true)
+    setBrowseMode('my')
+    setBreadcrumbs([{ id: null, name: 'My Drive' }])
+    loadFolders()
+  }
+
+  const switchToShared = () => {
+    setBrowseMode('shared')
+    setBreadcrumbs([{ id: null, name: 'Shared with me', shared: true }])
+    loadFolders(undefined, true)
+  }
+
+  const switchToMyDrive = () => {
+    setBrowseMode('my')
     setBreadcrumbs([{ id: null, name: 'My Drive' }])
     loadFolders()
   }
@@ -2153,7 +2170,11 @@ function GoogleDriveSection({
   const navigateToBreadcrumb = (index: number) => {
     const crumb = breadcrumbs[index]
     setBreadcrumbs(prev => prev.slice(0, index + 1))
-    loadFolders(crumb.id ?? undefined)
+    if (crumb.shared) {
+      loadFolders(undefined, true)
+    } else {
+      loadFolders(crumb.id ?? undefined)
+    }
   }
 
   const selectFolder = async (folder: { id: string; name: string }) => {
@@ -2234,6 +2255,21 @@ function GoogleDriveSection({
 
       {showPicker ? (
         <div className="border rounded-lg p-3 space-y-3">
+          <div className="flex items-center gap-2 text-xs">
+            <button
+              onClick={switchToMyDrive}
+              className={`px-2 py-1 rounded ${browseMode === 'my' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              My Drive
+            </button>
+            <button
+              onClick={switchToShared}
+              className={`px-2 py-1 rounded ${browseMode === 'shared' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Shared with me
+            </button>
+          </div>
+
           <div className="flex items-center gap-1 text-xs text-muted-foreground flex-wrap">
             {breadcrumbs.map((crumb, i) => (
               <span key={i} className="flex items-center gap-1">

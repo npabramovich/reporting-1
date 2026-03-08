@@ -144,9 +144,8 @@ ${text}`,
       usage: aiResult.usage,
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    console.error('[import-fund-cash-flows] AI API error:', message)
-    return NextResponse.json({ error: `AI API call failed: ${message}` }, { status: 500 })
+    console.error('[import-fund-cash-flows] AI API error:', err instanceof Error ? err.message : err)
+    return NextResponse.json({ error: 'AI API call failed' }, { status: 500 })
   }
 
   let parsed: { cash_flows: ParsedCashFlow[] }
@@ -155,10 +154,8 @@ ${text}`,
     if (!jsonMatch) throw new Error('No JSON found in response')
     parsed = JSON.parse(jsonMatch[0])
   } catch {
-    return NextResponse.json({
-      error: 'Failed to parse AI response as JSON',
-      raw: responseText,
-    }, { status: 500 })
+    console.error('[import-fund-cash-flows] Failed to parse AI response:', responseText)
+    return NextResponse.json({ error: 'Failed to parse AI response as JSON' }, { status: 500 })
   }
 
   if (!parsed.cash_flows || !Array.isArray(parsed.cash_flows)) {
@@ -225,7 +222,6 @@ ${text}`,
   return NextResponse.json(results)
   } catch (err) {
     console.error('[import-fund-cash-flows] Unhandled error:', err)
-    const message = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 })
   }
 }

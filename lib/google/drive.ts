@@ -41,16 +41,27 @@ interface DriveFile {
 
 export async function listFolders(
   accessToken: string,
-  parentId?: string
+  parentId?: string,
+  sharedWithMe?: boolean
 ): Promise<DriveFile[]> {
-  const parent = parentId || 'root'
-  const q = `'${parent}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
+  let q: string
+  if (sharedWithMe) {
+    q = `sharedWithMe=true and mimeType='application/vnd.google-apps.folder' and trashed=false`
+  } else {
+    const parent = parentId || 'root'
+    if (parent !== 'root' && !/^[a-zA-Z0-9_-]+$/.test(parent)) {
+      throw new Error('Invalid parent folder ID')
+    }
+    q = `'${parent}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
+  }
 
   const url = new URL(`${DRIVE_API}/files`)
   url.searchParams.set('q', q)
   url.searchParams.set('fields', 'files(id,name,mimeType)')
   url.searchParams.set('orderBy', 'name')
   url.searchParams.set('pageSize', '100')
+  url.searchParams.set('includeItemsFromAllDrives', 'true')
+  url.searchParams.set('supportsAllDrives', 'true')
 
   const res = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -70,6 +81,9 @@ export async function findOrCreateFolder(
   parentId: string,
   folderName: string
 ): Promise<string> {
+  if (parentId !== 'root' && !/^[a-zA-Z0-9_-]+$/.test(parentId)) {
+    throw new Error('Invalid parent folder ID')
+  }
   // Search for existing folder
   const q = `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and name='${folderName.replace(/'/g, "\\'")}' and trashed=false`
 
@@ -132,33 +146,68 @@ export async function uploadFile(
     }
   }
 
-  const boundary = '----DriveUploadBoundary' + Date.now()
   const contentBuffer = typeof content === 'string' ? Buffer.from(content, 'utf-8') : content
 
-  const metadataPart = JSON.stringify(metadata)
-  const bodyParts = [
-    `--${boundary}\r\n`,
-    'Content-Type: application/json; charset=UTF-8\r\n\r\n',
-    metadataPart,
-    `\r\n--${boundary}\r\n`,
-    `Content-Type: ${mimeType}\r\n\r\n`,
-  ]
-
-  const prefix = Buffer.from(bodyParts.join(''))
-  const suffix = Buffer.from(`\r\n--${boundary}--`)
-  const body = Buffer.concat([prefix, contentBuffer, suffix])
-
-  const res = await fetch(
-    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': `multipart/related; boundary=${boundary}`,
-      },
-      body,
+  // Use resumable upload for files > 4MB, multipart for smaller files
+  let res: Response
+  if (contentBuffer.length > 4 * 1024 * 1024) {
+    // Step 1: Initiate resumable upload
+    const initRes = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json; charset=UTF-8',
+          'X-Upload-Content-Type': mimeType,
+          'X-Upload-Content-Length': String(contentBuffer.length),
+        },
+        body: JSON.stringify(metadata),
+      }
+    )
+    if (!initRes.ok) {
+      const text = await initRes.text()
+      throw new Error(`Failed to initiate upload for "${filename}": ${text}`)
     }
-  )
+    const uploadUrl = initRes.headers.get('Location')
+    if (!uploadUrl) throw new Error(`No upload URL returned for "${filename}"`)
+
+    // Step 2: Upload the file content
+    res = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Length': String(contentBuffer.length),
+        'Content-Type': mimeType,
+      },
+      body: new Uint8Array(contentBuffer),
+    })
+  } else {
+    const boundary = '----DriveUploadBoundary' + Date.now()
+    const metadataPart = JSON.stringify(metadata)
+    const bodyParts = [
+      `--${boundary}\r\n`,
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n',
+      metadataPart,
+      `\r\n--${boundary}\r\n`,
+      `Content-Type: ${mimeType}\r\n\r\n`,
+    ]
+
+    const prefix = Buffer.from(bodyParts.join(''))
+    const suffix = Buffer.from(`\r\n--${boundary}--`)
+    const body = Buffer.concat([prefix, contentBuffer, suffix])
+
+    res = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body,
+      }
+    )
+  }
 
   if (!res.ok) {
     const text = await res.text()

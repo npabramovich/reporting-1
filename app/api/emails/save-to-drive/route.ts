@@ -173,13 +173,30 @@ export async function POST(req: NextRequest) {
         Content?: string
       }>) ?? []
 
+      let attachmentsSaved = 0
+      let attachmentErrors = 0
       for (const att of attachments) {
-        if (!att.Content) continue
-        const content = Buffer.from(att.Content, 'base64')
-        await uploadAttachment(companyName, att.Name, content)
+        if (!att.Content) {
+          console.warn(`[save-to-drive] Attachment "${att.Name}" has no Content, skipping`)
+          continue
+        }
+        try {
+          const content = Buffer.from(att.Content, 'base64')
+          console.log(`[save-to-drive] Uploading attachment "${att.Name}" (${content.length} bytes)`)
+          await uploadAttachment(companyName, att.Name, content)
+          attachmentsSaved++
+        } catch (attErr) {
+          attachmentErrors++
+          const msg = attErr instanceof Error ? attErr.message : 'Unknown error'
+          console.error(`[save-to-drive] Attachment "${att.Name}" failed:`, msg)
+          errors.push(`Attachment "${att.Name}": ${msg}`)
+        }
       }
 
       saved++
+      if (attachmentErrors > 0) {
+        errors.push(`${attachmentErrors} of ${attachments.length} attachment(s) failed to upload`)
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       errors.push(`${email.id}: ${msg}`)

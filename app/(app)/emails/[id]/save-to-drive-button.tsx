@@ -23,7 +23,12 @@ export function SaveToDriveButton({ emailId }: { emailId: string }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Failed to save')
       if (data.failed > 0) throw new Error(data.errors?.[0] ?? 'Failed to save')
-      setResult('success')
+      if (data.errors?.length > 0) {
+        setResult('success')
+        setErrorMsg(data.errors.join('; '))
+      } else {
+        setResult('success')
+      }
     } catch (err) {
       setResult('error')
       setErrorMsg(err instanceof Error ? err.message : 'Failed to save')
