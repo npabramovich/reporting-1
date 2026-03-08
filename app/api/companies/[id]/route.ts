@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (writeCheck instanceof NextResponse) return writeCheck
 
   const body = await req.json()
-  const { name, aliases, tags, stage, industry, notes, status, overview, founders, why_invested, current_update, contact_email, portfolio_group } = body
+  const { name, aliases, tags, stage, industry, notes, status, overview, founders, why_invested, current_update, contact_email, portfolio_group, google_drive_folder_id, google_drive_folder_name, dropbox_folder_path } = body
 
   if (name !== undefined && !name?.trim()) {
     return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 })
@@ -73,6 +73,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (current_update !== undefined) updates.current_update = current_update?.trim() || null
   if (contact_email !== undefined) updates.contact_email = contact_email
   if (portfolio_group !== undefined) updates.portfolio_group = portfolio_group
+  if (google_drive_folder_id !== undefined) updates.google_drive_folder_id = google_drive_folder_id || null
+  if (google_drive_folder_name !== undefined) updates.google_drive_folder_name = google_drive_folder_name || null
+  if (dropbox_folder_path !== undefined) updates.dropbox_folder_path = dropbox_folder_path || null
   if (status !== undefined) {
     if (!VALID_STATUSES.includes(status)) {
       return NextResponse.json({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` }, { status: 400 })

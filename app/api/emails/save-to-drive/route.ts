@@ -61,8 +61,8 @@ export async function POST(req: NextRequest) {
   const dek = decrypt(settings.encryption_key_encrypted, kek)
 
   // Set up provider-specific upload functions
-  let uploadEmail: (companyName: string, dateStr: string, subject: string, emailBody: string) => Promise<void>
-  let uploadAttachment: (companyName: string, name: string, content: Buffer) => Promise<void>
+  let uploadEmail: (companyName: string, dateStr: string, subject: string, emailBody: string, companyInfo: { google_drive_folder_id: string | null; dropbox_folder_path: string | null } | null) => Promise<void>
+  let uploadAttachment: (companyName: string, name: string, content: Buffer, companyInfo: { google_drive_folder_id: string | null; dropbox_folder_path: string | null } | null) => Promise<void>
 
   if (provider === 'google_drive') {
     if (!settings.google_refresh_token_encrypted || !settings.google_drive_folder_id) {
@@ -76,12 +76,12 @@ export async function POST(req: NextRequest) {
     const accessToken = await getGoogleAccessToken(refreshToken, creds.clientId, creds.clientSecret)
     const rootFolderId = settings.google_drive_folder_id
 
-    uploadEmail = async (companyName, dateStr, subject, emailBody) => {
-      const folderId = await findOrCreateGoogleFolder(accessToken, rootFolderId, companyName)
+    uploadEmail = async (companyName, dateStr, subject, emailBody, companyInfo) => {
+      const folderId = companyInfo?.google_drive_folder_id || await findOrCreateGoogleFolder(accessToken, rootFolderId, companyName)
       await uploadGoogleFile(accessToken, folderId, `${dateStr}_${subject}.txt`, emailBody, 'text/plain')
     }
-    uploadAttachment = async (companyName, name, content) => {
-      const folderId = await findOrCreateGoogleFolder(accessToken, rootFolderId, companyName)
+    uploadAttachment = async (companyName, name, content, companyInfo) => {
+      const folderId = companyInfo?.google_drive_folder_id || await findOrCreateGoogleFolder(accessToken, rootFolderId, companyName)
       await uploadGoogleFile(accessToken, folderId, name, content, 'application/octet-stream')
     }
   } else if (provider === 'dropbox') {
@@ -94,13 +94,13 @@ export async function POST(req: NextRequest) {
     const accessToken = await getDropboxAccessToken(refreshToken, creds.appKey, creds.appSecret)
     const rootPath = settings.dropbox_folder_path
 
-    uploadEmail = async (companyName, dateStr, subject, emailBody) => {
-      const companyPath = `${rootPath}/${companyName}`
+    uploadEmail = async (companyName, dateStr, subject, emailBody, companyInfo) => {
+      const companyPath = companyInfo?.dropbox_folder_path || `${rootPath}/${companyName}`
       await findOrCreateDropboxFolder(accessToken, companyPath)
       await uploadDropboxFile(accessToken, companyPath, `${dateStr}_${subject}.txt`, emailBody)
     }
-    uploadAttachment = async (companyName, name, content) => {
-      const companyPath = `${rootPath}/${companyName}`
+    uploadAttachment = async (companyName, name, content, companyInfo) => {
+      const companyPath = companyInfo?.dropbox_folder_path || `${rootPath}/${companyName}`
       await findOrCreateDropboxFolder(accessToken, companyPath)
       await uploadDropboxFile(accessToken, companyPath, name, content)
     }
@@ -123,18 +123,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No matching emails found' }, { status: 404 })
   }
 
-  // Get company names for subfolder creation
+  // Get company info for subfolder creation
   const companyIds = Array.from(new Set(emails.map(e => e.company_id).filter(Boolean))) as string[]
-  const companiesMap: Record<string, string> = {}
+  const companiesMap: Record<string, { name: string; google_drive_folder_id: string | null; dropbox_folder_path: string | null }> = {}
 
   if (companyIds.length > 0) {
     const { data: companies } = await admin
       .from('companies')
-      .select('id, name')
+      .select('id, name, google_drive_folder_id, dropbox_folder_path')
       .in('id', companyIds)
 
     for (const c of companies ?? []) {
-      companiesMap[c.id] = c.name
+      companiesMap[c.id] = { name: c.name, google_drive_folder_id: c.google_drive_folder_id, dropbox_folder_path: c.dropbox_folder_path }
     }
   }
 
@@ -155,9 +155,8 @@ export async function POST(req: NextRequest) {
       // Hydrate attachments from Storage (downloads Content from email-attachments bucket)
       const payload = await hydrateAttachments(rawPayload as import('@/lib/parsing/extractAttachmentText').PostmarkPayload)
 
-      const companyName = email.company_id
-        ? companiesMap[email.company_id] ?? 'Unknown Company'
-        : 'Unidentified'
+      const companyInfo = email.company_id ? companiesMap[email.company_id] : null
+      const companyName = companyInfo?.name ?? (email.company_id ? 'Unknown Company' : 'Unidentified')
 
       const dateStr = new Date(email.received_at).toISOString().slice(0, 10)
       const subject = (((payload as Record<string, unknown>).Subject as string) ?? '')
@@ -165,7 +164,7 @@ export async function POST(req: NextRequest) {
         .slice(0, 60) || 'Report'
       const emailBody = (payload.TextBody as string) || (payload.HtmlBody as string) || '(no body)'
 
-      await uploadEmail(companyName, dateStr, subject, emailBody)
+      await uploadEmail(companyName, dateStr, subject, emailBody, companyInfo)
 
       const attachments = (payload.Attachments as Array<{
         Name: string
@@ -183,7 +182,7 @@ export async function POST(req: NextRequest) {
         try {
           const content = Buffer.from(att.Content, 'base64')
           console.log(`[save-to-drive] Uploading attachment "${att.Name}" (${content.length} bytes)`)
-          await uploadAttachment(companyName, att.Name, content)
+          await uploadAttachment(companyName, att.Name, content, companyInfo)
           attachmentsSaved++
         } catch (attErr) {
           attachmentErrors++

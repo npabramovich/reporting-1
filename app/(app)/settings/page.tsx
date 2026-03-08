@@ -208,6 +208,7 @@ export default function SettingsPage() {
 
           <GroupHeader label="Storage" />
           <StorageSection
+            fundId={settings.fundId}
             fileStorageProvider={settings.fileStorageProvider}
             googleDriveConnected={settings.googleDriveConnected}
             googleDriveFolderId={settings.googleDriveFolderId}
@@ -2098,12 +2099,14 @@ function GoogleConnectionUI({
 // ──────────────────────────── Google Drive ────────────────────────────
 
 function GoogleDriveSection({
+  fundId,
   connected,
   folderId,
   folderName,
   hasCredentials,
   onChanged,
 }: {
+  fundId: string
   connected: boolean
   folderId: string | null
   folderName: string | null
@@ -2339,6 +2342,230 @@ function GoogleDriveSection({
           {folderId ? 'Change folder' : 'Pick folder'}
         </Button>
       )}
+
+      {folderId && connected && (
+        <GoogleDriveCompanyFolders fundId={fundId} />
+      )}
+    </div>
+  )
+}
+
+function GoogleDriveCompanyFolders({ fundId }: { fundId: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const [companies, setCompanies] = useState<{ id: string; name: string; google_drive_folder_id: string | null; google_drive_folder_name: string | null }[]>([])
+  const [loading, setLoading] = useState(false)
+  const [pickerCompanyId, setPickerCompanyId] = useState<string | null>(null)
+  const [folders, setFolders] = useState<{ id: string; name: string }[]>([])
+  const [loadingFolders, setLoadingFolders] = useState(false)
+  const [breadcrumbs, setBreadcrumbs] = useState<{ id: string | null; name: string; shared?: boolean }[]>([{ id: null, name: 'My Drive' }])
+  const [browseMode, setBrowseMode] = useState<'my' | 'shared'>('my')
+  const [saving, setSaving] = useState<string | null>(null)
+  const [folderError, setFolderError] = useState<string | null>(null)
+
+  const loadCompanies = async () => {
+    setLoading(true)
+    const res = await fetch('/api/companies')
+    if (res.ok) {
+      const data = await res.json()
+      // Fetch full details for each company to get folder overrides
+      const detailed = await Promise.all(
+        data.map(async (c: { id: string; name: string }) => {
+          const r = await fetch(`/api/companies/${c.id}`)
+          if (r.ok) {
+            const d = await r.json()
+            return { id: d.id, name: d.name, google_drive_folder_id: d.google_drive_folder_id ?? null, google_drive_folder_name: d.google_drive_folder_name ?? null }
+          }
+          return { id: c.id, name: c.name, google_drive_folder_id: null, google_drive_folder_name: null }
+        })
+      )
+      setCompanies(detailed)
+    }
+    setLoading(false)
+  }
+
+  const handleExpand = () => {
+    if (!expanded) loadCompanies()
+    setExpanded(!expanded)
+  }
+
+  const loadFolders = async (parentId?: string, shared?: boolean) => {
+    setLoadingFolders(true)
+    setFolderError(null)
+    try {
+      let url = '/api/settings/drive/folders'
+      if (shared) url += '?shared=true'
+      else if (parentId) url += `?parent=${parentId}`
+      const res = await fetch(url)
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setFolderError(data.error || 'Failed to list folders')
+        return
+      }
+      const data = await res.json()
+      setFolders(data.folders ?? [])
+    } catch {
+      setFolderError('Failed to list folders')
+    } finally {
+      setLoadingFolders(false)
+    }
+  }
+
+  const openPicker = (companyId: string) => {
+    setPickerCompanyId(companyId)
+    setBrowseMode('my')
+    setBreadcrumbs([{ id: null, name: 'My Drive' }])
+    setFolderError(null)
+    loadFolders()
+  }
+
+  const selectFolder = async (companyId: string, folder: { id: string; name: string }) => {
+    setSaving(companyId)
+    const res = await fetch(`/api/companies/${companyId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ google_drive_folder_id: folder.id, google_drive_folder_name: folder.name }),
+    })
+    setSaving(null)
+    if (res.ok) {
+      setPickerCompanyId(null)
+      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, google_drive_folder_id: folder.id, google_drive_folder_name: folder.name } : c))
+    }
+  }
+
+  const clearFolder = async (companyId: string) => {
+    setSaving(companyId)
+    const res = await fetch(`/api/companies/${companyId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ google_drive_folder_id: null, google_drive_folder_name: null }),
+    })
+    setSaving(null)
+    if (res.ok) {
+      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, google_drive_folder_id: null, google_drive_folder_name: null } : c))
+    }
+  }
+
+  const navigateInto = (folder: { id: string; name: string }) => {
+    setBreadcrumbs(prev => [...prev, { id: folder.id, name: folder.name }])
+    loadFolders(folder.id)
+  }
+
+  const navigateToBreadcrumb = (index: number) => {
+    const crumb = breadcrumbs[index]
+    setBreadcrumbs(prev => prev.slice(0, index + 1))
+    if (crumb.shared) loadFolders(undefined, true)
+    else loadFolders(crumb.id ?? undefined)
+  }
+
+  return (
+    <div className="border-t pt-3 mt-3">
+      <button onClick={handleExpand} className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        Company Folders
+        <span className="font-normal">(optional overrides)</span>
+      </button>
+
+      {expanded && (
+        <div className="mt-2 space-y-1">
+          {loading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : companies.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2">No companies found.</p>
+          ) : (
+            <div className="border rounded-lg divide-y">
+              {companies.map(c => (
+                <div key={c.id} className="px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium truncate">{c.name}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {c.google_drive_folder_id ? (
+                        <>
+                          <span className="text-xs text-muted-foreground truncate max-w-[200px]">{c.google_drive_folder_name}</span>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => openPicker(c.id)} disabled={saving === c.id}>
+                            Change
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => clearFolder(c.id)} disabled={saving === c.id}>
+                            {saving === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs text-muted-foreground">Default (auto-created)</span>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => openPicker(c.id)}>
+                            Set folder
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {pickerCompanyId === c.id && (
+                    <div className="border rounded-lg p-3 mt-2 space-y-3">
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          onClick={() => { setBrowseMode('my'); setBreadcrumbs([{ id: null, name: 'My Drive' }]); loadFolders() }}
+                          className={`px-2 py-1 rounded ${browseMode === 'my' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                        >My Drive</button>
+                        <button
+                          onClick={() => { setBrowseMode('shared'); setBreadcrumbs([{ id: null, name: 'Shared with me', shared: true }]); loadFolders(undefined, true) }}
+                          className={`px-2 py-1 rounded ${browseMode === 'shared' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                        >Shared with me</button>
+                      </div>
+
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground flex-wrap">
+                        {breadcrumbs.map((crumb, i) => (
+                          <span key={i} className="flex items-center gap-1">
+                            {i > 0 && <ChevronRight className="h-3 w-3" />}
+                            <button onClick={() => navigateToBreadcrumb(i)} className={`hover:text-foreground ${i === breadcrumbs.length - 1 ? 'text-foreground font-medium' : ''}`}>
+                              {crumb.name}
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="border rounded max-h-36 overflow-y-auto">
+                        {loadingFolders ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : folders.length === 0 ? (
+                          <p className="text-xs text-muted-foreground text-center py-4">No folders found</p>
+                        ) : (
+                          folders.map(f => (
+                            <div key={f.id} className="flex items-center justify-between px-3 py-2 hover:bg-muted/50 group">
+                              <button className="flex items-center gap-2 text-sm flex-1 text-left" onClick={() => navigateInto(f)}>
+                                <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                                {f.name}
+                              </button>
+                              <Button size="sm" variant="ghost" className="opacity-0 group-hover:opacity-100 h-7 text-xs" onClick={() => selectFolder(c.id, f)} disabled={saving === c.id}>
+                                Select
+                              </Button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {folderError && (
+                        <p className="text-xs text-destructive flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" /> {folderError}
+                        </p>
+                      )}
+
+                      <div className="flex gap-2 justify-end">
+                        <Button size="sm" variant="outline" onClick={() => { setPickerCompanyId(null); setFolderError(null) }}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -2346,6 +2573,7 @@ function GoogleDriveSection({
 // ──────────────────────────── Storage ────────────────────────────
 
 function StorageSection({
+  fundId,
   fileStorageProvider,
   googleDriveConnected,
   googleDriveFolderId,
@@ -2358,6 +2586,7 @@ function StorageSection({
   dropboxFolderPath,
   onChanged,
 }: {
+  fundId: string
   fileStorageProvider: string | null
   googleDriveConnected: boolean
   googleDriveFolderId: string | null
@@ -2418,6 +2647,7 @@ function StorageSection({
         {selectedProvider === 'google_drive' && (
           <div className="border-t pt-4">
             <GoogleDriveSection
+              fundId={fundId}
               connected={googleDriveConnected}
               folderId={googleDriveFolderId}
               folderName={googleDriveFolderName}
@@ -2430,6 +2660,7 @@ function StorageSection({
         {selectedProvider === 'dropbox' && (
           <div className="border-t pt-4">
             <DropboxSection
+              fundId={fundId}
               connected={dropboxConnected}
               hasCredentials={hasDropboxCredentials}
               appKey={dropboxAppKey}
@@ -2446,12 +2677,14 @@ function StorageSection({
 // ──────────────────────────── Dropbox ────────────────────────────
 
 function DropboxSection({
+  fundId,
   connected,
   hasCredentials,
   appKey: existingAppKey,
   folderPath,
   onChanged,
 }: {
+  fundId: string
   connected: boolean
   hasCredentials: boolean
   appKey: string
@@ -2644,6 +2877,144 @@ function DropboxSection({
                 {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5 mr-1" />}
                 Disconnect
               </Button>
+            </div>
+          )}
+
+          {folderPath && (
+            <DropboxCompanyFolders fundId={fundId} />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DropboxCompanyFolders({ fundId }: { fundId: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const [companies, setCompanies] = useState<{ id: string; name: string; dropbox_folder_path: string | null }[]>([])
+  const [loading, setLoading] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editPath, setEditPath] = useState('')
+  const [saving, setSaving] = useState<string | null>(null)
+
+  const loadCompanies = async () => {
+    setLoading(true)
+    const res = await fetch('/api/companies')
+    if (res.ok) {
+      const data = await res.json()
+      const detailed = await Promise.all(
+        data.map(async (c: { id: string; name: string }) => {
+          const r = await fetch(`/api/companies/${c.id}`)
+          if (r.ok) {
+            const d = await r.json()
+            return { id: d.id, name: d.name, dropbox_folder_path: d.dropbox_folder_path ?? null }
+          }
+          return { id: c.id, name: c.name, dropbox_folder_path: null }
+        })
+      )
+      setCompanies(detailed)
+    }
+    setLoading(false)
+  }
+
+  const handleExpand = () => {
+    if (!expanded) loadCompanies()
+    setExpanded(!expanded)
+  }
+
+  const startEdit = (companyId: string, currentPath: string | null) => {
+    setEditingId(companyId)
+    setEditPath(currentPath || '')
+  }
+
+  const savePath = async (companyId: string) => {
+    setSaving(companyId)
+    const res = await fetch(`/api/companies/${companyId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dropbox_folder_path: editPath.trim() || null }),
+    })
+    setSaving(null)
+    if (res.ok) {
+      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, dropbox_folder_path: editPath.trim() || null } : c))
+      setEditingId(null)
+    }
+  }
+
+  const clearPath = async (companyId: string) => {
+    setSaving(companyId)
+    const res = await fetch(`/api/companies/${companyId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dropbox_folder_path: null }),
+    })
+    setSaving(null)
+    if (res.ok) {
+      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, dropbox_folder_path: null } : c))
+    }
+  }
+
+  return (
+    <div className="border-t pt-3 mt-3">
+      <button onClick={handleExpand} className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        Company Folders
+        <span className="font-normal">(optional overrides)</span>
+      </button>
+
+      {expanded && (
+        <div className="mt-2 space-y-1">
+          {loading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : companies.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2">No companies found.</p>
+          ) : (
+            <div className="border rounded-lg divide-y">
+              {companies.map(c => (
+                <div key={c.id} className="px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium truncate">{c.name}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {editingId === c.id ? (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            value={editPath}
+                            onChange={(e) => setEditPath(e.target.value)}
+                            placeholder="/Custom/Path"
+                            className="h-7 text-xs w-48"
+                            onKeyDown={(e) => { if (e.key === 'Enter') savePath(c.id) }}
+                          />
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => savePath(c.id)} disabled={saving === c.id}>
+                            {saving === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingId(null)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : c.dropbox_folder_path ? (
+                        <>
+                          <span className="text-xs text-muted-foreground truncate max-w-[200px]">{c.dropbox_folder_path}</span>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => startEdit(c.id, c.dropbox_folder_path)}>
+                            Change
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => clearPath(c.id)} disabled={saving === c.id}>
+                            {saving === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs text-muted-foreground">Default (auto-created)</span>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => startEdit(c.id, null)}>
+                            Set path
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

@@ -330,6 +330,9 @@ export type Database = {
           current_update: string | null
           contact_email: string[] | null
           portfolio_group: string[] | null
+          google_drive_folder_id: string | null
+          google_drive_folder_name: string | null
+          dropbox_folder_path: string | null
           created_at: string
           updated_at: string
         }
@@ -350,6 +353,9 @@ export type Database = {
           current_update?: string | null
           contact_email?: string[] | null
           portfolio_group?: string[] | null
+          google_drive_folder_id?: string | null
+          google_drive_folder_name?: string | null
+          dropbox_folder_path?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -370,6 +376,9 @@ export type Database = {
           current_update?: string | null
           contact_email?: string[] | null
           portfolio_group?: string[] | null
+          google_drive_folder_id?: string | null
+          google_drive_folder_name?: string | null
+          dropbox_folder_path?: string | null
           created_at?: string
           updated_at?: string
         }
