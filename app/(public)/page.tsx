@@ -25,7 +25,7 @@ export default function HomePage() {
   return (
     <div className="p-4 pt-6 md:p-8">
       <h1 className="text-4xl md:text-7xl font-semibold tracking-tight mb-2 max-w-3xl">
-        Track your portfolio. Forward updates.<br className="hidden md:block" /> Analyst does the rest.
+        Forward updates.<br /> Import data.<br /> Analyst does the rest.
       </h1>
       <p className="text-xl text-muted-foreground mb-8 max-w-2xl">
         Source-available portfolio reporting for venture capital firms, accelerators, and angel investors.
@@ -135,6 +135,25 @@ export default function HomePage() {
       <section className="mb-12 mt-12">
         <h2 className="text-2xl font-semibold tracking-tight mb-6">Common Questions</h2>
         <div className="space-y-1">
+          <details className="group">
+            <summary className="flex cursor-pointer items-center gap-3 py-3 text-lg font-medium [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
+              Why are you building this?
+            </summary>
+            <p className="pl-7 pb-3 text-base text-muted-foreground">
+              I&apos;ve worked as an investor, CFO, and consultant for funds for over a decade and have
+              experienced first hand the problems with manually collecting, analyzing, and presenting
+              quantitative and qualitative data about the performance and forecasts for funds and their
+              portfolio investments. At the same time, I am not interested in adding another SaaS app
+              to the mix of operating systems in the private investment space, and am looking to provide
+              tools to help investors and fund operators better solutions to build and manage their own
+              solutions, just like I have done with{' '}
+              <a href="https://www.hemrock.com/downloads" className="underline hover:text-foreground">
+                financial model templates
+              </a>
+              , but evolved for today&apos;s technologies.
+            </p>
+          </details>
           <details className="group">
             <summary className="flex cursor-pointer items-center gap-3 py-3 text-lg font-medium [&::-webkit-details-marker]:hidden">
               <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
@@ -257,7 +276,7 @@ export default function HomePage() {
                 <a href="https://www.hemrock.com" className="underline hover:text-foreground">
                   Hemrock
                 </a>{' '}
-                (formerly Foresight). Fractional Chief Financial Officer for{' '}
+                (formerly Foresight). Chief Financial Officer (fractional) for{' '}
                 <a href="https://laconiacapitalgroup.com" className="underline hover:text-foreground">
                   Laconia Capital Group
                 </a>
@@ -276,7 +295,7 @@ export default function HomePage() {
               <a href="https://www.hemrock.com" className="underline hover:text-foreground">
                 Hemrock
               </a>{' '}
-              (formerly Foresight). Fractional Chief Financial Officer for{' '}
+              (formerly Foresight). Chief Financial Officer (fractional) for{' '}
               <a href="https://laconiacapitalgroup.com" className="underline hover:text-foreground">
                 Laconia Capital Group
               </a>
@@ -295,7 +314,7 @@ export default function HomePage() {
           >
             <Lightbulb className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <p className="text-[0.9375rem] leading-relaxed text-muted-foreground">
-              Need a fractional CFO?{' '}
+              Work with an experienced fractional CFO on a flexible basis.{' '}
               <span className="text-foreground underline underline-offset-4">Learn more here</span>.
             </p>
           </a>

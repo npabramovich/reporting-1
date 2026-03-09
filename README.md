@@ -31,7 +31,7 @@ The Portfolio page is the main dashboard and your starting point for monitoring 
 
 Filter by portfolio group and sort by name, cash position, or other criteria. A shared notes section at the bottom lets team members post fund-level observations — market commentary, cross-portfolio themes, reminders for the next IC meeting.
 
-![Portfolio Dashboard](docs/screenshots/dashboard.png)
+![Portfolio Dashboard](public/screenshots/dashboard.png)
 
 ### Company Detail
 
@@ -47,7 +47,7 @@ The **Investments section** tracks the fund's transaction history with the compa
 
 A **notes panel** on the right side lets your team leave company-specific observations visible to all members.
 
-![Company Detail](docs/screenshots/company.png)
+![Company Detail](public/screenshots/company.png)
 
 ## Review
 
@@ -57,7 +57,7 @@ Each review item shows the issue type, the extracted value, and context from the
 
 The review badge in the sidebar shows how many items are waiting. Once all items for an email are resolved, its status moves to "success." The system is designed to err on the side of flagging rather than silently writing bad data.
 
-![Review Queue](docs/screenshots/review.png)
+![Review Queue](public/screenshots/review.png)
 
 ## Inbound
 
@@ -67,9 +67,9 @@ If an email failed processing, you can see the error in the detail view. For ema
 
 If file storage is connected (Google Drive or Dropbox), emails and attachments are saved into company-specific folders automatically.
 
-![Inbound](docs/screenshots/inbound.png)
+![Inbound](public/screenshots/inbound.png)
 
-![Email Detail](docs/screenshots/email-detail.png)
+![Email Detail](public/screenshots/email-detail.png)
 
 ## Import
 
@@ -81,7 +81,7 @@ Investment transaction data can also be pasted — rounds, proceeds, valuations,
 
 Fund cash flow data (commitments, called capital, distributions) can be pasted in freeform format — the AI parses dates, amounts, flow types, and portfolio group assignments automatically.
 
-![Import](docs/screenshots/import.png)
+![Import](public/screenshots/import.png)
 
 ## Investments
 
@@ -93,7 +93,7 @@ The Investments page provides a fund-level view of all investment transactions a
 
 Realized/Cost MOIC is calculated as realized proceeds divided by the cost basis exited. Unrealized/Cost MOIC is unrealized value divided by current cost (total invested minus cost basis exited). These provide a more precise view of returns relative to the capital actually at work, rather than total invested capital.
 
-![Investments](docs/screenshots/investments.png)
+![Investments](public/screenshots/investments.png)
 
 ## Funds
 
@@ -113,7 +113,7 @@ Key calculations:
 
 Cash flow data can be bulk-imported from the Import page using freeform text — the AI parses dates, amounts, types, and group assignments automatically.
 
-![Funds](docs/screenshots/funds.png)
+![Funds](public/screenshots/funds.png)
 
 ## LP Letters
 
@@ -129,7 +129,7 @@ LP Letters helps you generate quarterly update letters for your limited partners
 
 **Export** — export the finished letter as a .docx file for final formatting and distribution. If Google Drive is connected, export directly to Drive.
 
-![LP Letters](docs/screenshots/letters.png)
+![LP Letters](public/screenshots/letters.png)
 
 ## Asks
 
@@ -137,7 +137,7 @@ Asks lets you send reporting request emails to portfolio companies. Compose a me
 
 The email composer supports a customizable subject and body. Each request is logged with its recipient list, send timestamp, and delivery results. When companies reply to your ask email with their report, those replies flow into the Inbound pipeline automatically.
 
-![Asks](docs/screenshots/asks.png)
+![Asks](public/screenshots/asks.png)
 
 ## Analyst
 
@@ -163,7 +163,7 @@ Notes support **@mentions** — type @ while writing to see a dropdown of team m
 
 Team notes are also fed into the Analyst as context, so the Analyst is aware of your team's discussions when answering questions.
 
-![Notes](docs/screenshots/notes.png)
+![Notes](public/screenshots/notes.png)
 
 ## Interactions
 
@@ -175,7 +175,7 @@ The Interactions page shows all logged interactions with filter tabs for **All**
 
 On each company's detail page, a **Recent Interactions** section shows the latest interactions for that company, with intro entries highlighted. The fund's inbound email address is shown at the top of the Interactions page for easy copy-and-paste into BCC.
 
-![Interactions](docs/screenshots/interactions.png)
+![Interactions](public/screenshots/interactions.png)
 
 ## Settings
 
@@ -183,7 +183,7 @@ Settings is where the platform is configured. Most settings are admin-only, but 
 
 For admins, Settings covers: AI provider keys and model selection (Anthropic, OpenAI, Google Gemini, and/or Ollama for local models), fund currency, feature visibility (control which features are visible to everyone, admin-only, hidden, or off), inbound email setup (Postmark or Mailgun), outbound email providers (Gmail, Resend, Postmark, or Mailgun), file storage connections (Google Drive or Dropbox), the AI summary prompt, email templates for reporting asks, analytics (Fathom, Google Analytics, and custom scripts), authorized senders, team members and roles, and the signup allow-list. The current app version is shown at the bottom of Settings, with a link to the Updates page when a newer version is available.
 
-![Settings](docs/screenshots/settings.png)
+![Settings](public/screenshots/settings.png)
 
 ### AI Providers
 

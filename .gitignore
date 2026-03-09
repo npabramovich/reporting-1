@@ -40,7 +40,6 @@ supabase/.branches
 supabase/.temp
 
 # local development plans
-/docs/*
-!/docs/screenshots
+/docs
 
 .env.production
