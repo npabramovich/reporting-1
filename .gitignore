@@ -24,6 +24,7 @@ yarn-error.log*
 .env
 .env*.local
 .env.local
+.env.production
 
 # google credentials
 credentials.json
@@ -41,5 +42,3 @@ supabase/.temp
 
 # local development plans
 /docs
-
-.env.production
