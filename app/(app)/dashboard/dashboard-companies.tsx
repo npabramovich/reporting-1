@@ -21,6 +21,9 @@ interface Company {
   metricsCount: number
   sparkMetrics: { id: string; name: string; unit: string | null; unit_position: string; value_type: string; currency: string | null; display_order: number; is_active: boolean }[]
   latestCash: number | null
+  moic: number | null
+  grossIrr: number | null
+  totalInvested: number | null
 }
 
 interface Props {
@@ -253,18 +256,40 @@ function CompanyGrid({ companies }: { companies: Company[] }) {
             )}
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
-            {c.lastReportAt && (
-              <span>Last report {new Date(c.lastReportAt).toLocaleDateString()}</span>
-            )}
-            <span>{c.metricsCount} metric{c.metricsCount !== 1 ? 's' : ''}</span>
-          </div>
+          {c.status === 'written-off' ? (
+            <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+              {c.lastReportAt && (
+                <span>Last report {new Date(c.lastReportAt).toLocaleDateString()}</span>
+              )}
+              <span>Written Off</span>
+              {c.totalInvested != null && c.totalInvested > 0 && (
+                <span>${c.totalInvested.toLocaleString()}</span>
+              )}
+            </div>
+          ) : c.status === 'exited' ? (
+            <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+              {c.lastReportAt && (
+                <span>Last report {new Date(c.lastReportAt).toLocaleDateString()}</span>
+              )}
+              <span>MOIC: {c.moic != null ? `${c.moic.toFixed(2)}x` : '—'}</span>
+              <span>IRR: {c.grossIrr != null ? `${(c.grossIrr * 100).toFixed(1)}%` : '—'}</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
+                {c.lastReportAt && (
+                  <span>Last report {new Date(c.lastReportAt).toLocaleDateString()}</span>
+                )}
+                <span>{c.metricsCount} metric{c.metricsCount !== 1 ? 's' : ''}</span>
+              </div>
 
-          {c.sparkMetrics.length > 0 && (
-            <DashboardSparklines
-              companyId={c.id}
-              metrics={c.sparkMetrics}
-            />
+              {c.sparkMetrics.length > 0 && (
+                <DashboardSparklines
+                  companyId={c.id}
+                  metrics={c.sparkMetrics}
+                />
+              )}
+            </>
           )}
         </Link>
       ))}

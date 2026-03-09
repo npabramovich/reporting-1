@@ -17,11 +17,11 @@ export default function HomePage() {
   return (
     <div className="p-4 md:p-8">
       <h1 className="text-4xl md:text-7xl font-semibold tracking-tight mb-2 max-w-3xl">
-        Track your portfolio. Forward updates.<br className="hidden md:block" /> AI does the rest.
+        Track your portfolio. Forward updates.<br className="hidden md:block" /> Analyst does the rest.
       </h1>
       <p className="text-xl text-muted-foreground mb-8 max-w-2xl">
         Source-available portfolio reporting for venture capital firms, accelerators, and angel investors.
-        Forward your investor updates, and AI does the rest.
+        Forward or upload your investor updates, and Analyst does the rest.
       </p>
 
       {/* Feature cards */}

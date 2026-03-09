@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { computeSummary } from '@/lib/investments'
+import type { InvestmentTransaction, CompanyStatus } from '@/lib/types/database'
 
 export const metadata: Metadata = { title: 'Portfolio' }
 import { DashboardCompanies } from './dashboard-companies'
@@ -101,10 +104,52 @@ export default async function DashboardPage() {
     }
   })
 
-  const allGroups = Array.from(new Set(companies.flatMap(c => c.portfolioGroup ?? []))).sort()
+  // Fetch MOIC & IRR for exited / written-off companies
+  const exitedIds = companies
+    .filter(c => c.status === 'exited' || c.status === 'written-off')
+    .map(c => c.id)
+
+  const investmentSummaries = new Map<string, { moic: number | null; grossIrr: number | null; totalInvested: number }>()
+
+  if (exitedIds.length > 0) {
+    const admin = createAdminClient()
+    const { data: allTxns } = await admin
+      .from('investment_transactions' as any)
+      .select('*')
+      .in('company_id', exitedIds)
+      .order('transaction_date', { ascending: true }) as { data: InvestmentTransaction[] | null }
+
+    // Group transactions by company
+    const txnsByCompany = new Map<string, InvestmentTransaction[]>()
+    for (const txn of allTxns ?? []) {
+      if (!txnsByCompany.has(txn.company_id)) txnsByCompany.set(txn.company_id, [])
+      txnsByCompany.get(txn.company_id)!.push(txn)
+    }
+
+    for (const id of exitedIds) {
+      const txns = txnsByCompany.get(id) ?? []
+      const status = companies.find(c => c.id === id)!.status as CompanyStatus
+      if (txns.length > 0) {
+        const summary = computeSummary(txns, status)
+        investmentSummaries.set(id, { moic: summary.moic, grossIrr: summary.grossIrr, totalInvested: summary.totalInvested })
+      } else {
+        investmentSummaries.set(id, { moic: null, grossIrr: null, totalInvested: 0 })
+      }
+    }
+  }
+
+  // Attach MOIC & IRR to company objects
+  const companiesWithInvestments = companies.map(c => ({
+    ...c,
+    moic: investmentSummaries.get(c.id)?.moic ?? null,
+    grossIrr: investmentSummaries.get(c.id)?.grossIrr ?? null,
+    totalInvested: investmentSummaries.get(c.id)?.totalInvested ?? null,
+  }))
+
+  const allGroups = Array.from(new Set(companiesWithInvestments.flatMap(c => c.portfolioGroup ?? []))).sort()
 
   return (
-    <DashboardNotesLayout userId={user.id} isAdmin={isAdmin} companies={companies.map(c => ({ id: c.id, name: c.name }))}>
+    <DashboardNotesLayout userId={user.id} isAdmin={isAdmin} companies={companiesWithInvestments.map(c => ({ id: c.id, name: c.name }))}>
     <div className="p-4 md:py-8 md:pl-8 md:pr-4">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Portfolio Overview</h1>
@@ -116,7 +161,7 @@ export default async function DashboardPage() {
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 max-w-7xl w-full">
-          <DashboardCompanies companies={companies} allGroups={allGroups} />
+          <DashboardCompanies companies={companiesWithInvestments} allGroups={allGroups} />
         </div>
         <DashboardNotesPanel />
         <AnalystPanel />
