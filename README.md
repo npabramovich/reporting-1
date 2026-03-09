@@ -1,8 +1,6 @@
-# Fund Portfolio Reporting
+![Public Home Page](public/screenshots/home.png)
 
-Portfolio reporting for venture capital firms, accelerators, and angel investors. Forward your investor updates in any format — PDF, Excel, PowerPoint, plain text — and AI identifies the company, extracts the metrics you care about, and creates an analysis of the current state of the company. Track investments at a per company, per fund, and overall perspective alongside your fund administrator. Lightweight CRM to track your intros, strategy guidance, qualitative value-adds. Complete your limited partner reporting process faster, easier, and better.
-
-Built by Taylor Davidson at [Hemrock](https://www.hemrock.com). For setup assistance, managed deployments, or general questions, [contact Taylor](https://www.hemrock.com/contact).
+Portfolio reporting for venture capital firms, accelerators, and angel investors. Forward your investor updates in any format — PDF, Excel, PowerPoint, plain text — and AI identifies the company, extracts the metrics you care about, and creates an analysis of the current state of the company. Track investments at a per company, per fund, and overall perspective alongside your fund administrator. Lightweight CRM to track your intros, strategy guidance, qualitative value-adds. Complete your limited partner reporting process faster, easier, and better. Built by Taylor Davidson of [Hemrock](https://www.hemrock.com).
 
 **[Try the demo](https://portfolio.hemrock.com/demo)** — explore the platform with sample data, no signup required.
 
@@ -10,12 +8,11 @@ Built by Taylor Davidson at [Hemrock](https://www.hemrock.com). For setup assist
 
 Self-hosted, operating this for yourself, this software is free to use if you are a single fund management company running your own operations — that includes all of your funds, SPVs, and internal team members. You can modify it and deploy it on your own infrastructure and on your own domain.
 
-Managed deployments are available, [contact Taylor](https://www.hemrock.com/contact) if you want him to deploy this on your infrastructure and your accounts.
+Managed deployments are available, [contact Taylor](https://portfolio.hemrock.com/contact) if you want him to deploy this on your infrastructure and your accounts.
 
 If you are a fund administrator, outsourced CFO, consultant, or service provider using this across multiple clients, you need a paid commercial license. You cannot resell it, white-label it, offer it as SaaS, or bundle it into another product.
 
-See [LICENSE](LICENSE) for full terms. For commercial licensing, [contact Taylor](https://www.hemrock.com/contact).
-
+See [LICENSE](LICENSE) for full terms. For commercial licensing, [contact Taylor](https://portfolio.hemrock.com/contact).
 
 ## How It Works
 
