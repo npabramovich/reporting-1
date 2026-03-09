@@ -451,11 +451,11 @@ const INTERACTIONS: InteractionDef[] = [
   {
     companyName: 'NovaTech',
     tags: ['intro'],
-    subject: 'Intro: Sarah Chen <> David Park (VP Sales, Datadog)',
-    summary: 'Introduction between Sarah Chen (NovaTech CEO) and David Park (VP Sales at Datadog) to discuss enterprise sales motion and playbook for scaling from $3M to $10M ARR.',
-    body_preview: 'Sarah, David — connecting you two as discussed. David has scaled Datadog\'s mid-market sales team from 5 to 50 reps and has great perspective on the $3-10M ARR journey...',
+    subject: 'Intro: Sarah Chen <> David Park (VP Sales, AcmeCorp)',
+    summary: 'Introduction between Sarah Chen (NovaTech CEO) and David Park (VP Sales at AcmeCorp) to discuss enterprise sales motion and playbook for scaling from $3M to $10M ARR.',
+    body_preview: 'Sarah, David — connecting you two as discussed. David has scaled AcmeCorp\'s mid-market sales team from 5 to 50 reps and has great perspective on the $3-10M ARR journey...',
     intro_contacts: [
-      { name: 'David Park', email: 'david.park@datadog.com', context: 'VP Sales at Datadog, experienced in scaling mid-market sales teams' },
+      { name: 'David Park', email: 'david.park@acmecorp.example.com', context: 'VP Sales at AcmeCorp, experienced in scaling mid-market sales teams' },
     ],
     days_ago: 22,
   },
@@ -470,11 +470,11 @@ const INTERACTIONS: InteractionDef[] = [
   {
     companyName: 'RouteWise',
     tags: ['intro'],
-    subject: 'Intro: James Okafor <> Maria Santos (COO, Flexport)',
-    summary: 'Introduction between James Okafor (RouteWise CEO) and Maria Santos (COO at Flexport) to explore potential partnership for last-mile delivery optimization.',
-    body_preview: 'James, Maria — making this intro as promised. Maria\'s team at Flexport is looking at last-mile optimization partners and I think there could be a strong fit...',
+    subject: 'Intro: James Okafor <> Maria Santos (COO, GlobalFreight)',
+    summary: 'Introduction between James Okafor (RouteWise CEO) and Maria Santos (COO at GlobalFreight) to explore potential partnership for last-mile delivery optimization.',
+    body_preview: 'James, Maria — making this intro as promised. Maria\'s team at GlobalFreight is looking at last-mile optimization partners and I think there could be a strong fit...',
     intro_contacts: [
-      { name: 'Maria Santos', email: 'maria.santos@flexport.com', context: 'COO at Flexport, exploring last-mile delivery partnerships' },
+      { name: 'Maria Santos', email: 'maria.santos@globalfreight.example.com', context: 'COO at GlobalFreight, exploring last-mile delivery partnerships' },
     ],
     days_ago: 35,
   },
@@ -483,7 +483,7 @@ const INTERACTIONS: InteractionDef[] = [
     tags: [],
     subject: 'Re: Customer expansion update',
     summary: 'Emily shared that three large enterprise prospects are in late-stage trials. Discussed pricing strategy for annual contracts above $200K and whether to offer multi-year discounts.',
-    body_preview: 'Quick update — we have Stripe, Notion, and Figma all in week 3 of their trials. Usage metrics look strong across all three. Wanted to discuss pricing...',
+    body_preview: 'Quick update — we have three large accounts all in week 3 of their trials. Usage metrics look strong across all three. Wanted to discuss pricing...',
     days_ago: 11,
   },
   {
@@ -497,11 +497,11 @@ const INTERACTIONS: InteractionDef[] = [
   {
     companyName: 'TapFin',
     tags: ['intro'],
-    subject: 'Intro: Kemi Adeyemi <> Rachel Kim (Stripe Atlas)',
-    summary: 'Connected Kemi with Rachel Kim from Stripe Atlas to discuss cross-border payment infrastructure and potential integration for TapFin\'s merchant onboarding flow.',
-    body_preview: 'Kemi, Rachel — making this intro. Rachel runs partnerships at Stripe Atlas and I think there is a natural fit with TapFin\'s merchant onboarding...',
+    subject: 'Intro: Kemi Adeyemi <> Rachel Kim (PayBridge)',
+    summary: 'Connected Kemi with Rachel Kim from PayBridge to discuss cross-border payment infrastructure and potential integration for TapFin\'s merchant onboarding flow.',
+    body_preview: 'Kemi, Rachel — making this intro. Rachel runs partnerships at PayBridge and I think there is a natural fit with TapFin\'s merchant onboarding...',
     intro_contacts: [
-      { name: 'Rachel Kim', email: 'rachel@stripe.com', context: 'Head of Partnerships at Stripe Atlas, focused on emerging market payment infrastructure' },
+      { name: 'Rachel Kim', email: 'rachel@paybridge.example.com', context: 'Head of Partnerships at PayBridge, focused on emerging market payment infrastructure' },
     ],
     days_ago: 40,
   },
@@ -516,11 +516,11 @@ const INTERACTIONS: InteractionDef[] = [
   {
     companyName: 'Lattis',
     tags: ['intro'],
-    subject: 'Intro: Elena Vasquez <> Chris Nguyen (CTO, Scale AI)',
-    summary: 'Introduction between Elena Vasquez (Lattis founder) and Chris Nguyen (CTO at Scale AI) to discuss potential design partnership on multimodal embeddings for enterprise RAG use cases.',
-    body_preview: 'Elena, Chris — connecting you two. Chris\'s team at Scale is working on multimodal data pipelines and I think Lattis\'s embedding framework could be a great fit...',
+    subject: 'Intro: Elena Vasquez <> Chris Nguyen (CTO, ApexData)',
+    summary: 'Introduction between Elena Vasquez (Lattis founder) and Chris Nguyen (CTO at ApexData) to discuss potential design partnership on multimodal embeddings for enterprise RAG use cases.',
+    body_preview: 'Elena, Chris — connecting you two. Chris\'s team at ApexData is working on multimodal data pipelines and I think Lattis\'s embedding framework could be a great fit...',
     intro_contacts: [
-      { name: 'Chris Nguyen', email: 'chris.nguyen@scale.ai', context: 'CTO at Scale AI, working on multimodal data pipelines for enterprise AI' },
+      { name: 'Chris Nguyen', email: 'chris.nguyen@apexdata.example.com', context: 'CTO at ApexData, working on multimodal data pipelines for enterprise AI' },
     ],
     days_ago: 30,
   },
@@ -543,11 +543,11 @@ const INTERACTIONS: InteractionDef[] = [
   {
     companyName: 'AdVantage',
     tags: ['intro'],
-    subject: 'Intro: Jamie Lin <> Sam Patel (Head of Growth, HubSpot)',
-    summary: 'Connected Jamie with Sam Patel at HubSpot to discuss potential integration partnership and co-marketing for ad creative optimization in the SMB segment.',
-    body_preview: 'Jamie, Sam — connecting you two as discussed at dinner last week. Sam\'s team is looking for creative optimization partners for HubSpot\'s ad tools...',
+    subject: 'Intro: Jamie Lin <> Sam Patel (Head of Growth, GrowthStack)',
+    summary: 'Connected Jamie with Sam Patel at GrowthStack to discuss potential integration partnership and co-marketing for ad creative optimization in the SMB segment.',
+    body_preview: 'Jamie, Sam — connecting you two as discussed at dinner last week. Sam\'s team is looking for creative optimization partners for GrowthStack\'s ad tools...',
     intro_contacts: [
-      { name: 'Sam Patel', email: 'sam.patel@hubspot.com', context: 'Head of Growth at HubSpot, exploring ad tech integration partners' },
+      { name: 'Sam Patel', email: 'sam.patel@growthstack.example.com', context: 'Head of Growth at GrowthStack, exploring ad tech integration partners' },
     ],
     days_ago: 28,
   },

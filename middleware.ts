@@ -31,10 +31,10 @@ export async function middleware(request: NextRequest) {
   const isAuthRoute = pathname.startsWith('/auth')
   const isApiRoute = pathname.startsWith('/api')
 
-  // Marketing site routes require both env vars to be enabled
+  // Marketing site routes require both env vars to be set
   const marketingEnabled =
     process.env.NEXT_PUBLIC_ENABLE_MARKETING_SITE === 'true' &&
-    process.env.MARKETING_DEPLOYMENT_KEY === 'a8fd65f6e4411446686446cf36edd1ce'
+    !!process.env.MARKETING_DEPLOYMENT_KEY
 
   const isMarketingRoute = pathname === '/' || pathname === '/license' || pathname === '/demo' || pathname === '/contact' || pathname === '/terms' || pathname === '/privacy' || pathname === '/pricing' || pathname.endsWith('-explainer')
   const isPublicRoute = marketingEnabled && isMarketingRoute
