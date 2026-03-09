@@ -25,7 +25,7 @@ export default function HomePage() {
   return (
     <div className="p-4 pt-6 md:p-8">
       <h1 className="text-4xl md:text-7xl font-semibold tracking-tight mb-2 max-w-3xl">
-        Forward updates.<br /> Import portfolio data.<br /> Analyst does the rest.
+        Forward updates.<br /> Track your portfolio.<br /> Analyst does the rest.
       </h1>
       <p className="text-xl text-muted-foreground mb-8 max-w-2xl">
         Source-available portfolio reporting for venture capital firms, accelerators, and angel investors.
