@@ -27,7 +27,7 @@ export default function SupportPage() {
       <li><a href="#letters" className="hover:text-foreground underline underline-offset-4">Letters</a></li>
       <li><a href="#lps" className="hover:text-foreground underline underline-offset-4">LPs</a></li>
       <li className="pl-4"><a href="#lp-snapshots" className="hover:text-foreground underline underline-offset-4">Snapshots</a></li>
-      <li className="pl-4"><a href="#lp-gp-entity-ownership" className="hover:text-foreground underline underline-offset-4">GP Entity Ownership</a></li>
+      <li className="pl-4"><a href="#lp-gp-entity-ownership" className="hover:text-foreground underline underline-offset-4">Entity Ownership Detail</a></li>
       <li><a href="#usage" className="hover:text-foreground underline underline-offset-4">Usage</a></li>
       <li><a href="#analyst" className="hover:text-foreground underline underline-offset-4">Analyst</a></li>
       <li><a href="#file-handling" className="hover:text-foreground underline underline-offset-4">File Handling &amp; Security</a></li>
@@ -738,11 +738,11 @@ export default function SupportPage() {
           </h2>
           <p className="text-muted-foreground mb-2">
             LPs helps you track and report on your limited partner positions across snapshots. Import LP data
-            from spreadsheets, view aggregated metrics per investor, generate individual investor reports as PDFs,
-            and export the full dataset to Excel.
+            from spreadsheets using AI-powered parsing, view aggregated metrics per investor, generate individual
+            investor reports as PDFs, and export the full dataset to Excel.
           </p>
           <p className="text-muted-foreground mb-2">
-            The LPs index page lists all snapshots and provides fund-level configuration for GP Entity Ownership mappings.
+            The LPs index page lists all snapshots and provides an optional fund-level Entity Ownership Detail section.
             Click a snapshot to view the detail page with investor data, summary cards, and the full investor table.
           </p>
 
@@ -758,7 +758,9 @@ export default function SupportPage() {
               <strong>Investor table</strong> &mdash; the snapshot detail page shows all investors with
               aggregated metrics. Expand an investor to see individual entity and portfolio group line items.
               All values are inline-editable: click a row to edit metrics, or click an investor name to rename.
-              Investors can be grouped under a parent for consolidated reporting.
+              Investors can be grouped under a parent for consolidated reporting, and duplicate investors
+              can be merged together. GP entity investors (configured in Entity Ownership Detail) are
+              automatically excluded from snapshot totals to avoid double-counting.
             </p>
             <p className="text-muted-foreground mb-2">
               <strong>Portfolio group filter</strong> &mdash; when a snapshot has multiple portfolio groups,
@@ -780,23 +782,24 @@ export default function SupportPage() {
           </div>
 
           <div id="lp-gp-entity-ownership">
-            <h3 className="text-sm font-medium mb-1 mt-4">GP Entity Ownership</h3>
+            <h3 className="text-sm font-medium mb-1 mt-4">Entity Ownership Detail</h3>
             <p className="text-muted-foreground mb-2">
-              This optional section on the LPs index page lets you map investor entities to GP-managed entities
-              (such as an associates or co-invest vehicle) and define ownership percentages. This is useful when
-              individual investors own pro-rata shares of a GP entity that itself holds positions in the fund&apos;s
-              portfolio groups.
+              This optional section on the LPs index page (under a collapsible &ldquo;Optional: Entity Ownership
+              Detail&rdquo; disclosure) lets you map investor entities to GP-managed entities (such as an associates
+              or co-invest vehicle) and define ownership percentages. This is useful when individual investors own
+              pro-rata shares of a GP entity that itself holds positions in the fund&apos;s portfolio groups.
             </p>
             <p className="text-muted-foreground mb-2">
-              For each mapping, specify the <strong>investor entity</strong> name, the <strong>associates entity</strong> name,
-              and optionally an <strong>ownership percentage</strong> (if left blank, ownership is computed automatically
-              from the investor&apos;s commitment relative to the total). You can also set a <strong>carried interest
-              percentage</strong> to reduce the investor&apos;s pro-rata share by the GP&apos;s carry on gains.
+              For each mapping, specify the <strong>investor entity</strong> name, the <strong>GP entity</strong> name,
+              and optionally an <strong>ownership percentage</strong> and <strong>carried interest percentage</strong>.
+              The investor entity and GP entity text fields autocomplete from entities and investors already entered
+              in your snapshots.
             </p>
             <p className="text-muted-foreground">
-              After configuring mappings, use the <strong>Recalculate</strong> button on any snapshot detail page
-              to compute and upsert the pro-rata investment metrics for each mapped investor. This persists across
-              snapshots &mdash; configure once, then recalculate on each new snapshot.
+              When Entity Ownership Detail mappings are configured, the snapshot detail page automatically excludes
+              GP entity investors from the snapshot totals to avoid double-counting &mdash; since those positions are
+              already reflected via the individual investors&apos; pro-rata shares. GP entity investors still appear
+              in the investor table but are not included in the aggregate totals row.
             </p>
           </div>
         </div>
