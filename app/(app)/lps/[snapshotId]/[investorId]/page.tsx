@@ -348,13 +348,13 @@ export default function InvestorReportPage() {
               <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Capital Summary</h3>
               <table className="w-full text-xs mb-5" style={{ tableLayout: 'fixed' }}>
                 <colgroup>
-                  <col style={{ width: '19.5%' }} />
-                  <col style={{ width: '25.5%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '19.75%' }} />
+                  <col style={{ width: '27.75%' }} />
+                  <col style={{ width: '10.5%' }} />
+                  <col style={{ width: '10.5%' }} />
+                  <col style={{ width: '10.5%' }} />
+                  <col style={{ width: '10.5%' }} />
+                  <col style={{ width: '10.5%' }} />
                 </colgroup>
                 <thead>
                   <tr className="border-b-2 border-foreground/20">
@@ -396,13 +396,13 @@ export default function InvestorReportPage() {
               <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Performance Metrics</h3>
               <table className="w-full text-xs mb-5" style={{ tableLayout: 'fixed' }}>
                 <colgroup>
-                  <col style={{ width: '19.5%' }} />
-                  <col style={{ width: '25.5%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '19.75%' }} />
+                  <col style={{ width: '27.75%' }} />
+                  <col style={{ width: '10.5%' }} />
+                  <col style={{ width: '10.5%' }} />
+                  <col style={{ width: '10.5%' }} />
+                  <col style={{ width: '10.5%' }} />
+                  <col style={{ width: '10.5%' }} />
                 </colgroup>
                 <thead>
                   <tr className="border-b-2 border-foreground/20">
