@@ -112,13 +112,13 @@ Cash flow data can be bulk-imported from the Import page using freeform text —
 
 ![Funds](public/screenshots/funds.png)
 
-## LP Letters
+## Letters
 
-LP Letters helps you generate quarterly update letters for your limited partners. Using AI and your portfolio data — reported metrics, company summaries, investment performance, and team notes — the system drafts professional LP communications scoped to a specific portfolio group and reporting period.
+Letters helps you generate quarterly update letters for your limited partners. Using AI and your portfolio data — reported metrics, company summaries, investment performance, and team notes — the system drafts professional LP communications scoped to a specific portfolio group and reporting period.
 
 **Creating a letter** — click "New letter" and select the year, quarter, portfolio group, and template. Optionally toggle "year-end summary" for Q4 letters and add custom instructions to guide the AI. A preview step shows the companies and data that will be included before generation begins.
 
-**Templates** — upload a previous LP letter (.docx or .pdf) and AI analyzes it to match your writing style, tone, and structure. Or use the built-in default template. Templates are reusable across letters and managed from the Templates dialog on the LP Letters page.
+**Templates** — upload a previous LP letter (.docx or .pdf) and AI analyzes it to match your writing style, tone, and structure. Or use the built-in default template. Templates are reusable across letters and managed from the Templates dialog on the Letters page.
 
 **Generation** — the AI generates a narrative for each company in the portfolio group, drawing on reported metrics, recent trends, company summaries, investment data, and team notes. A portfolio summary table with investment performance is also generated. The full letter is assembled from these sections.
 
@@ -126,7 +126,33 @@ LP Letters helps you generate quarterly update letters for your limited partners
 
 **Export** — export the finished letter as a .docx file for final formatting and distribution. If Google Drive is connected, export directly to Drive.
 
-![LP Letters](public/screenshots/letters.png)
+![Letters](public/screenshots/letters.png)
+
+## LPs
+
+LPs helps you track and report on your limited partner positions across snapshots. Each snapshot represents LP positions at a point in time — typically a quarter-end.
+
+**Creating a snapshot** — from the LPs index page, click "New Snapshot" and give it a name and optional as-of date. Click the snapshot to open the detail page.
+
+**Importing data** — paste spreadsheet data into the import dialog and AI automatically parses it, matching columns to fields like investor name, entity, commitment, paid-in capital, distributions, NAV, DPI, RVPI, TVPI, and IRR. Investors, entities, and investments are created or updated automatically. Rows with zero commitment and no financial data are filtered out.
+
+**Investor table** — the snapshot detail page shows all investors with aggregated metrics. Expand an investor to see individual entity and portfolio group line items. All values are inline-editable: click a row to edit metrics, or click an investor name to rename. Investors can be grouped under a parent for consolidated reporting, and duplicate investors can be merged together.
+
+**Portfolio group filter** — when a snapshot has multiple portfolio groups, a filter appears in the header to include or exclude specific groups from the view and totals.
+
+**Report settings** — configure a header and footer for the snapshot's PDF reports via the Settings button. These appear on individual investor PDFs and batch exports.
+
+**Investor PDFs** — click the document icon on any investor row to view their individual report, or use "Batch PDFs" to generate all investor reports at once. PDFs include the header, a metrics summary table, and the footer.
+
+**Excel export** — export the full snapshot dataset to an Excel file with all investors, entities, portfolio groups, and metrics.
+
+### Entity Ownership Detail
+
+An optional section on the LPs index page (under a collapsible disclosure) lets you map investor entities to GP-managed entities (such as an associates or co-invest vehicle) and define ownership percentages. This is useful when individual investors own pro-rata shares of a GP entity that itself holds positions in the fund's portfolio groups.
+
+For each mapping, specify the investor entity name, the GP entity name, and optionally an ownership percentage and carried interest percentage. The text fields autocomplete from entities and investors already entered in your snapshots.
+
+When mappings are configured, the snapshot detail page automatically excludes GP entity investors from the snapshot totals to avoid double-counting — since those positions are already reflected via the individual investors' pro-rata shares.
 
 ## Asks
 
@@ -208,7 +234,7 @@ Admins can control which optional features are visible in the sidebar and access
 | **Hidden** | Removed from the sidebar for all users, but still accessible via direct URL |
 | **Off** | Functionally disabled — the feature is completely inaccessible |
 
-The features that can be configured are: **Interactions** (CRM-style email logging), **Investments** (fund transaction tracking), **Funds** (fund-level cash flows and LP metrics), **Notes** (team discussion and observations), **LP Letters** (quarterly LP update generation), **Imports** (bulk data import), and **Asks** (portfolio company reporting requests).
+The features that can be configured are: **Interactions** (CRM-style email logging), **Investments** (fund transaction tracking), **Funds** (fund-level cash flows and LP metrics), **Notes** (team discussion and observations), **Letters** (quarterly LP update generation), **LPs** (LP position tracking and reporting), **Imports** (bulk data import), and **Asks** (portfolio company reporting requests).
 
 ## Setup & Deployment
 
