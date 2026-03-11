@@ -325,9 +325,17 @@ export default function InvestorReportPage() {
           {/* Investor summary statement */}
           {filteredTotals.paidInCapital > 0 && (
             <p className="text-xs leading-relaxed mb-5">
-              You have invested <strong>{fmtFull(filteredTotals.commitment)}</strong>.
-              {' '}So far you have received <strong>{fmtFull(filteredTotals.distributions)}</strong> back,
-              {' '}and your current investments are valued at <strong>{fmtFull(filteredTotals.nav)}</strong>.
+              You have invested <strong>{fmtFull(filteredTotals.paidInCapital)}</strong>
+              {filteredTotals.distributions > 0 ? (
+                <>
+                  . So far you have received <strong>{fmtFull(filteredTotals.distributions)}</strong> back,
+                  {' '}and your current investments are valued at <strong>{fmtFull(filteredTotals.nav)}</strong>.
+                </>
+              ) : (
+                <>
+                  , and your current investments are valued at <strong>{fmtFull(filteredTotals.nav)}</strong>.
+                </>
+              )}
             </p>
           )}
 
