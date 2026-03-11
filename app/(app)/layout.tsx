@@ -23,7 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // Get fund ID (uncached — quick single query, needed to key everything else)
   const { data: fund } = await supabase.from('funds').select('id').limit(1).single() as { data: { id: string } | null }
-  if (!fund) redirect('/auth')
+  if (!fund) redirect('/onboarding')
 
   // All cached queries in parallel
   const [fundData, membership, fundSettings, reviewBadge, notesBadge] = await Promise.all([
