@@ -19,6 +19,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/notes-explainer',
     '/interactions-explainer',
     '/letters-explainer',
+    '/lps-explainer',
     '/settings-explainer',
     '/support-explainer',
   ]

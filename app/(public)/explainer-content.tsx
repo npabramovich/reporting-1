@@ -1,11 +1,11 @@
 import Image from 'next/image'
 import type { LucideIcon } from 'lucide-react'
 
-interface ExplainerContentProps {
+export interface ExplainerContentProps {
   title: string
   icon: LucideIcon
-  screenshotSrc: string
-  screenshotLabel: string
+  screenshotSrc?: string
+  screenshotLabel?: string
   children: React.ReactNode
 }
 
@@ -17,14 +17,16 @@ export function ExplainerContent({ title, icon: Icon, screenshotSrc, screenshotL
         {title}
       </h1>
 
-      <Image
-        src={screenshotSrc}
-        alt={screenshotLabel}
-        width={1200}
-        height={900}
-        className="w-full h-auto rounded-lg border shadow-sm mb-8"
-        priority
-      />
+      {screenshotSrc && (
+        <Image
+          src={screenshotSrc}
+          alt={screenshotLabel || title}
+          width={1200}
+          height={900}
+          className="w-full h-auto rounded-lg border shadow-sm mb-8"
+          priority
+        />
+      )}
 
       <div className="space-y-4 text-sm leading-relaxed">
         {children}
