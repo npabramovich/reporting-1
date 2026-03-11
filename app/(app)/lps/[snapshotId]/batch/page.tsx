@@ -345,9 +345,17 @@ export default function BatchPDFPage() {
 
                 {totals.paidInCapital > 0 && (
                   <p className="text-xs leading-relaxed mb-5">
-                    You have invested <strong>{fmtFull(totals.commitment)}</strong>.
-                    {' '}So far you have received <strong>{fmtFull(totals.distributions)}</strong> back,
-                    {' '}and your current investments are valued at <strong>{fmtFull(totals.nav)}</strong>.
+                    You have invested <strong>{fmtFull(totals.paidInCapital)}</strong>
+                    {totals.distributions > 0 ? (
+                      <>
+                        . So far you have received <strong>{fmtFull(totals.distributions)}</strong> back,
+                        {' '}and your current investments are valued at <strong>{fmtFull(totals.nav)}</strong>.
+                      </>
+                    ) : (
+                      <>
+                        , and your current investments are valued at <strong>{fmtFull(totals.nav)}</strong>.
+                      </>
+                    )}
                   </p>
                 )}
 
