@@ -13,11 +13,20 @@ export async function GET(
 
   const admin = createAdminClient()
 
+  const { data: membership } = await admin
+    .from('fund_members')
+    .select('fund_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!membership) return NextResponse.json({ error: 'No fund' }, { status: 403 })
+
   const { data, error } = await admin
     .from('analyst_conversations')
     .select('*')
     .eq('id', id)
     .eq('user_id', user.id)
+    .eq('fund_id', membership.fund_id)
     .maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -37,11 +46,20 @@ export async function DELETE(
 
   const admin = createAdminClient()
 
+  const { data: membership } = await admin
+    .from('fund_members')
+    .select('fund_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!membership) return NextResponse.json({ error: 'No fund' }, { status: 403 })
+
   const { error } = await admin
     .from('analyst_conversations')
     .delete()
     .eq('id', id)
     .eq('user_id', user.id)
+    .eq('fund_id', membership.fund_id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

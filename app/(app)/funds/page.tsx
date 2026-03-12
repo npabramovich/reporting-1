@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, Plus, Trash2, Save, X, Pencil, Briefcase, Lock } from 'lucide-react'
+import { Loader2, Plus, Trash2, Save, X, Pencil, Briefcase, Lock, Upload } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
@@ -147,6 +147,12 @@ export default function FundsPage() {
   const [editingCashGroup, setEditingCashGroup] = useState<string | null>(null)
   const [cashOnHandDraft, setCashOnHandDraft] = useState<Record<string, string>>({})
   const [savingCash, setSavingCash] = useState(false)
+
+  // Import state
+  const [importOpen, setImportOpen] = useState(false)
+  const [importData, setImportData] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ created: number; errors: string[] } | null>(null)
 
   // Group settings modal state
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -317,6 +323,31 @@ export default function FundsPage() {
       }
     } finally {
       setSavingCash(false)
+    }
+  }
+
+  async function handleImport() {
+    if (!importData.trim()) return
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const res = await fetch('/api/portfolio/fund-cash-flows/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: importData }),
+      })
+      const result = await res.json()
+      if (res.ok) {
+        setImportResult(result)
+        setImportData('')
+        // Reload cash flows
+        const cfRes = await fetch('/api/portfolio/fund-cash-flows')
+        if (cfRes.ok) setCashFlows(await cfRes.json())
+      } else {
+        setImportResult({ created: 0, errors: [result.error || 'Import failed'] })
+      }
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -556,17 +587,17 @@ export default function FundsPage() {
                             <td className="px-3 py-1.5">
                               <input type="number" step="0.01" value={editDraft.amount} onChange={e => setEditDraft(d => ({ ...d, amount: e.target.value }))} className="border rounded px-1.5 py-0.5 text-sm text-right w-28" />
                             </td>
-                            <td colSpan={4} />
                             <td className="px-3 py-1.5">
-                              <div className="flex items-center gap-1">
-                                <button onClick={handleSaveEdit} disabled={saving} className="text-green-600 hover:text-green-700 inline-flex items-center gap-1 text-sm" title="Save">
-                                  <Save className="h-3.5 w-3.5" /> Save
-                                </button>
-                                <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground" title="Cancel">
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
+                              <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={handleSaveEdit} disabled={saving}>
+                                  <Save className="h-3.5 w-3.5 mr-1" />Save
+                                </Button>
+                                <Button variant="outline" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={() => setEditingId(null)}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
                               </div>
                             </td>
+                            <td colSpan={4} />
                           </tr>
                         )
                       }
@@ -622,17 +653,17 @@ export default function FundsPage() {
                         <td className="px-3 py-1.5">
                           <input type="number" step="0.01" value={addDraft.amount} onChange={e => setAddDraft(d => ({ ...d, amount: e.target.value }))} className="border rounded px-1.5 py-0.5 text-sm text-right w-28" placeholder="0.00" />
                         </td>
-                        <td colSpan={4} />
                         <td className="px-3 py-1.5">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleAdd(addDraft.portfolioGroup || group)} disabled={saving || !addDraft.flowDate || !addDraft.amount} className="text-green-600 hover:text-green-700 disabled:opacity-50 inline-flex items-center gap-1 text-sm" title="Save">
-                              <Save className="h-3.5 w-3.5" /> Save
-                            </button>
-                            <button onClick={() => { setAddingGroup(null); setAddDraft({ flowDate: '', flowType: 'commitment', amount: '', notes: '', portfolioGroup: '' }) }} className="text-muted-foreground hover:text-foreground" title="Cancel">
-                              <X className="h-3.5 w-3.5" />
-                            </button>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={() => handleAdd(addDraft.portfolioGroup || group)} disabled={saving || !addDraft.flowDate || !addDraft.amount}>
+                              <Save className="h-3.5 w-3.5 mr-1" />Save
+                            </Button>
+                            <Button variant="outline" size="sm" className="text-muted-foreground h-7 px-2 text-xs" onClick={() => { setAddingGroup(null); setAddDraft({ flowDate: '', flowType: 'commitment', amount: '', notes: '', portfolioGroup: '' }) }}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
                         </td>
+                        <td colSpan={4} />
                       </tr>
                     )}
                   </tbody>
@@ -640,12 +671,53 @@ export default function FundsPage() {
               </div>
 
               {addingGroup !== group && (
-                <button
-                  onClick={() => { setAddingGroup(group); setAddDraft({ flowDate: '', flowType: 'commitment', amount: '', notes: '', portfolioGroup: group }) }}
-                  className="mt-3 inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add Cash Flow
-                </button>
+                <div className="flex items-center gap-2 mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-muted-foreground"
+                    onClick={() => { setAddingGroup(group); setAddDraft({ flowDate: '', flowType: 'commitment', amount: '', notes: '', portfolioGroup: group }) }}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Cash Flow
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-muted-foreground"
+                    onClick={() => { setImportOpen(!importOpen); setImportResult(null) }}
+                  >
+                    <Upload className="h-4 w-4 mr-1" />
+                    Import
+                  </Button>
+                </div>
+              )}
+
+              {/* Import Section */}
+              {importOpen && (
+                <div className="mt-4 border rounded-lg p-4">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Paste fund cash flow data from a spreadsheet. Columns will be matched automatically (date, type, amount, fund/group, notes).
+                  </p>
+                  <textarea
+                    value={importData}
+                    onChange={e => setImportData(e.target.value)}
+                    rows={6}
+                    className="w-full border border-input rounded p-2 text-sm font-mono bg-transparent text-foreground mb-2"
+                    placeholder="Paste any fund cash flow data here — dates, types (commitment / called capital / distribution), amounts, fund names"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" onClick={handleImport} disabled={importing || !importData.trim()}>
+                      {importing ? 'Importing...' : 'Import'}
+                    </Button>
+                    {importResult && (
+                      <span className={`text-sm ${importResult.created === 0 && importResult.errors.length > 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+                        {importResult.created > 0 && `${importResult.created} cash flow${importResult.created !== 1 ? 's' : ''} imported.`}
+                        {importResult.errors.length > 0 && ` ${importResult.errors.length} error${importResult.errors.length !== 1 ? 's' : ''}: ${importResult.errors[0]}`}
+                      </span>
+                    )}
+                  </div>
+                </div>
               )}
             </TabsContent>
           )

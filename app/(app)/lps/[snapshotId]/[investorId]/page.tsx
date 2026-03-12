@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, ArrowLeft, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrency, formatCurrencyFull } from '@/components/currency-context'
@@ -63,6 +63,7 @@ function fmtPct(val: number | null): string {
 export default function InvestorReportPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const snapshotId = params.snapshotId as string
   const investorId = params.investorId as string
 
@@ -76,7 +77,10 @@ export default function InvestorReportPage() {
   const [fundLogo, setFundLogo] = useState<string | null>(null)
   const [fundAddress, setFundAddress] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [excludedGroups, setExcludedGroups] = useState<Set<string>>(new Set())
+  const [excludedGroups, setExcludedGroups] = useState<Set<string>>(() => {
+    const exclude = searchParams.get('exclude')
+    return exclude ? new Set(exclude.split(',').map(s => decodeURIComponent(s.trim())).filter(Boolean)) : new Set()
+  })
 
   useEffect(() => {
     async function load() {
@@ -261,7 +265,7 @@ export default function InvestorReportPage() {
 
       {/* Navigation bar (hidden in print) */}
       <div className="flex items-center gap-4 mb-6 no-print">
-        <Button variant="outline" size="sm" onClick={() => router.push(`/lps/${snapshotId}`)}>
+        <Button variant="outline" size="sm" className="text-muted-foreground" onClick={() => router.push(`/lps/${snapshotId}`)}>
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back
         </Button>
@@ -280,7 +284,7 @@ export default function InvestorReportPage() {
             )}
           />
         )}
-        <Button variant="outline" size="sm" onClick={() => window.print()}>
+        <Button variant="outline" size="sm" className="text-muted-foreground" onClick={() => window.print()}>
           <Download className="h-4 w-4 mr-1" />
           Save PDF
         </Button>
@@ -370,7 +374,7 @@ export default function InvestorReportPage() {
                 <tbody>
                   {filteredRows.map(row => (
                     <tr key={row.id} className="border-b border-foreground/10">
-                      <td className="pl-1.5 pr-2.5 py-1.5">{row.entityName}</td>
+                      <td className="pl-1.5 pr-2.5 py-1.5 max-w-0"><div className="line-clamp-2 break-words">{row.entityName}</div></td>
                       <td className="pl-2.5 pr-1.5 py-1.5">{row.portfolioGroup}</td>
                       <td className="px-1.5 py-1.5 text-right font-mono">{fmt(row.commitment)}</td>
                       <td className="px-1.5 py-1.5 text-right font-mono">{fmt(row.paidInCapital)}</td>
@@ -418,7 +422,7 @@ export default function InvestorReportPage() {
                 <tbody>
                   {filteredRows.map(row => (
                     <tr key={row.id} className="border-b border-foreground/10">
-                      <td className="pl-1.5 pr-2.5 py-1.5">{row.entityName}</td>
+                      <td className="pl-1.5 pr-2.5 py-1.5 max-w-0"><div className="line-clamp-2 break-words">{row.entityName}</div></td>
                       <td className="pl-2.5 pr-1.5 py-1.5">{row.portfolioGroup}</td>
                       <td className="px-1.5 py-1.5 text-right font-mono">{fmtPct(row.pctFunded)}</td>
                       <td className="px-1.5 py-1.5 text-right font-mono">{fmtMoic(row.dpi)}</td>

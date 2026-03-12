@@ -34,6 +34,7 @@ function AuthForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const urlError = searchParams.get('error')
+  const emailConfirmed = searchParams.get('confirmed') === 'true'
 
   const supabase = createClient()
 
@@ -50,7 +51,12 @@ function AuthForm() {
       }
       // Check if this is a recovery session — redirect to set new password
       const { data: { session } } = await supabase.auth.getSession()
-      const destination = session?.user?.recovery_sent_at ? '/auth/reset-password' : '/'
+      let destination = session?.user?.recovery_sent_at ? '/auth/reset-password' : '/'
+      // If user has no fund, send to onboarding
+      if (destination === '/') {
+        const { data: fund } = await supabase.from('funds').select('id').limit(1).maybeSingle()
+        if (!fund) destination = '/onboarding?confirmed=true'
+      }
       // If MFA is enrolled, verify first then continue to destination
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
       if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
@@ -70,12 +76,15 @@ function AuthForm() {
       setError(error.message)
     } else {
       fetch('/api/auth/activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'password' }) }).catch(() => {})
+      // Check if user has a fund — if not, go to onboarding
+      const { data: fund } = await supabase.from('funds').select('id').limit(1).maybeSingle()
+      const destination = fund ? '/' : '/onboarding'
       // Check if user has MFA enrolled and needs to verify
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
       if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
-        router.push('/auth/mfa-verify')
+        router.push(`/auth/mfa-verify?next=${encodeURIComponent(destination)}`)
       } else {
-        router.push('/')
+        router.push(destination)
       }
       router.refresh()
     }
@@ -98,6 +107,13 @@ function AuthForm() {
             <CardDescription>Sign in with password or magic link.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {emailConfirmed && (
+              <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
+                <AlertDescription className="text-green-800 dark:text-green-200">
+                  Your email has been confirmed. Please sign in to continue.
+                </AlertDescription>
+              </Alert>
+            )}
             {(error || urlError) && (
               <Alert variant="destructive">
                 <AlertDescription>{error || urlError}</AlertDescription>

@@ -62,11 +62,12 @@ export async function rateLimit(config: RateLimitConfig): Promise<NextResponse |
   }
 }
 
-/** Extract client IP from request headers. Prefer Vercel's x-real-ip (cannot be spoofed). */
+/** Extract client IP from request headers. Prefer platform-specific headers that cannot be spoofed. */
 export function getClientIp(req: Request): string {
   const headers = req.headers
   return (
-    headers.get('x-real-ip') ||
+    headers.get('x-real-ip') ||                          // Vercel (cannot be spoofed)
+    headers.get('x-nf-client-connection-ip') ||          // Netlify (cannot be spoofed)
     headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     'unknown'
   )

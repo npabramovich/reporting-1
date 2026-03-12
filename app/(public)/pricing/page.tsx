@@ -67,18 +67,12 @@ export default function PricingPage() {
             </Button>
           </div>
         </div>
-        <div className="rounded-lg border bg-muted/50 p-6 flex flex-col sm:flex-row sm:items-center gap-4 mt-4">
-          <div className="flex-1">
-            <h3 className="font-semibold mb-1">Subscription</h3>
-            <p className="text-2xl font-bold mb-1">Hosted</p>
-            <p className="text-sm text-muted-foreground">
-              Monthly subscription. Login at{' '}
-              <a href="https://portfolio.hemrock.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">portfolio.hemrock.com</a>
-              , set up your fund, and run on our servers. Onboarding assistance available.
-            </p>
-          </div>
-          <SubscriptionInquiryButton className="shrink-0">
-            <Send className="h-3.5 w-3.5 mr-1.5" />Request Access
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
+          <p className="text-base text-muted-foreground flex-1">
+            <span className="font-medium text-foreground">Hosted</span> — Let us host your fund. Get help onboarding your information and processes. Monthly subscription, cancel anytime.
+          </p>
+          <SubscriptionInquiryButton className="inline-flex items-center gap-1.5 shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+            <Send className="h-3.5 w-3.5" />Request Access
           </SubscriptionInquiryButton>
         </div>
 

@@ -122,7 +122,7 @@ interface PortfolioData {
 type SortKey = 'companyName' | 'status' | 'portfolioGroup' | 'totalInvested' | 'currentCost' | 'proceedsReceived' | 'proceedsEscrow' | 'unrealizedValue' | 'totalValue' | 'realizedGL' | 'unrealizedGL' | 'totalGL' | 'moic' | 'realizedMoic' | 'unrealizedMoic' | 'irr' | 'pctUnrealized' | 'pctTotalValue'
 type SortDir = 'asc' | 'desc'
 
-type GroupSortKey = 'group' | 'totalInvested' | 'currentCost' | 'proceedsReceived' | 'proceedsEscrow' | 'unrealizedValue' | 'totalValue' | 'realizedGL' | 'unrealizedGL' | 'totalGL' | 'moic' | 'realizedMoic' | 'unrealizedMoic' | 'irr'
+type GroupSortKey = 'group' | 'vintage' | 'totalInvested' | 'currentCost' | 'proceedsReceived' | 'proceedsEscrow' | 'unrealizedValue' | 'totalValue' | 'realizedGL' | 'unrealizedGL' | 'totalGL' | 'moic' | 'realizedMoic' | 'unrealizedMoic' | 'irr'
 
 // Derived metric helpers
 function currentCost(row: { totalInvested: number; totalCostBasisExited: number }) {
@@ -340,11 +340,16 @@ export default function InvestmentsPage() {
     const dir = groupSortDir === 'asc' ? 1 : -1
     return [...data.groups].sort((a, b) => {
       if (groupSortKey === 'group') return dir * a.group.localeCompare(b.group)
+      if (groupSortKey === 'vintage') {
+        const av = groupConfigs[a.group]?.vintage ?? 0
+        const bv = groupConfigs[b.group]?.vintage ?? 0
+        return dir * (av - bv)
+      }
       const av = getGroupDerivedValue(a, groupSortKey)
       const bv = getGroupDerivedValue(b, groupSortKey)
       return dir * (av - bv)
     })
-  }, [data, groupSortKey, groupSortDir])
+  }, [data, groupSortKey, groupSortDir, groupConfigs])
 
   // Group totals for footer
   const groupTotals = useMemo(() => {
@@ -391,7 +396,7 @@ export default function InvestmentsPage() {
       setGroupSortDir(d => d === 'asc' ? 'desc' : 'asc')
     } else {
       setGroupSortKey(key)
-      setGroupSortDir(key === 'group' ? 'asc' : 'desc')
+      setGroupSortDir(key === 'group' || key === 'vintage' ? 'asc' : 'desc')
     }
   }
 
@@ -553,7 +558,11 @@ export default function InvestmentsPage() {
                       Group<GroupSortIcon col="group" />
                     </button>
                   </th>
-                  <th className="text-center px-3 py-2 font-medium">Vintage</th>
+                  <th className="text-center px-3 py-2 font-medium">
+                    <button onClick={() => handleGroupSort('vintage')} className="hover:text-foreground">
+                      Vintage<GroupSortIcon col="vintage" />
+                    </button>
+                  </th>
                   {numericColumns.map(col => (
                     <th key={col.sortKey} className="text-right px-3 py-2 font-medium">
                       <button onClick={() => handleGroupSort(col.sortKey as GroupSortKey)} className="hover:text-foreground">

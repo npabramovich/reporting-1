@@ -18,7 +18,7 @@ export function PortfolioGroupFilter({ allGroups, excludedGroups, onToggle, onTo
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="no-print">
+        <Button variant="outline" size="sm" className="no-print text-muted-foreground">
           <Filter className="h-4 w-4 mr-1" />
           Filters
           {hasExclusions && (

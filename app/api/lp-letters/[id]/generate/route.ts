@@ -122,14 +122,14 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 
     return NextResponse.json(updated)
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Generation failed'
-    // Revert status on failure, store the error
+    const internalError = err instanceof Error ? err.message : 'Generation failed'
+    // Log the full error server-side, store a safe message for the UI
+    console.error('[lp-letters] Generation error detail:', internalError)
     await admin
       .from('lp_letters')
-      .update({ status: 'draft', generation_error: errorMessage, updated_at: new Date().toISOString() })
+      .update({ status: 'draft', generation_error: 'Letter generation failed. Please try again.', updated_at: new Date().toISOString() })
       .eq('id', params.id)
 
-    console.error('[lp-letters] Generation failed:', err)
     return NextResponse.json({ error: 'Letter generation failed. Please try again.' }, { status: 500 })
   }
 }

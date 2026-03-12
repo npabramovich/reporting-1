@@ -1,7 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Github, Play, Mail, Upload, BarChart3, Brain, Handshake, FileText, ChevronRight, Lightbulb, Database, TableProperties, ShieldUser, Users, Calendar, Send } from 'lucide-react'
+import { Github, Play, Mail, Upload, BarChart3, Brain, Handshake, FileText, ChevronRight, Lightbulb, Database, TableProperties, ShieldUser, Users, Calendar, Send, ArrowDown, StickyNote, MessageCircle, FolderOpen } from 'lucide-react'
 import { CalendlyButton } from '@/components/calendly-button'
 import { SubscriptionInquiryButton } from '@/components/subscription-inquiry-modal'
 import type { LucideIcon } from 'lucide-react'
@@ -14,13 +14,25 @@ function XIcon({ className }: { className?: string }) {
   )
 }
 
-const features: { icon: LucideIcon; title: string; text: string; href: string; screenshot: string }[] = [
-  { icon: Mail, title: 'Automated report ingestion', text: 'Forward investor updates in any format and AI identifies the company, extracts metrics, and flags anything that needs review.', href: '/inbound-explainer', screenshot: '/screenshots/inbound-cropped.png' },
-  { icon: Brain, title: 'AI-powered analysis', text: 'Generate company summaries, chat with an AI analyst about your portfolio, and draft LP letters — all grounded in your actual data.', href: '/dashboard-explainer', screenshot: '/screenshots/company-cropped.png' },
-  { icon: BarChart3, title: 'Investment tracking', text: 'Track investments per company, per fund, and overall. Record rounds, proceeds, valuations, and compute metrics like TVPI, DPI, and Net IRR.', href: '/investments-explainer', screenshot: '/screenshots/investments-cropped.png' },
-  { icon: Upload, title: 'Flexible import', text: 'Paste text, upload files, or bulk-import spreadsheet data. The same AI pipeline processes everything — metrics, investments, and cash flows.', href: '/import-explainer', screenshot: '/screenshots/import-cropped.png' },
-  { icon: Handshake, title: 'Lightweight CRM', text: 'BCC your inbound address on conversations to log interactions and introductions automatically.', href: '/interactions-explainer', screenshot: '/screenshots/interactions-cropped.png' },
-  { icon: FileText, title: 'LP letter generation', text: 'Generate quarterly update letters for your LPs using AI and your portfolio data — metrics, summaries, performance, and team notes.', href: '/letters-explainer', screenshot: '/screenshots/letters-cropped.png' },
+const steps: { icon: LucideIcon; step: string; title: string; text: string; href: string; screenshot: string }[] = [
+  { icon: Mail, step: '1', title: 'Forward your investor updates', text: 'Send investor updates in any format to your inbound address. AI identifies the company, extracts metrics, and flags anything that needs review.', href: '/inbound-explainer', screenshot: '/screenshots/inbound-cropped.png' },
+  { icon: Upload, step: '2', title: 'Import your portfolio data', text: 'Paste text, upload files, or bulk-import spreadsheet data. The same AI pipeline processes everything — metrics, investments, and cash flows.', href: '/import-explainer', screenshot: '/screenshots/import-cropped.png' },
+  { icon: BarChart3, step: '3', title: 'Track investments and performance', text: 'Track investments per company, per fund, and overall. Record rounds, proceeds, valuations, and compute metrics like TVPI, DPI, and Net IRR.', href: '/investments-explainer', screenshot: '/screenshots/investments-cropped.png' },
+  { icon: StickyNote, step: '4', title: 'Communicate insights via Notes', text: 'Share metrics, observations, and context with your team through Notes. Keep a running record of what matters across your portfolio and surface it when you need it.', href: '/notes-explainer', screenshot: '/screenshots/notes-cropped.png' },
+  { icon: MessageCircle, step: '5', title: 'Ask your AI analyst anything', text: 'An always-available analyst to ask questions, interpret data, compare companies, and surface trends across your portfolio — grounded in your actual metrics and notes.', href: '/dashboard-explainer', screenshot: '/screenshots/company-cropped.png' },
+  { icon: Handshake, step: '6', title: 'Log interactions automatically', text: 'BCC your inbound address on conversations to log interactions and introductions automatically. A lightweight CRM built into your workflow.', href: '/interactions-explainer', screenshot: '/screenshots/interactions-cropped.png' },
+  { icon: FileText, step: '7', title: 'Generate LP letters', text: 'Draft quarterly update letters for your LPs using AI and your portfolio data — metrics, summaries, performance, and team notes.', href: '/letters-explainer', screenshot: '/screenshots/letters-cropped.png' },
+  { icon: FolderOpen, step: '8', title: 'Consolidate everything in one place', text: 'Manage your portfolio, funds, SPVs, personal investments, and LPs by consolidating data from multiple platforms, spreadsheets, emails, and documents into a single source of truth. Works alongside your fund admin.', href: '/dashboard-explainer', screenshot: '/screenshots/dashboard-cropped.png' },
+]
+
+const faqs: { q: string; a: React.ReactNode }[] = [
+  { q: 'Why are you building this?', a: <>I&apos;ve worked as an investor, CFO, and consultant for funds for over a decade and have experienced first hand the problems with manually collecting, analyzing, and presenting quantitative and qualitative data about the performance and forecasts for funds and their portfolio investments. At the same time, I am not interested in adding another SaaS app to the mix of operating systems in the private investment space, and am looking to provide tools to help investors and fund operators better solutions to build and manage their own solutions, just like I have done with{' '}<a href="https://www.hemrock.com/downloads" className="underline hover:text-foreground">financial model templates</a>, but evolved for today&apos;s technologies.</> },
+  { q: 'How long does it take to get started?', a: <>A technical user can deploy in about 1-2 hours. Setting up the infrastructure and obtaining API keys for the various services takes most of the setup time. Onboarding involves importing your existing portfolio data via spreadsheet paste or CSV upload, which can vary based on your number of investment vehicles and the size of your portfolios. The AI pipeline creates companies, metrics, and historical values automatically from your imported data. I&apos;m available for questions, and also offer managed onboarding for a one-time setup fee — <Link href="/contact" className="underline hover:text-foreground">contact me</Link> for details.</> },
+  { q: 'What is the tech stack?', a: 'Next.js and React for the frontend, Supabase (Postgres) for the database and authentication, Vercel or Netlify for hosting, and Anthropic, OpenAI, Google Gemini, or Ollama for AI features. Postmark or Mailgun for inbound mail processing, Google Drive or Dropbox for optional file storage, and Gmail, Resend, Postmark, or Mailgun for outbound emails. All services run on your own accounts so you control access and costs.' },
+  { q: 'How much does it cost to run?', a: 'Most services in the stack have generous free tiers that cover normal usage. The main variable cost is AI API usage (Anthropic, OpenAI, or Gemini) for metric extraction, summaries, and analysis, which scales with your portfolio size and how often you generate reports.' },
+  { q: 'Is my portfolio data private?', a: 'Yes. You deploy on your own infrastructure with your own database. No data is shared with other users or stored on third-party servers beyond the services you configure (your Supabase instance, your AI provider). You own and control everything. A hosted solution is also available for a select number of funds, which involves shared resources, but the platform is designed for data security and isolation between funds.' },
+  { q: 'What AI models are supported?', a: 'The platform supports Anthropic (Claude), OpenAI (GPT), Google (Gemini), and Ollama for local models. You bring your own API key and can switch between providers. AI powers metric extraction from emails, company summaries, portfolio analysis chat, and LP letter drafting.' },
+  { q: 'Can I modify the code?', a: <>Yes. The source is available under a single-fund free use <a href="https://github.com/tdavidson/reporting/blob/main/LICENSE" className="underline hover:text-foreground">license</a>. You can customize the platform for your own fund. Commercial use across multiple clients requires a separate license. I&apos;m also available to assist with modifications — <Link href="/contact" className="underline hover:text-foreground">contact me</Link> to discuss.</> },
 ]
 
 export default function HomePage() {
@@ -29,38 +41,56 @@ export default function HomePage() {
       <h1 className="text-4xl md:text-7xl font-semibold tracking-tight mb-2 max-w-3xl">
         Run your fund with Analyst
       </h1>
-      <p className="text-xl text-muted-foreground mb-8 max-w-2xl">
+      <p className="text-xl text-muted-foreground mb-12 max-w-2xl">
         Source-available portfolio reporting for venture capital firms, accelerators, and angel investors.
         Forward or upload your investor updates, and Analyst does the rest.
       </p>
 
-      {/* Feature cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12">
-        {features.map(({ icon: Icon, title, text, href, screenshot }) => (
-          <Link
-            key={title}
-            href={href}
-            className="group rounded-lg border overflow-hidden transition-colors hover:bg-accent/50 flex flex-col"
-          >
-            <div className="p-4 flex gap-3">
-              <Icon className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-sm font-medium mb-1 group-hover:text-foreground">{title}</h3>
-                <p className="text-sm text-muted-foreground">{text}</p>
-              </div>
-            </div>
-            <div className="relative h-[312px] overflow-hidden border-t mt-auto">
-              <Image
-                src={screenshot}
-                alt={title}
-                fill
-                sizes="(max-width: 768px) 100vw, 50vw"
-                className="object-cover object-left-top"
-              />
-            </div>
-          </Link>
-        ))}
-      </div>
+      {/* Timeline / Flow */}
+      <section className="mb-16">
+        <h2 className="text-2xl font-semibold tracking-tight mb-8">How it works</h2>
+        <div className="relative">
+          {/* Vertical line */}
+          <div className="absolute left-[19px] top-8 bottom-8 w-px bg-border hidden md:block" />
+
+          <div className="space-y-8 md:space-y-12">
+            {steps.map(({ icon: Icon, step, title, text, href, screenshot }, i) => (
+              <Link
+                key={title}
+                href={href}
+                className="group block"
+              >
+                <div className="flex gap-4 md:gap-6 items-start">
+                  {/* Step indicator */}
+                  <div className="relative z-10 shrink-0">
+                    <div className="h-10 w-10 rounded-full border-2 border-border bg-background flex items-center justify-center group-hover:border-foreground transition-colors">
+                      <span className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">{step}</span>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <h3 className="text-base font-medium group-hover:text-foreground transition-colors">{title}</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-3 max-w-xl">{text}</p>
+                    <div className="relative h-[200px] md:h-[280px] rounded-lg border shadow-sm overflow-hidden">
+                      <Image
+                        src={screenshot}
+                        alt={title}
+                        fill
+                        sizes="(max-width: 768px) 100vw, 80vw"
+                        className="object-cover object-left-top"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* Why use this */}
       <section className="mb-12">
@@ -158,126 +188,46 @@ export default function HomePage() {
             </Button>
           </div>
         </div>
-        <div className="rounded-lg border bg-muted/50 p-6 flex flex-col sm:flex-row sm:items-center gap-4 mt-4">
-          <div className="flex-1">
-            <h3 className="font-semibold mb-1">Subscription</h3>
-            <p className="text-2xl font-bold mb-1">Hosted</p>
-            <p className="text-sm text-muted-foreground">
-              Monthly subscription. Login at{' '}
-              <a href="https://portfolio.hemrock.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">portfolio.hemrock.com</a>
-              , set up your fund, and run on our servers. Onboarding assistance available.
-            </p>
-          </div>
-          <SubscriptionInquiryButton className="shrink-0">
-            <Send className="h-3.5 w-3.5 mr-1.5" />Request Access
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-6">
+          <p className="text-base text-muted-foreground flex-1">
+            <span className="font-medium text-foreground">Hosted</span> — Let us host your fund. Get help onboarding your information and processes. Monthly subscription, cancel anytime.
+          </p>
+          <SubscriptionInquiryButton className="inline-flex items-center gap-1.5 shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+            <Send className="h-3.5 w-3.5" />Request Access
           </SubscriptionInquiryButton>
         </div>
       </section>
 
-      {/* FAQ */}
+      {/* FAQ — 2 columns */}
       <section className="mb-12 mt-12">
         <h2 className="text-2xl font-semibold tracking-tight mb-6">Common Questions</h2>
-        <div className="space-y-1">
-          <details className="group">
-            <summary className="flex cursor-pointer items-center gap-3 py-3 text-lg font-medium [&::-webkit-details-marker]:hidden">
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
-              Why are you building this?
-            </summary>
-            <p className="pl-7 pb-3 text-base text-muted-foreground">
-              I&apos;ve worked as an investor, CFO, and consultant for funds for over a decade and have
-              experienced first hand the problems with manually collecting, analyzing, and presenting
-              quantitative and qualitative data about the performance and forecasts for funds and their
-              portfolio investments. At the same time, I am not interested in adding another SaaS app
-              to the mix of operating systems in the private investment space, and am looking to provide
-              tools to help investors and fund operators better solutions to build and manage their own
-              solutions, just like I have done with{' '}
-              <a href="https://www.hemrock.com/downloads" className="underline hover:text-foreground">
-                financial model templates
-              </a>
-              , but evolved for today&apos;s technologies.
-            </p>
-          </details>
-          <details className="group">
-            <summary className="flex cursor-pointer items-center gap-3 py-3 text-lg font-medium [&::-webkit-details-marker]:hidden">
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
-              How long does it take to get started?
-            </summary>
-            <p className="pl-7 pb-3 text-base text-muted-foreground">
-              A technical user can deploy in about 1-2 hours. Setting up the infrastructure and
-              obtaining API keys for the various services takes most of the setup time. Onboarding
-              involves importing your existing portfolio data via spreadsheet paste or CSV upload,
-              which can vary based on your number of investment vehicles and the size of your
-              portfolios. The AI pipeline creates companies, metrics, and historical values
-              automatically from your imported data. I'm available for questions, and also offer
-              managed onboarding for a one-time setup fee —{' '}
-              <Link href="/contact" className="underline hover:text-foreground">contact me</Link> for details.
-            </p>
-          </details>
-          <details className="group">
-            <summary className="flex cursor-pointer items-center gap-3 py-3 text-lg font-medium [&::-webkit-details-marker]:hidden">
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
-              What is the tech stack?
-            </summary>
-            <p className="pl-7 pb-3 text-base text-muted-foreground">
-              Next.js and React for the frontend, Supabase (Postgres) for the database and authentication,
-              Vercel or Netlify for hosting, and Anthropic, OpenAI, Google Gemini, or Ollama for
-              AI features. Postmark or Mailgun for inbound mail processing, Google Drive or Dropbox
-              for optional file storage, and Gmail, Resend, Postmark, or Mailgun for outbound emails.
-              All services run on your own accounts so you control access and costs.
-            </p>
-          </details>
-          <details className="group">
-            <summary className="flex cursor-pointer items-center gap-3 py-3 text-lg font-medium [&::-webkit-details-marker]:hidden">
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
-              How much does it cost to run?
-            </summary>
-            <p className="pl-7 pb-3 text-base text-muted-foreground">
-              Most services in the stack have generous free tiers that cover normal usage. The main
-              variable cost is AI API usage (Anthropic, OpenAI, or Gemini) for metric extraction, summaries,
-              and analysis, which scales with your portfolio size and how often you generate reports.
-            </p>
-          </details>
-          <details className="group">
-            <summary className="flex cursor-pointer items-center gap-3 py-3 text-lg font-medium [&::-webkit-details-marker]:hidden">
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
-              Is my portfolio data private?
-            </summary>
-            <p className="pl-7 pb-3 text-base text-muted-foreground">
-              Yes. You deploy on your own infrastructure with your own database. No data is shared
-              with other users or stored on third-party servers beyond the services you configure
-              (your Supabase instance, your AI provider). You own and control everything. A hosted
-              solution is also available for a select number of funds, which involves shared
-              resources, but the platform is designed for data security and isolation between funds.
-            </p>
-          </details>
-          <details className="group">
-            <summary className="flex cursor-pointer items-center gap-3 py-3 text-lg font-medium [&::-webkit-details-marker]:hidden">
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
-              What AI models are supported?
-            </summary>
-            <p className="pl-7 pb-3 text-base text-muted-foreground">
-              The platform supports Anthropic (Claude), OpenAI (GPT), Google (Gemini), and Ollama
-              for local models. You bring your own API key and can switch between providers. AI
-              powers metric extraction from emails, company summaries, portfolio analysis chat,
-              and LP letter drafting.
-            </p>
-          </details>
-          <details className="group">
-            <summary className="flex cursor-pointer items-center gap-3 py-3 text-lg font-medium [&::-webkit-details-marker]:hidden">
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
-              Can I modify the code?
-            </summary>
-            <p className="pl-7 pb-3 text-base text-muted-foreground">
-              Yes. The source is available under a single-fund free use{' '}
-              <a href="https://github.com/tdavidson/reporting/blob/main/LICENSE" className="underline hover:text-foreground">
-                license
-              </a>
-              . You can customize the platform for your own fund. Commercial use across multiple
-              clients requires a separate license. I'm also available to assist with
-              modifications —{' '}
-              <Link href="/contact" className="underline hover:text-foreground">contact me</Link> to discuss.
-            </p>
-          </details>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+          <div className="space-y-1">
+            {faqs.slice(0, Math.ceil(faqs.length / 2)).map(({ q, a }, i) => (
+              <details key={i} className="group">
+                <summary className="flex cursor-pointer items-center gap-3 py-3 text-lg font-medium [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
+                  {q}
+                </summary>
+                <p className="pl-7 pb-3 text-base text-muted-foreground">
+                  {a}
+                </p>
+              </details>
+            ))}
+          </div>
+          <div className="space-y-1">
+            {faqs.slice(Math.ceil(faqs.length / 2)).map(({ q, a }, i) => (
+              <details key={i} className="group">
+                <summary className="flex cursor-pointer items-center gap-3 py-3 text-lg font-medium [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
+                  {q}
+                </summary>
+                <p className="pl-7 pb-3 text-base text-muted-foreground">
+                  {a}
+                </p>
+              </details>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -293,7 +243,7 @@ export default function HomePage() {
                 height={128}
                 className="rounded-lg shrink-0"
               />
-              {/* Mobile: name + icon links, vertically centered */}
+              {/* Mobile: name + icon links */}
               <div className="flex sm:hidden flex-col justify-center h-[128px]">
                 <p className="font-medium text-base mb-2">Taylor Davidson</p>
                 <ul className="text-sm text-muted-foreground space-y-1">

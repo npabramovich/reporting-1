@@ -42,13 +42,6 @@ export default function LPsExplainerPage() {
         <strong>Excel export</strong> &mdash; export the full snapshot dataset to an Excel file with
         all investors, entities, portfolio groups, and metrics.
       </p>
-      <p className="text-muted-foreground">
-        <strong>Entity Ownership Detail</strong> &mdash; an optional section on the LPs index page lets
-        you map investor entities to GP-managed entities (such as an associates or co-invest vehicle)
-        and define ownership percentages. When configured, GP entity investors are automatically excluded
-        from snapshot totals to avoid double-counting. The text fields autocomplete from entities and
-        investors already entered in your snapshots.
-      </p>
     </ExplainerContent>
   )
 }

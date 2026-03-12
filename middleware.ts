@@ -49,9 +49,12 @@ export async function middleware(request: NextRequest) {
   }
 
   // Enforce MFA: redirect to verify page if user has enrolled TOTP but hasn't completed AAL2
-  if (user && !isAuthRoute && !isApiRoute && !isPublicRoute) {
+  if (user && !isAuthRoute && !isPublicRoute) {
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
+      if (isApiRoute) {
+        return NextResponse.json({ error: 'MFA verification required' }, { status: 403 })
+      }
       const url = request.nextUrl.clone()
       url.pathname = '/auth/mfa-verify'
       return NextResponse.redirect(url)

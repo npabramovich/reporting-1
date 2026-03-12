@@ -759,8 +759,7 @@ export default function SupportPage() {
               aggregated metrics. Expand an investor to see individual entity and portfolio group line items.
               All values are inline-editable: click a row to edit metrics, or click an investor name to rename.
               Investors can be grouped under a parent for consolidated reporting, and duplicate investors
-              can be merged together. GP entity investors (configured in Entity Ownership Detail) are
-              automatically excluded from snapshot totals to avoid double-counting.
+              can be merged together.
             </p>
             <p className="text-muted-foreground mb-2">
               <strong>Portfolio group filter</strong> &mdash; when a snapshot has multiple portfolio groups,
@@ -781,27 +780,6 @@ export default function SupportPage() {
             </p>
           </div>
 
-          <div id="lp-gp-entity-ownership">
-            <h3 className="text-sm font-medium mb-1 mt-4">Entity Ownership Detail</h3>
-            <p className="text-muted-foreground mb-2">
-              This optional section on the LPs index page (under a collapsible &ldquo;Optional: Entity Ownership
-              Detail&rdquo; disclosure) lets you map investor entities to GP-managed entities (such as an associates
-              or co-invest vehicle) and define ownership percentages. This is useful when individual investors own
-              pro-rata shares of a GP entity that itself holds positions in the fund&apos;s portfolio groups.
-            </p>
-            <p className="text-muted-foreground mb-2">
-              For each mapping, specify the <strong>investor entity</strong> name, the <strong>GP entity</strong> name,
-              and optionally an <strong>ownership percentage</strong> and <strong>carried interest percentage</strong>.
-              The investor entity and GP entity text fields autocomplete from entities and investors already entered
-              in your snapshots.
-            </p>
-            <p className="text-muted-foreground">
-              When Entity Ownership Detail mappings are configured, the snapshot detail page automatically excludes
-              GP entity investors from the snapshot totals to avoid double-counting &mdash; since those positions are
-              already reflected via the individual investors&apos; pro-rata shares. GP entity investors still appear
-              in the investor table but are not included in the aggregate totals row.
-            </p>
-          </div>
         </div>
 
         <div id="usage">

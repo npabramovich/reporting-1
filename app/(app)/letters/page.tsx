@@ -111,7 +111,7 @@ export default function LettersPage() {
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
             {fv.lp_letters === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Letters
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Quarterly LP letter drafts</p>
+          <p className="text-sm text-muted-foreground mt-1">Create communications about your portfolio for your limited partners</p>
         </div>
         <div className="flex items-center gap-3">
           <AnalystToggleButton />

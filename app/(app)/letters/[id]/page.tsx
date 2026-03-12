@@ -3,10 +3,35 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Lock, RefreshCw, Copy, Check, Save, FileText, Download, ExternalLink, ChevronDown, ChevronRight, MessageSquare } from 'lucide-react'
+import { ArrowLeft, Loader2, Lock, Sparkles, Copy, Check, Save, FileText, Download, ExternalLink, ChevronDown, ChevronRight, MessageSquare, Pencil, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useFeatureVisibility } from '@/components/feature-visibility-context'
+
+const DEFAULT_PROMPT_PLACEHOLDER = `## LP Letter Style Guide (Default)
+
+### Structure
+1. Header: Fund name, period, date
+2. Opening: "Dear Limited Partners" + brief intro paragraph
+3. Portfolio Company Updates: one section per active company
+4. Exited/Written-off: brief notes
+5. Closing: placeholder for GP outlook
+
+### Company Update Format
+- Length: 2-4 paragraphs per company
+- Leads with key metrics and trends
+- References specific numbers from the data
+- Notes significant developments or milestones
+- Flags challenges honestly
+- Does NOT include forward-looking predictions unless data-supported
+
+### Tone
+- Professional but not overly formal
+- First person plural ("We", "Our portfolio")
+- Data-forward — numbers first, narrative supports
+- Balanced — acknowledges both positives and challenges
+- Concise — no filler language`
 
 interface CompanyNarrative {
   company_id: string
@@ -41,6 +66,44 @@ interface Letter {
   updated_at: string
 }
 
+interface PortfolioPreviewData {
+  fundName: string
+  fundCurrency: string
+  periodLabel: string
+  portfolioGroup: string
+  companies: {
+    investment: {
+      companyName: string
+      status: string
+      stage: string | null
+      totalInvested: number
+      totalRealized: number
+      unrealizedValue: number
+      fmv: number
+      moic: number | null
+    }
+  }[]
+  fundMetrics: {
+    committedCapital: number
+    paidInCapital: number
+    distributions: number
+    fmv: number
+    dpi: number | null
+    rvpi: number | null
+    tvpi: number | null
+    irr: number | null
+  } | null
+  totals: {
+    totalInvested: number
+    totalFmv: number
+    totalRealized: number
+    portfolioMoic: number | null
+    activeCount: number
+    exitedCount: number
+    writtenOffCount: number
+  }
+}
+
 export default function LetterEditorPage() {
   const fv = useFeatureVisibility()
   const router = useRouter()
@@ -56,16 +119,18 @@ export default function LetterEditorPage() {
   const [editingNarrative, setEditingNarrative] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
   const [fullDraft, setFullDraft] = useState('')
-  const [viewMode, setViewMode] = useState<'sections' | 'full'>('sections')
+  const [viewMode, setViewMode] = useState<'sections' | 'portfolio' | 'full'>('sections')
   const [exporting, setExporting] = useState<string | null>(null)
   const [googleDriveConnected, setGoogleDriveConnected] = useState(false)
   const [globalPromptOpen, setGlobalPromptOpen] = useState(false)
   const [globalPromptText, setGlobalPromptText] = useState('')
   const [savingGlobalPrompt, setSavingGlobalPrompt] = useState(false)
-  const [editingCompanyPrompt, setEditingCompanyPrompt] = useState<string | null>(null)
+  const [promptPanelCompany, setPromptPanelCompany] = useState<string | null>(null)
   const [companyPromptText, setCompanyPromptText] = useState('')
-  const [companyPromptMode, setCompanyPromptMode] = useState<'add' | 'replace'>('add')
   const [savingCompanyPrompt, setSavingCompanyPrompt] = useState(false)
+  const [liveTableHtml, setLiveTableHtml] = useState<string | null>(null)
+  const [loadingTable, setLoadingTable] = useState(false)
+  const [previewData, setPreviewData] = useState<PortfolioPreviewData | null>(null)
 
   const loadLetter = useCallback(async () => {
     const res = await fetch(`/api/lp-letters/${letterId}`)
@@ -73,14 +138,43 @@ export default function LetterEditorPage() {
       const data = await res.json()
       setLetter(data)
       setFullDraft(data.full_draft ?? '')
-      setGlobalPromptText(data.generation_prompt ?? '')
+      setGlobalPromptText(data.generation_prompt ?? DEFAULT_PROMPT_PLACEHOLDER)
     }
     setLoading(false)
   }, [letterId])
 
+  // Load live portfolio table from preview endpoint
+  const loadPortfolioTable = useCallback(async (l: Letter) => {
+    setLoadingTable(true)
+    try {
+      const params = new URLSearchParams({
+        year: String(l.period_year),
+        quarter: String(l.period_quarter),
+        group: l.portfolio_group,
+        yearEnd: String(l.is_year_end),
+      })
+      const res = await fetch(`/api/lp-letters/preview?${params}`)
+      if (res.ok) {
+        const preview = await res.json()
+        setPreviewData(preview)
+        const html = buildTableHtml(preview)
+        setLiveTableHtml(html)
+      }
+    } catch {
+      // Fall back to stored table
+    } finally {
+      setLoadingTable(false)
+    }
+  }, [])
+
   useEffect(() => {
     loadLetter()
   }, [loadLetter])
+
+  // Load live portfolio table when letter is available
+  useEffect(() => {
+    if (letter) loadPortfolioTable(letter)
+  }, [letter?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Poll for updates when letter is generating server-side
   useEffect(() => {
@@ -208,13 +302,13 @@ export default function LetterEditorPage() {
     setSavingGlobalPrompt(false)
   }
 
-  const saveCompanyPrompt = async (companyId: string) => {
+  const saveCompanyPromptAndRegenerate = async (companyId: string) => {
     if (!letter) return
     setSavingCompanyPrompt(true)
     const existing = letter.company_prompts ?? {}
     const updated = { ...existing }
     if (companyPromptText.trim()) {
-      updated[companyId] = { prompt: companyPromptText.trim(), mode: companyPromptMode }
+      updated[companyId] = { prompt: companyPromptText.trim(), mode: 'add' }
     } else {
       delete updated[companyId]
     }
@@ -228,14 +322,18 @@ export default function LetterEditorPage() {
       setLetter(data)
     }
     setSavingCompanyPrompt(false)
-    setEditingCompanyPrompt(null)
+    setPromptPanelCompany(null)
+    await regenerateCompany(companyId)
   }
 
-  const openCompanyPrompt = (companyId: string) => {
+  const openPromptPanel = (companyId: string) => {
+    if (promptPanelCompany === companyId) {
+      setPromptPanelCompany(null)
+      return
+    }
     const cp = letter?.company_prompts?.[companyId]
     setCompanyPromptText(cp?.prompt ?? '')
-    setCompanyPromptMode(cp?.mode ?? 'add')
-    setEditingCompanyPrompt(companyId)
+    setPromptPanelCompany(companyId)
   }
 
   if (loading) {
@@ -257,6 +355,7 @@ export default function LetterEditorPage() {
 
   const narratives: CompanyNarrative[] = Array.isArray(letter.company_narratives) ? letter.company_narratives : []
   const hasContent = narratives.length > 0 || letter.full_draft
+  const tableHtml = liveTableHtml ?? letter.portfolio_table_html
 
   return (
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
@@ -273,8 +372,19 @@ export default function LetterEditorPage() {
             <p className="text-sm text-muted-foreground mt-0.5">{letter.portfolio_group}</p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" onClick={copyToClipboard}>
+      </div>
+
+      {/* Tabs row with action buttons */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <Tabs value={viewMode} onValueChange={v => setViewMode(v as 'sections' | 'portfolio' | 'full')}>
+          <TabsList>
+            <TabsTrigger value="sections">Edit Company Summaries</TabsTrigger>
+            <TabsTrigger value="portfolio">Review Portfolio Data</TabsTrigger>
+            <TabsTrigger value="full">Review All</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="flex items-center gap-2 ml-auto">
+          <Button size="sm" variant="outline" className="text-muted-foreground" onClick={copyToClipboard} title="Copy the full letter draft to your clipboard">
             {copied ? <Check className="h-3.5 w-3.5 mr-1.5" /> : <Copy className="h-3.5 w-3.5 mr-1.5" />}
             {copied ? 'Copied' : 'Copy'}
           </Button>
@@ -282,8 +392,10 @@ export default function LetterEditorPage() {
             <Button
               size="sm"
               variant="outline"
+              className="text-muted-foreground"
               onClick={() => exportLetter('docx')}
               disabled={!!exporting}
+              title="Download the letter as a Word document (.docx)"
             >
               {exporting === 'docx' ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Download className="h-3.5 w-3.5 mr-1.5" />}
               Download .docx
@@ -293,49 +405,26 @@ export default function LetterEditorPage() {
             <Button
               size="sm"
               variant="outline"
+              className="text-muted-foreground"
               onClick={() => exportLetter('google-docs')}
               disabled={!!exporting}
+              title="Export the letter to Google Docs in your connected Drive"
             >
               {exporting === 'google-docs' ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <ExternalLink className="h-3.5 w-3.5 mr-1.5" />}
               Google Docs
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={regenerateAll}
-            disabled={regeneratingAll}
-          >
-            {regeneratingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
-            Regenerate all
-          </Button>
         </div>
       </div>
 
-      {/* View mode toggle */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setViewMode('sections')}
-          className={`text-xs px-3 py-1 rounded-md ${viewMode === 'sections' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
-        >
-          By company
-        </button>
-        <button
-          onClick={() => setViewMode('full')}
-          className={`text-xs px-3 py-1 rounded-md ${viewMode === 'full' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
-        >
-          Full draft
-        </button>
-      </div>
-
-      {/* Global prompt editor */}
-      <div className="rounded-lg border mb-4">
+      {/* Analyst prompt editor — only on Edit Company Summaries tab */}
+      {viewMode === 'sections' && <div className="rounded-lg border mb-4">
         <button
           onClick={() => setGlobalPromptOpen(!globalPromptOpen)}
           className="flex items-center gap-2 w-full px-4 py-2.5 text-left text-sm hover:bg-muted/50"
         >
           {globalPromptOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-          <span className="font-medium">Generation prompt</span>
+          <span className="font-medium">Analyst prompt</span>
           {letter.generation_prompt && (
             <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">customized</span>
           )}
@@ -348,23 +437,35 @@ export default function LetterEditorPage() {
             <Textarea
               value={globalPromptText}
               onChange={e => setGlobalPromptText(e.target.value)}
-              placeholder="e.g., Write in a concise, data-driven style. Focus on ARR growth and burn rate..."
-              rows={4}
+              rows={6}
               className="text-sm"
             />
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <Button
                 size="sm"
+                variant="outline"
                 onClick={saveGlobalPrompt}
-                disabled={savingGlobalPrompt || globalPromptText === (letter.generation_prompt ?? '')}
+                disabled={savingGlobalPrompt || globalPromptText === (letter.generation_prompt ?? DEFAULT_PROMPT_PLACEHOLDER)}
               >
                 {savingGlobalPrompt ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
                 Save prompt
               </Button>
+              <span className="flex-1" />
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-muted-foreground"
+                onClick={regenerateAll}
+                disabled={regeneratingAll}
+                title="Generate AI narratives for all portfolio companies"
+              >
+                {regeneratingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Sparkles className="h-3.5 w-3.5 mr-1.5" />}
+                Analyze All Companies
+              </Button>
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {!hasContent && !regeneratingAll && letter.status === 'generating' && (
         <div className="rounded-lg border bg-muted/30 p-8 text-center space-y-3">
@@ -387,13 +488,15 @@ export default function LetterEditorPage() {
           ) : (
             <>
               <p className="text-sm text-muted-foreground">No content has been generated for this letter yet.</p>
-              <p className="text-xs text-muted-foreground/60">Click below to generate AI-written narratives for each portfolio company.</p>
+              <p className="text-xs text-muted-foreground/60">Open the Analyst Prompt above to generate AI-written narratives for each portfolio company.</p>
             </>
           )}
-          <Button size="sm" onClick={regenerateAll}>
-            <RefreshCw className="h-4 w-4 mr-1.5" />
-            {letter.generation_error ? 'Retry generation' : 'Generate letter'}
-          </Button>
+          {letter.generation_error && (
+            <Button size="sm" variant="outline" onClick={regenerateAll}>
+              <Sparkles className="h-4 w-4 mr-1.5" />
+              Retry generation
+            </Button>
+          )}
         </div>
       )}
 
@@ -401,136 +504,234 @@ export default function LetterEditorPage() {
         <div className="rounded-lg border bg-muted/30 p-8 text-center space-y-3">
           <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            Generating narratives for all companies. This may take a few minutes...
+            Analyzing all companies. This may take a few minutes...
           </p>
         </div>
       )}
 
       {/* Section view */}
-      {viewMode === 'sections' && hasContent && !regeneratingAll && (
+      {viewMode === 'sections' && !regeneratingAll && (
         <div className="space-y-6">
-          {/* Portfolio table */}
-          {letter.portfolio_table_html && (
-            <div className="rounded-lg border p-4">
-              <h2 className="font-medium text-sm mb-3">Portfolio Summary</h2>
-              <div
-                className="prose prose-sm dark:prose-invert max-w-none [&_table]:w-full [&_table]:text-xs [&_th]:px-2 [&_th]:py-1.5 [&_td]:px-2 [&_td]:py-1.5 [&_th]:border [&_td]:border [&_thead]:bg-muted/50"
-                dangerouslySetInnerHTML={{ __html: letter.portfolio_table_html }}
-              />
-            </div>
-          )}
-
           {/* Company narratives */}
-          {narratives.map(n => (
+          {hasContent && narratives.map(n => (
             <div key={n.company_id} className="rounded-lg border p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-medium text-sm">{n.company_name}</h3>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   {editingNarrative !== n.company_id && (
-                    <button
-                      onClick={() => { setEditingNarrative(n.company_id); setEditText(n.narrative) }}
-                      className="text-[11px] text-primary hover:underline"
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs px-2.5"
+                      onClick={() => { setEditingNarrative(n.company_id); setEditText(n.narrative); setPromptPanelCompany(null) }}
                     >
+                      <Pencil className="h-3 w-3 mr-1.5" />
                       Edit
-                    </button>
+                    </Button>
                   )}
-                  <button
-                    onClick={() => editingCompanyPrompt === n.company_id ? setEditingCompanyPrompt(null) : openCompanyPrompt(n.company_id)}
-                    className={`text-[11px] flex items-center gap-1 ${
-                      letter.company_prompts?.[n.company_id] ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                  <Button
+                    size="sm"
+                    variant={promptPanelCompany === n.company_id ? 'default' : 'outline'}
+                    className="h-7 text-xs px-2.5"
+                    onClick={() => { openPromptPanel(n.company_id); setEditingNarrative(null) }}
                   >
-                    <MessageSquare className="h-3 w-3" />
+                    <MessageSquare className="h-3 w-3 mr-1.5" />
                     Prompt
-                  </button>
-                  <button
-                    onClick={() => regenerateCompany(n.company_id)}
-                    disabled={regenerating === n.company_id}
-                    className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"
-                  >
-                    {regenerating === n.company_id ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-3 w-3" />
+                    {letter.company_prompts?.[n.company_id] && promptPanelCompany !== n.company_id && (
+                      <span className="ml-1 h-1.5 w-1.5 rounded-full bg-primary inline-block" />
                     )}
-                    Regenerate
-                  </button>
+                  </Button>
                 </div>
               </div>
 
-              {editingNarrative === n.company_id ? (
-                <div className="space-y-2">
-                  <Textarea
-                    value={editText}
-                    onChange={e => setEditText(e.target.value)}
-                    rows={8}
-                    className="text-sm"
-                  />
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => saveNarrative(n.company_id, editText)}
-                      disabled={saving}
-                    >
-                      {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
-                      Save
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setEditingNarrative(null)}>
-                      Cancel
-                    </Button>
-                  </div>
+              <div className="flex gap-0">
+                {/* Main content area */}
+                <div className={`min-w-0 ${promptPanelCompany === n.company_id ? 'flex-1' : 'w-full'}`}>
+                  {editingNarrative === n.company_id ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        value={editText}
+                        onChange={e => setEditText(e.target.value)}
+                        rows={8}
+                        className="text-sm"
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => saveNarrative(n.company_id, editText)}
+                          disabled={saving}
+                        >
+                          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
+                          Save
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditingNarrative(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm whitespace-pre-wrap text-muted-foreground leading-relaxed">
+                      {regenerating === n.company_id ? (
+                        <div className="flex items-center gap-2 py-4 text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span className="text-xs">Analyzing company...</span>
+                        </div>
+                      ) : (
+                        n.narrative
+                      )}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="text-sm whitespace-pre-wrap text-muted-foreground leading-relaxed">
-                  {n.narrative}
-                </div>
-              )}
 
-              {/* Per-company prompt editor */}
-              {editingCompanyPrompt === n.company_id && (
-                <div className="mt-3 pt-3 border-t space-y-2">
-                  <p className="text-[11px] text-muted-foreground">
-                    Custom instructions for this company only.
-                  </p>
-                  <Textarea
-                    value={companyPromptText}
-                    onChange={e => setCompanyPromptText(e.target.value)}
-                    placeholder="e.g., Emphasize product milestones and customer growth..."
-                    rows={3}
-                    className="text-sm"
-                  />
-                  <div className="flex items-center gap-3">
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setCompanyPromptMode('add')}
-                        className={`text-[11px] px-2 py-0.5 rounded ${companyPromptMode === 'add' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
-                      >
-                        Add to global
-                      </button>
-                      <button
-                        onClick={() => setCompanyPromptMode('replace')}
-                        className={`text-[11px] px-2 py-0.5 rounded ${companyPromptMode === 'replace' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
-                      >
-                        Replace global
+                {/* Inline prompt panel (slides in from right within card) */}
+                {promptPanelCompany === n.company_id && (
+                  <div className="w-[280px] shrink-0 border-l ml-4 pl-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium">Company prompt</p>
+                      <button onClick={() => setPromptPanelCompany(null)} className="text-muted-foreground hover:text-foreground">
+                        <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => saveCompanyPrompt(n.company_id)}
-                      disabled={savingCompanyPrompt}
-                    >
-                      {savingCompanyPrompt ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
-                      Save
-                    </Button>
+                    <p className="text-[11px] text-muted-foreground">
+                      Custom instructions for this company. Saving will regenerate the narrative.
+                    </p>
+                    <Textarea
+                      value={companyPromptText}
+                      onChange={e => setCompanyPromptText(e.target.value)}
+                      placeholder="e.g., Emphasize product milestones and customer growth..."
+                      rows={5}
+                      className="text-xs"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => saveCompanyPromptAndRegenerate(n.company_id)}
+                        disabled={savingCompanyPrompt || regenerating === n.company_id}
+                      >
+                        {(savingCompanyPrompt || regenerating === n.company_id) ? (
+                          <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                        ) : (
+                          <Sparkles className="h-3 w-3 mr-1.5" />
+                        )}
+                        Save & analyze
+                      </Button>
+                    </div>
+                    {letter.company_prompts?.[n.company_id] && (
+                      <button
+                        className="text-[11px] text-muted-foreground hover:text-destructive"
+                        onClick={async () => {
+                          const existing = letter.company_prompts ?? {}
+                          const updated = { ...existing }
+                          delete updated[n.company_id]
+                          const res = await fetch(`/api/lp-letters/${letterId}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ company_prompts: updated }),
+                          })
+                          if (res.ok) {
+                            const data = await res.json()
+                            setLetter(data)
+                            setCompanyPromptText('')
+                          }
+                        }}
+                      >
+                        Clear prompt
+                      </button>
+                    )}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               <p className="text-[10px] text-muted-foreground/50 mt-2">
                 Last updated: {new Date(n.updated_at).toLocaleString()}
               </p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Portfolio data view */}
+      {viewMode === 'portfolio' && (
+        <div className="space-y-6">
+          {loadingTable ? (
+            <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Loading portfolio data...</span>
+            </div>
+          ) : previewData ? (
+            <>
+              {/* Fund metrics table */}
+              <div className="rounded-lg border p-4">
+                <h2 className="font-medium text-sm mb-3">Fund Summary</h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left px-2 py-1.5 font-semibold">Fund</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">Committed</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">Paid In</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">Distributions</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">FMV</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">DPI</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">RVPI</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">TVPI</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">IRR</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b">
+                        <td className="px-2 py-1.5">
+                          <div className="font-medium">{previewData.fundName}</div>
+                          <div className="text-muted-foreground">{previewData.portfolioGroup}</div>
+                        </td>
+                        {previewData.fundMetrics ? (
+                          <>
+                            <td className="text-right px-2 py-1.5 font-mono">{fmtCurrency(previewData.fundMetrics.committedCapital)}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{fmtCurrency(previewData.fundMetrics.paidInCapital)}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{fmtCurrency(previewData.fundMetrics.distributions)}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{fmtCurrency(previewData.fundMetrics.fmv)}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{previewData.fundMetrics.dpi != null ? `${previewData.fundMetrics.dpi.toFixed(2)}x` : '\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{previewData.fundMetrics.rvpi != null ? `${previewData.fundMetrics.rvpi.toFixed(2)}x` : '\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{previewData.fundMetrics.tvpi != null ? `${previewData.fundMetrics.tvpi.toFixed(2)}x` : '\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{previewData.fundMetrics.irr != null ? `${(previewData.fundMetrics.irr * 100).toFixed(1)}%` : '\u2014'}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
+                          </>
+                        )}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Portfolio company table */}
+              {tableHtml && (
+                <div className="rounded-lg border p-4">
+                  <h2 className="font-medium text-sm mb-3">Portfolio Companies</h2>
+                  <div
+                    className="prose prose-sm dark:prose-invert max-w-none [&_table]:w-full [&_table]:text-xs [&_th]:px-2 [&_th]:py-1.5 [&_td]:px-2 [&_td]:py-1.5 [&_th]:border [&_td]:border [&_thead]:bg-muted/50"
+                    dangerouslySetInnerHTML={{ __html: tableHtml }}
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="rounded-lg border border-dashed p-12 text-center">
+              <p className="text-sm text-muted-foreground">No portfolio data available for this period.</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -546,6 +747,7 @@ export default function LetterEditorPage() {
           <div className="flex gap-2">
             <Button
               size="sm"
+              variant="outline"
               onClick={saveFullDraft}
               disabled={saving || fullDraft === letter.full_draft}
             >
@@ -565,4 +767,57 @@ export default function LetterEditorPage() {
       )}
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Build portfolio table HTML from preview data (client-side, no AI)
+// ---------------------------------------------------------------------------
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function fmtCurrency(value: number): string {
+  if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`
+  if (Math.abs(value) >= 1_000) return `$${(value / 1_000).toFixed(0)}K`
+  return `$${value.toLocaleString()}`
+}
+
+function buildTableHtml(preview: {
+  companies: { investment: { companyName: string; status: string; stage: string | null; totalInvested: number; fmv: number; moic: number | null } }[]
+  totals: { totalInvested: number; totalFmv: number; portfolioMoic: number | null }
+}): string {
+  const rows = preview.companies.map(c => {
+    const inv = c.investment
+    return `<tr>
+      <td>${escHtml(inv.companyName)}</td>
+      <td style="text-transform:capitalize">${escHtml(inv.status)}</td>
+      <td>${escHtml(inv.stage ?? '\u2014')}</td>
+      <td style="text-align:right">${fmtCurrency(inv.totalInvested)}</td>
+      <td style="text-align:right">${fmtCurrency(inv.fmv)}</td>
+      <td style="text-align:right">${inv.moic ? `${inv.moic.toFixed(2)}x` : '\u2014'}</td>
+    </tr>`
+  })
+
+  return `<table>
+  <thead>
+    <tr>
+      <th>Company</th><th>Status</th><th>Stage</th>
+      <th style="text-align:right">Invested</th>
+      <th style="text-align:right">FMV</th>
+      <th style="text-align:right">Gross MOIC</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${rows.join('\n    ')}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="3"><strong>Total</strong></td>
+      <td style="text-align:right"><strong>${fmtCurrency(preview.totals.totalInvested)}</strong></td>
+      <td style="text-align:right"><strong>${fmtCurrency(preview.totals.totalFmv)}</strong></td>
+      <td style="text-align:right"><strong>${preview.totals.portfolioMoic ? `${preview.totals.portfolioMoic.toFixed(2)}x` : '\u2014'}</strong></td>
+    </tr>
+  </tfoot>
+</table>`
 }

@@ -46,9 +46,9 @@ export function SubscriptionInquiryButton({ children, className }: { children: R
 
   return (
     <>
-      <Button variant="outline" size="sm" className={className} onClick={() => { setOpen(true); setSent(false) }}>
+      <button className={className} onClick={() => { setOpen(true); setSent(false) }}>
         {children}
-      </Button>
+      </button>
       <Dialog open={open} onOpenChange={o => { if (!o) setOpen(false) }}>
         <DialogContent className="sm:max-w-md">
           {sent ? (
@@ -61,7 +61,9 @@ export function SubscriptionInquiryButton({ children, className }: { children: R
             <DialogHeader>
               <DialogTitle>Request Access</DialogTitle>
               <DialogDescription>
-                Tell us about your fund and we&apos;ll set you up with the best solution.
+                Tell us about your fund and we&apos;ll set you up with the best solution. You can also email{' '}
+                <a href="mailto:hello@hemrock.com" className="underline underline-offset-2">hello@hemrock.com</a> or call{' '}
+                <a href="tel:+16467700052" className="underline underline-offset-2">+1 646 770 0052</a>.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-3">

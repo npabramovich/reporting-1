@@ -747,21 +747,21 @@ export default function SnapshotDetailPage() {
           />
         )}
         <span className="flex-1" />
-        <Button variant="outline" size="sm" onClick={() => { setImportOpen(!importOpen); setImportResult(null) }}>
+        <Button variant="outline" size="sm" className="text-muted-foreground" onClick={() => { setImportOpen(!importOpen); setImportResult(null) }}>
           <Upload className="h-4 w-4 mr-1" />
           Import
         </Button>
-        <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={exporting || investorTree.length === 0}>
+        <Button variant="outline" size="sm" className="text-muted-foreground" onClick={handleExportExcel} disabled={exporting || investorTree.length === 0}>
           <Download className="h-4 w-4 mr-1" />
           {exporting ? 'Exporting...' : 'Export Excel'}
         </Button>
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="outline" size="sm" className="text-muted-foreground" asChild>
           <a href={`/lps/${snapshotId}/batch`}>
             <FileText className="h-4 w-4 mr-1" />
             Batch PDFs
           </a>
         </Button>
-        <Button variant="outline" size="sm" onClick={() => setReportSettingsOpen(true)}>
+        <Button variant="outline" size="sm" className="text-muted-foreground" onClick={() => setReportSettingsOpen(true)}>
           <Settings className="h-4 w-4 mr-1" />
           Settings
         </Button>

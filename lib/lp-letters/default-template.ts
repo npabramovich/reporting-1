@@ -3,10 +3,9 @@ export const DEFAULT_STYLE_GUIDE = `## LP Letter Style Guide (Default)
 ### Structure
 1. Header: Fund name, period, date
 2. Opening: "Dear Limited Partners" + brief intro paragraph
-3. Portfolio Summary: table of all companies with status, invested, FMV, MOIC
-4. Portfolio Company Updates: one section per active company
-5. Exited/Written-off: brief notes
-6. Closing: placeholder for GP outlook
+3. Portfolio Company Updates: one section per active company
+4. Exited/Written-off: brief notes
+5. Closing: placeholder for GP outlook
 
 ### Company Update Format
 - Length: 2-4 paragraphs per company
@@ -22,9 +21,6 @@ export const DEFAULT_STYLE_GUIDE = `## LP Letter Style Guide (Default)
 - Data-forward — numbers first, narrative supports
 - Balanced — acknowledges both positives and challenges
 - Concise — no filler language
-
-### Portfolio Table Columns
-Company | Status | Stage | Invested | FMV | Gross MOIC
 `
 
 export const DEFAULT_TEMPLATE_NAME = 'Default'

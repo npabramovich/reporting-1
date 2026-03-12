@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, ArrowLeft, Download, CheckSquare, Square, Search, X } from 'lucide-react'
+import { Loader2, ArrowLeft, Download, FileDown, CheckSquare, Square, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrency, formatCurrencyFull } from '@/components/currency-context'
 import { PortfolioGroupFilter } from '@/components/lp-portfolio-group-filter'
@@ -118,6 +118,7 @@ export default function BatchPDFPage() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [generating, setGenerating] = useState(false)
+  const [generatingIndividual, setGeneratingIndividual] = useState(false)
   const [excludedGroups, setExcludedGroups] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -204,6 +205,41 @@ export default function BatchPDFPage() {
     }, 100)
   }
 
+  async function handleGenerateIndividual() {
+    setGeneratingIndividual(true)
+
+    try {
+      const res = await fetch('/api/lps/export/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          snapshotId,
+          investorIds: selectedInvestors.map(i => i.investorId),
+          excludedGroups: Array.from(excludedGroups),
+          snapshotName: snapshot?.name ?? 'Report',
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'PDF generation failed' }))
+        console.error('Individual PDF generation failed:', err)
+        return
+      }
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${snapshot?.name ?? 'LP Reports'} - Individual PDFs.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Individual PDF generation failed:', err)
+    } finally {
+      setGeneratingIndividual(false)
+    }
+  }
+
   const selectedInvestors = investors.filter(i => selected.has(i.investorId))
 
   if (loading) {
@@ -247,7 +283,7 @@ export default function BatchPDFPage() {
       {/* Selection UI (hidden in print) */}
       <div className="no-print">
         <div className="flex items-center gap-4 mb-6">
-          <Button variant="outline" size="sm" onClick={() => router.push(`/lps/${snapshotId}`)}>
+          <Button variant="outline" size="sm" className="text-muted-foreground" onClick={() => router.push(`/lps/${snapshotId}`)}>
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back
           </Button>
@@ -269,11 +305,23 @@ export default function BatchPDFPage() {
           )}
           <Button
             size="sm"
+            variant="outline"
             onClick={handleGenerate}
-            disabled={selected.size === 0 || generating}
+            disabled={selected.size === 0 || generating || generatingIndividual}
           >
             {generating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
-            Save PDF ({selected.size} investor{selected.size !== 1 ? 's' : ''})
+            Combined PDF
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleGenerateIndividual}
+            disabled={selected.size === 0 || generating || generatingIndividual}
+          >
+            {generatingIndividual ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileDown className="h-4 w-4 mr-1" />}
+            {generatingIndividual
+              ? 'Generating...'
+              : `Individual PDFs (${selected.size})`
+            }
           </Button>
         </div>
 
@@ -325,7 +373,7 @@ export default function BatchPDFPage() {
       </div>
 
       {/* Rendered reports (visible in print, hidden on screen unless generating) */}
-      <div className={generating ? '' : 'hidden print:block'}>
+      <div id="batch-reports-container" className={generating || generatingIndividual ? '' : 'hidden print:block'}>
         {selectedInvestors.map(investor => {
           const filtered = excludedGroups.size === 0
             ? investor.investments
@@ -411,7 +459,7 @@ export default function BatchPDFPage() {
                       <tbody>
                         {rows.map(row => (
                           <tr key={row.id} className="border-b border-foreground/10">
-                            <td className="pl-1.5 pr-2.5 py-1.5">{row.entityName}</td>
+                            <td className="pl-1.5 pr-2.5 py-1.5 max-w-0"><div className="line-clamp-2 break-words">{row.entityName}</div></td>
                             <td className="pl-2.5 pr-1.5 py-1.5">{row.portfolioGroup}</td>
                             <td className="px-1.5 py-1.5 text-right font-mono">{fmt(row.commitment)}</td>
                             <td className="px-1.5 py-1.5 text-right font-mono">{fmt(row.paidInCapital)}</td>
@@ -458,7 +506,7 @@ export default function BatchPDFPage() {
                       <tbody>
                         {rows.map(row => (
                           <tr key={row.id} className="border-b border-foreground/10">
-                            <td className="pl-1.5 pr-2.5 py-1.5">{row.entityName}</td>
+                            <td className="pl-1.5 pr-2.5 py-1.5 max-w-0"><div className="line-clamp-2 break-words">{row.entityName}</div></td>
                             <td className="pl-2.5 pr-1.5 py-1.5">{row.portfolioGroup}</td>
                             <td className="px-1.5 py-1.5 text-right font-mono">{fmtPct(row.pctFunded)}</td>
                             <td className="px-1.5 py-1.5 text-right font-mono">{fmtMoic(row.dpi)}</td>

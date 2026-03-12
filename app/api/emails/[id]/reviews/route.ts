@@ -91,15 +91,9 @@ export async function POST(
 
   if (error) return dbError(error, 'emails-id-reviews')
 
-  // Get the email's fund_id for settings check
-  const { data: emailData } = await admin
-    .from('inbound_emails')
-    .select('fund_id')
-    .eq('id', params.id)
-    .single()
-
-  const fundId = (reviews?.[0] as unknown as { fund_id: string })?.fund_id
-    ?? (emailData as unknown as { fund_id: string })?.fund_id
+  // Get fund_id — prefer from RLS-filtered reviews, fall back to email with fund membership check
+  const { fundId: userFundId } = writeCheck
+  const fundId = (reviews?.[0] as unknown as { fund_id: string })?.fund_id ?? userFundId
 
   if (reviews && reviews.length > 0) {
     const reviewIds = reviews.map(r => (r as unknown as { id: string }).id)

@@ -1,14 +1,22 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Sparkles, RefreshCw, Trash2, Upload, Loader2 } from 'lucide-react'
+import { Sparkles, RefreshCw, Upload, Loader2, History, ChevronDown, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+
+interface HistoryEntry {
+  id: string
+  summary_text: string
+  period_label: string | null
+  created_at: string
+}
 
 interface SummaryData {
   summary: string | null
   period_label?: string | null
   generated_at?: string | null
+  history?: HistoryEntry[]
 }
 
 interface Props {
@@ -27,11 +35,12 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
   const [data, setData] = useState<SummaryData | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [clearing, setClearing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
   const [selectedProvider, setSelectedProvider] = useState<string>(defaultAIProvider ?? 'anthropic')
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [viewingHistoryId, setViewingHistoryId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const showProviderToggle = hasClaudeKey && hasOpenAIKey
@@ -41,7 +50,11 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
     setLoading(true)
     try {
       const res = await fetch(`/api/companies/${companyId}/summary`)
-      if (res.ok) setData(await res.json())
+      if (res.ok) {
+        const result = await res.json()
+        setData(result)
+        setViewingHistoryId(null)
+      }
     } finally {
       setLoading(false)
     }
@@ -51,6 +64,7 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
   async function generate() {
     setGenerating(true)
     setError(null)
+    setViewingHistoryId(null)
     try {
       const res = await fetch(`/api/companies/${companyId}/summary`, {
         method: 'POST',
@@ -59,7 +73,8 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
       })
       const result = await res.json()
       if (res.ok) {
-        setData(result)
+        // Reload to get updated history
+        await load()
       } else {
         setError(result.error ?? 'Unable to generate summary.')
       }
@@ -67,21 +82,6 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
       setError('Unable to generate summary at this time.')
     } finally {
       setGenerating(false)
-    }
-  }
-
-  async function clear() {
-    setClearing(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/companies/${companyId}/summary`, { method: 'DELETE' })
-      if (res.ok) {
-        setData({ summary: null })
-      }
-    } catch {
-      setError('Failed to clear summary.')
-    } finally {
-      setClearing(false)
     }
   }
 
@@ -141,7 +141,25 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
     }
   }
 
+  function viewHistoryEntry(entry: HistoryEntry) {
+    setViewingHistoryId(entry.id)
+    setHistoryOpen(false)
+  }
+
+  function viewLatest() {
+    setViewingHistoryId(null)
+    setHistoryOpen(false)
+  }
+
   useEffect(() => { load() }, [load])
+
+  // Determine which summary to display
+  const history = data?.history ?? []
+  const viewingEntry = viewingHistoryId ? history.find(h => h.id === viewingHistoryId) : null
+  const displaySummary = viewingEntry?.summary_text ?? data?.summary
+  const displayDate = viewingEntry?.created_at ?? data?.generated_at
+  const displayPeriod = viewingEntry?.period_label ?? data?.period_label
+  const isViewingOlder = viewingHistoryId !== null && history.length > 0 && viewingHistoryId !== history[0]?.id
 
   // Loading skeleton
   if (loading) {
@@ -226,7 +244,7 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
   }
 
   // Render the summary with paragraph breaks
-  const paragraphs = data.summary.split('\n\n').filter(p => p.trim())
+  const paragraphs = (displaySummary ?? '').split('\n\n').filter(p => p.trim())
 
   return (
     <div className="rounded-lg border bg-card p-5 mb-6">
@@ -241,12 +259,25 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
         <div className="flex items-center gap-2">
           <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground">Analyst</span>
-          {data.generated_at && (
+          {displayDate && (
             <span className="text-[10px] text-muted-foreground">
-              · {new Date(data.generated_at).toLocaleDateString(undefined, {
+              · {new Date(displayDate).toLocaleDateString(undefined, {
                 month: 'short', day: 'numeric', year: 'numeric',
               })}
             </span>
+          )}
+          {displayPeriod && (
+            <span className="text-[10px] text-muted-foreground">
+              · {displayPeriod}
+            </span>
+          )}
+          {isViewingOlder && (
+            <button
+              onClick={viewLatest}
+              className="text-[10px] text-primary hover:underline ml-1"
+            >
+              Back to latest
+            </button>
           )}
         </div>
         <div className="flex items-center gap-1">
@@ -280,22 +311,70 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
             size="sm"
             variant="ghost"
             onClick={generate}
-            disabled={generating || clearing}
+            disabled={generating}
             title="Regenerate summary"
             className="h-7 px-2 text-muted-foreground hover:text-foreground"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${generating ? 'animate-spin' : ''}`} />
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={clear}
-            disabled={generating || clearing}
-            title="Clear and start fresh"
-            className="h-7 px-2 text-muted-foreground hover:text-destructive"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          <div className="relative">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setHistoryOpen(!historyOpen)}
+              title="View previous summaries"
+              className="h-7 px-2 text-muted-foreground hover:text-foreground"
+            >
+              <History className="h-3.5 w-3.5" />
+              <span className="text-[10px] ml-1">{history.length}</span>
+            </Button>
+            {historyOpen && (
+              <div className="absolute right-0 top-full mt-1 z-50 w-72 rounded-lg border bg-popover shadow-lg">
+                <div className="flex items-center justify-between px-3 py-2 border-b">
+                  <span className="text-xs font-medium">Summary history</span>
+                  <button onClick={() => setHistoryOpen(false)} className="text-muted-foreground hover:text-foreground">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {history.length <= 1 ? (
+                    <p className="px-3 py-4 text-[11px] text-muted-foreground text-center">
+                      Each time you analyze this company, a new summary is saved here. Previous summaries are never overwritten.
+                    </p>
+                  ) : (
+                    history.map((entry, i) => (
+                      <button
+                        key={entry.id}
+                        onClick={() => viewHistoryEntry(entry)}
+                        className={`w-full text-left px-3 py-2 hover:bg-muted/50 border-b last:border-0 ${
+                          (viewingHistoryId === entry.id || (!viewingHistoryId && i === 0))
+                            ? 'bg-muted/30'
+                            : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-foreground">
+                            {new Date(entry.created_at).toLocaleDateString(undefined, {
+                              month: 'short', day: 'numeric', year: 'numeric',
+                            })}
+                          </span>
+                          {entry.period_label && (
+                            <span className="text-[10px] text-muted-foreground">{entry.period_label}</span>
+                          )}
+                          {i === 0 && (
+                            <span className="text-[10px] text-primary font-medium">Latest</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+                          {entry.summary_text.slice(0, 120)}{entry.summary_text.length > 120 ? '…' : ''}
+                        </p>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       <div className="space-y-2">

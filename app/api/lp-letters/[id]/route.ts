@@ -48,14 +48,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { fundId } = writeCheck
 
   const body = await req.json()
-  const { company_narratives, full_draft, status, generation_prompt, portfolio_table_html, company_prompts } = body
+  const { company_narratives, full_draft, status, generation_prompt, company_prompts } = body
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (company_narratives !== undefined) updates.company_narratives = company_narratives
   if (full_draft !== undefined) updates.full_draft = full_draft
-  if (status !== undefined) updates.status = status
+  if (status !== undefined && ['draft', 'generating', 'complete'].includes(status)) updates.status = status
   if (generation_prompt !== undefined) updates.generation_prompt = generation_prompt
-  if (portfolio_table_html !== undefined) updates.portfolio_table_html = portfolio_table_html
+  // portfolio_table_html is always derived server-side — not accepted from client
   if (company_prompts !== undefined) updates.company_prompts = company_prompts
 
   const { data, error } = await admin

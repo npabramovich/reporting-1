@@ -8,14 +8,18 @@ export async function GET() {
   }
 
   // Require authentication — setup info should not be publicly accessible
-  try {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  } catch {
-    // If Supabase is not yet configured, allow unauthenticated access for initial setup only
-    // This is safe because the only info returned without a DB is boolean env var checks
+  const supabaseConfigured = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (supabaseConfigured) {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    } catch {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
   }
+  // If Supabase env vars are not set, allow unauthenticated access for initial setup only
+  // (returns only boolean env var presence checks, no sensitive values)
 
   const supabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY

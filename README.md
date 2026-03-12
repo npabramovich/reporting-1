@@ -146,14 +146,6 @@ LPs helps you track and report on your limited partner positions across snapshot
 
 **Excel export** — export the full snapshot dataset to an Excel file with all investors, entities, portfolio groups, and metrics.
 
-### Entity Ownership Detail
-
-An optional section on the LPs index page (under a collapsible disclosure) lets you map investor entities to GP-managed entities (such as an associates or co-invest vehicle) and define ownership percentages. This is useful when individual investors own pro-rata shares of a GP entity that itself holds positions in the fund's portfolio groups.
-
-For each mapping, specify the investor entity name, the GP entity name, and optionally an ownership percentage and carried interest percentage. The text fields autocomplete from entities and investors already entered in your snapshots.
-
-When mappings are configured, the snapshot detail page automatically excludes GP entity investors from the snapshot totals to avoid double-counting — since those positions are already reflected via the individual investors' pro-rata shares.
-
 ## Asks
 
 Asks lets you send reporting request emails to portfolio companies. Compose a message, select which companies should receive it, and send it out. The system tracks each request so you know what was sent and when.

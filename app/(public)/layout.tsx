@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import Link from 'next/link'
-import { Menu, Github, LogIn, Play, Home, Building2, Mail, Upload, BarChart3, Briefcase, Send, StickyNote, Handshake, FileText, Crown, Settings, LifeBuoy, Scale, MessageCircle, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, ChevronRight, Package, Tag } from 'lucide-react'
+import { Menu, Github, LogIn, Play, Home, Building2, Mail, Upload, BarChart3, Briefcase, Send, StickyNote, Handshake, FileText, Crown, Settings, LifeBuoy, Scale, MessageCircle, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, ChevronRight, Package, Tag, Star } from 'lucide-react'
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -231,6 +231,14 @@ function PublicSidebar({ onNavigate }: { onNavigate?: () => void }) {
 function PublicShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { collapsed } = useSidebar()
+  const [starCount, setStarCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    fetch('/api/github-stars')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.stars != null) setStarCount(d.stars) })
+      .catch(() => {})
+  }, [])
 
   return (
     <>
@@ -273,6 +281,12 @@ function PublicShell({ children }: { children: React.ReactNode }) {
             <a href="https://github.com/tdavidson/reporting" target="_blank" rel="noopener noreferrer">
               <Github className="h-4 w-4" />
               <span className="hidden sm:inline">View on GitHub</span>
+              {starCount != null && starCount > 15 && (
+                <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
+                  <Star className="h-3 w-3" />
+                  {starCount}
+                </span>
+              )}
             </a>
           </Button>
           <Button variant="outline" size="sm" asChild className="text-muted-foreground gap-2">

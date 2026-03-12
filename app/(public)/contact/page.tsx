@@ -74,6 +74,13 @@ export default function ContactPage() {
                 >
                   Hemrock
                 </a>
+                {' '}at{' '}
+                <a
+                  href="tel:+16467700052"
+                  className="text-foreground underline underline-offset-4 hover:text-foreground/80"
+                >
+                  +1 646 770 0052
+                </a>
                 .
               </p>
             </div>

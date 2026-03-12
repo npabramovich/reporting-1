@@ -23,7 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // Get fund ID (uncached — quick single query, needed to key everything else)
   const { data: fund } = await supabase.from('funds').select('id').limit(1).single() as { data: { id: string } | null }
-  if (!fund) redirect('/auth')
+  if (!fund) redirect('/onboarding')
 
   // All cached queries in parallel
   const [fundData, membership, fundSettings, reviewBadge, notesBadge] = await Promise.all([
@@ -95,7 +95,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {gaMeasurementId && (
         <>
           <Script src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`} strategy="afterInteractive" />
-          <Script id="ga-config" strategy="afterInteractive">{`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${gaMeasurementId}');`}</Script>
+          <Script id="ga-config" strategy="afterInteractive">{`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config',${JSON.stringify(gaMeasurementId)});`}</Script>
         </>
       )}
     </div>

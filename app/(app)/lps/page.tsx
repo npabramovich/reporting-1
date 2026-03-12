@@ -232,7 +232,7 @@ export default function LPsPage() {
       <details className="mt-8 group">
         <summary className="flex cursor-pointer items-center gap-2 mb-3 [&::-webkit-details-marker]:hidden">
           <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
-          <h3 className="text-base font-medium">Optional: Entity Ownership Detail</h3>
+          <h3 className="text-base font-medium text-muted-foreground">Optional: Entity Ownership Detail</h3>
           {fv.lp_associates === 'admin' && <Lock className="h-3.5 w-3.5 text-amber-500" />}
         </summary>
         <p className="text-xs text-muted-foreground mb-3 pl-6">

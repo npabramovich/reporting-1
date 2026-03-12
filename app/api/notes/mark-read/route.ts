@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   // Validate note IDs belong to the user's fund
   const { data: validNotes } = await admin
-    .from('notes' as any)
+    .from('company_notes' as any)
     .select('id')
     .in('id', ids)
     .eq('fund_id', membership.fund_id) as { data: { id: string }[] | null }

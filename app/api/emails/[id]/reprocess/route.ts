@@ -52,9 +52,9 @@ export async function POST(
   const emailId = email.id
   const fundId = email.fund_id
 
-  // Delete existing reviews and metric_values sourced from this email
-  await admin.from('parsing_reviews').delete().eq('email_id', emailId)
-  await admin.from('metric_values').delete().eq('source_email_id', emailId)
+  // Delete existing reviews and metric_values sourced from this email (scoped to fund)
+  await admin.from('parsing_reviews').delete().eq('email_id', emailId).eq('fund_id', fundId)
+  await admin.from('metric_values').delete().eq('source_email_id', emailId).eq('fund_id', fundId)
 
   // Reset the email record (preserve company_id so manual assignment isn't lost)
   await admin
