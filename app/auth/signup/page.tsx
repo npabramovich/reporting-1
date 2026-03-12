@@ -96,8 +96,8 @@ export default function SignUpPage() {
           </div>
         )}
         <div className="text-center">
-          <div className="h-10 w-10 rounded bg-muted flex items-center justify-center mx-auto mb-2">
-            <Building2 className="h-5 w-5 text-muted-foreground" />
+          <div className="h-14 w-14 rounded-xl overflow-hidden shadow-sm border mx-auto mb-3">
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-lg font-semibold tracking-tight">Portfolio Reporting</h1>
         </div>

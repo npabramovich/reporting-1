@@ -56,9 +56,8 @@ function StepIndicator({ current }: { current: number }) {
               <Circle className="h-5 w-5 text-muted-foreground" />
             )}
             <span
-              className={`text-sm ${
-                current === step.n ? 'font-medium' : 'text-muted-foreground'
-              }`}
+              className={`text-sm ${current === step.n ? 'font-medium' : 'text-muted-foreground'
+                }`}
             >
               {step.label}
             </span>
@@ -266,7 +265,9 @@ function JoinFundScreen({
             ) : (
               <>
                 <div className="flex items-center gap-3 p-4 rounded-lg border bg-muted/50">
-                  <Building2 className="h-8 w-8 text-muted-foreground shrink-0" />
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border shadow-sm">
+                    <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
+                  </div>
                   <div>
                     <p className="font-medium">{fund.name}</p>
                     <p className="text-xs text-muted-foreground">Existing fund at your organization</p>
@@ -464,23 +465,20 @@ function Step2({
   const mailgunWebhookUrl = `${baseUrl}/api/inbound-email/mailgun`
 
   async function submit() {
-    if (provider === 'postmark' && !inboundAddress.trim()) {
-      setError('Postmark inbound address is required.')
-      return
-    }
-    if (provider === 'mailgun' && !mgDomain.trim()) {
-      setError('Mailgun inbound domain is required.')
-      return
-    }
     setError(null)
     setSaving(true)
     try {
       const body: Record<string, string> = { fundId, provider }
-      if (provider === 'postmark') {
+
+      // Only include provider details if they were actually filled out
+      if (provider === 'postmark' && inboundAddress.trim()) {
         body.postmarkInboundAddress = inboundAddress
-      } else {
+      } else if (provider === 'mailgun' && mgDomain.trim()) {
         body.mailgunInboundDomain = mgDomain
         if (mgSigningKey.trim()) body.mailgunSigningKey = mgSigningKey
+      } else {
+        // If they skipped filling out details, don't update the provider
+        delete body.provider
       }
       const res = await fetch('/api/onboarding/inbound-email', {
         method: 'PATCH',
@@ -517,11 +515,10 @@ function Step2({
             <button
               type="button"
               onClick={() => setProvider('postmark')}
-              className={`flex-1 rounded-lg border px-4 py-3 text-left text-sm transition-colors ${
-                provider === 'postmark'
-                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                  : 'hover:bg-accent'
-              }`}
+              className={`flex-1 rounded-lg border px-4 py-3 text-left text-sm transition-colors ${provider === 'postmark'
+                ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                : 'hover:bg-accent'
+                }`}
             >
               <span className="font-medium">Postmark</span>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -531,11 +528,10 @@ function Step2({
             <button
               type="button"
               onClick={() => setProvider('mailgun')}
-              className={`flex-1 rounded-lg border px-4 py-3 text-left text-sm transition-colors ${
-                provider === 'mailgun'
-                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                  : 'hover:bg-accent'
-              }`}
+              className={`flex-1 rounded-lg border px-4 py-3 text-left text-sm transition-colors ${provider === 'mailgun'
+                ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                : 'hover:bg-accent'
+                }`}
             >
               <span className="font-medium">Mailgun</span>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -674,10 +670,8 @@ function Step3({ fundId, onComplete }: { fundId: string; onComplete: () => void 
 
   async function submit() {
     const valid = senders.filter(s => s.email.trim())
-    if (valid.length === 0) {
-      setError('Add at least one authorized sender.')
-      return
-    }
+
+    // Allow empty senders if skipped
     setError(null)
     setSaving(true)
     try {
@@ -762,13 +756,18 @@ function Step3({ fundId, onComplete }: { fundId: string; onComplete: () => void 
           </div>
         </div>
 
-        <Button className="w-full" onClick={submit} disabled={saving}>
-          {saving ? (
-            <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…</>
-          ) : (
-            'Next →'
-          )}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={() => onComplete()} disabled={saving}>
+            Skip for now
+          </Button>
+          <Button className="flex-1" onClick={submit} disabled={saving}>
+            {saving ? (
+              <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…</>
+            ) : (
+              'Next →'
+            )}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )
