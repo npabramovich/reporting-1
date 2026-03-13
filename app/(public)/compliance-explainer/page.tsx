@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { ShieldCheck } from 'lucide-react'
 import { ExplainerContent } from '../explainer-content'
+
+export const metadata = ogMetadata({
+  title: 'Compliance',
+  description: 'Track regulatory filings, tax deadlines, and compliance obligations with a calendar tailored to your fund.',
+})
 
 export default function ComplianceExplainerPage() {
   return (

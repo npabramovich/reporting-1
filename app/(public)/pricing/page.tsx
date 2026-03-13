@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import Link from 'next/link'
 import { Tag, Github, Heart, Calendar, Mail, Send } from 'lucide-react'
+
+export const metadata = ogMetadata({
+  title: 'Pricing',
+  description: 'Free self-hosted, managed deployment, commercial licensing, and hosted subscription options for Analyst portfolio reporting.',
+})
 import { Button } from '@/components/ui/button'
 import { CalendlyButton } from '@/components/calendly-button'
 import { SubscriptionInquiryButton } from '@/components/subscription-inquiry-modal'

@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import Link from 'next/link'
 import { Shield } from 'lucide-react'
+
+export const metadata = ogMetadata({
+  title: 'Privacy Policy',
+  description: 'How Hemrock collects, uses, and protects information across self-hosted, managed, and hosted deployments.',
+})
 
 export default function PrivacyPage() {
   const tocLinks = (

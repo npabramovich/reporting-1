@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import Image from 'next/image'
 import { Building2 } from 'lucide-react'
+
+export const metadata = ogMetadata({
+  title: 'Portfolio',
+  description: 'Monitor your fund with a dashboard of active companies, headline metrics, and shared team notes.',
+})
 
 export default function DashboardExplainerPage() {
   return (

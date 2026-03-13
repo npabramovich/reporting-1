@@ -1,4 +1,10 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { LifeBuoy } from 'lucide-react'
+
+export const metadata = ogMetadata({
+  title: 'Support',
+  description: 'Get help with technical questions, feature requests, or bug reports.',
+})
 
 export default function SupportExplainerPage() {
   return (

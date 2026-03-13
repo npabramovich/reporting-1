@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { Crown } from 'lucide-react'
 import { ExplainerContent } from '../explainer-content'
+
+export const metadata = ogMetadata({
+  title: 'LPs',
+  description: 'Track limited partner positions across snapshots, generate individual investor PDFs, and export to Excel.',
+})
 
 export default function LPsExplainerPage() {
   return (

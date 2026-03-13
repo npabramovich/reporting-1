@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { BarChart3 } from 'lucide-react'
 import { ExplainerContent } from '../explainer-content'
+
+export const metadata = ogMetadata({
+  title: 'Investments',
+  description: 'Track fund-level investment transactions, FMV, MOIC, and realized returns across your portfolio.',
+})
 
 export default function InvestmentsExplainerPage() {
   return (

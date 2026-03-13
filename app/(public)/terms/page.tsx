@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import Link from 'next/link'
 import { FileText } from 'lucide-react'
+
+export const metadata = ogMetadata({
+  title: 'Terms of Service',
+  description: 'Terms governing use of the portfolio reporting platform, including self-hosted and managed deployments.',
+})
 
 export default function TermsPage() {
   const tocLinks = (

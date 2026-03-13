@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { Send } from 'lucide-react'
 import { ExplainerContent } from '../explainer-content'
+
+export const metadata = ogMetadata({
+  title: 'Asks',
+  description: 'Send reporting request emails to portfolio companies and track the full ask-receive-parse cycle.',
+})
 
 export default function AsksExplainerPage() {
   return (

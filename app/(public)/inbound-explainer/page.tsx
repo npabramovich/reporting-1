@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { Mail } from 'lucide-react'
 import { ExplainerContent } from '../explainer-content'
+
+export const metadata = ogMetadata({
+  title: 'Inbound',
+  description: 'View and manage every email received and processed by the automated report ingestion pipeline.',
+})
 
 export default function InboundExplainerPage() {
   return (
