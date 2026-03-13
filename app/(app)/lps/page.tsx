@@ -162,7 +162,7 @@ export default function LPsPage() {
   // =========================================================================
 
   return (
-    <PortfolioNotesProvider>
+    <PortfolioNotesProvider pageContext="lps">
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
       <div className="mb-6 space-y-1">
         <div className="flex items-center justify-between">

@@ -471,7 +471,7 @@ export default function InvestmentsPage() {
 
   if (loading) {
     return (
-      <PortfolioNotesProvider>
+      <PortfolioNotesProvider pageContext="investments">
       <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
         {heading}
         <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -491,7 +491,7 @@ export default function InvestmentsPage() {
 
   if (!data || data.companies.length === 0) {
     return (
-      <PortfolioNotesProvider>
+      <PortfolioNotesProvider pageContext="investments">
       <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
         {heading}
         <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -509,7 +509,7 @@ export default function InvestmentsPage() {
   }
 
   return (
-    <PortfolioNotesProvider>
+    <PortfolioNotesProvider pageContext="investments">
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
       {heading}
 

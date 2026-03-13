@@ -37,7 +37,7 @@ export function InteractionsContent({ interactions }: { interactions: Interactio
   }, [])
 
   return (
-    <PortfolioNotesProvider>
+    <PortfolioNotesProvider pageContext="interactions">
       <div className="p-4 md:py-8 md:pl-8 md:pr-4">
         <div className="mb-6 space-y-1">
           <div className="flex items-center justify-between">

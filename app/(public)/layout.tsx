@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import Link from 'next/link'
-import { Menu, Github, LogIn, Play, Home, Building2, Mail, Upload, BarChart3, Briefcase, Send, StickyNote, Handshake, FileText, Crown, Settings, LifeBuoy, Scale, MessageCircle, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, ChevronRight, Package, Tag, Star } from 'lucide-react'
+import { Menu, Github, LogIn, Play, Home, Building2, Mail, Upload, BarChart3, Briefcase, Send, StickyNote, Handshake, FileText, Crown, ShieldCheck, Settings, LifeBuoy, Scale, MessageCircle, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, ChevronRight, Package, Tag, Star } from 'lucide-react'
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -40,6 +40,7 @@ const PRODUCT_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/interactions-explainer', label: 'Interactions', icon: Handshake },
   { href: '/letters-explainer', label: 'Letters', icon: FileText },
   { href: '/lps-explainer', label: 'LPs', icon: Crown },
+  { href: '/compliance-explainer', label: 'Compliance', icon: ShieldCheck },
   { href: '/settings-explainer', label: 'Settings', icon: Settings },
   { href: '/support-explainer', label: 'Support', icon: LifeBuoy },
 ]

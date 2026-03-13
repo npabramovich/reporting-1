@@ -29,7 +29,7 @@ const steps: { icon: LucideIcon; step: string; title: string; text: string; href
 const faqs: { q: string; a: React.ReactNode }[] = [
   { q: 'Why are you building this?', a: <>I&apos;ve worked as an investor, CFO, and consultant for funds for over a decade and have experienced first hand the problems with manually collecting, analyzing, and presenting quantitative and qualitative data about the performance and forecasts for funds and their portfolio investments. At the same time, I am not interested in adding another SaaS app to the mix of operating systems in the private investment space, and am looking to provide tools to help investors and fund operators better solutions to build and manage their own solutions, just like I have done with{' '}<a href="https://www.hemrock.com/downloads" className="underline hover:text-foreground">financial model templates</a>, but evolved for today&apos;s technologies.</> },
   { q: 'How long does it take to get started?', a: <>A technical user can deploy in about 1-2 hours. Setting up the infrastructure and obtaining API keys for the various services takes most of the setup time. Onboarding involves importing your existing portfolio data via spreadsheet paste or CSV upload, which can vary based on your number of investment vehicles and the size of your portfolios. The AI pipeline creates companies, metrics, and historical values automatically from your imported data. I&apos;m available for questions, and also offer managed onboarding for a one-time setup fee — <Link href="/contact" className="underline hover:text-foreground">contact me</Link> for details.</> },
-  { q: 'What is the tech stack?', a: 'Next.js and React for the frontend, Supabase (Postgres) for the database and authentication, Vercel or Netlify for hosting, and Anthropic, OpenAI, Google Gemini, or Ollama for AI features. Postmark or Mailgun for inbound mail processing, Google Drive or Dropbox for optional file storage, and Gmail, Resend, Postmark, or Mailgun for outbound emails. All services run on your own accounts so you control access and costs.' },
+  { q: 'What is the tech stack?', a: 'Next.js and React for the frontend, Supabase (Postgres) for the database and authentication, Vercel or Netlify for hosting, and Anthropic, OpenAI, Google Gemini, or Ollama for AI features. Postmark or Mailgun for inbound mail processing, Google Drive or Dropbox for optional file storage, and Gmail, Resend, Postmark, or Mailgun for outbound emails. For the self-hosted and managed deployment solutions, all services run on your own accounts so you can control access and costs. For the hosted solution, we provide all the infrastructure except for the API keys for your selected API provider(s), which you pay for using your own account.' },
   { q: 'How much does it cost to run?', a: 'Most services in the stack have generous free tiers that cover normal usage. The main variable cost is AI API usage (Anthropic, OpenAI, or Gemini) for metric extraction, summaries, and analysis, which scales with your portfolio size and how often you generate reports.' },
   { q: 'Is my portfolio data private?', a: 'Yes. You deploy on your own infrastructure with your own database. No data is shared with other users or stored on third-party servers beyond the services you configure (your Supabase instance, your AI provider). You own and control everything. A hosted solution is also available for a select number of funds, which involves shared resources, but the platform is designed for data security and isolation between funds.' },
   { q: 'What AI models are supported?', a: 'The platform supports Anthropic (Claude), OpenAI (GPT), Google (Gemini), and Ollama for local models. You bring your own API key and can switch between providers. AI powers metric extraction from emails, company summaries, portfolio analysis chat, and LP letter drafting.' },
@@ -153,6 +153,7 @@ export default function HomePage() {
               <li>All your funds, SPVs, and team members</li>
               <li>Deploy on your own infrastructure</li>
               <li>Modify and use on your own domain</li>
+              <li>Estimated $0 to $75 per month in operational costs</li>
             </ul>
             <Button size="sm" asChild className="w-full">
               <a href="https://github.com/tdavidson/reporting" className="gap-2">
@@ -169,6 +170,7 @@ export default function HomePage() {
               <li>Deployed on your infrastructure and accounts</li>
               <li>Setup and onboarding included</li>
               <li>Ongoing support available</li>
+              <li>$2,500+ one-time setup costs, ongoing based on need</li>
             </ul>
             <CalendlyButton url="https://calendly.com/foresighthq/15min" className="w-full">
               <Calendar className="h-4 w-4 mr-1.5" />
@@ -183,6 +185,7 @@ export default function HomePage() {
               <li>Fund administrators and outsourced CFOs</li>
               <li>Consultants and service providers</li>
               <li>Use across multiple clients</li>
+              <li>License fee based on deployment</li>
             </ul>
             <Button variant="outline" size="sm" asChild className="w-full">
               <Link href="/contact"><Mail className="h-3.5 w-3.5 mr-1.5" />Contact Taylor</Link>
@@ -190,10 +193,10 @@ export default function HomePage() {
           </div>
         </div>
         <div className="rounded-lg border p-6 mt-6 relative">
-          <span className="absolute -top-3 left-4 bg-muted text-muted-foreground text-xs font-medium px-2.5 py-0.5 rounded-full">Coming Soon</span>
+          <span className="absolute -top-3 left-4 bg-muted text-muted-foreground text-xs font-medium px-2.5 py-0.5 rounded-full">Early Access</span>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <p className="text-base text-muted-foreground flex-1">
-              <span className="font-medium text-foreground">Hosted</span> — Let us host your fund. Get help onboarding your information and processes. Monthly subscription, cancel anytime.
+              <span className="font-medium text-foreground">Hosted</span> — Let us host your fund. Get help onboarding your information and processes. $250+ monthly subscription, cancel anytime.
             </p>
             <SubscriptionInquiryButton className="inline-flex items-center gap-1.5 shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
               <Send className="h-3.5 w-3.5" />Request Access

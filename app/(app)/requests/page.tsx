@@ -231,7 +231,7 @@ export default function RequestsPage() {
 
   if (loading) {
     return (
-      <PortfolioNotesProvider>
+      <PortfolioNotesProvider pageContext="asks">
       <div className="p-4 md:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -259,7 +259,7 @@ export default function RequestsPage() {
 
   if (!settings?.isAdmin) {
     return (
-      <PortfolioNotesProvider>
+      <PortfolioNotesProvider pageContext="asks">
       <div className="p-4 md:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -296,7 +296,7 @@ export default function RequestsPage() {
   const hasEmailProvider = !!settings?.asksEmailProvider
 
   return (
-    <PortfolioNotesProvider>
+    <PortfolioNotesProvider pageContext="asks">
     <div className="p-4 md:p-8">
       <div className="mb-6 space-y-1">
         <div className="flex items-center justify-between">

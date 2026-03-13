@@ -103,9 +103,12 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="p-4 md:p-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-          <AnalystToggleButton />
+        <div className="mb-6 space-y-1">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+            <AnalystToggleButton />
+          </div>
+          <p className="text-sm text-muted-foreground">Configure your fund, integrations, and team preferences</p>
         </div>
         <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 max-w-3xl w-full">
@@ -122,9 +125,12 @@ export default function SettingsPage() {
   if (!settings) {
     return (
       <div className="p-4 md:p-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-          <AnalystToggleButton />
+        <div className="mb-6 space-y-1">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+            <AnalystToggleButton />
+          </div>
+          <p className="text-sm text-muted-foreground">Configure your fund, integrations, and team preferences</p>
         </div>
         <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 max-w-3xl w-full">

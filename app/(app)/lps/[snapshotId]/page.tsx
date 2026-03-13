@@ -704,7 +704,7 @@ export default function SnapshotDetailPage() {
   // =========================================================================
 
   return (
-    <PortfolioNotesProvider>
+    <PortfolioNotesProvider pageContext="lps">
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
       {/* Header row 1: title + analyst */}
       <div className="flex items-center justify-between mb-4">
@@ -1151,32 +1151,31 @@ function InvestorTreeRows({
                 {!isGroup && node.investments.length > 1 && (
                   <span className="text-xs text-muted-foreground ml-1 shrink-0">({node.investments.length})</span>
                 )}
-                <button
-                  onClick={e => { e.stopPropagation(); onStartEditInvestorName(node.investorId, node.investorName) }}
-                  className="text-muted-foreground hover:text-foreground opacity-0 group-hover/row:opacity-100 ml-1 shrink-0"
-                  title="Edit name"
-                >
-                  <Pencil className="h-3 w-3" />
-                </button>
-                {hasContent && (
-                  <a
-                    href={`/lps/${snapshotId}/${node.investorId}`}
-                    onClick={e => e.stopPropagation()}
-                    className="text-muted-foreground hover:text-foreground opacity-0 group-hover/row:opacity-100 ml-0.5 shrink-0"
-                    title="View investor report"
-                  >
-                    <FileText className="h-3 w-3" />
-                  </a>
-                )}
-                {!isGroup && (
+                <div className="opacity-0 group-hover/row:opacity-100 inline-flex items-center gap-1 ml-1.5 shrink-0">
                   <button
-                    onClick={e => { e.stopPropagation(); onOpenGroupDialog(node.investorId, node.investorName) }}
-                    className="text-muted-foreground hover:text-foreground opacity-0 group-hover/row:opacity-100 ml-0.5 shrink-0"
-                    title="Group under another investor"
+                    onClick={e => { e.stopPropagation(); onStartEditInvestorName(node.investorId, node.investorName) }}
+                    className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                   >
-                    <Users className="h-3 w-3" />
+                    <Pencil className="h-2.5 w-2.5" />Edit
                   </button>
-                )}
+                  {hasContent && (
+                    <a
+                      href={`/lps/${snapshotId}/${node.investorId}`}
+                      onClick={e => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    >
+                      <FileText className="h-2.5 w-2.5" />Report
+                    </a>
+                  )}
+                  {!isGroup && (
+                    <button
+                      onClick={e => { e.stopPropagation(); onOpenGroupDialog(node.investorId, node.investorName) }}
+                      className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    >
+                      <Users className="h-2.5 w-2.5" />Group
+                    </button>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -1239,32 +1238,27 @@ function InvestorTreeRows({
                         <span className="text-xs text-muted-foreground ml-1 shrink-0">({child.investments.length})</span>
                       )}
                       {!isSynthetic && (
-                        <button
-                          onClick={e => { e.stopPropagation(); onStartEditInvestorName(child.investorId, child.investorName) }}
-                          className="text-muted-foreground hover:text-foreground opacity-0 group-hover/child:opacity-100 ml-1 shrink-0"
-                          title="Edit name"
-                        >
-                          <Pencil className="h-2.5 w-2.5" />
-                        </button>
-                      )}
-                      {!isSynthetic && (
-                        <a
-                          href={`/lps/${snapshotId}/${child.investorId}`}
-                          onClick={e => e.stopPropagation()}
-                          className="text-muted-foreground hover:text-foreground opacity-0 group-hover/child:opacity-100 ml-0.5 shrink-0"
-                          title="View investor report"
-                        >
-                          <FileText className="h-2.5 w-2.5" />
-                        </a>
-                      )}
-                      {!isSynthetic && (
-                        <button
-                          onClick={e => { e.stopPropagation(); onUngroupInvestor(child.investorId) }}
-                          className="text-muted-foreground hover:text-foreground opacity-0 group-hover/child:opacity-100 ml-0.5 shrink-0"
-                          title="Remove from group"
-                        >
-                          <X className="h-2.5 w-2.5" />
-                        </button>
+                        <div className="opacity-0 group-hover/child:opacity-100 inline-flex items-center gap-1 ml-1.5 shrink-0">
+                          <button
+                            onClick={e => { e.stopPropagation(); onStartEditInvestorName(child.investorId, child.investorName) }}
+                            className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                          >
+                            <Pencil className="h-2.5 w-2.5" />Edit
+                          </button>
+                          <a
+                            href={`/lps/${snapshotId}/${child.investorId}`}
+                            onClick={e => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                          >
+                            <FileText className="h-2.5 w-2.5" />Report
+                          </a>
+                          <button
+                            onClick={e => { e.stopPropagation(); onUngroupInvestor(child.investorId) }}
+                            className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                          >
+                            <X className="h-2.5 w-2.5" />Ungroup
+                          </button>
+                        </div>
                       )}
                     </>
                   )}
@@ -1382,10 +1376,9 @@ function InvestmentRow({
               </span>
               <button
                 onClick={() => onStartEditInvestment(inv)}
-                className="text-muted-foreground hover:text-foreground opacity-0 group-hover/inv:opacity-100 ml-1 shrink-0"
-                title="Edit"
+                className="opacity-0 group-hover/inv:opacity-100 inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors ml-1.5 shrink-0"
               >
-                <Pencil className="h-2.5 w-2.5" />
+                <Pencil className="h-2.5 w-2.5" />Edit
               </button>
             </div>
           </td>
@@ -1491,11 +1484,17 @@ function EditableInvestmentRow({
             className="border border-input rounded px-1 py-0.5 text-xs bg-transparent text-foreground w-full min-w-[100px]"
             placeholder="Portfolio group"
           />
-          <button onClick={onSave} className="text-green-600 hover:text-green-700 shrink-0" title="Save">
-            <Check className="h-3.5 w-3.5" />
+          <button
+            onClick={onSave}
+            className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/20 border-green-200 dark:border-green-800 transition-colors shrink-0"
+          >
+            <Check className="h-2.5 w-2.5" />Save
           </button>
-          <button onClick={onCancel} className="text-muted-foreground hover:text-foreground shrink-0" title="Cancel">
-            <X className="h-3.5 w-3.5" />
+          <button
+            onClick={onCancel}
+            className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
+          >
+            <X className="h-2.5 w-2.5" />Cancel
           </button>
         </div>
       </td>
