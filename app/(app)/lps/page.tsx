@@ -6,6 +6,9 @@ import { Loader2, Plus, ChevronRight, Trash2, Lock, X, Check, Pencil } from 'luc
 import { useFeatureVisibility } from '@/components/feature-visibility-context'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
+import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,12 +41,18 @@ export default function LPsPage() {
   // Snapshot index state
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
   const [loadingSnapshots, setLoadingSnapshots] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   // Create snapshot dialog
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [newDate, setNewDate] = useState('')
   const [creating, setCreating] = useState(false)
+
+  // Delete snapshot confirmation
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   // Snapshot name editing
   const [editingSnapshotListId, setEditingSnapshotListId] = useState<string | null>(null)
@@ -66,7 +75,10 @@ export default function LPsPage() {
     setLoadingSnapshots(true)
     try {
       const res = await fetch('/api/lps/snapshots')
-      if (res.ok) setSnapshots(await res.json())
+      if (res.ok) {
+        setSnapshots(await res.json())
+        setIsAdmin(true) // snapshots API requires admin — success means admin
+      }
     } finally {
       setLoadingSnapshots(false)
     }
@@ -119,10 +131,17 @@ export default function LPsPage() {
     }
   }
 
-  async function handleDeleteSnapshot(id: string) {
-    if (!confirm('Delete this snapshot and all its investment data?')) return
-    await fetch(`/api/lps/snapshots?id=${id}`, { method: 'DELETE' })
-    loadSnapshots()
+  async function handleDeleteSnapshot() {
+    if (!deleteConfirmId || deleteConfirmText !== 'delete') return
+    setDeleting(true)
+    try {
+      await fetch(`/api/lps/snapshots?id=${deleteConfirmId}`, { method: 'DELETE' })
+      setDeleteConfirmId(null)
+      setDeleteConfirmText('')
+      loadSnapshots()
+    } finally {
+      setDeleting(false)
+    }
   }
 
   async function saveSnapshotListName(snapshotId: string) {
@@ -143,18 +162,29 @@ export default function LPsPage() {
   // =========================================================================
 
   return (
+    <PortfolioNotesProvider>
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
-      <div className="flex items-center gap-4 mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-          {fv.lps === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}LPs
-        </h1>
-        <span className="flex-1" />
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" />
-          New Snapshot
-        </Button>
+      <div className="mb-6 space-y-1">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+            {fv.lps === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}LPs
+          </h1>
+          <div className="flex items-center gap-2">
+            <PortfolioNotesButton />
+            <AnalystToggleButton />
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground">Track investments and returns for LPs across portfolios</p>
+        <div className="pt-2">
+          <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            New Snapshot
+          </Button>
+        </div>
       </div>
 
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex-1 min-w-0 w-full">
       {loadingSnapshots ? (
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -202,7 +232,7 @@ export default function LPsPage() {
                   Created {fmtDate(s.created_at?.split('T')[0] ?? null)}
                 </p>
               </div>
-              <button
+              {isAdmin && <button
                 onClick={e => {
                   e.stopPropagation()
                   setSnapshotNameDraft(s.name)
@@ -213,14 +243,14 @@ export default function LPsPage() {
                 title="Rename snapshot"
               >
                 <Pencil className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={e => { e.stopPropagation(); handleDeleteSnapshot(s.id) }}
+              </button>}
+              {isAdmin && <button
+                onClick={e => { e.stopPropagation(); setDeleteConfirmId(s.id); setDeleteConfirmText('') }}
                 className="text-muted-foreground hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Delete snapshot"
               >
                 <Trash2 className="h-4 w-4" />
-              </button>
+              </button>}
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </div>
           ))}
@@ -229,16 +259,15 @@ export default function LPsPage() {
 
       {/* Entity Ownership Detail (fund-level, optional) — gated by lp_associates feature visibility */}
       {(fv.lp_associates === 'everyone' || fv.lp_associates === 'admin') && (
-      <details className="mt-8 group">
-        <summary className="flex cursor-pointer items-center gap-2 mb-3 [&::-webkit-details-marker]:hidden">
-          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-open:rotate-90" />
-          <h3 className="text-base font-medium text-muted-foreground">Optional: Entity Ownership Detail</h3>
+      <div className="mt-8">
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="text-base font-medium text-muted-foreground">GP Entity Ownership</h3>
           {fv.lp_associates === 'admin' && <Lock className="h-3.5 w-3.5 text-amber-500" />}
-        </summary>
-        <p className="text-xs text-muted-foreground mb-3 pl-6">
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">
           Map investor entities to their ownership in GP-managed entities (e.g. associates or co-invest vehicles). GP entity investments are excluded from totals to avoid double-counting.
         </p>
-        <div className="pl-6">
+        <div>
 
         {assocOverrides.length > 0 && (
           <div className="border rounded-lg mb-3 overflow-x-auto">
@@ -373,8 +402,44 @@ export default function LPsPage() {
           </Button>
         </div>
         </div>
-      </details>
+      </div>
       )}
+
+      {/* Delete Snapshot Confirmation */}
+      <Dialog open={!!deleteConfirmId} onOpenChange={open => { if (!open) { setDeleteConfirmId(null); setDeleteConfirmText('') } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Snapshot</DialogTitle>
+            <DialogDescription>
+              This will permanently delete this snapshot and all its investor data. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            <label className="text-sm text-muted-foreground">
+              Type <strong>delete</strong> to confirm
+            </label>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={e => setDeleteConfirmText(e.target.value)}
+              className="w-full border border-input rounded px-2 py-1.5 text-sm bg-transparent text-foreground mt-1"
+              placeholder="delete"
+              onKeyDown={e => e.key === 'Enter' && handleDeleteSnapshot()}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDeleteConfirmId(null); setDeleteConfirmText('') }}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteSnapshot}
+              disabled={deleting || deleteConfirmText !== 'delete'}
+            >
+              {deleting ? 'Deleting...' : 'Delete Snapshot'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Snapshot Dialog */}
       <Dialog open={createOpen} onOpenChange={open => { if (!open) setCreateOpen(false) }}>
@@ -413,6 +478,11 @@ export default function LPsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
+      <PortfolioNotesPanel />
+      <AnalystPanel />
+      </div>
     </div>
+    </PortfolioNotesProvider>
   )
 }

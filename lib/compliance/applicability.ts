@@ -166,6 +166,28 @@ const rules: Record<string, Rule> = {
       return { result: 'not_applicable', reason: 'Auto-dismissed: All entities are U.S.-formed (exempt since March 2025)' }
     return { result: 'needs_review', reason: 'Foreign entity status has not been assessed' }
   },
+
+  'schedule-k1': (p) => {
+    if (p.fund_structure === 'lp' || p.fund_structure === 'llc_partnership')
+      return { result: 'applies', reason: 'Fund is structured as a partnership — K-1s required for all partners' }
+    if (p.fund_structure === 'llc_corp')
+      return { result: 'not_applicable', reason: 'Auto-dismissed: LLC taxed as corporation' }
+    return { result: 'needs_review', reason: 'Fund structure is unclear' }
+  },
+
+  'quarterly-financial-reporting': (_p) => {
+    return { result: 'applies', reason: 'Required for all funds with LP reporting obligations per LPA' }
+  },
+
+  'valuations-soi': (_p) => {
+    return { result: 'applies', reason: 'Required for all funds that report NAV or FMV to LPs' }
+  },
+
+  'partnership-expenses': (p) => {
+    if (p.fund_structure === 'lp' || p.fund_structure === 'llc_partnership')
+      return { result: 'applies', reason: 'Fund is a partnership — quarterly expense allocation review recommended per LPA terms' }
+    return { result: 'needs_review', reason: 'Fund structure is unclear — review LPA expense provisions' }
+  },
 }
 
 export function evaluateApplicability(

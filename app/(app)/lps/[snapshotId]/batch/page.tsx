@@ -221,8 +221,9 @@ export default function BatchPDFPage() {
       })
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'PDF generation failed' }))
+        const err = await res.json().catch(() => ({ error: 'PDF generation failed', status: res.status }))
         console.error('Individual PDF generation failed:', err)
+        alert(`PDF generation failed: ${err?.error || res.statusText}`)
         return
       }
 
@@ -325,6 +326,12 @@ export default function BatchPDFPage() {
           </Button>
         </div>
 
+        {generatingIndividual && (
+          <p className="text-xs text-muted-foreground mb-3">
+            Generating {selected.size} individual PDF{selected.size !== 1 ? 's' : ''}. This typically takes {selected.size <= 10 ? '5–15' : selected.size <= 50 ? '15–30' : '30–60'} seconds — please keep this tab open.
+          </p>
+        )}
+
         {/* Search */}
         <div className="relative max-w-xl mb-3">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -373,7 +380,7 @@ export default function BatchPDFPage() {
       </div>
 
       {/* Rendered reports (visible in print, hidden on screen unless generating) */}
-      <div id="batch-reports-container" className={generating || generatingIndividual ? '' : 'hidden print:block'}>
+      <div id="batch-reports-container" className={generating ? '' : 'hidden print:block'}>
         {selectedInvestors.map(investor => {
           const filtered = excludedGroups.size === 0
             ? investor.investments

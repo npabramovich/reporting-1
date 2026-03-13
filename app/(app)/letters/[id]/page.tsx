@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Lock, Sparkles, Copy, Check, Save, FileText, Download, ExternalLink, ChevronDown, ChevronRight, MessageSquare, Pencil, X } from 'lucide-react'
+import { Loader2, Lock, Sparkles, Copy, Check, Save, FileText, Download, ExternalLink, ChevronDown, ChevronRight, MessageSquare, Pencil, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -360,18 +360,11 @@ export default function LetterEditorPage() {
   return (
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
       {/* Header */}
-      <div className="flex flex-col gap-3 mb-6">
-        <div className="flex items-center gap-3">
-          <Link href="/letters" className="text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-              {fv.lp_letters === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}{letter.period_label}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">{letter.portfolio_group}</p>
-          </div>
-        </div>
+      <div className="mb-6 space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+          {fv.lp_letters === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}{letter.period_label}
+        </h1>
+        <p className="text-sm text-muted-foreground">{letter.portfolio_group}</p>
       </div>
 
       {/* Tabs row with action buttons */}

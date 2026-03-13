@@ -10,6 +10,7 @@ import { useCurrency, formatCurrency } from '@/components/currency-context'
 import { PortfolioGroupFilter } from '@/components/lp-portfolio-group-filter'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
+import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -703,13 +704,17 @@ export default function SnapshotDetailPage() {
   // =========================================================================
 
   return (
+    <PortfolioNotesProvider>
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
       {/* Header row 1: title + analyst */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold tracking-tight">
           {snapshot?.name ?? 'Loading...'}
         </h1>
-        <AnalystToggleButton />
+        <div className="flex items-center gap-2">
+          <PortfolioNotesButton />
+          <AnalystToggleButton />
+        </div>
       </div>
 
       {/* Header row 2: search, filters, actions */}
@@ -919,6 +924,7 @@ export default function SnapshotDetailPage() {
       )}
 
       </div>
+      <PortfolioNotesPanel />
       <AnalystPanel />
       </div>
 
@@ -1055,6 +1061,7 @@ export default function SnapshotDetailPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </PortfolioNotesProvider>
   )
 }
 
@@ -1208,7 +1215,7 @@ function InvestorTreeRows({
               className={`border-b last:border-b-0 bg-muted/10 hover:bg-muted/20 group/child ${!childEditingName ? 'cursor-pointer' : ''}`}
               onClick={() => !childEditingName && onToggle(child.investorId)}
             >
-              <td className="py-1.5 sticky left-0 bg-muted/10 z-10" style={{ paddingLeft: 26 }}>
+              <td className="py-1.5 sticky left-0 bg-background z-10" style={{ paddingLeft: 26 }}>
                 <div className="flex items-center gap-1 max-w-[220px]">
                   {childExpanded ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
                   {!isSynthetic && childEditingName ? (
@@ -1366,7 +1373,7 @@ function InvestmentRow({
         />
       ) : (
         <>
-          <td className="px-3 py-1.5 sticky left-0 bg-muted/20 z-10 text-muted-foreground text-xs" style={{ paddingLeft: padLeft }}>
+          <td className="px-3 py-1.5 sticky left-0 bg-background z-10 text-muted-foreground text-xs" style={{ paddingLeft: padLeft }}>
             <div className="flex items-center gap-1 max-w-[220px]">
               <span className="truncate" title={`${inv.lp_entities?.entity_name} · ${inv.portfolio_group}`}>
                 {inv.lp_entities?.entity_name}
@@ -1474,7 +1481,7 @@ function EditableInvestmentRow({
 
   return (
     <>
-      <td className="px-3 py-1.5 sticky left-0 bg-muted/20 z-10" style={{ paddingLeft: padLeft }}>
+      <td className="px-3 py-1.5 sticky left-0 bg-background z-10" style={{ paddingLeft: padLeft }}>
         <div className="flex items-center gap-1">
           <input
             type="text"

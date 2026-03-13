@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { ArrowLeft, ArrowRight, Loader2, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -145,18 +144,13 @@ export default function NewLetterPage() {
 
   return (
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 max-w-3xl">
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/letters" className="text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            {fv.lp_letters === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}New Letter
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Step {step} of 2 — {step === 1 ? 'Select period' : 'Review & generate'}
-          </p>
-        </div>
+      <div className="mb-6 space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+          {fv.lp_letters === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}New Letter
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Step {step} of 2 — {step === 1 ? 'Select period' : 'Review & generate'}
+        </p>
       </div>
 
       {step === 1 && (

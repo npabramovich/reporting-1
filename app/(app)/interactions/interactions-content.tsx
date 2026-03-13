@@ -5,7 +5,7 @@ import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
 import { useFeatureVisibility } from '@/components/feature-visibility-context'
-import { Lock } from 'lucide-react'
+import { Lock, Copy, Check } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { RelationshipsList } from './relationships-list'
 
@@ -28,6 +28,7 @@ interface Interaction {
 export function InteractionsContent({ interactions }: { interactions: Interaction[] }) {
   const fv = useFeatureVisibility()
   const [inboundAddress, setInboundAddress] = useState('')
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.ok ? r.json() : null).then(s => {
@@ -38,17 +39,40 @@ export function InteractionsContent({ interactions }: { interactions: Interactio
   return (
     <PortfolioNotesProvider>
       <div className="p-4 md:py-8 md:pl-8 md:pr-4">
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.interactions === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Interactions</h1>
-          <div className="flex items-center gap-2">
-            <PortfolioNotesButton />
-            <AnalystToggleButton />
+        <div className="mb-6 space-y-1">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.interactions === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Interactions</h1>
+            <div className="flex items-center gap-2">
+              <PortfolioNotesButton />
+              <AnalystToggleButton />
+            </div>
           </div>
+          <p className="text-sm text-muted-foreground">Lightweight CRM to track qualitative value-adds across the portfolio</p>
+          {inboundAddress && (
+            <div className="flex items-end gap-1.5 pt-2">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Send emails to</label>
+                <Input type="text" readOnly value={inboundAddress}
+                  className="h-8 w-64 text-sm bg-muted text-muted-foreground cursor-default" />
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(inboundAddress)
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 2000)
+                }}
+                className="text-muted-foreground hover:text-foreground transition-colors mb-1.5"
+                title="Copy to clipboard"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col lg:flex-row gap-6 items-start">
           <div className="flex-1 min-w-0 w-full max-w-5xl">
-            <RelationshipsList interactions={interactions} inboundAddress={inboundAddress} />
+            <RelationshipsList interactions={interactions} />
           </div>
           <PortfolioNotesPanel />
           <AnalystPanel />

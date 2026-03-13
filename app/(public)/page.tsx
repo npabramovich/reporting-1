@@ -1,7 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Github, Play, Mail, Upload, BarChart3, Brain, Handshake, FileText, ChevronRight, Lightbulb, Database, TableProperties, ShieldUser, Users, Calendar, Send, ArrowDown, StickyNote, MessageCircle, FolderOpen } from 'lucide-react'
+import { Github, Play, Mail, Upload, BarChart3, Brain, Handshake, FileText, ChevronRight, Lightbulb, Database, TableProperties, ShieldUser, Users, Calendar, Send, ArrowDown, StickyNote, MessageCircle, FolderOpen, ShieldCheck } from 'lucide-react'
 import { CalendlyButton } from '@/components/calendly-button'
 import { SubscriptionInquiryButton } from '@/components/subscription-inquiry-modal'
 import type { LucideIcon } from 'lucide-react'
@@ -23,6 +23,7 @@ const steps: { icon: LucideIcon; step: string; title: string; text: string; href
   { icon: Handshake, step: '6', title: 'Log interactions automatically', text: 'BCC your inbound address on conversations to log interactions and introductions automatically. A lightweight CRM built into your workflow.', href: '/interactions-explainer', screenshot: '/screenshots/interactions-cropped.png' },
   { icon: FileText, step: '7', title: 'Generate LP letters', text: 'Draft quarterly update letters for your LPs using AI and your portfolio data — metrics, summaries, performance, and team notes.', href: '/letters-explainer', screenshot: '/screenshots/letters-cropped.png' },
   { icon: FolderOpen, step: '8', title: 'Consolidate everything in one place', text: 'Manage your portfolio, funds, SPVs, personal investments, and LPs by consolidating data from multiple platforms, spreadsheets, emails, and documents into a single source of truth. Works alongside your fund admin.', href: '/dashboard-explainer', screenshot: '/screenshots/dashboard-cropped.png' },
+  { icon: ShieldCheck, step: '9', title: 'Stay on top of compliance', text: 'Track regulatory filings, tax deadlines, and internal compliance requirements in a calendar tailored to your fund profile. Color-coded by category, with automatic applicability and dismiss tracking.', href: '/compliance-explainer', screenshot: '/screenshots/compliance-cropped.png' },
 ]
 
 const faqs: { q: string; a: React.ReactNode }[] = [
@@ -188,13 +189,16 @@ export default function HomePage() {
             </Button>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-6">
-          <p className="text-base text-muted-foreground flex-1">
-            <span className="font-medium text-foreground">Hosted</span> — Let us host your fund. Get help onboarding your information and processes. Monthly subscription, cancel anytime.
-          </p>
-          <SubscriptionInquiryButton className="inline-flex items-center gap-1.5 shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
-            <Send className="h-3.5 w-3.5" />Request Access
-          </SubscriptionInquiryButton>
+        <div className="rounded-lg border p-6 mt-6 relative">
+          <span className="absolute -top-3 left-4 bg-muted text-muted-foreground text-xs font-medium px-2.5 py-0.5 rounded-full">Coming Soon</span>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <p className="text-base text-muted-foreground flex-1">
+              <span className="font-medium text-foreground">Hosted</span> — Let us host your fund. Get help onboarding your information and processes. Monthly subscription, cancel anytime.
+            </p>
+            <SubscriptionInquiryButton className="inline-flex items-center gap-1.5 shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+              <Send className="h-3.5 w-3.5" />Request Access
+            </SubscriptionInquiryButton>
+          </div>
         </div>
       </section>
 

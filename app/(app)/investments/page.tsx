@@ -451,16 +451,21 @@ export default function InvestmentsPage() {
   }
 
   const heading = (
-    <div className="flex items-center gap-4 mb-6">
-      <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.investments === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Investments</h1>
-      <span className="text-sm text-muted-foreground">As of</span>
-      <input
-        type="date"
-        value={asOfDate}
-        onChange={e => setAsOfDate(e.target.value)}
-        className="border rounded px-2 py-1 text-sm"
-      />
-      <span className="ml-auto flex items-center gap-2"><PortfolioNotesButton /><AnalystToggleButton /></span>
+    <div className="mb-6 space-y-1">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.investments === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Investments</h1>
+        <div className="flex items-center gap-2"><PortfolioNotesButton /><AnalystToggleButton /></div>
+      </div>
+      <p className="text-sm text-muted-foreground">Portfolio-level investment positions and returns</p>
+      <div className="flex items-center gap-2 pt-2">
+        <span className="text-sm text-muted-foreground">As of</span>
+        <input
+          type="date"
+          value={asOfDate}
+          onChange={e => setAsOfDate(e.target.value)}
+          className="border rounded px-2 py-1 text-sm"
+        />
+      </div>
     </div>
   )
 

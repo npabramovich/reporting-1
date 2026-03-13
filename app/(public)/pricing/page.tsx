@@ -67,13 +67,16 @@ export default function PricingPage() {
             </Button>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
-          <p className="text-base text-muted-foreground flex-1">
-            <span className="font-medium text-foreground">Hosted</span> — Let us host your fund. Get help onboarding your information and processes. Monthly subscription, cancel anytime.
-          </p>
-          <SubscriptionInquiryButton className="inline-flex items-center gap-1.5 shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
-            <Send className="h-3.5 w-3.5" />Request Access
-          </SubscriptionInquiryButton>
+        <div className="rounded-lg border p-6 mt-4 relative">
+          <span className="absolute -top-3 left-4 bg-muted text-muted-foreground text-xs font-medium px-2.5 py-0.5 rounded-full">Coming Soon</span>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <p className="text-base text-muted-foreground flex-1">
+              <span className="font-medium text-foreground">Hosted</span> — Let us host your fund. Get help onboarding your information and processes. Monthly subscription, cancel anytime.
+            </p>
+            <SubscriptionInquiryButton className="inline-flex items-center gap-1.5 shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+              <Send className="h-3.5 w-3.5" />Request Access
+            </SubscriptionInquiryButton>
+          </div>
         </div>
 
         {/* Cost details */}

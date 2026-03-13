@@ -67,12 +67,10 @@ export default function ContactPage() {
                 For questions about the platform, setup, licensing, managed hosting, or anything else,
                 reach out to Taylor Davidson at{' '}
                 <a
-                  href="https://www.hemrock.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="mailto:hello@hemrock.com"
                   className="text-foreground underline underline-offset-4 hover:text-foreground/80"
                 >
-                  Hemrock
+                  hello@hemrock.com
                 </a>
                 {' '}at{' '}
                 <a

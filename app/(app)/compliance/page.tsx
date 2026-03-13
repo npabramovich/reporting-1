@@ -1,12 +1,15 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { ShieldCheck, ChevronRight, Check, AlertTriangle, X, ExternalLink, Clock, FileText, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { ChevronRight, Check, AlertTriangle, X, ExternalLink, Clock, Loader2, Link as LinkIcon } from 'lucide-react'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
+import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
 import { evaluateAll, type ComplianceProfile, type Applicability } from '@/lib/compliance/applicability'
+import { ComplianceNav, type ComplianceTab } from './compliance-nav'
 
 interface ComplianceItem {
   id: string
@@ -26,10 +29,12 @@ interface ComplianceItem {
   notes: string | null
   alert: string | null
   sort_order: number
+  scope: 'firm' | 'vehicle'
 }
 
 interface FundSetting {
   compliance_item_id: string
+  portfolio_group: string
   applies: string | null
   dismissed: boolean
   dismissed_reason: string | null
@@ -42,6 +47,14 @@ interface Deadline {
   year: number
   due_date: string | null
   status: string
+}
+
+interface ComplianceLink {
+  id: string
+  compliance_item_id: string | null
+  title: string
+  description: string | null
+  url: string
 }
 
 // Intake questions
@@ -173,7 +186,8 @@ const QUESTIONS = [
   },
 ] as const
 
-type View = 'calendar' | 'items' | 'setup'
+type View = ComplianceTab
+type StatusFilter = 'active' | 'dismissed' | 'all'
 
 const STATUS_COLORS: Record<Applicability | 'monitor', { bg: string; text: string; icon: typeof Check }> = {
   applies: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400', icon: Check },
@@ -182,27 +196,55 @@ const STATUS_COLORS: Record<Applicability | 'monitor', { bg: string; text: strin
   monitor: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400', icon: Clock },
 }
 
+const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
+  'SEC Filings':           { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-400' },
+  'Securities Offerings':  { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-400' },
+  'Tax Filings':           { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400' },
+  'Internal Compliance':   { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400' },
+  'Fund Reporting':        { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-400' },
+  'State Compliance':      { bg: 'bg-rose-100 dark:bg-rose-900/30', text: 'text-rose-700 dark:text-rose-400' },
+  'CFTC':                  { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-400' },
+  'AML / FinCEN':          { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-400' },
+}
+const DEFAULT_CATEGORY_COLORS = { bg: 'bg-muted', text: 'text-muted-foreground' }
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+type CalendarEntry = { item: ComplianceItem; group?: string }
+
+function entryKey(e: CalendarEntry) {
+  return e.group ? `${e.item.id}::${e.group}` : e.item.id
+}
+
 export default function CompliancePage() {
+  const searchParams = useSearchParams()
+  const initialView = (['calendar', 'items', 'setup'].includes(searchParams.get('view') ?? '') ? searchParams.get('view') as View : 'calendar')
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<ComplianceItem[]>([])
   const [profile, setProfile] = useState<ComplianceProfile | null>(null)
   const [fundSettings, setFundSettings] = useState<FundSetting[]>([])
-  const [view, setView] = useState<View>('calendar')
-  const [showDismissed, setShowDismissed] = useState(false)
+  const [portfolioGroups, setPortfolioGroups] = useState<string[]>([])
+  const [closeMonths, setCloseMonths] = useState<Record<string, number[]>>({})
+  const [view, setView] = useState<View>(initialView)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [links, setLinks] = useState<ComplianceLink[]>([])
 
   // Intake state
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({})
 
   useEffect(() => {
-    fetch('/api/compliance')
-      .then(r => r.json())
-      .then(d => {
+    Promise.all([
+      fetch('/api/compliance').then(r => r.json()),
+      fetch('/api/compliance/links').then(r => r.json()),
+    ])
+      .then(([d, linksData]) => {
         setItems(d.items ?? [])
         setFundSettings(d.settings ?? [])
+        setPortfolioGroups(d.portfolioGroups ?? [])
+        setCloseMonths(d.closeMonths ?? {})
+        setLinks(Array.isArray(linksData) ? linksData : [])
         if (d.profile) {
           setProfile(d.profile)
           // Pre-fill answers from existing profile
@@ -212,7 +254,8 @@ export default function CompliancePage() {
             if (val != null) a[q.key] = val
           }
           setAnswers(a)
-          setView('calendar')
+          // Only override view if no query param was provided
+          if (!searchParams.get('view')) setView('calendar')
         } else {
           setView('setup')
         }
@@ -227,14 +270,15 @@ export default function CompliancePage() {
     return evaluateAll(profile)
   }, [profile])
 
-  // Get setting for an item
-  const getSetting = useCallback((itemId: string): FundSetting | undefined => {
-    return fundSettings.find(s => s.compliance_item_id === itemId)
+  // Get setting for an item (optionally scoped to a portfolio group)
+  const getSetting = useCallback((itemId: string, group?: string): FundSetting | undefined => {
+    const pg = group ?? ''
+    return fundSettings.find(s => s.compliance_item_id === itemId && (s.portfolio_group ?? '') === pg)
   }, [fundSettings])
 
-  // Get effective status for an item
-  const getStatus = useCallback((itemId: string): Applicability => {
-    const setting = getSetting(itemId)
+  // Get effective status for an item (optionally scoped to a portfolio group)
+  const getStatus = useCallback((itemId: string, group?: string): Applicability => {
+    const setting = getSetting(itemId, group)
     if (setting?.dismissed) return 'not_applicable'
     if (setting?.applies === 'yes') return 'applies'
     if (setting?.applies === 'no') return 'not_applicable'
@@ -293,13 +337,15 @@ export default function CompliancePage() {
     }
   }
 
-  // Toggle dismiss/restore
-  async function handleToggleDismiss(itemId: string, dismiss: boolean, reason?: string) {
+  // Toggle dismiss/restore (optionally scoped to a portfolio group)
+  async function handleToggleDismiss(itemId: string, dismiss: boolean, reason?: string, group?: string) {
+    const pg = group ?? ''
     const res = await fetch('/api/compliance/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         compliance_item_id: itemId,
+        portfolio_group: pg,
         dismissed: dismiss,
         dismissed_reason: reason,
         applies: dismiss ? 'no' : 'unsure',
@@ -308,7 +354,7 @@ export default function CompliancePage() {
     if (res.ok) {
       const updated = await res.json()
       setFundSettings(prev => {
-        const others = prev.filter(s => s.compliance_item_id !== itemId)
+        const others = prev.filter(s => !(s.compliance_item_id === itemId && (s.portfolio_group ?? '') === pg))
         return [...others, updated]
       })
     }
@@ -316,37 +362,80 @@ export default function CompliancePage() {
 
   // Calendar items grouped by month
   const calendarData = useMemo(() => {
-    const months: Record<number, ComplianceItem[]> = {}
+    const months: Record<number, CalendarEntry[]> = {}
     for (let m = 1; m <= 12; m++) months[m] = []
-    const eventDriven: ComplianceItem[] = []
+    function addToMonths(entry: CalendarEntry, monthList: number[]) {
+      for (const m of monthList) months[m].push(entry)
+    }
 
-    for (const item of items) {
-      const status = getStatus(item.id)
-      if (status === 'not_applicable' && !showDismissed) continue
+    const QUARTERLY_MONTHS: Record<string, number[]> = {
+      'valuations-soi': [3, 6, 9, 12],
+      'partnership-expenses': [3, 6, 9, 12],
+      'quarterly-financial-reporting': [3, 5, 8, 11],
+    }
+    const DEFAULT_QUARTERLY = [1, 4, 7, 10]
+    const QUARTER_LABELS: Record<number, string> = { 1: 'Q1', 2: 'Q1', 3: 'Q1', 4: 'Q2', 5: 'Q2', 6: 'Q2', 7: 'Q3', 8: 'Q3', 9: 'Q3', 10: 'Q4', 11: 'Q4', 12: 'Q4' }
 
+    function placeItem(item: ComplianceItem, group?: string) {
       if (item.deadline_month) {
-        months[item.deadline_month].push(item)
+        const status = getStatus(item.id, group)
+        if (statusFilter === 'active' && status === 'not_applicable') return
+        if (statusFilter === 'dismissed' && status !== 'not_applicable') return
+        months[item.deadline_month].push({ item, group })
+      } else if (item.frequency === 'Quarterly') {
+        // Each quarter gets its own entry so it can be dismissed independently
+        const qMonths = QUARTERLY_MONTHS[item.id] ?? DEFAULT_QUARTERLY
+        for (const m of qMonths) {
+          const qLabel = QUARTER_LABELS[m]
+          const qGroup = group ? `${group}::${qLabel}` : qLabel
+          const status = getStatus(item.id, qGroup)
+          if (statusFilter === 'active' && status === 'not_applicable') continue
+          if (statusFilter === 'dismissed' && status !== 'not_applicable') continue
+          months[m].push({ item, group: qGroup })
+        }
       } else {
-        eventDriven.push(item)
+        // Event-driven items (Form D, Blue Sky) — only show for funds
+        // with a current-year vintage (new fund/SPV this year)
       }
     }
-    return { months, eventDriven }
-  }, [items, getStatus, showDismissed])
 
-  // Items grouped by status
-  const groupedItems = useMemo(() => {
-    const groups: Record<string, ComplianceItem[]> = {
-      applies: [],
-      needs_review: [],
-      monitor: [],
-      not_applicable: [],
-    }
+    // Portfolio groups that had closes (commitment entries) this year
+    const groupsWithCloses = Object.keys(closeMonths).filter(pg => closeMonths[pg].length > 0)
+
     for (const item of items) {
-      const status = getStatus(item.id)
-      groups[status]?.push(item)
+      if (item.frequency === 'Event-driven') {
+        // Place only in months where a close (commitment entry) occurred
+        for (const pg of groupsWithCloses) {
+          const status = getStatus(item.id, pg)
+          if (statusFilter === 'active' && status === 'not_applicable') continue
+          if (statusFilter === 'dismissed' && status !== 'not_applicable') continue
+          addToMonths({ item, group: pg }, closeMonths[pg])
+        }
+      } else if (item.scope === 'vehicle') {
+        for (const pg of portfolioGroups) {
+          if (item.frequency === 'Quarterly') {
+            placeItem(item, pg)
+          } else {
+            const status = getStatus(item.id, pg)
+            if (statusFilter === 'active' && status === 'not_applicable') continue
+            if (statusFilter === 'dismissed' && status !== 'not_applicable') continue
+            placeItem(item, pg)
+          }
+        }
+      } else {
+        if (item.frequency === 'Quarterly') {
+          placeItem(item)
+        } else {
+          const status = getStatus(item.id)
+          if (statusFilter === 'active' && status === 'not_applicable') continue
+          if (statusFilter === 'dismissed' && status !== 'not_applicable') continue
+          placeItem(item)
+        }
+      }
     }
-    return groups
-  }, [items, getStatus])
+    return { months }
+  }, [items, getStatus, statusFilter, portfolioGroups, closeMonths])
+
 
   if (loading) {
     return (
@@ -357,43 +446,41 @@ export default function CompliancePage() {
   }
 
   return (
+    <PortfolioNotesProvider>
     <div className="p-4 md:py-8 md:pl-8 md:pr-4">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-3">
-          <ShieldCheck className="h-6 w-6 text-muted-foreground" />
-          Compliance
-        </h1>
-        <div className="flex items-center gap-2">
-          {profile && (
-            <>
-              <Button
-                variant={view === 'calendar' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="text-muted-foreground"
-                onClick={() => setView('calendar')}
-              >
-                Calendar
-              </Button>
-              <Button
-                variant={view === 'items' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="text-muted-foreground"
-                onClick={() => setView('items')}
-              >
-                All Items
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                onClick={() => setView('setup')}
-              >
-                Fund Profile
-              </Button>
-            </>
-          )}
-          <AnalystToggleButton />
+      <div className="mb-6 space-y-1">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold tracking-tight">Compliance</h1>
+          <div className="flex items-center gap-2">
+            <PortfolioNotesButton />
+            <AnalystToggleButton />
+          </div>
         </div>
+        <p className="text-sm text-muted-foreground">Track regulatory filings and compliance deadlines</p>
+        {profile && (
+          <div className="flex items-center justify-between flex-wrap gap-2 pt-2">
+            <ComplianceNav active={view} onSelect={(tab) => setView(tab)} />
+            {(view === 'calendar' || view === 'items') && (
+              <div className="flex items-center rounded-md border text-xs">
+                {(['active', 'dismissed', 'all'] as const).map((f, i, arr) => (
+                  <button
+                    key={f}
+                    onClick={() => setStatusFilter(f)}
+                    className={`px-3 py-1 capitalize transition-colors ${
+                      i === 0 ? 'rounded-l-md' : i === arr.length - 1 ? 'rounded-r-md' : ''
+                    } ${
+                      statusFilter === f
+                        ? 'bg-foreground text-background'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -419,10 +506,11 @@ export default function CompliancePage() {
               getSetting={getSetting}
               expandedItem={expandedItem}
               setExpandedItem={setExpandedItem}
-              showDismissed={showDismissed}
-              setShowDismissed={setShowDismissed}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
               onToggleDismiss={handleToggleDismiss}
-              groupedItems={groupedItems}
+
+              links={links}
             />
           )}
 
@@ -434,16 +522,19 @@ export default function CompliancePage() {
               getSetting={getSetting}
               expandedItem={expandedItem}
               setExpandedItem={setExpandedItem}
-              showDismissed={showDismissed}
-              setShowDismissed={setShowDismissed}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
               onToggleDismiss={handleToggleDismiss}
-              groupedItems={groupedItems}
+
+              links={links}
             />
           )}
         </div>
+        <PortfolioNotesPanel />
         <AnalystPanel />
       </div>
     </div>
+    </PortfolioNotesProvider>
   )
 }
 
@@ -556,143 +647,120 @@ function IntakeQuestionnaire({
 // --- Calendar View ---
 function CalendarView({
   calendarData, items, getStatus, applicability, getSetting, expandedItem, setExpandedItem,
-  showDismissed, setShowDismissed, onToggleDismiss, groupedItems,
+  statusFilter, setStatusFilter, onToggleDismiss, links,
 }: {
-  calendarData: { months: Record<number, ComplianceItem[]>; eventDriven: ComplianceItem[] }
+  calendarData: { months: Record<number, CalendarEntry[]> }
   items: ComplianceItem[]
-  getStatus: (id: string) => Applicability
+  getStatus: (id: string, group?: string) => Applicability
   applicability: Record<string, { result: Applicability; reason: string }>
-  getSetting: (id: string) => FundSetting | undefined
+  getSetting: (id: string, group?: string) => FundSetting | undefined
   expandedItem: string | null
   setExpandedItem: (id: string | null) => void
-  showDismissed: boolean
-  setShowDismissed: (v: boolean) => void
-  onToggleDismiss: (id: string, dismiss: boolean, reason?: string) => void
-  groupedItems: Record<string, ComplianceItem[]>
+  statusFilter: StatusFilter
+  setStatusFilter: (v: StatusFilter) => void
+  onToggleDismiss: (id: string, dismiss: boolean, reason?: string, group?: string) => void
+  links: ComplianceLink[]
 }) {
   const now = new Date()
   const currentMonth = now.getMonth() + 1
+  // Track which entry is expanded (item id + optional group)
+  const [expandedEntry, setExpandedEntry] = useState<{ itemId: string; group?: string } | null>(null)
+  // Months that have entries
+  const activeMonths = Array.from({ length: 12 }, (_, i) => i + 1)
+    .filter(month => (calendarData.months[month] ?? []).length > 0)
 
   return (
     <div>
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <Card>
-          <CardContent className="p-3">
-            <p className="text-[10px] text-muted-foreground mb-0.5">Applies</p>
-            <p className="text-2xl font-semibold">{groupedItems.applies?.length ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3">
-            <p className="text-[10px] text-muted-foreground mb-0.5">Needs Review</p>
-            <p className="text-2xl font-semibold text-amber-600">{groupedItems.needs_review?.length ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3">
-            <p className="text-[10px] text-muted-foreground mb-0.5">Monitor</p>
-            <p className="text-2xl font-semibold text-blue-600">{groupedItems.monitor?.length ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3">
-            <p className="text-[10px] text-muted-foreground mb-0.5">Not Applicable</p>
-            <p className="text-2xl font-semibold text-muted-foreground">{groupedItems.not_applicable?.length ?? 0}</p>
-          </CardContent>
-        </Card>
+      {/* Header */}
+      <div className="mb-3">
+        <h2 className="text-sm font-medium">{now.getFullYear()} Compliance Calendar</h2>
       </div>
 
-      {/* Calendar grid */}
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-medium">2026 Compliance Calendar</h2>
-        <button
-          onClick={() => setShowDismissed(!showDismissed)}
-          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-        >
-          {showDismissed ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-          {showDismissed ? 'Hide dismissed' : 'Show all'}
-        </button>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">
-        {Array.from({ length: 12 }, (_, i) => i + 1).map(month => {
-          const monthItems = calendarData.months[month] ?? []
-          const isPast = month < currentMonth
-          const isCurrent = month === currentMonth
-
-          return (
-            <div
-              key={month}
-              className={`rounded-lg border p-3 ${isCurrent ? 'border-foreground' : ''} ${isPast ? 'opacity-50' : ''}`}
-            >
-              <p className={`text-xs font-medium mb-2 ${isCurrent ? 'text-foreground' : 'text-muted-foreground'}`}>
-                {MONTHS[month - 1]}
-              </p>
-              {monthItems.length === 0 ? (
-                <p className="text-[10px] text-muted-foreground">—</p>
-              ) : (
+      {/* Two-column on desktop, single-column on mobile */}
+      <div className="flex flex-col lg:flex-row gap-5 mb-6">
+        {/* Month boxes column */}
+        <div className="w-full lg:w-80 lg:shrink-0 space-y-3">
+          {activeMonths.map(month => {
+            const entries = calendarData.months[month] ?? []
+            const isPast = month < currentMonth
+            const isCurrent = month === currentMonth
+            return (
+              <div
+                key={month}
+                className={`rounded-lg border p-3 ${isPast ? 'opacity-60' : ''}`}
+              >
+                <p className={`text-base font-semibold mb-2 ${isCurrent ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {MONTHS[month - 1]}
+                </p>
                 <div className="space-y-1">
-                  {monthItems.map(item => {
-                    const status = getStatus(item.id)
-                    const colors = STATUS_COLORS[status]
+                  {entries.map(entry => {
+                    const { item, group } = entry
+                    const status = getStatus(item.id, group)
+                    const colors = status === 'not_applicable'
+                      ? { bg: 'bg-muted', text: 'text-muted-foreground' }
+                      : (CATEGORY_COLORS[item.category] ?? DEFAULT_CATEGORY_COLORS)
+                    const ek = entryKey(entry)
+                    const isExpanded = expandedEntry?.itemId === item.id && expandedEntry?.group === group
                     return (
-                      <button
-                        key={item.id}
-                        onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
-                        className={`w-full text-left px-2 py-1 rounded text-[11px] ${colors.bg} ${colors.text} hover:opacity-80 transition-opacity`}
-                      >
-                        {item.short_name}
-                        {item.deadline_day && <span className="ml-1 opacity-70">({item.deadline_month}/{item.deadline_day})</span>}
-                      </button>
+                      <div key={ek}>
+                        <button
+                          onClick={() => setExpandedEntry(isExpanded ? null : { itemId: item.id, group })}
+                          className={`w-full text-left px-2 py-1 rounded text-xs ${
+                            isExpanded ? 'ring-1 ring-foreground' : ''
+                          } ${colors.bg} ${colors.text} hover:opacity-80 transition-opacity`}
+                        >
+                          {item.short_name}
+                          {group && <span className="ml-1 opacity-70">· {group}</span>}
+                          {item.deadline_day && !group && <span className="ml-1 opacity-70">({item.deadline_month}/{item.deadline_day})</span>}
+                        </button>
+                        {/* Inline detail on mobile */}
+                        {isExpanded && (
+                          <div className="mt-2 mb-1 lg:hidden">
+                            <ItemDetail
+                              item={items.find(i => i.id === item.id)!}
+                              status={getStatus(item.id, group)}
+                              reason={applicability[item.id]?.reason}
+                              setting={getSetting(item.id, group)}
+                              group={group}
+                              onClose={() => setExpandedEntry(null)}
+                              onToggleDismiss={onToggleDismiss}
+                              links={links.filter(l => l.compliance_item_id === item.id)}
+                            />
+                          </div>
+                        )}
+                      </div>
                     )
                   })}
                 </div>
-              )}
+              </div>
+            )
+          })}
+
+        </div>
+
+        {/* Detail panel — sticky on the right, desktop only */}
+        <div className="hidden lg:block flex-1 min-w-0">
+          {expandedEntry ? (
+            <div className="sticky top-8">
+              <ItemDetail
+                item={items.find(i => i.id === expandedEntry.itemId)!}
+                status={getStatus(expandedEntry.itemId, expandedEntry.group)}
+                reason={applicability[expandedEntry.itemId]?.reason}
+                setting={getSetting(expandedEntry.itemId, expandedEntry.group)}
+                group={expandedEntry.group}
+                onClose={() => setExpandedEntry(null)}
+                onToggleDismiss={onToggleDismiss}
+                links={links.filter(l => l.compliance_item_id === expandedEntry.itemId)}
+              />
             </div>
-          )
-        })}
+          ) : (
+            <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
+              Click an item to view details
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Event-driven / rolling */}
-      {calendarData.eventDriven.length > 0 && (
-        <div className="mb-6">
-          <h3 className="text-xs font-medium text-muted-foreground mb-2">Event-Driven / Rolling Deadlines</h3>
-          <div className="space-y-1">
-            {calendarData.eventDriven.map(item => {
-              const status = getStatus(item.id)
-              const colors = STATUS_COLORS[status]
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
-                  className={`w-full text-left px-3 py-2 rounded-lg border text-sm flex items-center justify-between ${
-                    expandedItem === item.id ? 'bg-accent' : 'hover:bg-accent/50'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <span className={`inline-block w-2 h-2 rounded-full ${colors.bg.replace('bg-', 'bg-').replace('/30', '')}`} />
-                    {item.short_name}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{item.deadline_description}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Expanded item detail */}
-      {expandedItem && (
-        <ItemDetail
-          item={items.find(i => i.id === expandedItem)!}
-          status={getStatus(expandedItem)}
-          reason={applicability[expandedItem]?.reason}
-          setting={getSetting(expandedItem)}
-          onClose={() => setExpandedItem(null)}
-          onToggleDismiss={onToggleDismiss}
-        />
-      )}
     </div>
   )
 }
@@ -700,52 +768,52 @@ function CalendarView({
 // --- Items List View ---
 function ItemsView({
   items, getStatus, applicability, getSetting, expandedItem, setExpandedItem,
-  showDismissed, setShowDismissed, onToggleDismiss, groupedItems,
+  statusFilter, setStatusFilter, onToggleDismiss, links,
 }: {
   items: ComplianceItem[]
-  getStatus: (id: string) => Applicability
+  getStatus: (id: string, group?: string) => Applicability
   applicability: Record<string, { result: Applicability; reason: string }>
-  getSetting: (id: string) => FundSetting | undefined
+  getSetting: (id: string, group?: string) => FundSetting | undefined
   expandedItem: string | null
   setExpandedItem: (id: string | null) => void
-  showDismissed: boolean
-  setShowDismissed: (v: boolean) => void
-  onToggleDismiss: (id: string, dismiss: boolean, reason?: string) => void
-  groupedItems: Record<string, ComplianceItem[]>
+  statusFilter: StatusFilter
+  setStatusFilter: (v: StatusFilter) => void
+  onToggleDismiss: (id: string, dismiss: boolean, reason?: string, group?: string) => void
+  links: ComplianceLink[]
 }) {
-  const sections: { key: string; label: string; items: ComplianceItem[] }[] = [
-    { key: 'applies', label: `Applies to your fund (${groupedItems.applies?.length ?? 0})`, items: groupedItems.applies ?? [] },
-    { key: 'needs_review', label: `Needs review (${groupedItems.needs_review?.length ?? 0})`, items: groupedItems.needs_review ?? [] },
-    { key: 'monitor', label: `Monitor (${groupedItems.monitor?.length ?? 0})`, items: groupedItems.monitor ?? [] },
-  ]
+  // Group items by category
+  const CATEGORY_ORDER = ['SEC Filings', 'Securities Offerings', 'Tax Filings', 'Fund Reporting', 'Internal Compliance', 'State Compliance', 'CFTC', 'AML / FinCEN']
 
-  if (showDismissed) {
-    sections.push({ key: 'not_applicable', label: `Not applicable (${groupedItems.not_applicable?.length ?? 0})`, items: groupedItems.not_applicable ?? [] })
-  }
+  const categoryGroups = useMemo(() => {
+    const groups: Record<string, ComplianceItem[]> = {}
+    for (const item of items) {
+      const status = getStatus(item.id)
+      if (statusFilter === 'active' && status === 'not_applicable') continue
+      if (statusFilter === 'dismissed' && status !== 'not_applicable') continue
+      if (!groups[item.category]) groups[item.category] = []
+      groups[item.category].push(item)
+    }
+    return groups
+  }, [items, getStatus, statusFilter])
+
+  const orderedCategories = CATEGORY_ORDER.filter(c => categoryGroups[c]?.length > 0)
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4">
         <h2 className="text-sm font-medium">All Compliance Items</h2>
-        <button
-          onClick={() => setShowDismissed(!showDismissed)}
-          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-        >
-          {showDismissed ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-          {showDismissed ? 'Hide dismissed' : 'Show all'}
-        </button>
       </div>
 
-      {sections.map(section => (
-        <div key={section.key} className="mb-6">
-          <h3 className="text-xs font-medium text-muted-foreground mb-2">{section.label}</h3>
-          {section.items.length === 0 ? (
-            <p className="text-xs text-muted-foreground pl-2">None</p>
-          ) : (
+      {orderedCategories.map(category => {
+        const catColors = CATEGORY_COLORS[category] ?? DEFAULT_CATEGORY_COLORS
+        return (
+          <div key={category} className="mb-6">
+            <h3 className={`text-xs font-medium mb-2 ${catColors.text}`}>{category} ({categoryGroups[category].length})</h3>
             <div className="space-y-1">
-              {section.items.map(item => {
+              {categoryGroups[category].map(item => {
                 const status = getStatus(item.id)
-                const colors = STATUS_COLORS[status]
+                const isDismissed = status === 'not_applicable'
+                const colors = isDismissed ? { bg: 'bg-muted', text: 'text-muted-foreground' } : catColors
                 const isExpanded = expandedItem === item.id
                 return (
                   <div key={item.id}>
@@ -756,13 +824,8 @@ function ItemsView({
                       }`}
                     >
                       <span className="flex items-center gap-2">
-                        <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${colors.bg}`}>
-                          {(() => { const Icon = colors.icon; return <Icon className={`h-3 w-3 ${colors.text}`} /> })()}
-                        </span>
-                        <span>
-                          <span className="font-medium">{item.short_name}</span>
-                          <span className="text-muted-foreground ml-2">{item.category}</span>
-                        </span>
+                        <span className={`inline-block w-2 h-2 rounded-full ${colors.bg}`} />
+                        <span className={`font-medium ${isDismissed ? 'text-muted-foreground line-through' : ''}`}>{item.short_name}</span>
                       </span>
                       <span className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">{item.deadline_description}</span>
@@ -777,29 +840,32 @@ function ItemsView({
                         setting={getSetting(item.id)}
                         onClose={() => setExpandedItem(null)}
                         onToggleDismiss={onToggleDismiss}
+                        links={links.filter(l => l.compliance_item_id === item.id)}
                       />
                     )}
                   </div>
                 )
               })}
             </div>
-          )}
-        </div>
-      ))}
+          </div>
+        )
+      })}
     </div>
   )
 }
 
 // --- Item Detail Panel ---
 function ItemDetail({
-  item, status, reason, setting, onClose, onToggleDismiss,
+  item, status, reason, setting, group, onClose, onToggleDismiss, links,
 }: {
   item: ComplianceItem
   status: Applicability
   reason?: string
   setting?: FundSetting
+  group?: string
   onClose: () => void
-  onToggleDismiss: (id: string, dismiss: boolean, reason?: string) => void
+  onToggleDismiss: (id: string, dismiss: boolean, reason?: string, group?: string) => void
+  links?: ComplianceLink[]
 }) {
   if (!item) return null
 
@@ -807,8 +873,8 @@ function ItemDetail({
     <div className="rounded-lg border bg-card p-4 mt-2 mb-4">
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h3 className="font-medium text-sm">{item.name}</h3>
-          <p className="text-xs text-muted-foreground">{item.category} · {item.frequency} · {item.complexity} complexity</p>
+          <h3 className="font-medium text-sm">{item.name}{group && <span className="text-muted-foreground font-normal"> · {group}</span>}</h3>
+          <p className="text-sm text-muted-foreground">{item.category} · {item.frequency} · {item.complexity} complexity</p>
         </div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
           <X className="h-4 w-4" />
@@ -818,62 +884,88 @@ function ItemDetail({
       <p className="text-sm text-muted-foreground mb-3">{item.description}</p>
 
       {reason && (
-        <div className={`text-xs px-2.5 py-1.5 rounded mb-3 ${STATUS_COLORS[status].bg} ${STATUS_COLORS[status].text}`}>
+        <div className={`text-sm px-2.5 py-1.5 rounded mb-3 ${STATUS_COLORS[status].bg} ${STATUS_COLORS[status].text}`}>
           {reason}
         </div>
       )}
 
       {item.alert && (
-        <div className="text-xs px-2.5 py-1.5 rounded mb-3 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+        <div className="text-sm px-2.5 py-1.5 rounded mb-3 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
           {item.alert}
         </div>
       )}
 
       {item.notes && (
-        <p className="text-xs text-muted-foreground mb-3">{item.notes}</p>
+        <p className="text-sm text-muted-foreground mb-3">{item.notes}</p>
       )}
 
-      <div className="text-xs text-muted-foreground mb-3 space-y-0.5">
+      {item.id === 'ca-diversity' && (
+        <p className="text-sm text-muted-foreground mb-3">
+          <a href="https://www.fipvcc.com/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">FIPVCC</a> provides standardized questionnaires for collecting demographic data from founders.
+        </p>
+      )}
+
+      <div className="text-sm text-muted-foreground mb-3 space-y-0.5">
         <p><strong>Deadline:</strong> {item.deadline_description}</p>
         <p><strong>Filing system:</strong> {item.filing_system}</p>
         <p><strong>Applies to:</strong> {item.applicability_text}</p>
       </div>
 
+      {links && links.length > 0 && (
+        <div className="mb-3 space-y-1">
+          {links.map(link => (
+            <a
+              key={link.id}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <LinkIcon className="h-3.5 w-3.5 shrink-0" />
+              <span className="underline underline-offset-2">{link.title}</span>
+              {link.description && <span className="opacity-70">— {link.description}</span>}
+            </a>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center gap-2 flex-wrap">
-        <a
-          href={item.regulation_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground underline"
-        >
-          <ExternalLink className="h-3 w-3" />View Regulation
-        </a>
+        {item.regulation_url && (
+          <a
+            href={item.regulation_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground underline"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />View Regulation
+          </a>
+        )}
         {item.filing_portal_url && (
           <a
             href={item.filing_portal_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground underline"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground underline"
           >
-            <ExternalLink className="h-3 w-3" />Filing Portal
+            <ExternalLink className="h-3.5 w-3.5" />Filing Portal
           </a>
         )}
         <span className="flex-1" />
         {status !== 'not_applicable' ? (
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="text-xs text-muted-foreground h-7"
-            onClick={() => onToggleDismiss(item.id, true, 'Manually dismissed')}
+            className="text-muted-foreground"
+            onClick={() => onToggleDismiss(item.id, true, 'Manually dismissed', group)}
           >
             Dismiss
           </Button>
         ) : (
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="text-xs text-muted-foreground h-7"
-            onClick={() => onToggleDismiss(item.id, false)}
+            className="text-muted-foreground"
+            onClick={() => onToggleDismiss(item.id, false, undefined, group)}
           >
             Restore
           </Button>

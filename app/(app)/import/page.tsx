@@ -363,9 +363,12 @@ export default function ImportPage() {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.imports === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Import</h1>
-        <AnalystToggleButton />
+      <div className="mb-6 space-y-1">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.imports === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Import</h1>
+          <AnalystToggleButton />
+        </div>
+        <p className="text-sm text-muted-foreground">Upload documents and spreadsheets to populate your portfolio</p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
