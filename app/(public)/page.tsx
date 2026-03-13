@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import Image from 'next/image'
 import Link from 'next/link'
+
+export const metadata = ogMetadata({
+  title: 'Run your fund with Analyst',
+  description: 'Source-available portfolio reporting for venture capital firms, accelerators, and angel investors. Forward or upload your investor updates, and Analyst does the rest.',
+})
 import { Button } from '@/components/ui/button'
 import { Github, Play, Mail, Upload, BarChart3, Brain, Handshake, FileText, ChevronRight, Lightbulb, Database, TableProperties, ShieldUser, Users, Calendar, Send, ArrowDown, StickyNote, MessageCircle, FolderOpen, ShieldCheck } from 'lucide-react'
 import { CalendlyButton } from '@/components/calendly-button'

@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { Upload } from 'lucide-react'
 import { ExplainerContent } from '../explainer-content'
+
+export const metadata = ogMetadata({
+  title: 'Import',
+  description: 'Manually import reports, metrics, investment transactions, and fund cash flows via paste or file upload.',
+})
 
 export default function ImportExplainerPage() {
   return (
