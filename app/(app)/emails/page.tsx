@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Loader2, Trash2, Copy, Check } from 'lucide-react'
+import { FiltersSheet } from '@/components/filters-sheet'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { EmailReviewModal } from '@/components/email-review-modal'
@@ -161,30 +162,72 @@ export default function EmailsPage() {
 
   return (
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
-        <div>
+      <div className="mb-6 space-y-1">
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight">Inbound</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Every inbound email and its processing result.
-          </p>
+          <div className="flex items-center gap-2">
+            <div className="lg:hidden">
+              <FiltersSheet activeCount={[status, dateFrom, dateTo].filter(Boolean).length}>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Status</label>
+                  <Select value={status || 'all'} onValueChange={v => { setStatus(v === 'all' ? '' : v); setPage(1) }}>
+                    <SelectTrigger className="h-8 w-full text-sm">
+                      <SelectValue placeholder="All statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All statuses</SelectItem>
+                      <SelectItem value="success">Success</SelectItem>
+                      <SelectItem value="needs_review">Review</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
+                      <SelectItem value="processing">Processing</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="not_processed">Not processed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">From date</label>
+                  <Input
+                    type="date"
+                    className="h-8 w-full text-sm"
+                    value={dateFrom}
+                    onChange={e => { setDateFrom(e.target.value); setPage(1) }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">To date</label>
+                  <Input
+                    type="date"
+                    className="h-8 w-full text-sm"
+                    value={dateTo}
+                    onChange={e => { setDateTo(e.target.value); setPage(1) }}
+                  />
+                </div>
+                {(status || dateFrom || dateTo) && (
+                  <Button size="sm" variant="ghost" className="h-8" onClick={() => { setStatus(''); setDateFrom(''); setDateTo(''); setPage(1) }}>
+                    Clear filters
+                  </Button>
+                )}
+              </FiltersSheet>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => load(page)} disabled={loading} className="text-muted-foreground">
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <AnalystToggleButton />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => load(page)} disabled={loading} className="text-muted-foreground">
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <AnalystToggleButton />
-        </div>
+        <p className="text-sm text-muted-foreground">Emails with metrics and updates on portfolio companies</p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
       <div className="flex-1 min-w-0 w-full">
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-end gap-3 mb-5">
+      {/* Desktop inline filters + inbound address */}
+      <div className="hidden lg:flex flex-wrap items-end gap-3 mb-5">
         <div>
           <label className="block text-xs text-muted-foreground mb-1">Status</label>
           <Select value={status || 'all'} onValueChange={v => { setStatus(v === 'all' ? '' : v); setPage(1) }}>
-            <SelectTrigger className="h-8 w-full sm:w-40 text-sm">
+            <SelectTrigger className="h-8 w-40 text-sm">
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
@@ -202,7 +245,7 @@ export default function EmailsPage() {
           <label className="block text-xs text-muted-foreground mb-1">From date</label>
           <Input
             type="date"
-            className="h-8 w-full sm:w-36 text-sm"
+            className="h-8 w-36 text-sm"
             value={dateFrom}
             onChange={e => { setDateFrom(e.target.value); setPage(1) }}
           />
@@ -211,7 +254,7 @@ export default function EmailsPage() {
           <label className="block text-xs text-muted-foreground mb-1">To date</label>
           <Input
             type="date"
-            className="h-8 w-full sm:w-36 text-sm"
+            className="h-8 w-36 text-sm"
             value={dateTo}
             onChange={e => { setDateTo(e.target.value); setPage(1) }}
           />
@@ -229,7 +272,7 @@ export default function EmailsPage() {
                 type="text"
                 readOnly
                 value={inboundAddress}
-                className="h-8 w-full sm:w-64 text-sm bg-muted text-muted-foreground cursor-default"
+                className="h-8 w-64 text-sm bg-muted text-muted-foreground cursor-default"
                 tabIndex={-1}
               />
             </div>
@@ -247,6 +290,29 @@ export default function EmailsPage() {
           </div>
         )}
       </div>
+      {/* Mobile inbound address */}
+      {inboundAddress && (
+        <div className="flex items-end gap-1.5 mb-5 lg:hidden">
+          <Input
+            type="text"
+            readOnly
+            value={inboundAddress}
+            className="h-8 w-full text-sm bg-muted text-muted-foreground cursor-default"
+            tabIndex={-1}
+          />
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(inboundAddress)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 2000)
+            }}
+            className="h-8 px-2 text-muted-foreground hover:text-foreground transition-colors"
+            title="Copy to clipboard"
+          >
+            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+          </button>
+        </div>
+      )}
 
       {error && (
         <Alert variant="destructive" className="mb-4">

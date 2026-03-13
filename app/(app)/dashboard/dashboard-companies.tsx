@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { ArrowDownAZ, ArrowUpZA, ArrowDown, ArrowUp, LayoutGrid, Table2, Banknote, Coins, CalendarDays } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpZA, ArrowDown, ArrowUp, LayoutGrid, Table2, CalendarDays } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DashboardTable } from './dashboard-table'
@@ -42,7 +42,7 @@ interface Props {
   allGroups: string[]
 }
 
-type SortMode = 'alpha' | 'cash' | 'investDate' | null
+type SortMode = 'alpha' | 'investDate' | null
 
 function formatMetricValue(v: number | null, metric: ActiveMetric, fundCurrency: string): string {
   if (v === null) return '\u2014'
@@ -72,40 +72,19 @@ function formatCurrency(v: number): string {
 export function DashboardCompanies({ companies, allGroups }: Props) {
   const [view, setView] = useState<'cards' | 'table'>('cards')
   const [statusFilter, setStatusFilter] = useState<string>('active')
-  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set(allGroups.includes('Fund III') ? ['Fund III'] : []))
   const [sortMode, setSortMode] = useState<SortMode>('investDate')
   const [alphaSortAsc, setAlphaSortAsc] = useState(true)
-  const [cashSortAsc, setCashSortAsc] = useState(false)
   const [investDateSortAsc, setInvestDateSortAsc] = useState(false) // newest first by default
-
-  function toggleGroup(group: string) {
-    setSelectedGroups(prev => {
-      const next = new Set(prev)
-      if (next.has(group)) next.delete(group)
-      else next.add(group)
-      return next
-    })
-  }
 
   const filtered = useMemo(() => {
     let result = companies
     if (statusFilter) {
       result = result.filter(c => c.status === statusFilter)
     }
-    if (selectedGroups.size > 0) {
-      result = result.filter(c => (c.portfolioGroup ?? []).some(g => selectedGroups.has(g)))
-    }
     return result
-  }, [companies, statusFilter, selectedGroups])
+  }, [companies, statusFilter])
 
   function sortCompanies(list: Company[]) {
-    if (sortMode === 'cash') {
-      return [...list].sort((a, b) => {
-        const aCash = a.latestCash ?? (cashSortAsc ? Infinity : -Infinity)
-        const bCash = b.latestCash ?? (cashSortAsc ? Infinity : -Infinity)
-        return cashSortAsc ? aCash - bCash : bCash - aCash
-      })
-    }
     if (sortMode === 'alpha') {
       return [...list].sort((a, b) =>
         alphaSortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
@@ -125,44 +104,26 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sortedFiltered = useMemo(() => sortCompanies(filtered), [filtered, sortMode, alphaSortAsc, cashSortAsc, investDateSortAsc])
+  const sortedFiltered = useMemo(() => sortCompanies(filtered), [filtered, sortMode, alphaSortAsc, investDateSortAsc])
 
   return (
     <div>
       {/* Filter bar */}
-      {(allGroups.length > 0 || filtered.length > 0) && (
+      {filtered.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap mb-4">
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="text-xs px-2 py-1 rounded-md border border-border bg-background"
-          >
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">Status</label>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="text-xs px-2 py-1 rounded-md border border-border bg-background"
+            >
             <option value="">All Statuses</option>
             <option value="active">Active</option>
             <option value="exited">Exited</option>
             <option value="written-off">Written Off</option>
-          </select>
-          {allGroups.map(group => (
-            <button
-              key={`group-${group}`}
-              onClick={() => toggleGroup(group)}
-              className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
-                selectedGroups.has(group)
-                  ? 'bg-accent text-foreground border-border font-medium'
-                  : 'text-muted-foreground border-border hover:text-foreground hover:bg-accent'
-              }`}
-            >
-              {group}
-            </button>
-          ))}
-          {selectedGroups.size > 0 && (
-            <button
-              onClick={() => setSelectedGroups(new Set())}
-              className="text-xs text-muted-foreground hover:text-foreground underline ml-1"
-            >
-              Clear
-            </button>
-          )}
+            </select>
+          </div>
           <div className="ml-auto flex items-center gap-1">
             <Button
               variant={sortMode === 'alpha' ? 'secondary' : 'ghost'}
@@ -180,24 +141,6 @@ export function DashboardCompanies({ companies, allGroups }: Props) {
                 <ArrowDownAZ className="h-3.5 w-3.5" />
               ) : (
                 <ArrowUpZA className="h-3.5 w-3.5" />
-              )}
-            </Button>
-            <Button
-              variant={sortMode === 'cash' ? 'secondary' : 'ghost'}
-              size="sm"
-              className="text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                if (sortMode === 'cash') {
-                  setCashSortAsc(prev => !prev)
-                } else {
-                  setSortMode('cash')
-                }
-              }}
-            >
-              {cashSortAsc ? (
-                <><Coins className="h-3.5 w-3.5" /><ArrowUp className="h-3 w-3" /></>
-              ) : (
-                <><Banknote className="h-3.5 w-3.5" /><ArrowDown className="h-3 w-3" /></>
               )}
             </Button>
             <Button

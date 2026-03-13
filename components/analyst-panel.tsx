@@ -175,7 +175,7 @@ export function AnalystPanel() {
             >
               <Plus className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
             </button>
-            <button onClick={close} className="p-1 rounded hover:bg-muted">
+            <button onClick={close} className="p-1 rounded hover:bg-muted hidden lg:block">
               <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
             </button>
           </div>

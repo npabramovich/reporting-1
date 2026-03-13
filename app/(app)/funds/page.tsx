@@ -432,14 +432,19 @@ export default function FundsPage() {
   return (
     <PortfolioNotesProvider>
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-          {fv.funds === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}
-                    Funds
-        </h1>
-        <span className="flex items-center gap-2"><PortfolioNotesButton /><AnalystToggleButton /></span>
+      <div className="mb-6 space-y-1">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+            {fv.funds === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}
+            Funds
+          </h1>
+          <span className="flex items-center gap-2"><PortfolioNotesButton /><AnalystToggleButton /></span>
+        </div>
+        <p className="text-sm text-muted-foreground">Fund-level cash flows, NAV, and performance metrics</p>
       </div>
 
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex-1 min-w-0 w-full">
       <Tabs defaultValue={groups[0]} className="w-full">
         <div className="flex items-center gap-2 mb-4">
           <TabsList>
@@ -723,8 +728,10 @@ export default function FundsPage() {
           )
         })}
       </Tabs>
+      </div>
       <PortfolioNotesPanel />
       <AnalystPanel />
+      </div>
 
       {/* Group Settings Dialog */}
       <Dialog open={settingsOpen} onOpenChange={open => { if (!open) setSettingsOpen(false) }}>

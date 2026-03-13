@@ -181,12 +181,15 @@ export default async function DashboardPage() {
   return (
     <DashboardNotesLayout userId={user.id} isAdmin={isAdmin} companies={companiesWithInvestments.map(c => ({ id: c.id, name: c.name }))}>
     <div className="p-4 md:py-8 md:pl-8 md:pr-4">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Portfolio Overview</h1>
-        <div className="flex items-center gap-2">
-          <DashboardChatButton />
-          <AnalystToggleButton />
+      <div className="mb-6 space-y-1">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold tracking-tight">Portfolio</h1>
+          <div className="flex items-center gap-2">
+            <DashboardChatButton />
+            <AnalystToggleButton />
+          </div>
         </div>
+        <p className="text-sm text-muted-foreground">Track performance and activity across your portfolio companies</p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">

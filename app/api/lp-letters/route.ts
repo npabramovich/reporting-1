@@ -12,7 +12,7 @@ export async function GET() {
   const admin = createAdminClient()
   const { data: membership } = await admin
     .from('fund_members')
-    .select('fund_id')
+    .select('fund_id, role')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -26,7 +26,7 @@ export async function GET() {
     .order('period_quarter', { ascending: false })
 
   if (error) return dbError(error, 'lp-letters')
-  return NextResponse.json(data ?? [])
+  return NextResponse.json({ letters: data ?? [], role: membership.role })
 }
 
 export async function POST(req: NextRequest) {

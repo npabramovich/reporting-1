@@ -298,15 +298,15 @@ export default function RequestsPage() {
   return (
     <PortfolioNotesProvider>
     <div className="p-4 md:p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="mb-6 space-y-1">
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.asks === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Asks</h1>
-          <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
+          <div className="flex items-center gap-2">
+            <PortfolioNotesButton />
+            <AnalystToggleButton />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <PortfolioNotesButton />
-          <AnalystToggleButton />
-        </div>
+        <p className="text-sm text-muted-foreground">Monitor responses to quarterly reporting asks</p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">

@@ -202,12 +202,13 @@ export default function NotesPage() {
   return (
     <PortfolioNotesProvider>
     <div className="p-4 md:py-8 md:pl-8 md:pr-4">
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="mb-6 space-y-1">
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.notes === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Notes</h1>
-          <p className="text-sm text-muted-foreground mt-1">Activity and conversations across your portfolio</p>
+          <AnalystToggleButton />
         </div>
-        <div className="flex items-center gap-2">
+        <p className="text-sm text-muted-foreground">Activity and conversations across your portfolio</p>
+        <div className="flex items-center pt-2">
           <div className="flex items-center rounded-md border text-xs">
           {(['all', 'mentions', 'general'] as FilterMode[]).map(f => (
             <button
@@ -225,7 +226,6 @@ export default function NotesPage() {
             </button>
           ))}
           </div>
-          <AnalystToggleButton />
         </div>
       </div>
 

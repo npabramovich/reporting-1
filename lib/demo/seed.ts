@@ -622,6 +622,7 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
           imports: 'everyone',
           asks: 'everyone',
           interactions: 'everyone',
+          compliance: 'everyone',
         },
       })
       .eq('fund_id', existingFund.id)
@@ -723,6 +724,7 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
       imports: 'everyone',
       asks: 'everyone',
       interactions: 'everyone',
+      compliance: 'everyone',
     },
   })
 
@@ -1024,6 +1026,90 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
       created_by: demoUserId,
     })
   }
+
+  // -------------------------------------------------------------------------
+  // Compliance — profile + settings for demo fund
+  // -------------------------------------------------------------------------
+  await admin.from('fund_compliance_profile' as any).upsert({
+    fund_id: fundId,
+    registration_status: 'era',
+    aum_range: '25m_100m',
+    fund_structure: 'lp',
+    fundraising_status: 'closed_recent',
+    reg_d_exemption: '506b',
+    investor_state_count: '6_to_15',
+    california_nexus: ['investments_ca'],
+    public_equity: 'no',
+    cftc_activity: 'yes_with_exemption',
+    access_person_count: '1_to_3',
+    has_foreign_entities: 'no',
+    completed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    updated_by: demoUserId,
+  }, { onConflict: 'fund_id' })
+
+  // Mark some items as applicable (active, not dismissed) so they show on the calendar
+  const activeItems = [
+    { compliance_item_id: 'cftc-exemption', applies: 'yes' },
+    { compliance_item_id: 'form-adv', applies: 'yes' },
+    { compliance_item_id: 'tax-7004', applies: 'yes' },
+  ]
+  for (const item of activeItems) {
+    await admin.from('compliance_fund_settings' as any).upsert({
+      fund_id: fundId,
+      compliance_item_id: item.compliance_item_id,
+      portfolio_group: '',
+      applies: item.applies,
+      dismissed: false,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'fund_id,compliance_item_id,portfolio_group' })
+  }
+
+  // Set some items as not applicable
+  const naItems = [
+    'form-13f', 'sched-13g', 'form-13h', 'form-npx', 'boi-report',
+  ]
+  for (const itemId of naItems) {
+    await admin.from('compliance_fund_settings' as any).upsert({
+      fund_id: fundId,
+      compliance_item_id: itemId,
+      portfolio_group: '',
+      applies: 'no',
+      dismissed: true,
+      dismissed_by: demoUserId,
+      dismissed_at: new Date().toISOString(),
+      dismissed_reason: 'Not applicable based on fund profile',
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'fund_id,compliance_item_id,portfolio_group' })
+  }
+
+  // Add a couple of demo compliance links
+  await (admin.from('compliance_links' as any) as any).insert([
+    {
+      fund_id: fundId,
+      compliance_item_id: 'form-adv',
+      title: 'IARD Filing Account',
+      description: 'FINRA CRD/IARD portal for Form ADV filings',
+      url: 'https://crd.finra.org/Iad/',
+      created_by: demoUserId,
+    },
+    {
+      fund_id: fundId,
+      compliance_item_id: 'blue-sky',
+      title: 'NASAA EFD Portal',
+      description: 'Electronic filing depository for state notice filings',
+      url: 'https://nasaaefd.org/',
+      created_by: demoUserId,
+    },
+    {
+      fund_id: fundId,
+      compliance_item_id: 'tax-1065',
+      title: 'IRS e-File',
+      description: 'Partnership return e-filing system',
+      url: 'https://www.irs.gov/e-file-providers/e-file-for-large-and-mid-size-corporations',
+      created_by: demoUserId,
+    },
+  ])
 
   console.log('[demo] Demo data seeded successfully')
   return true

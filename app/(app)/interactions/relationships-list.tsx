@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Building2, ChevronDown, ChevronRight, Copy, Check, Mail, Users } from 'lucide-react'
+import { Building2, ChevronDown, ChevronRight, Mail, Users } from 'lucide-react'
 
 const KNOWN_TAGS = ['intro', 'hiring', 'strategy', 'fundraising', 'product', 'partnership', 'legal', 'operations'] as const
 
@@ -54,13 +54,12 @@ function formatRelativeTime(dateStr: string) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export function RelationshipsList({ interactions, inboundAddress }: { interactions: Interaction[]; inboundAddress?: string }) {
+export function RelationshipsList({ interactions }: { interactions: Interaction[] }) {
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [emailExpandedId, setEmailExpandedId] = useState<string | null>(null)
   const [fetchedBodies, setFetchedBodies] = useState<Record<string, string>>({})
   const [emailLoading, setEmailLoading] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
 
   const toggleEmailBody = async (interactionId: string, emailId: string) => {
     if (emailExpandedId === interactionId) {
@@ -104,7 +103,7 @@ export function RelationshipsList({ interactions, inboundAddress }: { interactio
   return (
     <div>
       {/* Tag filters + inbound address */}
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         {usedTags.map(tag => (
           <button
             key={tag}
@@ -125,23 +124,6 @@ export function RelationshipsList({ interactions, inboundAddress }: { interactio
           >
             Clear
           </button>
-        )}
-        {inboundAddress && (
-          <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>BCC:</span>
-            <code className="bg-muted px-2 py-1 rounded text-[11px]">{inboundAddress}</code>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(inboundAddress)
-                setCopied(true)
-                setTimeout(() => setCopied(false), 2000)
-              }}
-              className="hover:text-foreground transition-colors"
-              title="Copy to clipboard"
-            >
-              {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-            </button>
-          </div>
         )}
       </div>
 
