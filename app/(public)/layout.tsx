@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import Link from 'next/link'
-import { Menu, Github, LogIn, Play, Home, Building2, Mail, Upload, BarChart3, Briefcase, Send, StickyNote, Handshake, FileText, Crown, ShieldCheck, Settings, LifeBuoy, Scale, MessageCircle, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, ChevronRight, Package, Tag, Star } from 'lucide-react'
+import { Menu, Github, LogIn, Play, Home, Building2, Mail, Upload, BarChart3, Briefcase, Send, StickyNote, Handshake, FileText, Crown, ShieldCheck, Settings, LifeBuoy, Scale, MessageCircle, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, Package, Tag, Star } from 'lucide-react'
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -51,8 +51,8 @@ const BOTTOM_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/license', label: 'License', icon: Scale },
 ]
 
-function NavLink({ href, label, icon: Icon, collapsed, isActive, onNavigate, className = '' }: {
-  href: string; label: string; icon: LucideIcon; collapsed: boolean; isActive: boolean; onNavigate?: () => void; className?: string
+function NavLink({ href, label, icon: Icon, collapsed, isActive, onNavigate, className = '', activeStyle = 'default' }: {
+  href: string; label: string; icon: LucideIcon; collapsed: boolean; isActive: boolean; onNavigate?: () => void; className?: string; activeStyle?: 'default' | 'text-only'
 }) {
   return (
     <Link
@@ -63,7 +63,9 @@ function NavLink({ href, label, icon: Icon, collapsed, isActive, onNavigate, cla
         collapsed ? 'md:justify-center md:px-0' : ''
       } ${
         isActive
-          ? 'bg-accent text-foreground font-medium'
+          ? activeStyle === 'text-only'
+            ? 'text-foreground font-medium'
+            : 'bg-accent text-foreground font-medium'
           : 'text-muted-foreground hover:text-foreground hover:bg-accent'
       } ${className}`}
     >
@@ -124,6 +126,7 @@ function PublicSidebar({ onNavigate }: { onNavigate?: () => void }) {
             collapsed={collapsed}
             isActive={pathname === href}
             onNavigate={onNavigate}
+            activeStyle={href === '/' ? 'text-only' : 'default'}
           />
         ))}
 
@@ -132,16 +135,15 @@ function PublicSidebar({ onNavigate }: { onNavigate?: () => void }) {
           <button
             onClick={() => setProductOpen(!productOpen)}
             title={collapsed ? 'Product' : undefined}
-            className={`flex w-full items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors text-muted-foreground hover:text-foreground hover:bg-accent ${
+            className={`flex w-full items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors hover:text-foreground hover:bg-accent ${
               collapsed ? 'md:justify-center md:px-0' : ''
-            }`}
+            } ${productOpen ? 'text-foreground font-medium' : 'text-muted-foreground'}`}
           >
             <Package className="h-5 w-5 shrink-0" />
             <span className={`flex-1 text-left ${collapsed ? 'md:hidden' : ''}`}>Product</span>
-            <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${productOpen ? 'rotate-90' : ''} ${collapsed ? 'md:hidden' : ''}`} />
           </button>
           {productOpen && (
-            <div className={`space-y-0.5 ${collapsed ? '' : 'ml-2'}`}>
+            <div className={`space-y-0.5 ${collapsed ? '' : 'ml-5 border-l border-border pl-2'}`}>
               {PRODUCT_ITEMS.map(({ href, label, icon }) => (
                 <NavLink
                   key={href}
