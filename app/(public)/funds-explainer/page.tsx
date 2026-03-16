@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { Briefcase } from 'lucide-react'
 import { ExplainerContent } from '../explainer-content'
+
+export const metadata = ogMetadata({
+  title: 'Funds',
+  description: 'View fund-level LP metrics including TVPI, DPI, RVPI, and Net IRR computed from cash flow data.',
+})
 
 export default function FundsExplainerPage() {
   return (

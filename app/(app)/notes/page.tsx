@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Building2, Lock, Send, Pencil, X, Check, Reply } from 'lucide-react'
+import { Building2, Lock, Send, Pencil, X, Check, Reply, Pin, PinOff } from 'lucide-react'
 import Link from 'next/link'
 import { NoteContent } from '@/components/note-content'
 import { AnalystToggleButton } from '@/components/analyst-button'
@@ -25,6 +25,8 @@ interface Note {
   isRead: boolean
   createdAt: string
   edited: boolean
+  pinnedAt: string | null
+  pageContext: string | null
 }
 
 interface CompanyOption {
@@ -192,6 +194,26 @@ export default function NotesPage() {
     }
   }
 
+  async function handlePin(noteId: string, pin: boolean) {
+    const res = await fetch(`/api/dashboard/notes/${noteId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pinned: pin }),
+    })
+    if (res.ok) {
+      const { pinnedAt } = await res.json()
+      setNotes(prev => {
+        const updated = prev.map(n => n.id === noteId ? { ...n, pinnedAt } : n)
+        // Re-sort: pinned first, then by createdAt desc
+        return updated.sort((a, b) => {
+          if (a.pinnedAt && !b.pinnedAt) return -1
+          if (!a.pinnedAt && b.pinnedAt) return 1
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        })
+      })
+    }
+  }
+
   async function handleDelete(noteId: string) {
     const res = await fetch(`/api/dashboard/notes/${noteId}`, { method: 'DELETE' })
     if (res.ok) {
@@ -202,12 +224,13 @@ export default function NotesPage() {
   return (
     <PortfolioNotesProvider>
     <div className="p-4 md:py-8 md:pl-8 md:pr-4">
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="mb-6 space-y-1">
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.notes === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Notes</h1>
-          <p className="text-sm text-muted-foreground mt-1">Activity and conversations across your portfolio</p>
+          <AnalystToggleButton />
         </div>
-        <div className="flex items-center gap-2">
+        <p className="text-sm text-muted-foreground">Activity and conversations across your portfolio</p>
+        <div className="flex items-center pt-2">
           <div className="flex items-center rounded-md border text-xs">
           {(['all', 'mentions', 'general'] as FilterMode[]).map(f => (
             <button
@@ -225,7 +248,6 @@ export default function NotesPage() {
             </button>
           ))}
           </div>
-          <AnalystToggleButton />
         </div>
       </div>
 
@@ -242,6 +264,8 @@ export default function NotesPage() {
           <div
             key={note.id}
             className={`group rounded-lg border p-4 transition-colors ${
+              note.pinnedAt ? 'border-l-4 border-l-foreground/20' : ''
+            } ${
               !note.isRead ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/40' : 'bg-card'
             }`}
           >
@@ -249,6 +273,9 @@ export default function NotesPage() {
             <div className="flex items-center gap-2 mb-1">
               {!note.isRead && (
                 <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+              )}
+              {note.pinnedAt && (
+                <Pin className="h-3 w-3 text-muted-foreground shrink-0" />
               )}
               <span className="text-sm font-medium">
                 {note.userName || note.userEmail.split('@')[0]}
@@ -264,22 +291,31 @@ export default function NotesPage() {
                 <Link
                   href={`/companies/${note.companyId}`}
                   className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-                                 >
+                >
                   <Building2 className="h-3 w-3" />
                   {note.companyName}
                 </Link>
+              ) : note.pageContext ? (
+                <span className="text-[11px] text-muted-foreground capitalize">{note.pageContext}</span>
               ) : (
                 <span className="text-[11px] text-muted-foreground">General</span>
               )}
-              {/* Edit / Delete actions */}
+              {/* Pin / Edit / Delete actions */}
               <div className="md:opacity-0 md:group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-1">
+                <button onClick={() => handlePin(note.id, !note.pinnedAt)} title={note.pinnedAt ? 'Unpin' : 'Pin'}>
+                  {note.pinnedAt ? (
+                    <PinOff className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                  ) : (
+                    <Pin className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                  )}
+                </button>
                 {currentUserId && note.userId === currentUserId && (
-                  <button onClick={e => { startEditing(note) }}>
+                  <button onClick={() => startEditing(note)}>
                     <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
                   </button>
                 )}
                 {currentUserId && (note.userId === currentUserId || isAdmin) && (
-                  <button onClick={e => { handleDelete(note.id) }}>
+                  <button onClick={() => handleDelete(note.id)}>
                     <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
                   </button>
                 )}

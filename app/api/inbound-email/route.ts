@@ -9,7 +9,7 @@ import {
 import { checkFundMember } from '@/lib/pipeline/checkFundMember'
 import { isAuthorizedSender } from '@/lib/pipeline/isAuthorizedSender'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
-import { scanFile } from '@/lib/security/scan-file'
+import { scanFileAsync } from '@/lib/security/scan-file'
 
 function safeTokenCompare(a: string, b: string): boolean {
   try {
@@ -109,7 +109,7 @@ async function handleInbound(req: NextRequest) {
       const buffer = Buffer.from(att.Content!, 'base64')
 
       // Scan attachment before uploading
-      const scanResult = scanFile(buffer, att.Name, att.ContentType)
+      const scanResult = await scanFileAsync(buffer, att.Name, att.ContentType)
       if (!scanResult.safe) {
         console.warn(`[inbound-email] Skipping unsafe attachment "${att.Name}": ${scanResult.reason}`)
         continue

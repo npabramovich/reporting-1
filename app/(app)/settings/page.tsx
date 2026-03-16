@@ -36,6 +36,7 @@ interface Settings {
   fundId: string
   fundName: string
   fundLogo: string | null
+  fundAddress: string | null
   postmarkInboundAddress: string
   postmarkWebhookToken: string
   hasClaudeKey: boolean
@@ -102,9 +103,12 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="p-4 md:p-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-          <AnalystToggleButton />
+        <div className="mb-6 space-y-1">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+            <AnalystToggleButton />
+          </div>
+          <p className="text-sm text-muted-foreground">Configure your fund, integrations, and team preferences</p>
         </div>
         <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 max-w-3xl w-full">
@@ -121,9 +125,12 @@ export default function SettingsPage() {
   if (!settings) {
     return (
       <div className="p-4 md:p-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-          <AnalystToggleButton />
+        <div className="mb-6 space-y-1">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+            <AnalystToggleButton />
+          </div>
+          <p className="text-sm text-muted-foreground">Configure your fund, integrations, and team preferences</p>
         </div>
         <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 max-w-3xl w-full">
@@ -150,7 +157,7 @@ export default function SettingsPage() {
       {settings.isAdmin && (
         <AdminSectionContext.Provider value={true}>
           <VersionSection appVersion={settings.appVersion} updateAvailable={settings.updateAvailable} />
-          <FundNameSection name={settings.fundName} logo={settings.fundLogo} onSaved={load} />
+          <FundNameSection name={settings.fundName} logo={settings.fundLogo} address={settings.fundAddress} onSaved={load} />
           <CurrencySection currency={settings.currency} onSaved={load} />
           <FeatureVisibilitySection featureVisibility={settings.featureVisibility} onSaved={load} />
         </AdminSectionContext.Provider>
@@ -607,6 +614,9 @@ const FEATURE_META: Record<FeatureKey, { label: string; description: string; hre
   lp_letters: { label: 'LP Letters', description: 'Generate and manage quarterly LP update letters', href: '/support#lp-letters' },
   imports: { label: 'Imports', description: 'Bulk import companies and metrics from CSV files', href: '/support#import' },
   asks: { label: 'Asks', description: 'Track and send portfolio company requests to your network', href: '/support#asks' },
+  lps: { label: 'LPs', description: 'Investor-level report cards with consolidated performance across fund vehicles', href: '/support#lps' },
+  lp_associates: { label: 'GP Entities', description: 'Entity ownership mappings and pro-rata associates calculations for LP reporting', href: '/support#lps' },
+  compliance: { label: 'Compliance', description: 'Track regulatory deadlines, filings, and compliance workflows', href: '/support#compliance' },
 }
 
 const VISIBILITY_OPTIONS: { value: FeatureVisibility; label: string; description: string }[] = [
@@ -809,13 +819,16 @@ function NotificationPreferencesSection() {
 
 // ──────────────────────────── Fund Name ────────────────────────────
 
-function FundNameSection({ name, logo, onSaved }: { name: string; logo: string | null; onSaved: () => void }) {
+function FundNameSection({ name, logo, address, onSaved }: { name: string; logo: string | null; address: string | null; onSaved: () => void }) {
   const [value, setValue] = useState(name)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [logoPreview, setLogoPreview] = useState<string | null>(logo)
   const [logoSaving, setLogoSaving] = useState(false)
   const [logoError, setLogoError] = useState<string | null>(null)
+  const [addressValue, setAddressValue] = useState(address ?? '')
+  const [addressSaving, setAddressSaving] = useState(false)
+  const [addressSaved, setAddressSaved] = useState(false)
 
   const handleSave = async () => {
     setSaving(true)
@@ -943,6 +956,40 @@ function FundNameSection({ name, logo, onSaved }: { name: string; logo: string |
             <AlertCircle className="h-3 w-3" /> {logoError}
           </p>
         )}
+      </div>
+
+      <div className="mt-4 pt-4 border-t">
+        <Label>Address / Contact Info</Label>
+        <p className="text-xs text-muted-foreground mb-2">
+          Displayed on investor report PDFs below the fund name.
+        </p>
+        <textarea
+          value={addressValue}
+          onChange={e => setAddressValue(e.target.value)}
+          rows={3}
+          className="w-full border rounded p-2 text-sm bg-background mb-2"
+          placeholder="123 Main St&#10;New York, NY 10001&#10;info@fund.com"
+        />
+        <Button
+          size="sm"
+          disabled={addressSaving || addressValue === (address ?? '')}
+          onClick={async () => {
+            setAddressSaving(true)
+            const res = await fetch('/api/settings', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fundAddress: addressValue || null }),
+            })
+            setAddressSaving(false)
+            if (res.ok) {
+              setAddressSaved(true)
+              setTimeout(() => setAddressSaved(false), 2000)
+              onSaved()
+            }
+          }}
+        >
+          {addressSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : addressSaved ? <Check className="h-3.5 w-3.5" /> : 'Save'}
+        </Button>
       </div>
     </Section>
   )

@@ -9,11 +9,16 @@ export async function assertWriteAccess(
   admin: SupabaseClient,
   userId: string
 ): Promise<{ fundId: string; role: string } | NextResponse> {
-  const { data: membership } = await admin
+  const { data: membership, error } = await admin
     .from('fund_members')
     .select('fund_id, role')
     .eq('user_id', userId)
     .maybeSingle()
+
+  if (error) {
+    console.error('[assertWriteAccess] DB error:', error.message)
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+  }
 
   if (!membership)
     return NextResponse.json({ error: 'No fund found' }, { status: 403 })

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose, Sparkles, Shield, Handshake, Users, ArrowDownCircle, DollarSign, FileText, Briefcase } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose, Sparkles, Shield, ShieldCheck, Handshake, Users, ArrowDownCircle, DollarSign, FileText, Briefcase, Crown } from 'lucide-react'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 
@@ -13,10 +13,8 @@ export default function SupportPage() {
       <li className="pl-4"><a href="#license" className="hover:text-foreground underline underline-offset-4">License</a></li>
       <li className="pl-4"><a href="#pricing" className="hover:text-foreground underline underline-offset-4">Pricing</a></li>
       <li><a href="#portfolio" className="hover:text-foreground underline underline-offset-4">Portfolio</a></li>
-      <li className="pl-4"><a href="#company-detail" className="hover:text-foreground underline underline-offset-4">Company Detail</a></li>
       <li><a href="#review" className="hover:text-foreground underline underline-offset-4">Review</a></li>
       <li><a href="#inbound" className="hover:text-foreground underline underline-offset-4">Inbound</a></li>
-      <li className="pl-4"><a href="#email-detail" className="hover:text-foreground underline underline-offset-4">Email Detail</a></li>
       <li><a href="#import" className="hover:text-foreground underline underline-offset-4">Import</a></li>
       <li><a href="#asks" className="hover:text-foreground underline underline-offset-4">Asks</a></li>
       <li><a href="#settings" className="hover:text-foreground underline underline-offset-4">Settings</a></li>
@@ -24,7 +22,9 @@ export default function SupportPage() {
       <li><a href="#interactions" className="hover:text-foreground underline underline-offset-4">Interactions</a></li>
       <li><a href="#investments" className="hover:text-foreground underline underline-offset-4">Investments</a></li>
       <li><a href="#funds" className="hover:text-foreground underline underline-offset-4">Funds</a></li>
-      <li><a href="#lp-letters" className="hover:text-foreground underline underline-offset-4">LP Letters</a></li>
+      <li><a href="#letters" className="hover:text-foreground underline underline-offset-4">Letters</a></li>
+      <li><a href="#lps" className="hover:text-foreground underline underline-offset-4">LPs</a></li>
+      <li><a href="#compliance" className="hover:text-foreground underline underline-offset-4">Compliance</a></li>
       <li><a href="#usage" className="hover:text-foreground underline underline-offset-4">Usage</a></li>
       <li><a href="#analyst" className="hover:text-foreground underline underline-offset-4">Analyst</a></li>
       <li><a href="#file-handling" className="hover:text-foreground underline underline-offset-4">File Handling &amp; Security</a></li>
@@ -90,8 +90,8 @@ export default function SupportPage() {
             into each company&apos;s metrics history.
           </p>
           <p className="text-muted-foreground mb-2">
-            The fastest way to get data flowing is to forward reporting emails to the inbound address
-            shown in Settings. You can forward emails yourself, or give the inbound address to your
+            The fastest way to get data flowing is to forward reporting emails to the <strong>inbound address</strong> shown
+            in Settings. You can forward emails yourself, or give the inbound address to your
             founders or fund analysts and ask them to CC or send reports directly. Every email that
             arrives at that address is automatically parsed: the system identifies which company it&apos;s
             from, extracts the metrics you&apos;ve defined, and flags anything it&apos;s unsure about
@@ -100,14 +100,14 @@ export default function SupportPage() {
           <p className="text-muted-foreground mb-2">
             Not everything arrives by email. When someone sends you a link to a Google Sheet, Google
             Slides, Docsend deck, or any other hosted file, download it and upload it through the
-            Import page. The same goes for PDFs, Excel workbooks, Word docs, PowerPoint decks, CSVs,
+            <strong>Import</strong> page. The same goes for PDFs, Excel workbooks, Word docs, PowerPoint decks, CSVs,
             and images &mdash; anything you can download, you can import. The AI pipeline processes
             uploads identically to inbound emails.
           </p>
           <p className="text-muted-foreground">
-            Once data starts flowing, the Portfolio dashboard gives you a real-time view of every
-            company, the Review queue catches anything that needs a human decision, and the Analyst
-            on each company page synthesizes the data into actionable summaries. The goal is to spend
+            Once data starts flowing, the <strong>Portfolio</strong> dashboard gives you a real-time view of every
+            company, the <strong>Review</strong> queue catches anything that needs a human decision, and the <strong>Analyst</strong> on
+            each company page synthesizes the data into actionable summaries. The goal is to spend
             less time on data entry and more time on the analysis and conversations that matter.
           </p>
         </div>
@@ -326,9 +326,9 @@ export default function SupportPage() {
           </h2>
           <p className="text-muted-foreground mb-2">
             When inbound emails are processed, the AI pipeline sometimes flags items that need a human
-            decision. These flagged items appear in the Review queue. Common reasons include: a new
-            company name was detected that doesn&apos;t match any existing portfolio company, a metric
-            value was extracted with low confidence, a reporting period was ambiguous, or a metric
+            decision. These flagged items appear in the Review queue. Common reasons include: a <strong>new
+            company</strong> was detected that doesn&apos;t match any existing portfolio company, a metric
+            value was extracted with <strong>low confidence</strong>, a reporting period was ambiguous, or a metric
             couldn&apos;t be found in the report at all.
           </p>
           <p className="text-muted-foreground mb-2">
@@ -338,7 +338,7 @@ export default function SupportPage() {
             company detections, you can create the company or map it to an existing one.
           </p>
           <p className="text-muted-foreground mb-2">
-            The review badge in the sidebar shows how many items are waiting for attention. Once all
+            The <strong>review badge</strong> in the sidebar shows how many items are waiting for attention. Once all
             review items for a given email are resolved, that email&apos;s status automatically moves
             from &ldquo;needs review&rdquo; to &ldquo;success.&rdquo; You can also dismiss all review
             items for an email at once if the entire report should be skipped.
@@ -358,7 +358,7 @@ export default function SupportPage() {
           <p className="text-muted-foreground mb-2">
             Inbound shows every email that has been received and processed by the system. It&apos;s the
             audit trail for all automated report ingestion. Each row displays the sender, subject line,
-            which company the email was matched to, and the processing status (success, needs review,
+            which company the email was matched to, and the <strong>processing status</strong> (success, needs review,
             failed, processing, or pending).
           </p>
           <p className="text-muted-foreground mb-2">
@@ -380,7 +380,7 @@ export default function SupportPage() {
           </p>
           <p className="text-muted-foreground">
             The platform can also store documents for you automatically. If your admin has connected
-            Google Drive or Dropbox in Settings, every inbound email and its attachments are saved
+            <strong>Google Drive</strong> or <strong>Dropbox</strong> in Settings, every inbound email and its attachments are saved
             into company-specific folders &mdash; organized by company name &mdash; so you always have
             the original source files alongside the extracted data.
           </p>
@@ -446,21 +446,21 @@ export default function SupportPage() {
             for each one to finish.
           </p>
           <p className="text-muted-foreground mb-2">
-            You can also paste data that covers multiple companies at once &mdash; for example, rows copied
+            You can also paste data that covers <strong>multiple companies</strong> at once &mdash; for example, rows copied
             from a spreadsheet or CSV file containing metrics across your portfolio. The system will parse
             the data, create new companies if they don&apos;t already exist, add new metrics as needed, and
             populate values for existing companies and metrics. This makes it easy to bulk import historical
             data or onboard an entire portfolio in one step.
           </p>
           <p className="text-muted-foreground mb-2">
-            Additionally, you can paste investment transaction data &mdash; rounds, proceeds, valuations,
+            Additionally, you can paste <strong>investment transaction data</strong> &mdash; rounds, proceeds, valuations,
             and share prices &mdash; and the AI will parse the entries and match them to your portfolio
             companies. This is useful for bulk-importing cap table history, backfilling historical rounds,
             or onboarding an entire portfolio&apos;s investment data at once. Transactions are written to
             each company&apos;s Investments section automatically.
           </p>
           <p className="text-muted-foreground mb-2">
-            You can also paste fund-level cash flow data &mdash; commitments, capital calls, and
+            You can also paste <strong>fund-level cash flow data</strong> &mdash; commitments, capital calls, and
             distributions per portfolio group. Each row uses the format: date, group, type, amount,
             notes (optional). Type accepts full names (commitment, called_capital, distribution)
             or abbreviations (com, cc, dist). These cash flows power the computed LP metrics
@@ -485,7 +485,7 @@ export default function SupportPage() {
             request so you know what was sent and when.
           </p>
           <p className="text-muted-foreground mb-2">
-            The email composer supports a customizable subject and HTML body. You can write a standard
+            The <strong>email composer</strong> supports a customizable subject and HTML body. You can write a standard
             template that you reuse each quarter, or tailor messages for specific companies. Emails are
             sent through whichever outbound email provider your admin has configured (Gmail, Resend,
             Postmark, or Mailgun).
@@ -515,15 +515,15 @@ export default function SupportPage() {
             authentication for additional account security.
           </p>
           <p className="text-muted-foreground mb-2">
-            For admins, Settings covers the full platform configuration: AI provider keys and model
+            For admins, Settings covers the full platform configuration: <strong>AI provider keys</strong> and model
             selection (Anthropic, OpenAI, Google Gemini, and/or Ollama for local models), the default AI provider
-            for the fund, feature visibility controls, inbound email setup (Postmark or Mailgun), outbound email
+            for the fund, <strong>feature visibility</strong> controls, inbound email setup (Postmark or Mailgun), outbound email
             providers (Gmail, Resend, Postmark, or Mailgun), file storage connections (Google Drive or Dropbox),
             the AI summary prompt, and email templates for reporting asks.
           </p>
           <p className="text-muted-foreground mb-2">
-            Admins also manage the authorized senders list (email addresses allowed to submit reports
-            via the inbound pipeline), team members and their roles, and an allow-list that controls
+            Admins also manage the <strong>authorized senders</strong> list (email addresses allowed to submit reports
+            via the inbound pipeline), <strong>team members</strong> and their roles, and an allow-list that controls
             who can sign up for the platform. A danger zone at the bottom allows admins to permanently
             delete all fund data if needed.
           </p>
@@ -687,44 +687,131 @@ export default function SupportPage() {
           </p>
         </div>
 
-        <div id="lp-letters">
+        <div id="letters">
           <h2 className="text-base font-medium mb-2 flex items-center gap-2">
             <FileText className="h-4 w-4 text-muted-foreground" />
-            LP Letters
+            Letters
           </h2>
           <p className="text-muted-foreground mb-2">
-            LP Letters helps you generate quarterly update letters for your limited partners.
-            Using AI and your portfolio data &mdash; reported metrics, company summaries, investment
-            performance, and team notes &mdash; the system drafts professional LP communications
-            scoped to a specific portfolio group and reporting period.
+            Letters helps you generate quarterly update letters for your limited partners. Using AI
+            and your portfolio data &mdash; reported metrics, company summaries, investment performance,
+            and team notes &mdash; the system drafts professional LP communications scoped to a specific
+            portfolio group and reporting period. To create a letter, click &ldquo;New letter&rdquo; and
+            select the year, quarter, portfolio group, and template. You can optionally toggle
+            &ldquo;year-end summary&rdquo; for Q4 letters and add custom instructions to guide the AI.
+            A preview step shows the companies and data that will be included before generation begins.
           </p>
           <p className="text-muted-foreground mb-2">
-            <strong>Creating a letter</strong> &mdash; click &ldquo;New letter&rdquo; and select the year,
-            quarter, portfolio group, and template. Optionally toggle &ldquo;year-end summary&rdquo; for
-            Q4 letters and add custom instructions to guide the AI. A preview step shows the companies
-            and data that will be included before generation begins.
+            If you&apos;ve written LP letters before, you can upload a previous letter (.docx or .pdf)
+            and the AI will analyze it to match your writing style, tone, and structure. Otherwise, a
+            built-in default <strong>template</strong> is available. Templates are reusable across letters and managed
+            from the Templates dialog on the Letters page.
           </p>
           <p className="text-muted-foreground mb-2">
-            <strong>Templates</strong> &mdash; upload a previous LP letter (.docx or .pdf) and AI analyzes
-            it to match your writing style, tone, and structure. Or use the built-in default template.
-            Templates are reusable across letters and managed from the Templates dialog on the LP Letters page.
-          </p>
-          <p className="text-muted-foreground mb-2">
-            <strong>Generation</strong> &mdash; the AI generates a narrative for each company in the portfolio
-            group, drawing on reported metrics, recent trends, company summaries, investment data, and team
-            notes. A portfolio summary table with investment performance is also generated. The full letter
-            is assembled from these sections.
-          </p>
-          <p className="text-muted-foreground mb-2">
-            <strong>Editing</strong> &mdash; after generation, the letter opens in an editor with two views:
-            &ldquo;Sections&rdquo; shows each company narrative individually for targeted editing,
-            and &ldquo;Full&rdquo; shows the complete assembled letter. Edit narratives inline, regenerate
-            individual company sections or the entire letter, and add per-company or global custom prompts
-            to refine the output. Per-company prompts can either add to or replace the default generation prompt.
+            During generation, the AI writes a narrative for each company in the portfolio group, drawing
+            on reported metrics, recent trends, company summaries, investment data, and team notes. A
+            portfolio summary table with investment performance is also generated, and the full letter is
+            assembled from these sections. After generation, the letter opens in an <strong>editor</strong> with two views:
+            &ldquo;Sections&rdquo; shows each company narrative individually for targeted editing, and
+            &ldquo;Full&rdquo; shows the complete assembled letter. You can edit narratives inline,
+            regenerate individual company sections or the entire letter, and add <strong>custom prompts</strong> per-company
+            or globally to refine the output. Per-company prompts can either add to or replace the
+            default generation prompt.
           </p>
           <p className="text-muted-foreground">
-            <strong>Export</strong> &mdash; export the finished letter as a .docx file for final formatting
+            When you&apos;re satisfied with the letter, export it as a .docx file for final formatting
             and distribution. If Google Drive is connected, you can export directly to Drive.
+          </p>
+        </div>
+
+        <div id="lps">
+          <h2 className="text-base font-medium mb-2 flex items-center gap-2">
+            <Crown className="h-4 w-4 text-muted-foreground" />
+            LPs
+          </h2>
+          <p className="text-muted-foreground mb-2">
+            LPs helps you track and report on your limited partner positions across snapshots. Each
+            snapshot represents LP positions at a point in time &mdash; typically a quarter-end. The
+            LPs index page lists all snapshots; click one to view investor data, summary cards, and
+            the full investor table.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            To get data in, create a new snapshot and paste spreadsheet content into the <strong>import dialog</strong>.
+            AI automatically matches columns to fields like investor name, entity, commitment, paid-in
+            capital, distributions, NAV, DPI, RVPI, TVPI, and IRR. Investors, entities, and investments
+            are created or updated automatically, and rows with zero commitment and no financial data
+            are filtered out.
+          </p>
+
+          <p className="text-muted-foreground mb-2">
+            The snapshot detail page shows all investors with aggregated metrics. Expand an investor
+            to see individual entity and portfolio group line items. All values are <strong>inline-editable</strong>:
+            click a row to edit metrics, or click an investor name to rename. Investors can be grouped
+            under a parent for consolidated reporting, and duplicate investors can be merged together.
+            When a snapshot has multiple portfolio groups, a <strong>portfolio group filter</strong> appears in the header to include
+            or exclude specific groups from the view and totals.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            Each snapshot can have its own <strong>report header and footer</strong>, configured via the Settings button.
+            These appear on individual investor PDFs and batch exports. Click the document icon on any
+            investor row to view their <strong>individual report</strong>, which includes a capital summary table, a
+            performance metrics table, and a narrative summary of total invested, distributions, and
+            current value. The &ldquo;Batch PDFs&rdquo; button generates all selected investor reports
+            at once and downloads them as a ZIP file of individual PDFs. You can also <strong>export to Excel</strong> with
+            all investors, entities, portfolio groups, and metrics.
+          </p>
+
+        </div>
+
+        <div id="compliance">
+          <h2 className="text-base font-medium mb-2 flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+            Compliance
+          </h2>
+          <p className="text-muted-foreground mb-2">
+            Compliance helps fund managers stay on top of regulatory filings, tax deadlines, internal
+            compliance requirements, and fund reporting obligations. It provides a calendar-based view
+            of everything due throughout the year, tailored to your fund&apos;s specific profile and
+            registration status.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            Start by completing a short <strong>compliance profile</strong> questionnaire about your fund &mdash; registration status, AUM
+            range, fund structure, Reg D exemption type, state presence, and a few other details. The
+            system uses your answers to automatically determine which compliance items apply, which need
+            further review, and which you can safely dismiss. If your fund profile changes, update the
+            questionnaire and the calendar adjusts accordingly.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            All applicable items appear in a <strong>monthly calendar</strong> organized by deadline. Items are color-coded
+            by category &mdash; SEC filings in amber, tax filings in green, internal compliance in blue,
+            fund reporting in purple, state compliance in rose, CFTC in orange, and AML/FinCEN in red.
+            Quarterly items like partnership expense reviews and access person disclosures appear in each
+            quarter independently, so you can track and dismiss them separately. Certain <strong>event-driven</strong> filings
+            like Form D and Blue Sky appear only in the months where your fund has committed
+            capital entries, derived automatically from your fund cash flows data.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            When you finish a filing, mark it as done by <strong>dismissing</strong> it for the year or quarter. You can
+            filter the view between active items, dismissed items, or all items to see what&apos;s been
+            completed and what remains. An <strong>all items</strong> view provides a comprehensive list of every compliance
+            item organized by category, with each item showing its frequency, deadline, applicability,
+            filing system, and any relevant notes or alerts.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            The system ships with a curated registry of compliance items covering SEC filings
+            (Form ADV, Form PF, Form 13F, Schedule 13G, Form 13H, Form N-PX), securities offerings
+            (Form D, Blue Sky), CFTC exemptions, California diversity reporting, tax filings (Form 1065,
+            K-1s, Form 7004), internal compliance (access person disclosures, annual compliance review,
+            privacy notice), AML/FinCEN requirements, fund reporting (quarterly financials, valuations),
+            and partnership expense allocation.
+          </p>
+
+          <p className="text-muted-foreground mb-2">
+            Save links to filing portals, regulatory accounts, and reference documents alongside your
+            compliance items. Each link can optionally be associated with a specific compliance item,
+            and associated links appear on that item&apos;s detail card for quick access during filing
+            season. Links are editable after entry &mdash; hover over any link and click the pencil
+            icon to update the title, URL, description, or associated compliance item.
           </p>
         </div>
 
@@ -776,25 +863,23 @@ export default function SupportPage() {
             about cross-portfolio trends and themes.
           </p>
           <p className="text-muted-foreground mb-2">
-            <strong>Conversations are persistent.</strong> Your chat history is saved to your account and
-            stored in the database. You can close the panel, navigate to other pages, or close the browser
-            entirely &mdash; when you return, click the clock icon to open your conversation history and
-            resume any previous thread. Conversations are scoped by context: company-specific chats stay
-            with that company, and portfolio-wide chats have their own history.
+            Your <strong>chat history</strong> is persistent and saved to your account in the database. You can close the panel,
+            navigate to other pages, or close the browser entirely &mdash; when you return, click the clock icon to
+            open your conversation history and resume any previous thread. Conversations are scoped by context:
+            company-specific chats stay with that company, and portfolio-wide chats have their own history.
           </p>
           <p className="text-muted-foreground mb-2">
-            <strong>Conversation memory</strong> gives the Analyst continuity across sessions. When you
+            The Analyst has <strong>conversation memory</strong> that gives it continuity across sessions. When you
             start a new conversation, the system automatically summarizes your recent past conversations
             in the same context and injects those summaries into the AI&apos;s prompt. This means the
             Analyst remembers what you&apos;ve discussed before &mdash; key questions, conclusions, and
             concerns &mdash; without you needing to repeat context.
           </p>
           <p className="text-muted-foreground mb-2">
-            <strong>Team notes as context:</strong> The Analyst incorporates your team&apos;s internal
-            discussion notes into its analysis. Notes posted on a company page are included when chatting
-            about that company, and portfolio-wide notes are included in fund-level conversations. This
-            means the AI is aware of your team&apos;s observations, follow-up items, and qualitative
-            context alongside the quantitative data.
+            The Analyst also incorporates your <strong>team notes</strong> into its analysis. Notes posted on a company page
+            are included when chatting about that company, and portfolio-wide notes are included in fund-level
+            conversations. This means the AI is aware of your team&apos;s observations, follow-up items, and
+            qualitative context alongside the quantitative data.
           </p>
           <p className="text-muted-foreground mb-2">
             Use the header controls to manage conversations: the <strong>clock icon</strong> opens your
@@ -822,39 +907,38 @@ export default function SupportPage() {
             inbound emails, or uploaded directly to a company&apos;s documents section.
           </p>
           <p className="text-muted-foreground mb-2">
-            <strong>File size limits:</strong> Individual file uploads are limited to 20 MB per file. This applies
+            Individual file uploads are limited to <strong>20 MB per file</strong>. This applies
             to both manual uploads and email attachments. For larger files (such as high-resolution board
             decks or extensive spreadsheets), consider splitting them into smaller parts, compressing images,
             or exporting to a more compact format before uploading. The AI processing pipeline works best
             with focused, well-structured documents rather than very large omnibus files.
           </p>
           <p className="text-muted-foreground mb-2">
-            <strong>Text extraction:</strong> The system extracts text content from uploaded files to make
+            The system extracts <strong>text content</strong> from uploaded files to make
             them available to the AI for analysis and metric extraction. PDFs and Office documents have
-            their text extracted server-side. Images are processed using the AI&apos;s vision capabilities
-            to read charts, tables, and text directly from screenshots or photos of reports.
+            their text extracted server-side. Images are processed using the AI&apos;s <strong>vision capabilities</strong> to
+            read charts, tables, and text directly from screenshots or photos of reports.
           </p>
           <p className="text-muted-foreground mb-2">
-            <strong>Virus and safety screening:</strong> The platform does not currently include built-in
-            antivirus or malware scanning of uploaded files. Files are stored in your configured storage
-            provider (Supabase Storage, Google Drive, or Dropbox), which may provide their own scanning
-            capabilities depending on your plan and configuration. If your organization requires virus
-            scanning, we recommend configuring it at the storage provider level or scanning files before
-            uploading them to the platform.
+            The platform does not currently include built-in antivirus or <strong>malware scanning</strong> of uploaded
+            files. Files are stored in your configured storage provider (Supabase Storage, Google Drive,
+            or Dropbox), which may provide their own scanning capabilities depending on your plan and
+            configuration. If your organization requires virus scanning, we recommend configuring it at
+            the storage provider level or scanning files before uploading them to the platform.
           </p>
           <p className="text-muted-foreground mb-2">
-            <strong>File storage:</strong> When file storage is configured (Google Drive or Dropbox),
+            When <strong>file storage</strong> is configured (Google Drive or Dropbox),
             email attachments and uploaded documents are automatically organized into company-specific
             folders. This provides a backup of all source materials alongside the extracted data. Files
             stored in Supabase Storage are accessible through the platform&apos;s UI; files in Google
             Drive or Dropbox can also be accessed directly through those services.
           </p>
           <p className="text-muted-foreground">
-            <strong>Data privacy:</strong> Uploaded files and their extracted content are only accessible
-            to members of your fund. Row-level security policies ensure that users can only see data
-            belonging to their fund. File content sent to AI providers (Anthropic or OpenAI) for processing
-            is subject to those providers&apos; data handling policies &mdash; refer to their documentation
-            for details on data retention and usage.
+            Uploaded files and their extracted content are only accessible to members of your fund.
+            <strong>Row-level security</strong> policies ensure that users can only see data belonging to their fund.
+            File content sent to AI providers (Anthropic or OpenAI) for processing is subject to those
+            providers&apos; <strong>data handling policies</strong> &mdash; refer to their documentation for details on
+            data retention and usage.
           </p>
         </div>
 

@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { xirr, type CashFlow } from '@/lib/xirr'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -42,12 +43,24 @@ export interface CompanyLetterData {
   latestUpdate: string | null
 }
 
+export interface FundMetrics {
+  committedCapital: number
+  paidInCapital: number
+  distributions: number
+  fmv: number
+  dpi: number | null
+  rvpi: number | null
+  tvpi: number | null
+  irr: number | null
+}
+
 export interface PortfolioPreview {
   fundName: string
   fundCurrency: string
   periodLabel: string
   portfolioGroup: string
   companies: CompanyLetterData[]
+  fundMetrics: FundMetrics | null
   totals: {
     totalInvested: number
     totalFmv: number
@@ -102,12 +115,15 @@ export async function aggregatePortfolioData(
   // Filter by portfolio group using investment transactions
   const { data: allTransactions } = await admin
     .from('investment_transactions')
-    .select('company_id, transaction_type, investment_cost, proceeds_received, proceeds_escrow, current_share_price, shares_acquired, unrealized_value_change, portfolio_group')
-    .eq('fund_id', fundId) as { data: {
-      company_id: string; transaction_type: string; investment_cost: number | null
+    .select('company_id, transaction_type, transaction_date, round_name, investment_cost, share_price, proceeds_received, proceeds_escrow, cost_basis_exited, current_share_price, shares_acquired, unrealized_value_change, portfolio_group')
+    .eq('fund_id', fundId)
+    .order('transaction_date', { ascending: true }) as { data: {
+      company_id: string; transaction_type: string; transaction_date: string | null
+      round_name: string | null; investment_cost: number | null; share_price: number | null
       proceeds_received: number | null; proceeds_escrow: number | null
-      current_share_price: number | null; shares_acquired: number | null
-      unrealized_value_change: number | null; portfolio_group: string[] | null
+      cost_basis_exited: number | null; current_share_price: number | null
+      shares_acquired: number | null; unrealized_value_change: number | null
+      portfolio_group: string[] | null
     }[] | null }
 
   // Determine which companies belong to this portfolio group
@@ -146,33 +162,122 @@ export async function aggregatePortfolioData(
     ...(inactiveCompanies ?? []).filter(c => companyIdsInGroup.has(c.id)),
   ]
 
-  // Compute investment summaries
+  // Compute investment summaries using canonical per-round cost basis logic
+  // (matches the portfolio investments API computation)
   const investmentSummaries: CompanyInvestmentSummary[] = []
   for (const c of allGroupCompanies) {
     const txns = (allTransactions ?? []).filter(t => t.company_id === c.id)
-    let totalInvested = 0
-    let totalRealized = 0
-    let shares = 0
-    let latestSharePrice = 0
+
+    // Determine company-wide latest share price from all transaction types
+    let latestSharePrice: number | null = null
+    let latestSharePriceDate: string | null = null
 
     for (const t of txns) {
       if (t.transaction_type === 'investment') {
-        totalInvested += Number(t.investment_cost ?? 0)
-        shares += Number(t.shares_acquired ?? 0)
+        if (t.share_price != null && t.share_price > 0 && t.transaction_date) {
+          if (!latestSharePriceDate || t.transaction_date > latestSharePriceDate) {
+            latestSharePrice = Number(t.share_price)
+            latestSharePriceDate = t.transaction_date
+          }
+        }
       }
-      if (t.transaction_type === 'proceeds') {
-        totalRealized += Number(t.proceeds_received ?? 0) + Number(t.proceeds_escrow ?? 0)
+      if (t.transaction_type === 'unrealized_gain_change' && t.current_share_price != null) {
+        if (!latestSharePriceDate || (t.transaction_date ?? '') >= (latestSharePriceDate ?? '')) {
+          latestSharePrice = Number(t.current_share_price)
+          latestSharePriceDate = t.transaction_date
+        }
       }
-      if (t.transaction_type === 'unrealized_gain_change' && t.current_share_price) {
-        latestSharePrice = Number(t.current_share_price)
+      if (t.transaction_type === 'round_info') {
+        if (t.share_price != null && t.transaction_date) {
+          if (!latestSharePriceDate || t.transaction_date >= latestSharePriceDate) {
+            latestSharePrice = Number(t.share_price)
+            latestSharePriceDate = t.transaction_date
+          }
+        }
       }
     }
 
-    const unrealizedValue = shares > 0 && latestSharePrice > 0 ? shares * latestSharePrice : 0
-    const fmv = c.status === 'exited' ? totalRealized
-      : c.status === 'written-off' ? 0
-      : totalRealized + unrealizedValue
-    const moic = totalInvested > 0 ? fmv / totalInvested : null
+    // Filter to transactions in this portfolio group
+    const groupTxns = txns.filter(t => {
+      const groups = t.portfolio_group ?? []
+      return groups.includes(portfolioGroup)
+    })
+    // Also include company-wide unrealized_gain_change/round_info (no portfolio_group) for share price
+    const companyWideTxns = txns.filter(t =>
+      (t.transaction_type === 'unrealized_gain_change' || t.transaction_type === 'round_info') &&
+      (!t.portfolio_group || t.portfolio_group.length === 0)
+    )
+    const relevantTxns = [...groupTxns, ...companyWideTxns.filter(t => !groupTxns.includes(t))]
+
+    // Build round map with cost basis tracking
+    let totalInvested = 0
+    let totalRealized = 0
+    const roundMap = new Map<string, {
+      investmentCost: number
+      sharesAcquired: number
+      unrealizedValueChange: number
+      costBasisExited: number
+    }>()
+
+    for (const t of relevantTxns) {
+      if (t.transaction_type === 'investment') {
+        totalInvested += Number(t.investment_cost ?? 0)
+        const roundName = t.round_name ?? 'Unknown'
+        const existing = roundMap.get(roundName)
+        if (existing) {
+          existing.investmentCost += Number(t.investment_cost ?? 0)
+          existing.sharesAcquired += Number(t.shares_acquired ?? 0)
+        } else {
+          roundMap.set(roundName, {
+            investmentCost: Number(t.investment_cost ?? 0),
+            sharesAcquired: Number(t.shares_acquired ?? 0),
+            unrealizedValueChange: 0,
+            costBasisExited: 0,
+          })
+        }
+      }
+      if (t.transaction_type === 'proceeds') {
+        const pr = Number(t.proceeds_received ?? 0)
+        const pe = Number(t.proceeds_escrow ?? 0)
+        totalRealized += pr + pe
+        if (t.round_name && t.cost_basis_exited != null) {
+          const round = roundMap.get(t.round_name)
+          if (round) round.costBasisExited += Math.abs(Number(t.cost_basis_exited))
+        }
+      }
+      if (t.transaction_type === 'unrealized_gain_change') {
+        if (t.round_name && t.unrealized_value_change != null) {
+          const round = roundMap.get(t.round_name)
+          if (round) round.unrealizedValueChange += Number(t.unrealized_value_change)
+        }
+      }
+    }
+
+    // Compute per-round unrealized value using remaining basis fraction
+    let unrealizedValue = 0
+    for (const round of Array.from(roundMap.values())) {
+      const isPricedEquity = round.sharesAcquired > 0 && round.investmentCost > 0
+      const remainingBasis = round.investmentCost - round.costBasisExited
+      if (remainingBasis <= 0) {
+        // All cost basis exited — no unrealized value
+      } else if (isPricedEquity) {
+        const fraction = round.investmentCost > 0 ? remainingBasis / round.investmentCost : 0
+        unrealizedValue += latestSharePrice != null ? round.sharesAcquired * fraction * latestSharePrice : 0
+      } else {
+        // Convertible / warrant: remaining basis + unrealized changes
+        unrealizedValue += Math.max(0, remainingBasis + round.unrealizedValueChange)
+      }
+    }
+
+    let fmv: number
+    if (c.status === 'exited') {
+      fmv = totalRealized
+    } else if (c.status === 'written-off') {
+      fmv = 0
+    } else {
+      fmv = unrealizedValue
+    }
+    const moic = totalInvested > 0 ? (totalRealized + unrealizedValue) / totalInvested : null
 
     investmentSummaries.push({
       companyId: c.id,
@@ -286,6 +391,63 @@ export async function aggregatePortfolioData(
   const totalRealized = investmentSummaries.reduce((s, c) => s + c.totalRealized, 0)
   const portfolioMoic = totalInvested > 0 ? totalFmv / totalInvested : null
 
+  // Fund-level cash flow metrics (net, matching funds page computation)
+  const { data: cashFlows } = await admin
+    .from('fund_cash_flows')
+    .select('flow_type, flow_date, amount')
+    .eq('fund_id', fundId)
+    .eq('portfolio_group', portfolioGroup) as { data: { flow_type: string; flow_date: string; amount: number }[] | null }
+
+  const { data: groupConfig } = await admin
+    .from('fund_group_config')
+    .select('cash_on_hand, carry_rate, gp_commit_pct')
+    .eq('fund_id', fundId)
+    .eq('portfolio_group', portfolioGroup)
+    .maybeSingle() as { data: { cash_on_hand: number; carry_rate: number; gp_commit_pct: number } | null }
+
+  let fundMetrics: FundMetrics | null = null
+  if (cashFlows && cashFlows.length > 0) {
+    const cashOnHand = Number(groupConfig?.cash_on_hand ?? 0)
+    const carryRate = Number(groupConfig?.carry_rate ?? 0.20)
+    const gpCommitPct = Number(groupConfig?.gp_commit_pct ?? 0)
+
+    const committedCapital = cashFlows.filter(f => f.flow_type === 'commitment').reduce((s, f) => s + Number(f.amount), 0)
+    const called = cashFlows.filter(f => f.flow_type === 'called_capital').reduce((s, f) => s + Number(f.amount), 0)
+    const distributions = cashFlows.filter(f => f.flow_type === 'distribution').reduce((s, f) => s + Number(f.amount), 0)
+    const grossResidual = totalFmv
+    const grossAssets = grossResidual + cashOnHand
+
+    // Net metrics: carry and GP commit adjustments
+    const gpCapital = called * gpCommitPct
+    const lpCapital = called - gpCapital
+    const lpDistributions = distributions * (1 - gpCommitPct)
+    const lpRemainingCapital = lpCapital - lpDistributions
+    const estimatedCarry = Math.max(0, carryRate * (grossAssets * (1 - gpCommitPct) - lpRemainingCapital))
+    const netResidual = grossAssets - estimatedCarry
+    const totalValue = distributions + netResidual
+
+    const dpi = called > 0 ? distributions / called : null
+    const rvpi = called > 0 ? netResidual / called : null
+    const tvpi = called > 0 ? totalValue / called : null
+
+    // Net IRR via XIRR
+    const xirrFlows: CashFlow[] = []
+    for (const cf of cashFlows) {
+      if (cf.flow_type === 'called_capital') {
+        xirrFlows.push({ date: new Date(cf.flow_date), amount: -Number(cf.amount) })
+      }
+      if (cf.flow_type === 'distribution') {
+        xirrFlows.push({ date: new Date(cf.flow_date), amount: Number(cf.amount) })
+      }
+    }
+    if (netResidual > 0) {
+      xirrFlows.push({ date: new Date(), amount: netResidual })
+    }
+    const irr = xirrFlows.length >= 2 ? xirr(xirrFlows) : null
+
+    fundMetrics = { committedCapital, paidInCapital: called, distributions, fmv: netResidual, dpi, rvpi, tvpi, irr }
+  }
+
   const periodLabel = isYearEnd
     ? `Q${quarter} ${year} / Year End ${year}`
     : `Q${quarter} ${year}`
@@ -296,6 +458,7 @@ export async function aggregatePortfolioData(
     periodLabel,
     portfolioGroup,
     companies: allGroupCompanies.map(c => companyDataMap.get(c.id)!),
+    fundMetrics,
     totals: {
       totalInvested,
       totalFmv,

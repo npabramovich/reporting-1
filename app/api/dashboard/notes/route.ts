@@ -22,15 +22,25 @@ export async function GET(req: NextRequest) {
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
 
   const filter = req.nextUrl.searchParams.get('filter')
+  const pageContext = req.nextUrl.searchParams.get('page_context')
+  const limitParam = req.nextUrl.searchParams.get('limit')
 
   let query = admin
     .from('company_notes')
-    .select('id, content, user_id, company_id, mentioned_user_ids, mentioned_company_ids, mentioned_groups, created_at, updated_at')
+    .select('id, content, user_id, company_id, mentioned_user_ids, mentioned_company_ids, mentioned_groups, created_at, updated_at, pinned_at, page_context')
     .eq('fund_id', membership.fund_id)
-    .order('created_at', { ascending: true })
 
-  if (filter === 'general') {
+  if (pageContext) {
+    query = query.eq('page_context', pageContext).is('company_id', null)
+  } else if (filter === 'general') {
     query = query.is('company_id', null)
+  }
+
+  if (limitParam) {
+    const n = Math.min(parseInt(limitParam, 10) || 10, 200)
+    query = query.order('created_at', { ascending: false }).limit(n)
+  } else {
+    query = query.order('created_at', { ascending: true })
   }
 
   const { data: notes, error } = await query as {
@@ -100,8 +110,13 @@ export async function GET(req: NextRequest) {
       isRead: note.user_id === user.id || readSet.has(note.id),
       createdAt: note.created_at,
       edited: note.updated_at !== note.created_at,
+      pinnedAt: (note as any).pinned_at ?? null,
+      pageContext: (note as any).page_context ?? null,
     })
   }
+
+  // When limit is used, we fetched DESC; reverse to chronological for chat display
+  if (limitParam) result.reverse()
 
   return NextResponse.json(result)
 }
@@ -124,7 +139,7 @@ export async function POST(req: NextRequest) {
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
 
   const body = await req.json()
-  const { content, companyId } = body
+  const { content, companyId, pageContext } = body
 
   if (!content?.trim()) {
     return NextResponse.json({ error: 'Content is required' }, { status: 400 })
@@ -186,9 +201,10 @@ export async function POST(req: NextRequest) {
       mentioned_user_ids: mentionedUserIds,
       mentioned_company_ids: mentionedCompanyIds,
       mentioned_groups: mentionedGroups,
+      page_context: pageContext || null,
     } as any)
-    .select('id, content, user_id, company_id, created_at')
-    .single() as { data: { id: string; content: string; user_id: string; company_id: string | null; created_at: string } | null; error: { message: string } | null }
+    .select('id, content, user_id, company_id, created_at, page_context')
+    .single() as { data: { id: string; content: string; user_id: string; company_id: string | null; created_at: string; page_context: string | null } | null; error: { message: string } | null }
 
   if (error || !note) return dbError(error ?? { message: 'Failed to create note' }, 'dashboard-notes')
 
@@ -221,6 +237,8 @@ export async function POST(req: NextRequest) {
     isRead: true,
     createdAt: note.created_at,
     edited: false,
+    pinnedAt: null,
+    pageContext: note.page_context ?? null,
   })
 }
 

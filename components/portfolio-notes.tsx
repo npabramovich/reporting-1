@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
-import { MessageSquare, Send, Pencil, X, Check, Building2, Lock } from 'lucide-react'
+import { MessageSquare, Send, Pencil, X, Check, Building2, Lock, Pin, PinOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NoteContent } from '@/components/note-content'
 import { MentionTextarea, type MentionMember, type MentionTextareaRef } from '@/components/mention-textarea'
@@ -24,6 +24,8 @@ interface Note {
   isRead: boolean
   createdAt: string
   edited: boolean
+  pinnedAt: string | null
+  pageContext: string | null
 }
 
 interface CompanyOption {
@@ -35,16 +37,20 @@ interface PortfolioNotesContextValue {
   open: boolean
   toggle: () => void
   unreadCount: number
+  pageContext?: string
 }
 
 const PortfolioNotesContext = createContext<PortfolioNotesContextValue | null>(null)
 
-export function PortfolioNotesProvider({ children }: { children: ReactNode }) {
+export function PortfolioNotesProvider({ children, pageContext }: { children: ReactNode; pageContext?: string }) {
   const [open, setOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
-    fetch('/api/dashboard/notes?filter=general')
+    const params = pageContext
+      ? `?page_context=${pageContext}&limit=10`
+      : '?filter=general'
+    fetch(`/api/dashboard/notes${params}`)
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -52,10 +58,10 @@ export function PortfolioNotesProvider({ children }: { children: ReactNode }) {
         }
       })
       .catch(() => {})
-  }, [])
+  }, [pageContext])
 
   return (
-    <PortfolioNotesContext.Provider value={{ open, toggle: () => setOpen(prev => !prev), unreadCount }}>
+    <PortfolioNotesContext.Provider value={{ open, toggle: () => setOpen(prev => !prev), unreadCount, pageContext }}>
       {children}
     </PortfolioNotesContext.Provider>
   )
@@ -96,7 +102,7 @@ export function PortfolioNotesPanel() {
   if (!ctx) return null
   return (
     <MobileDrawerPanel open={ctx.open} onOpenChange={(open) => { if (!open) ctx.toggle() }}>
-      <NotesPanel toggle={ctx.toggle} />
+      <NotesPanel toggle={ctx.toggle} pageContext={ctx.pageContext} />
     </MobileDrawerPanel>
   )
 }
@@ -116,7 +122,7 @@ function formatRelativeTime(dateStr: string) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function NotesPanel({ toggle }: { toggle: () => void }) {
+function NotesPanel({ toggle, pageContext }: { toggle: () => void; pageContext?: string }) {
   const { fundName } = useAnalystContext()
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(false)
@@ -173,16 +179,25 @@ function NotesPanel({ toggle }: { toggle: () => void }) {
 
   useEffect(() => {
     setLoading(true)
-    fetch('/api/dashboard/notes?filter=general')
+    const params = pageContext
+      ? `?page_context=${pageContext}&limit=10`
+      : '?filter=general'
+    fetch(`/api/dashboard/notes${params}`)
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {
-          setNotes(data)
+          // Sort pinned notes to top, then chronological
+          const sorted = [...data].sort((a, b) => {
+            if (a.pinnedAt && !b.pinnedAt) return -1
+            if (!a.pinnedAt && b.pinnedAt) return 1
+            return 0 // already chronological from API
+          })
+          setNotes(sorted)
           markAsRead(data)
         }
       })
       .finally(() => setLoading(false))
-  }, [markAsRead])
+  }, [markAsRead, pageContext])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -198,17 +213,16 @@ function NotesPanel({ toggle }: { toggle: () => void }) {
     if (!content.trim() || posting) return
     setPosting(true)
     try {
+      const body: any = { content: content.trim() }
+      if (pageContext) body.pageContext = pageContext
       const res = await fetch('/api/dashboard/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: content.trim() }),
+        body: JSON.stringify(body),
       })
       if (res.ok) {
         const note = await res.json()
-        // Only add to visible list if it's a general note (no company_id)
-        if (!note.companyId) {
-          setNotes(prev => [...prev, note])
-        }
+        setNotes(prev => [...prev, note])
         setContent('')
         setTimeout(() => inputRef.current?.focus(), 50)
       }
@@ -221,6 +235,25 @@ function NotesPanel({ toggle }: { toggle: () => void }) {
     const res = await fetch(`/api/dashboard/notes/${noteId}`, { method: 'DELETE' })
     if (res.ok) {
       setNotes(prev => prev.filter(n => n.id !== noteId))
+    }
+  }
+
+  async function handlePin(noteId: string, pin: boolean) {
+    const res = await fetch(`/api/dashboard/notes/${noteId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pinned: pin }),
+    })
+    if (res.ok) {
+      const { pinnedAt } = await res.json()
+      setNotes(prev => {
+        const updated = prev.map(n => n.id === noteId ? { ...n, pinnedAt } : n)
+        return updated.sort((a, b) => {
+          if (a.pinnedAt && !b.pinnedAt) return -1
+          if (!a.pinnedAt && b.pinnedAt) return 1
+          return 0
+        })
+      })
     }
   }
 
@@ -249,7 +282,7 @@ function NotesPanel({ toggle }: { toggle: () => void }) {
     <div className="max-h-[80vh] lg:max-h-[calc(100vh-6rem)] rounded-lg border bg-card flex flex-col flex-1">
       <div className="px-4 py-3 flex items-center justify-between">
         <h2 className="text-sm font-medium text-muted-foreground">Team Notes</h2>
-        <button onClick={toggle}>
+        <button onClick={toggle} className="hidden lg:block">
           <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
         </button>
       </div>
@@ -262,10 +295,13 @@ function NotesPanel({ toggle }: { toggle: () => void }) {
           <p className="text-sm text-muted-foreground">No notes yet.</p>
         )}
         {notes.map(note => (
-          <div key={note.id} className="group">
+          <div key={note.id} className={`group ${note.pinnedAt ? 'border-l-2 border-foreground/20 pl-2' : ''}`}>
             <div className="flex items-center gap-2 mb-0.5">
               {!note.isRead && (
                 <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
+              )}
+              {note.pinnedAt && (
+                <Pin className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
               )}
               <span className="text-xs font-medium">
                 {note.userName || note.userEmail.split('@')[0]}
@@ -277,6 +313,13 @@ function NotesPanel({ toggle }: { toggle: () => void }) {
                 <span className="text-[10px] text-muted-foreground italic">edited</span>
               )}
               <div className="md:opacity-0 md:group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-1">
+                <button onClick={() => handlePin(note.id, !note.pinnedAt)} title={note.pinnedAt ? 'Unpin' : 'Pin'}>
+                  {note.pinnedAt ? (
+                    <PinOff className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                  ) : (
+                    <Pin className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                  )}
+                </button>
                 {currentUserId && note.userId === currentUserId && (
                   <button onClick={() => startEditing(note)}>
                     <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />

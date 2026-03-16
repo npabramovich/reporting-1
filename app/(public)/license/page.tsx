@@ -1,4 +1,10 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { Scale } from 'lucide-react'
+
+export const metadata = ogMetadata({
+  title: 'License',
+  description: 'Source-available license terms for the portfolio reporting software, free for single fund entities.',
+})
 
 export default function LicensePage() {
   const tocLinks = (

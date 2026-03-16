@@ -54,6 +54,11 @@ export async function POST(req: NextRequest) {
 
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
 
+    // Reject files over 20MB before buffering into memory
+    if (file.size > 20 * 1024 * 1024) {
+      return NextResponse.json({ error: 'File too large (max 20MB)' }, { status: 400 })
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer())
     const extracted = await extractFromBuffer(buffer, file.name, file.type)
 

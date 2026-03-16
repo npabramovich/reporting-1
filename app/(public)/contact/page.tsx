@@ -54,9 +54,9 @@ export default function ContactPage() {
 
       <div className="max-w-3xl space-y-6 text-sm leading-relaxed">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="sm:col-span-2 flex items-start gap-4">
+          <div className="sm:col-span-2 flex items-start gap-4 pt-3">
             <img
-              src="https://www.hemrock.com/_next/image?url=%2Fassets%2Ftdavidson.jpg&w=128&q=75"
+              src="/tdavidson.jpg"
               alt="Taylor Davidson"
               width={80}
               height={80}
@@ -67,12 +67,17 @@ export default function ContactPage() {
                 For questions about the platform, setup, licensing, managed hosting, or anything else,
                 reach out to Taylor Davidson at{' '}
                 <a
-                  href="https://www.hemrock.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="mailto:hello@hemrock.com"
                   className="text-foreground underline underline-offset-4 hover:text-foreground/80"
                 >
-                  Hemrock
+                  hello@hemrock.com
+                </a>
+                {' '}at{' '}
+                <a
+                  href="tel:+16467700052"
+                  className="text-foreground underline underline-offset-4 hover:text-foreground/80"
+                >
+                  +1 646 770 0052
                 </a>
                 .
               </p>

@@ -6,7 +6,7 @@ import { runPipeline } from '@/lib/pipeline/processEmail'
 import { checkFundMember } from '@/lib/pipeline/checkFundMember'
 import { isAuthorizedSender } from '@/lib/pipeline/isAuthorizedSender'
 import { decrypt } from '@/lib/crypto'
-import { scanFile } from '@/lib/security/scan-file'
+import { scanFileAsync } from '@/lib/security/scan-file'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import type { Json } from '@/lib/types/database'
 
@@ -102,7 +102,8 @@ async function handleMailgunInbound(req: NextRequest) {
       }
     }
   } else {
-    console.warn('[inbound-email/mailgun] Signature verification skipped — no signing key configured')
+    console.warn('[inbound-email/mailgun] Rejecting — no signing key configured for this fund')
+    return
   }
 
   // Check if sender is a fund member (determines interaction extraction, bypasses authorized_senders)
@@ -159,7 +160,7 @@ async function handleMailgunInbound(req: NextRequest) {
       const buffer = Buffer.from(att.Content!, 'base64')
 
       // Scan attachment before uploading
-      const scanResult = scanFile(buffer, att.Name, att.ContentType)
+      const scanResult = await scanFileAsync(buffer, att.Name, att.ContentType)
       if (!scanResult.safe) {
         console.warn(`[inbound-email/mailgun] Skipping unsafe attachment "${att.Name}": ${scanResult.reason}`)
         continue

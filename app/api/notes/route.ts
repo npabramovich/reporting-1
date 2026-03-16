@@ -21,8 +21,9 @@ export async function GET(req: NextRequest) {
 
   let query = admin
     .from('company_notes')
-    .select('id, content, user_id, company_id, mentioned_user_ids, mentioned_company_ids, mentioned_groups, created_at, updated_at')
+    .select('id, content, user_id, company_id, mentioned_user_ids, mentioned_company_ids, mentioned_groups, created_at, updated_at, pinned_at, page_context')
     .eq('fund_id', membership.fund_id)
+    .order('pinned_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
     .limit(200)
 
@@ -97,6 +98,8 @@ export async function GET(req: NextRequest) {
       isRead: note.user_id === user.id || readSet.has(note.id),
       createdAt: note.created_at,
       edited: note.updated_at !== note.created_at,
+      pinnedAt: (note as any).pinned_at ?? null,
+      pageContext: (note as any).page_context ?? null,
     })
   }
 

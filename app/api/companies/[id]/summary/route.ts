@@ -54,22 +54,29 @@ export async function GET(
   const access = await verifyCompanyAccess(supabase, admin, user.id, params.id)
   if ('error' in access) return access.error
 
-  const { data: latest } = await admin
+  const { data: summaries } = await admin
     .from('company_summaries')
-    .select('summary_text, period_label, created_at')
+    .select('id, summary_text, period_label, created_at')
     .eq('company_id', params.id)
     .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle() as { data: { summary_text: string; period_label: string | null; created_at: string } | null }
+    .limit(50) as { data: { id: string; summary_text: string; period_label: string | null; created_at: string }[] | null }
 
-  if (!latest) {
-    return NextResponse.json({ summary: null, generated_at: null })
+  if (!summaries || summaries.length === 0) {
+    return NextResponse.json({ summary: null, generated_at: null, history: [] })
   }
+
+  const latest = summaries[0]
 
   return NextResponse.json({
     summary: latest.summary_text,
     period_label: latest.period_label,
     generated_at: latest.created_at,
+    history: summaries.map(s => ({
+      id: s.id,
+      summary_text: s.summary_text,
+      period_label: s.period_label,
+      created_at: s.created_at,
+    })),
   })
 }
 
@@ -349,7 +356,7 @@ ${documentsBlock ? '\nYou also have access to supplementary documents (strategy 
     const message = err instanceof Error ? err.message : String(err)
     console.error('[company-summary] Claude error:', message, err)
     return NextResponse.json({
-      error: `Summary generation failed: ${message}`,
+      error: 'Summary generation failed. Check your API key in Settings.',
     }, { status: 500 })
   }
 }

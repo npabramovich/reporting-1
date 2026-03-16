@@ -112,21 +112,43 @@ Cash flow data can be bulk-imported from the Import page using freeform text —
 
 ![Funds](public/screenshots/funds.png)
 
-## LP Letters
+## Letters
 
-LP Letters helps you generate quarterly update letters for your limited partners. Using AI and your portfolio data — reported metrics, company summaries, investment performance, and team notes — the system drafts professional LP communications scoped to a specific portfolio group and reporting period.
+Letters helps you generate quarterly update letters for your limited partners. Using AI and your portfolio data — reported metrics, company summaries, investment performance, and team notes — the system drafts professional LP communications scoped to a specific portfolio group and reporting period.
 
-**Creating a letter** — click "New letter" and select the year, quarter, portfolio group, and template. Optionally toggle "year-end summary" for Q4 letters and add custom instructions to guide the AI. A preview step shows the companies and data that will be included before generation begins.
+To create a letter, select the year, quarter, portfolio group, and template. Optionally toggle "year-end summary" for Q4 letters and add custom instructions to guide the AI. A preview step shows the companies and data that will be included before generation begins. You can upload a previous LP letter (.docx or .pdf) and AI analyzes it to match your writing style, tone, and structure, or use the built-in default template. Templates are reusable across letters and managed from the Templates dialog on the Letters page.
 
-**Templates** — upload a previous LP letter (.docx or .pdf) and AI analyzes it to match your writing style, tone, and structure. Or use the built-in default template. Templates are reusable across letters and managed from the Templates dialog on the LP Letters page.
+The AI generates a narrative for each company in the portfolio group, drawing on reported metrics, recent trends, company summaries, investment data, and team notes. A portfolio summary table with investment performance is also generated. The full letter is assembled from these sections.
 
-**Generation** — the AI generates a narrative for each company in the portfolio group, drawing on reported metrics, recent trends, company summaries, investment data, and team notes. A portfolio summary table with investment performance is also generated. The full letter is assembled from these sections.
+After generation, the letter opens in an editor with two views: "Sections" shows each company narrative individually for targeted editing, and "Full" shows the complete assembled letter. Edit narratives inline, regenerate individual company sections or the entire letter, and add per-company or global custom prompts to refine the output. Per-company prompts can either add to or replace the default generation prompt. When finished, export the letter as a .docx file for final formatting and distribution, or export directly to Google Drive if connected.
 
-**Editing** — after generation, the letter opens in an editor with two views: "Sections" shows each company narrative individually for targeted editing, and "Full" shows the complete assembled letter. Edit narratives inline, regenerate individual company sections or the entire letter, and add per-company or global custom prompts to refine the output. Per-company prompts can either add to or replace the default generation prompt.
+![Letters](public/screenshots/letters.png)
 
-**Export** — export the finished letter as a .docx file for final formatting and distribution. If Google Drive is connected, export directly to Drive.
+## LPs
 
-![LP Letters](public/screenshots/letters.png)
+LPs helps you track and report on your limited partner positions across snapshots. Each snapshot represents LP positions at a point in time — typically a quarter-end.
+
+From the LPs index page, create a new snapshot with a name and optional as-of date. On the detail page, paste spreadsheet data into the import dialog and AI automatically parses it, matching columns to fields like investor name, entity, commitment, paid-in capital, distributions, NAV, DPI, RVPI, TVPI, and IRR. Investors, entities, and investments are created or updated automatically. Rows with zero commitment and no financial data are filtered out.
+
+The snapshot detail page shows all investors with aggregated metrics. Expand an investor to see individual entity and portfolio group line items. All values are inline-editable: click a row to edit metrics, or click an investor name to rename. Investors can be grouped under a parent for consolidated reporting, and duplicate investors can be merged together. When a snapshot has multiple portfolio groups, a filter appears in the header to include or exclude specific groups from the view and totals.
+
+Configure a header and footer for the snapshot's PDF reports via the Settings button. Click the document icon on any investor row to view their individual report, or use "Batch PDFs" to generate all investor reports at once. PDFs include the header, a metrics summary table, and the footer. You can also export the full snapshot dataset to an Excel file with all investors, entities, portfolio groups, and metrics.
+
+## Compliance
+
+Compliance helps fund managers stay on top of regulatory filings, tax deadlines, internal compliance requirements, and fund reporting obligations. It provides a calendar-based view of everything due throughout the year, tailored to your fund's specific profile and registration status.
+
+Start by completing a short questionnaire about your fund — registration status, AUM range, fund structure, Reg D exemption type, state presence, and a few other details. The system uses your answers to automatically determine which compliance items apply, which need further review, and which you can safely dismiss. If your fund profile changes, update the questionnaire and the calendar adjusts accordingly.
+
+All applicable items appear in a monthly calendar organized by deadline. Items are color-coded by category — SEC filings in amber, tax filings in green, internal compliance in blue, fund reporting in purple, state compliance in rose, CFTC in orange, and AML/FinCEN in red. Quarterly items like partnership expense reviews and access person disclosures appear in each quarter independently, so you can track and dismiss them separately. Certain event-driven filings like Form D and Blue Sky appear only in the months where your fund has committed capital entries, derived automatically from fund cash flows data.
+
+When you finish a filing, mark it as done by dismissing it for the year or quarter. You can filter the view between active items, dismissed items, or all items to see what's been completed and what remains. An all-items view provides a comprehensive list of every compliance item organized by category, with each item showing its frequency, deadline, applicability, filing system, and any relevant notes or alerts.
+
+Save links to filing portals, regulatory accounts, and reference documents alongside your compliance items. Each link can optionally be associated with a specific compliance item, and associated links appear on that item's detail card for quick access during filing season.
+
+The system ships with a curated registry of compliance items covering SEC filings (Form ADV, Form PF, Form 13F, Schedule 13G, Form 13H, Form N-PX), securities offerings (Form D, Blue Sky), CFTC exemptions, California diversity reporting, tax filings (Form 1065, K-1s, Form 7004), internal compliance (access person disclosures, annual compliance review, privacy notice), AML/FinCEN requirements, fund reporting (quarterly financials, valuations), and partnership expense allocation.
+
+![Compliance](public/screenshots/compliance.png)
 
 ## Asks
 
@@ -208,7 +230,7 @@ Admins can control which optional features are visible in the sidebar and access
 | **Hidden** | Removed from the sidebar for all users, but still accessible via direct URL |
 | **Off** | Functionally disabled — the feature is completely inaccessible |
 
-The features that can be configured are: **Interactions** (CRM-style email logging), **Investments** (fund transaction tracking), **Funds** (fund-level cash flows and LP metrics), **Notes** (team discussion and observations), **LP Letters** (quarterly LP update generation), **Imports** (bulk data import), and **Asks** (portfolio company reporting requests).
+The features that can be configured are: **Interactions** (CRM-style email logging), **Investments** (fund transaction tracking), **Funds** (fund-level cash flows and LP metrics), **Notes** (team discussion and observations), **Letters** (quarterly LP update generation), **LPs** (LP position tracking and reporting), **Compliance** (regulatory filing calendar and tracking), **Imports** (bulk data import), and **Asks** (portfolio company reporting requests).
 
 ## Setup & Deployment
 

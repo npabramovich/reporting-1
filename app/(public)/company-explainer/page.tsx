@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { Building2 } from 'lucide-react'
 import { ExplainerContent } from '../explainer-content'
+
+export const metadata = ogMetadata({
+  title: 'Company Detail',
+  description: 'View company metrics, AI-powered analyst summaries, documents, investments, and team notes in one place.',
+})
 
 export default function CompanyExplainerPage() {
   return (

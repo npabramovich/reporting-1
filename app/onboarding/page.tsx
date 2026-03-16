@@ -96,6 +96,7 @@ function OnboardingContent() {
   const [mode, setMode] = useState<'detect' | 'join' | 'create'>('detect')
   const [step, setStep] = useState(1)
   const [state, setState] = useState<OnboardingState>({ fundId: null, webhookToken: null })
+  const emailConfirmed = searchParams.get('confirmed') === 'true'
 
   const detectFund = useCallback(async () => {
     // Check if returning from Google Drive OAuth
@@ -154,13 +155,23 @@ function OnboardingContent() {
     )
   }
 
+  const confirmedBanner = emailConfirmed ? (
+    <Alert className="mb-6 border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
+      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+      <AlertDescription className="text-green-800 dark:text-green-200">
+        Your email has been confirmed. You&apos;re all set to get started.
+      </AlertDescription>
+    </Alert>
+  ) : null
+
   if (mode === 'join' && matchingFund) {
-    return <JoinFundScreen fund={matchingFund} onCreateInstead={() => setMode('create')} />
+    return <JoinFundScreen fund={matchingFund} onCreateInstead={() => setMode('create')} confirmedBanner={confirmedBanner} />
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-lg">
+        {confirmedBanner}
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight">Set up your fund</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -209,9 +220,11 @@ function OnboardingContent() {
 function JoinFundScreen({
   fund,
   onCreateInstead,
+  confirmedBanner,
 }: {
   fund: MatchingFund
   onCreateInstead: () => void
+  confirmedBanner?: React.ReactNode
 }) {
   const router = useRouter()
   const [requesting, setRequesting] = useState(false)
@@ -241,6 +254,7 @@ function JoinFundScreen({
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-md space-y-4">
+        {confirmedBanner}
         <div className="text-center">
           <h1 className="text-2xl font-semibold tracking-tight">Welcome</h1>
           <p className="text-sm text-muted-foreground mt-1">

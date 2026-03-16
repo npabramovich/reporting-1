@@ -19,11 +19,7 @@ export async function PATCH(
   if (writeCheck instanceof NextResponse) return writeCheck
 
   const body = await req.json()
-  const { content } = body
-
-  if (!content?.trim()) {
-    return NextResponse.json({ error: 'Content is required' }, { status: 400 })
-  }
+  const { content, pinned } = body
 
   const { data: membership } = await admin
     .from('fund_members')
@@ -41,6 +37,26 @@ export async function PATCH(
     .maybeSingle() as { data: { id: string; user_id: string; fund_id: string } | null }
 
   if (!note) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Pin/unpin: any fund member can do this
+  if (typeof pinned === 'boolean') {
+    const { data: updated, error } = await admin
+      .from('company_notes')
+      .update({ pinned_at: pinned ? new Date().toISOString() : null } as any)
+      .eq('id', params.noteId)
+      .select('id, pinned_at')
+      .single() as { data: { id: string; pinned_at: string | null } | null; error: { message: string } | null }
+
+    if (error || !updated) return dbError(error ?? { message: 'Failed to update' }, 'dashboard-notes')
+
+    revalidateTag('notes-badge')
+    return NextResponse.json({ id: updated.id, pinnedAt: updated.pinned_at })
+  }
+
+  // Content edit: only the author
+  if (!content?.trim()) {
+    return NextResponse.json({ error: 'Content is required' }, { status: 400 })
+  }
 
   if (note.user_id !== user.id) {
     return NextResponse.json({ error: 'You can only edit your own notes' }, { status: 403 })

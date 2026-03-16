@@ -32,6 +32,9 @@ export async function GET(request: NextRequest) {
         .maybeSingle()
       if (membership) {
         logActivity(admin, membership.fund_id, user.id, 'login', { method: 'magic_link' })
+      } else if (next === '/') {
+        // New user with no fund — send to onboarding with confirmation message
+        return NextResponse.redirect(`${origin}/onboarding?confirmed=true`)
       }
     }
     return NextResponse.redirect(`${origin}${next}`)

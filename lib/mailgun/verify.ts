@@ -10,6 +10,10 @@ export function verifyMailgunWebhook(
   token: string,
   signature: string
 ): boolean {
+  // Reject stale timestamps (> 5 minutes) to prevent replay attacks
+  const age = Math.abs(Date.now() / 1000 - parseInt(timestamp, 10))
+  if (isNaN(age) || age > 300) return false
+
   const data = timestamp + token
   const digest = createHmac('sha256', signingKey).update(data).digest('hex')
 

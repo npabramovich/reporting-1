@@ -159,12 +159,12 @@ export function UsageDashboard() {
 
   return (
     <div className="p-4 md:py-8 md:pl-8 md:pr-4">
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="mb-6 space-y-1">
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2"><Lock className="h-4 w-4 text-amber-500" />AI Usage</h1>
-          <p className="text-sm text-muted-foreground mt-1">{monthLabel} &mdash; month to date</p>
+          <AnalystToggleButton />
         </div>
-        <AnalystToggleButton />
+        <p className="text-sm text-muted-foreground">{monthLabel} &mdash; month to date</p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">

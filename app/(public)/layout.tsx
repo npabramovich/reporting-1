@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import Link from 'next/link'
-import { Menu, Github, LogIn, Play, Home, Building2, Mail, Upload, BarChart3, Briefcase, Send, StickyNote, Handshake, FileText, Settings, LifeBuoy, Scale, MessageCircle, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, ChevronRight, Package, Award } from 'lucide-react'
+import { Menu, Github, LogIn, Play, Home, Building2, Mail, Upload, BarChart3, Briefcase, Send, StickyNote, Handshake, FileText, Crown, ShieldCheck, Settings, LifeBuoy, Scale, MessageCircle, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, Package, Tag, Star } from 'lucide-react'
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -38,19 +38,21 @@ const PRODUCT_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/asks-explainer', label: 'Asks', icon: Send },
   { href: '/notes-explainer', label: 'Notes', icon: StickyNote },
   { href: '/interactions-explainer', label: 'Interactions', icon: Handshake },
-  { href: '/letters-explainer', label: 'LP Letters', icon: FileText },
+  { href: '/letters-explainer', label: 'Letters', icon: FileText },
+  { href: '/lps-explainer', label: 'LPs', icon: Crown },
+  { href: '/compliance-explainer', label: 'Compliance', icon: ShieldCheck },
   { href: '/settings-explainer', label: 'Settings', icon: Settings },
   { href: '/support-explainer', label: 'Support', icon: LifeBuoy },
 ]
 
 const BOTTOM_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: '/pricing', label: 'Pricing', icon: Award },
+  { href: '/pricing', label: 'Pricing', icon: Tag },
   { href: '/contact', label: 'Contact', icon: MessageCircle },
   { href: '/license', label: 'License', icon: Scale },
 ]
 
-function NavLink({ href, label, icon: Icon, collapsed, isActive, onNavigate, className = '' }: {
-  href: string; label: string; icon: LucideIcon; collapsed: boolean; isActive: boolean; onNavigate?: () => void; className?: string
+function NavLink({ href, label, icon: Icon, collapsed, isActive, onNavigate, className = '', activeStyle = 'default' }: {
+  href: string; label: string; icon: LucideIcon; collapsed: boolean; isActive: boolean; onNavigate?: () => void; className?: string; activeStyle?: 'default' | 'text-only'
 }) {
   return (
     <Link
@@ -61,7 +63,9 @@ function NavLink({ href, label, icon: Icon, collapsed, isActive, onNavigate, cla
         collapsed ? 'md:justify-center md:px-0' : ''
       } ${
         isActive
-          ? 'bg-accent text-foreground font-medium'
+          ? activeStyle === 'text-only'
+            ? 'text-foreground font-medium'
+            : 'bg-accent text-foreground font-medium'
           : 'text-muted-foreground hover:text-foreground hover:bg-accent'
       } ${className}`}
     >
@@ -98,6 +102,21 @@ function PublicSidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex flex-col flex-1">
       <nav className={`flex-1 p-2 space-y-0.5 ${collapsed ? 'md:px-1' : ''}`}>
+        {/* Demo link — shown only on mobile (sidebar drawer) */}
+        <a
+          href="https://portfolio.hemrock.com/demo"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onNavigate}
+          title={collapsed ? 'Try the Demo' : undefined}
+          className={`md:hidden flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors text-muted-foreground hover:text-foreground hover:bg-accent ${
+            collapsed ? 'md:justify-center md:px-0' : ''
+          }`}
+        >
+          <Play className="h-5 w-5 shrink-0" />
+          <span>Try the Demo</span>
+        </a>
+
         {TOP_ITEMS.map(({ href, label, icon }) => (
           <NavLink
             key={href}
@@ -107,6 +126,7 @@ function PublicSidebar({ onNavigate }: { onNavigate?: () => void }) {
             collapsed={collapsed}
             isActive={pathname === href}
             onNavigate={onNavigate}
+            activeStyle={href === '/' ? 'text-only' : 'default'}
           />
         ))}
 
@@ -115,16 +135,15 @@ function PublicSidebar({ onNavigate }: { onNavigate?: () => void }) {
           <button
             onClick={() => setProductOpen(!productOpen)}
             title={collapsed ? 'Product' : undefined}
-            className={`flex w-full items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors text-muted-foreground hover:text-foreground hover:bg-accent ${
+            className={`flex w-full items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors hover:text-foreground hover:bg-accent ${
               collapsed ? 'md:justify-center md:px-0' : ''
-            }`}
+            } ${productOpen ? 'text-foreground font-medium' : 'text-muted-foreground'}`}
           >
             <Package className="h-5 w-5 shrink-0" />
             <span className={`flex-1 text-left ${collapsed ? 'md:hidden' : ''}`}>Product</span>
-            <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${productOpen ? 'rotate-90' : ''} ${collapsed ? 'md:hidden' : ''}`} />
           </button>
           {productOpen && (
-            <div className={`space-y-0.5 ${collapsed ? '' : 'ml-2'}`}>
+            <div className={`space-y-0.5 ${collapsed ? '' : 'ml-5 border-l border-border pl-2'}`}>
               {PRODUCT_ITEMS.map(({ href, label, icon }) => (
                 <NavLink
                   key={href}
@@ -215,6 +234,14 @@ function PublicSidebar({ onNavigate }: { onNavigate?: () => void }) {
 function PublicShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { collapsed } = useSidebar()
+  const [starCount, setStarCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    fetch('/api/github-stars')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.stars != null) setStarCount(d.stars) })
+      .catch(() => {})
+  }, [])
 
   return (
     <>
@@ -247,16 +274,22 @@ function PublicShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" asChild className="text-muted-foreground gap-2">
+          <Button variant="outline" size="sm" asChild className="text-muted-foreground gap-2 hidden sm:inline-flex">
             <a href="https://portfolio.hemrock.com/demo" target="_blank" rel="noopener noreferrer">
               <Play className="h-4 w-4" />
-              <span className="hidden sm:inline">Try the Demo</span>
+              Try the Demo
             </a>
           </Button>
           <Button variant="outline" size="sm" asChild className="text-muted-foreground gap-2">
             <a href="https://github.com/tdavidson/reporting" target="_blank" rel="noopener noreferrer">
               <Github className="h-4 w-4" />
               <span className="hidden sm:inline">View on GitHub</span>
+              {starCount != null && starCount > 15 && (
+                <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
+                  <Star className="h-3 w-3" />
+                  {starCount}
+                </span>
+              )}
             </a>
           </Button>
           <Button variant="outline" size="sm" asChild className="text-muted-foreground gap-2">

@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { FileText } from 'lucide-react'
 import { ExplainerContent } from '../explainer-content'
+
+export const metadata = ogMetadata({
+  title: 'LP Letters',
+  description: 'Generate AI-drafted quarterly LP update letters from your portfolio data with customizable templates.',
+})
 
 export default function LettersExplainerPage() {
   return (

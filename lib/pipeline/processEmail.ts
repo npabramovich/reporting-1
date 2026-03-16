@@ -687,8 +687,9 @@ async function saveToDropbox(
   const accessToken = await getDropboxAccessToken(refreshToken, creds.appKey, creds.appSecret)
   const rootPath = settings.dropbox_folder_path
 
-  // Create company subfolder
-  const companyPath = `${rootPath}/${companyName}`
+  // Create company subfolder (sanitize name to prevent path traversal)
+  const safeCompanyName = companyName.replace(/[\/\\:*?"<>|.]/g, '_').replace(/^_+/, '').slice(0, 100) || 'Unknown'
+  const companyPath = `${rootPath}/${safeCompanyName}`
   await findOrCreateDropboxFolder(accessToken, companyPath)
 
   const dateStr = new Date().toISOString().slice(0, 10)

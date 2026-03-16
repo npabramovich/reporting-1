@@ -1,10 +1,25 @@
 import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET() {
   if (process.env.ENABLE_SETUP_PAGE !== 'true') {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
+
+  // Require authentication — setup info should not be publicly accessible
+  const supabaseConfigured = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (supabaseConfigured) {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    } catch {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+  }
+  // If Supabase env vars are not set, allow unauthenticated access for initial setup only
+  // (returns only boolean env var presence checks, no sensitive values)
 
   const supabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -61,7 +76,7 @@ export async function GET() {
     if (dbConnected) {
       const tableChecks = await Promise.all(
         expectedTables.map(async (table) => {
-          const { error } = await supabase.from(table).select('id').limit(1)
+          const { error } = await supabase.from(table as any).select('id').limit(1)
           return !error
         })
       )

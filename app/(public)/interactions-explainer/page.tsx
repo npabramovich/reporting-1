@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { Handshake } from 'lucide-react'
 import { ExplainerContent } from '../explainer-content'
+
+export const metadata = ogMetadata({
+  title: 'Interactions',
+  description: 'Log GP conversations and introductions with portfolio companies via BCC-based email capture.',
+})
 
 export default function InteractionsExplainerPage() {
   return (

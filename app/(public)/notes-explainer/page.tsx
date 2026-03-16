@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { StickyNote } from 'lucide-react'
 import { ExplainerContent } from '../explainer-content'
+
+export const metadata = ogMetadata({
+  title: 'Notes',
+  description: 'Share observations and follow-ups across the fund with @mentions, company follows, and notifications.',
+})
 
 export default function NotesExplainerPage() {
   return (

@@ -1,5 +1,11 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import { Settings } from 'lucide-react'
 import { ExplainerContent } from '../explainer-content'
+
+export const metadata = ogMetadata({
+  title: 'Settings',
+  description: 'Configure AI providers, email integrations, file storage, team members, and platform preferences.',
+})
 
 export default function SettingsExplainerPage() {
   return (

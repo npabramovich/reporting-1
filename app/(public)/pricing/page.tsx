@@ -1,12 +1,20 @@
+import { ogMetadata } from '@/lib/og-metadata'
 import Link from 'next/link'
-import { Award, Github, Heart } from 'lucide-react'
+import { Tag, Github, Heart, Calendar, Mail, Send } from 'lucide-react'
+
+export const metadata = ogMetadata({
+  title: 'Pricing',
+  description: 'Free self-hosted, managed deployment, commercial licensing, and hosted subscription options for Analyst portfolio reporting.',
+})
 import { Button } from '@/components/ui/button'
+import { CalendlyButton } from '@/components/calendly-button'
+import { SubscriptionInquiryButton } from '@/components/subscription-inquiry-modal'
 
 export default function PricingPage() {
   return (
     <div className="p-4 pt-6 md:p-8">
       <h1 className="text-2xl font-semibold tracking-tight mb-6 flex items-center gap-3">
-        <Award className="h-6 w-6 text-muted-foreground" />
+        <Tag className="h-6 w-6 text-muted-foreground" />
         Pricing
       </h1>
 
@@ -29,6 +37,7 @@ export default function PricingPage() {
               <li>All your funds, SPVs, and team members</li>
               <li>Deploy on your own infrastructure</li>
               <li>Modify and use on your own domain</li>
+              <li>Estimated $0 to $75 per month in operational costs</li>
             </ul>
             <Button size="sm" asChild className="w-full">
               <a href="https://github.com/tdavidson/reporting" className="gap-2">
@@ -45,10 +54,12 @@ export default function PricingPage() {
               <li>Deployed on your infrastructure and accounts</li>
               <li>Setup and onboarding included</li>
               <li>Ongoing support available</li>
+              <li>$2,500+ one-time setup costs, ongoing based on need</li>
             </ul>
-            <Button variant="outline" size="sm" asChild className="w-full">
-              <Link href="/contact">Contact Taylor</Link>
-            </Button>
+            <CalendlyButton url="https://calendly.com/foresighthq/15min" className="w-full">
+              <Calendar className="h-4 w-4 mr-1.5" />
+              Book a Demo
+            </CalendlyButton>
           </div>
           <div className="rounded-lg border p-6 flex flex-col">
             <h3 className="font-semibold mb-1">Commercial</h3>
@@ -58,10 +69,22 @@ export default function PricingPage() {
               <li>Fund administrators and outsourced CFOs</li>
               <li>Consultants and service providers</li>
               <li>Use across multiple clients</li>
+              <li>License fee based on deployment</li>
             </ul>
             <Button variant="outline" size="sm" asChild className="w-full">
-              <Link href="/contact">Contact Taylor</Link>
+              <Link href="/contact"><Mail className="h-3.5 w-3.5 mr-1.5" />Contact Taylor</Link>
             </Button>
+          </div>
+        </div>
+        <div className="rounded-lg border p-6 mt-4 relative">
+          <span className="absolute -top-3 left-4 bg-muted text-muted-foreground text-xs font-medium px-2.5 py-0.5 rounded-full">Early Access</span>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <p className="text-base text-muted-foreground flex-1">
+              <span className="font-medium text-foreground">Hosted</span> — Let us host your fund. Get help onboarding your information and processes. $250+ monthly subscription, cancel anytime.
+            </p>
+            <SubscriptionInquiryButton className="inline-flex items-center gap-1.5 shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+              <Send className="h-3.5 w-3.5" />Request Access
+            </SubscriptionInquiryButton>
           </div>
         </div>
 
