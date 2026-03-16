@@ -283,13 +283,13 @@ function PublicShell({ children }: { children: React.ReactNode }) {
           <Button variant="outline" size="sm" asChild className="text-muted-foreground gap-2">
             <a href="https://github.com/tdavidson/reporting" target="_blank" rel="noopener noreferrer">
               <Github className="h-4 w-4" />
-              <span className="hidden sm:inline">View on GitHub</span>
-              {starCount != null && starCount > 15 && (
+              {starCount != null && starCount >= 10 && (
                 <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
                   <Star className="h-3 w-3" />
                   {starCount}
                 </span>
               )}
+              <span className="hidden sm:inline">View on GitHub</span>
             </a>
           </Button>
           <Button variant="outline" size="sm" asChild className="text-muted-foreground gap-2">
