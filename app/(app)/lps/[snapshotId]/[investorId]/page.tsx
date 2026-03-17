@@ -94,7 +94,8 @@ export default function InvestorReportPage() {
         ])
 
         if (snapshotRes.ok) {
-          const all: Snapshot[] = await snapshotRes.json()
+          const body = await snapshotRes.json()
+          const all: Snapshot[] = body.snapshots ?? []
           setSnapshot(all.find(s => s.id === snapshotId) ?? null)
         }
 
