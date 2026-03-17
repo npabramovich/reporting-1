@@ -18,7 +18,6 @@ export async function GET() {
     .maybeSingle() as { data: { fund_id: string; role: string } | null }
 
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
-  if (membership.role !== 'admin') return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
 
   const admin = createAdminClient()
   const { data, error } = await admin
@@ -29,7 +28,7 @@ export async function GET() {
 
   if (error) return dbError(error, 'lp-snapshots')
 
-  return NextResponse.json(data ?? [])
+  return NextResponse.json({ snapshots: data ?? [], role: membership.role })
 }
 
 // POST — create a new snapshot

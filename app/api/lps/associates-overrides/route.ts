@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     .maybeSingle() as { data: { fund_id: string; role: string } | null }
 
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+  if (membership.role !== 'admin') return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
 
   const admin = createAdminClient()
   const { data, error } = await admin

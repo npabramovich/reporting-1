@@ -207,7 +207,8 @@ export default function SnapshotDetailPage() {
         fetch(`/api/lps/investments?snapshotId=${snapshotId}`),
       ])
       if (snapRes.ok) {
-        const snaps: Snapshot[] = await snapRes.json()
+        const body = await snapRes.json()
+        const snaps: Snapshot[] = body.snapshots ?? []
         const snap = snaps.find(s => s.id === snapshotId) ?? null
         setSnapshot(snap)
         setDescription(snap?.description ?? '')

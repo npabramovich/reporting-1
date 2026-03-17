@@ -76,8 +76,9 @@ export default function LPsPage() {
     try {
       const res = await fetch('/api/lps/snapshots')
       if (res.ok) {
-        setSnapshots(await res.json())
-        setIsAdmin(true) // snapshots API requires admin — success means admin
+        const body = await res.json()
+        setSnapshots(body.snapshots ?? [])
+        setIsAdmin(body.role === 'admin')
       }
     } finally {
       setLoadingSnapshots(false)
@@ -258,7 +259,7 @@ export default function LPsPage() {
       )}
 
       {/* Entity Ownership Detail (fund-level, optional) — gated by lp_associates feature visibility */}
-      {(fv.lp_associates === 'everyone' || fv.lp_associates === 'admin') && (
+      {isAdmin && (fv.lp_associates === 'everyone' || fv.lp_associates === 'admin') && (
       <div className="mt-8">
         <div className="flex items-center gap-2 mb-3">
           <h3 className="text-base font-medium text-muted-foreground">GP Entity Ownership</h3>
