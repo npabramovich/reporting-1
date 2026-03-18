@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 
-export function SubscriptionInquiryButton({ children, className }: { children: React.ReactNode; className?: string }) {
+export function SubscriptionInquiryButton({ children, className, variant, size }: { children: React.ReactNode; className?: string; variant?: "default" | "outline" | "secondary" | "destructive" | "ghost" | "link"; size?: "default" | "sm" | "lg" | "icon" }) {
   const [open, setOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
@@ -46,9 +46,9 @@ export function SubscriptionInquiryButton({ children, className }: { children: R
 
   return (
     <>
-      <button className={className} onClick={() => { setOpen(true); setSent(false) }}>
+      <Button variant={variant} size={size} className={className} onClick={() => { setOpen(true); setSent(false) }}>
         {children}
-      </button>
+      </Button>
       <Dialog open={open} onOpenChange={o => { if (!o) setOpen(false) }}>
         <DialogContent className="sm:max-w-md">
           {sent ? (

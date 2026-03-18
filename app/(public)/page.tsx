@@ -204,8 +204,8 @@ export default function HomePage() {
             <p className="text-base text-muted-foreground flex-1">
               <span className="font-medium text-foreground">Hosted</span> — Let us host your fund. Get help onboarding your information and processes. $250+ monthly subscription, cancel anytime.
             </p>
-            <SubscriptionInquiryButton className="inline-flex items-center gap-1.5 shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
-              <Send className="h-3.5 w-3.5" />Request Access
+            <SubscriptionInquiryButton variant="outline" size="sm" className="w-full sm:w-auto shrink-0">
+              <Send className="h-3.5 w-3.5 mr-1.5" />Request Access
             </SubscriptionInquiryButton>
           </div>
         </div>
