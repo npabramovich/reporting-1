@@ -22,6 +22,8 @@ import { DEFAULT_FEATURE_VISIBILITY, FEATURES_WITH_OFF } from '@/lib/types/featu
 import type { FeatureKey, FeatureVisibility } from '@/lib/types/features'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
+import { Skeleton } from '@/components/ui/skeleton'
+
 
 const AdminSectionContext = createContext(false)
 
@@ -112,12 +114,37 @@ export default function SettingsPage() {
         </div>
         <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 max-w-3xl w-full">
-          <div className="animate-pulse space-y-4">
-            {[1, 2, 3].map(i => <div key={i} className="h-24 bg-muted rounded-lg" />)}
+          <div className="space-y-8">
+            {/* Profile */}
+            <div className="space-y-3"><Skeleton className="h-6 w-32" /><Skeleton className="h-20 w-full" /></div>
+            {/* MFA */}
+            <div className="space-y-3"><Skeleton className="h-6 w-48" /><Skeleton className="h-24 w-full" /></div>
+            {/* Several Admin blocks approximated */}
+            <div className="space-y-3"><Skeleton className="h-6 w-24" /><Skeleton className="h-16 w-full" /></div>
+            <div className="space-y-3"><Skeleton className="h-6 w-32" /><Skeleton className="h-32 w-full" /></div>
+            <div className="space-y-3"><Skeleton className="h-6 w-40" /><Skeleton className="h-48 w-full" /></div>
+            
+            {/* Groups Headers... */}
+            <div className="pt-4"><Skeleton className="h-6 w-24" /></div>
+            <div className="space-y-3"><Skeleton className="h-6 w-48" /><Skeleton className="h-40 w-full" /></div>
+            
+            <div className="pt-4"><Skeleton className="h-6 w-32" /></div>
+            <div className="space-y-3"><Skeleton className="h-6 w-40" /><Skeleton className="h-[400px] w-full" /></div>
+            
+            <div className="pt-4"><Skeleton className="h-6 w-16" /></div>
+            <div className="space-y-3"><Skeleton className="h-6 w-48" /><Skeleton className="h-[400px] w-full" /></div>
+            
+            <div className="pt-4"><Skeleton className="h-6 w-24" /></div>
+            <div className="space-y-3"><Skeleton className="h-6 w-40" /><Skeleton className="h-64 w-full" /></div>
+
+            <div className="pt-4"><Skeleton className="h-6 w-32" /></div>
+            <div className="space-y-3"><Skeleton className="h-6 w-48" /><Skeleton className="h-80 w-full" /></div>
+            <div className="space-y-3"><Skeleton className="h-6 w-64" /><Skeleton className="h-64 w-full" /></div>
           </div>
         </div>
         <AnalystPanel />
         </div>
+
       </div>
     )
   }

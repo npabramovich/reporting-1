@@ -4,14 +4,15 @@ import { createClient } from '@/lib/supabase/server'
 import { AppShell } from '@/components/app-shell'
 import { DemoSessionGuard } from '@/components/demo-session-guard'
 import {
-  getReviewBadge,
-  getNotesBadge,
-  getPendingRequests,
   getFundData,
   getFundSettings,
   getMembership,
-  getUpdateAvailable,
 } from '@/lib/cache/layout'
+import { AppHeaderServer, AppSidebarServer } from '@/components/app-shell-server'
+import { AppHeader } from '@/components/app-header'
+import { AppSidebar } from '@/components/app-sidebar'
+import React, { Suspense } from 'react'
+
 import { DEFAULT_FEATURE_VISIBILITY } from '@/lib/types/features'
 import type { FeatureVisibilityMap } from '@/lib/types/features'
 
@@ -25,21 +26,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { data: fund } = await supabase.from('funds').select('id').limit(1).single() as { data: { id: string } | null }
   if (!fund) redirect('/onboarding')
 
-  // All cached queries in parallel
-  const [fundData, membership, fundSettings, reviewBadge, notesBadge] = await Promise.all([
+  // Fast cached queries in parallel
+  const [fundData, membership, fundSettings] = await Promise.all([
     getFundData(fund.id),
     getMembership(user.id, fund.id),
     getFundSettings(fund.id),
-    getReviewBadge(fund.id),
-    getNotesBadge(user.id),
   ])
 
   const isAdmin = membership?.role === 'admin'
   const isViewer = membership?.role === 'viewer'
-  const [pendingRequestCount, updateAvailable] = await Promise.all([
-    isAdmin ? getPendingRequests(fund.id) : Promise.resolve(0),
-    isAdmin ? getUpdateAvailable() : Promise.resolve(false),
-  ])
 
   const featureVisibility = { ...DEFAULT_FEATURE_VISIBILITY, ...(fundSettings?.feature_visibility as Partial<FeatureVisibilityMap> | null) }
   const fundCurrency = fundSettings?.currency ?? 'USD'
@@ -74,16 +69,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           fundName={fundName}
           fundLogo={fundLogo}
           userEmail={user.email ?? ''}
-          reviewBadge={reviewBadge}
-          settingsBadge={pendingRequestCount}
-          notesBadge={notesBadge}
-          isAdmin={isAdmin}
           currency={fundCurrency}
           hasAIKey={hasAIKey}
           configuredProviders={configuredProviders}
           defaultAIProvider={defaultAIProvider}
-          updateAvailable={updateAvailable}
           featureVisibility={featureVisibility}
+          headerNode={
+            <Suspense fallback={<AppHeader fundName={fundName} fundLogo={fundLogo} userEmail={user.email ?? ''} reviewBadge={0} isAdmin={isAdmin} featureVisibility={featureVisibility} />}>
+              <AppHeaderServer fundId={fund.id} userId={user.id} fundName={fundName} fundLogo={fundLogo} userEmail={user.email ?? ''} isAdmin={isAdmin} featureVisibility={featureVisibility} />
+            </Suspense>
+          }
+          sidebarNode={
+            <Suspense fallback={<AppSidebar reviewBadge={0} isAdmin={isAdmin} featureVisibility={featureVisibility} />}>
+              <AppSidebarServer fundId={fund.id} userId={user.id} isAdmin={isAdmin} featureVisibility={featureVisibility} />
+            </Suspense>
+          }
         >
           {children}
         </AppShell>

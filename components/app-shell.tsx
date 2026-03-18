@@ -1,12 +1,12 @@
 'use client'
 
+import React from 'react'
 import { SidebarProvider, useSidebar } from '@/components/sidebar-context'
 import { CurrencyProvider } from '@/components/currency-context'
 import { AnalystProvider } from '@/components/analyst-context'
-import { AppHeader } from '@/components/app-header'
-import { AppSidebar } from '@/components/app-sidebar'
 import { AppFooter } from '@/components/app-footer'
 import { FeatureVisibilityProvider } from '@/components/feature-visibility-context'
+
 import { DEFAULT_FEATURE_VISIBILITY } from '@/lib/types/features'
 import type { FeatureVisibilityMap } from '@/lib/types/features'
 
@@ -14,35 +14,25 @@ interface AppShellProps {
   fundName: string
   fundLogo: string | null
   userEmail: string
-  reviewBadge: number
-  settingsBadge?: number
-  notesBadge?: number
-  isAdmin?: boolean
   currency?: string
   hasAIKey?: boolean
   configuredProviders?: string[]
   defaultAIProvider?: string
-  updateAvailable?: boolean
   featureVisibility?: FeatureVisibilityMap
+  headerNode: React.ReactNode
+  sidebarNode: React.ReactNode
   children: React.ReactNode
 }
 
-export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, currency, hasAIKey, configuredProviders, defaultAIProvider, updateAvailable, featureVisibility, children }: AppShellProps) {
+export function AppShell({ fundName, fundLogo, userEmail, currency, hasAIKey, configuredProviders, defaultAIProvider, featureVisibility, headerNode, sidebarNode, children }: AppShellProps) {
   return (
     <FeatureVisibilityProvider value={featureVisibility ?? DEFAULT_FEATURE_VISIBILITY}>
     <CurrencyProvider currency={currency ?? 'USD'}>
       <SidebarProvider>
         <AnalystProvider hasAIKey={hasAIKey ?? false} configuredProviders={configuredProviders ?? []} defaultAIProvider={defaultAIProvider ?? 'anthropic'} fundName={fundName}>
           <AppShellInner
-            fundName={fundName}
-            fundLogo={fundLogo}
-            userEmail={userEmail}
-            reviewBadge={reviewBadge}
-            settingsBadge={settingsBadge}
-            notesBadge={notesBadge}
-            isAdmin={isAdmin}
-            updateAvailable={updateAvailable}
-            featureVisibility={featureVisibility}
+            headerNode={headerNode}
+            sidebarNode={sidebarNode}
           >
             {children}
           </AppShellInner>
@@ -53,21 +43,12 @@ export function AppShell({ fundName, fundLogo, userEmail, reviewBadge, settingsB
   )
 }
 
-function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, updateAvailable, featureVisibility, children }: AppShellProps) {
+function AppShellInner({ headerNode, sidebarNode, children }: { headerNode: React.ReactNode; sidebarNode: React.ReactNode; children: React.ReactNode }) {
   const { collapsed } = useSidebar()
 
   return (
     <>
-      <AppHeader
-        fundName={fundName}
-        fundLogo={fundLogo}
-        userEmail={userEmail}
-        reviewBadge={reviewBadge}
-        settingsBadge={settingsBadge}
-        notesBadge={notesBadge}
-        isAdmin={isAdmin}
-        featureVisibility={featureVisibility}
-      />
+      {headerNode}
 
       <div className="flex flex-1">
         {/* Desktop sidebar — always rendered, width varies */}
@@ -76,7 +57,7 @@ function AppShellInner({ fundName, fundLogo, userEmail, reviewBadge, settingsBad
             collapsed ? 'w-16' : 'w-56'
           }`}
         >
-          <AppSidebar reviewBadge={reviewBadge} settingsBadge={settingsBadge} notesBadge={notesBadge} isAdmin={isAdmin} updateAvailable={updateAvailable} featureVisibility={featureVisibility} />
+          {sidebarNode}
         </aside>
 
         {/* Page content */}
