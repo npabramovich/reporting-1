@@ -377,7 +377,7 @@ function NotesPanel({ toggle, pageContext }: { toggle: () => void; pageContext?:
       </div>
 
       <div className="px-4 py-3">
-        <div className="flex gap-2">
+        <div className="flex items-end gap-2">
           <MentionTextarea
             ref={inputRef}
             value={content}
@@ -396,10 +396,9 @@ function NotesPanel({ toggle, pageContext }: { toggle: () => void; pageContext?:
             className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
           <Button
-            size="icon"
             onClick={handlePost}
             disabled={!content.trim() || posting}
-            className="h-auto self-end px-2 py-2"
+            className="shrink-0 self-end px-2.5 py-2"
           >
             <Send className="h-3.5 w-3.5" />
           </Button>
