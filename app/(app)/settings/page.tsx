@@ -22,6 +22,7 @@ import { DEFAULT_FEATURE_VISIBILITY, FEATURES_WITH_OFF } from '@/lib/types/featu
 import type { FeatureKey, FeatureVisibility } from '@/lib/types/features'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const AdminSectionContext = createContext(false)
 
@@ -111,12 +112,35 @@ export default function SettingsPage() {
           <p className="text-sm text-muted-foreground">Configure your fund, integrations, and team preferences</p>
         </div>
         <div className="flex flex-col lg:flex-row gap-6 items-start">
-        <div className="flex-1 min-w-0 max-w-3xl w-full">
-          <div className="animate-pulse space-y-4">
-            {[1, 2, 3].map(i => <div key={i} className="h-24 bg-muted rounded-lg" />)}
+          <div className="flex-1 min-w-0 max-w-3xl w-full space-y-8">
+            {/* Profile Skeleton */}
+            <div className="rounded-lg border bg-card p-6 space-y-4">
+              <Skeleton className="h-4 w-32" />
+              <div className="flex gap-4">
+                <Skeleton className="h-10 flex-1" />
+                <Skeleton className="h-10 w-20" />
+              </div>
+            </div>
+            {/* MFA Skeleton */}
+            <div className="rounded-lg border bg-card p-6 space-y-4">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-9 w-48" />
+            </div>
+            {/* Admin Sections Skeleton */}
+            <div className="rounded-lg border border-amber-500/10 bg-card p-5">
+              <Skeleton className="h-4 w-24 mb-2" />
+              <Skeleton className="h-3 w-64" />
+            </div>
+            <div className="rounded-lg border bg-card p-6 space-y-4">
+              <Skeleton className="h-4 w-32" />
+              <div className="flex gap-4">
+                <Skeleton className="h-10 flex-1" />
+                <Skeleton className="h-10 w-20" />
+              </div>
+            </div>
           </div>
-        </div>
-        <AnalystPanel />
+          <AnalystPanel />
         </div>
       </div>
     )

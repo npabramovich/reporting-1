@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Plus, ChevronRight, Trash2, Lock, X, Check, Pencil } from 'lucide-react'
 import { useFeatureVisibility } from '@/components/feature-visibility-context'
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
+import { Skeleton } from '@/components/ui/skeleton'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -187,9 +188,20 @@ export default function LPsPage() {
       <div className="flex flex-col lg:flex-row gap-6 items-start">
       <div className="flex-1 min-w-0 w-full">
       {loadingSnapshots ? (
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading...
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-4" />
+              </div>
+              <Skeleton className="h-4 w-full" />
+              <div className="flex gap-2">
+                <Skeleton className="h-8 flex-1" />
+                <Skeleton className="h-8 w-8" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : snapshots.length === 0 ? (
         <div className="text-center py-12">

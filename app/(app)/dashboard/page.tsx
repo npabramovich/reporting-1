@@ -16,17 +16,6 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth')
 
-  const { data: membership } = await supabase
-    .from('fund_members')
-    .select('role')
-    .eq('user_id', user.id)
-    .maybeSingle() as { data: { role: string } | null }
-
-  const isAdmin = membership?.role === 'admin'
-
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
-
-  // Fetch companies with their first 2 metrics and review counts
   type CompanyRow = {
     id: string; name: string; stage: string | null; status: string
     tags: string[]; industry: string[] | null; portfolio_group: string[] | null
@@ -34,58 +23,84 @@ export default async function DashboardPage() {
     parsing_reviews: { id: string; resolution: string | null }[]
   }
 
-  const { data: companiesRaw } = await supabase
-    .from('companies')
-    .select(`
-      id, name, stage, status, tags, industry, portfolio_group,
-      metrics(id, name, unit, unit_position, value_type, currency, display_order, is_active),
-      parsing_reviews(id, resolution)
-    `)
-    .order('name') as { data: CompanyRow[] | null }
+  // Parallel fetch membership and initial company list
+  const [membershipRes, companiesRawRes] = await Promise.all([
+    supabase
+      .from('fund_members')
+      .select('role')
+      .eq('user_id', user.id)
+      .maybeSingle(),
+    supabase
+      .from('companies')
+      .select(`
+        id, name, stage, status, tags, industry, portfolio_group,
+        metrics(id, name, unit, unit_position, value_type, currency, display_order, is_active),
+        parsing_reviews(id, resolution)
+      `)
+      .order('name')
+  ])
+
+  const membership = membershipRes.data as { role: string } | null
+  const companiesRaw = (companiesRawRes.data ?? []) as CompanyRow[]
+  const isAdmin = membership?.role === 'admin'
 
   // Find cash metric IDs for each company
   const cashMetricMap = new Map<string, string>()
-  for (const c of companiesRaw ?? []) {
+  for (const c of companiesRaw) {
     const cashMetric = (c.metrics ?? []).find(m =>
       m.is_active && (m.name.toLowerCase() === 'cash' || /\bcash\b/i.test(m.name))
     )
     if (cashMetric) cashMetricMap.set(c.id, cashMetric.id)
   }
 
-  // Batch fetch latest cash values
   const cashMetricIds = Array.from(cashMetricMap.values())
-  const cashValues = new Map<string, number>()
-  if (cashMetricIds.length > 0) {
-    const { data: cashRows } = await supabase
-      .from('metric_values')
-      .select('metric_id, value_number')
-      .in('metric_id', cashMetricIds)
-      .not('value_number', 'is', null)
-      .order('period_year', { ascending: false })
-      .order('created_at', { ascending: false }) as { data: { metric_id: string; value_number: number }[] | null }
+  const allCompanyIds = companiesRaw.map(c => c.id)
+  const admin = createAdminClient()
 
-    // Keep only the first (latest) value per metric
-    for (const row of cashRows ?? []) {
-      if (!cashValues.has(row.metric_id)) {
-        cashValues.set(row.metric_id, row.value_number)
-      }
+  // Parallel fetch latest cash values, latest periods, and all transactions
+  const [cashRowsRes, latestPeriodRowsRes, allTxnsRes] = await Promise.all([
+    cashMetricIds.length > 0 
+      ? supabase
+          .from('metric_values')
+          .select('metric_id, value_number')
+          .in('metric_id', cashMetricIds)
+          .not('value_number', 'is', null)
+          .order('period_year', { ascending: false })
+          .order('period_quarter', { ascending: false, nullsFirst: false })
+          .order('period_month', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false })
+      : Promise.resolve({ data: [] }),
+    supabase
+      .from('metric_values')
+      .select('company_id, period_year, period_quarter, period_month')
+      .in('company_id', allCompanyIds)
+      .order('period_year', { ascending: false })
+      .order('period_quarter', { ascending: false, nullsFirst: false })
+      .order('period_month', { ascending: false, nullsFirst: false }),
+    admin
+      .from('investment_transactions' as any)
+      .select('*')
+      .in('company_id', allCompanyIds)
+      .order('transaction_date', { ascending: true })
+  ])
+
+  const cashRows = cashRowsRes.data as { metric_id: string; value_number: number }[] | null
+  const latestPeriodRows = latestPeriodRowsRes.data as { company_id: string; period_year: number; period_quarter: number | null; period_month: number | null }[] | null
+  const allTxns = allTxnsRes.data as InvestmentTransaction[] | null
+
+  // Process cash values
+  const cashValues = new Map<string, number>()
+  for (const row of cashRows ?? []) {
+    if (!cashValues.has(row.metric_id)) {
+      cashValues.set(row.metric_id, row.value_number)
     }
   }
 
-  // Batch fetch latest metric period per company
-  const { data: latestPeriodRows } = await supabase
-    .from('metric_values')
-    .select('company_id, period_year, period_quarter, period_month')
-    .in('company_id', (companiesRaw ?? []).map(c => c.id))
-    .order('period_year', { ascending: false })
-    .order('period_quarter', { ascending: false, nullsFirst: false })
-    .order('period_month', { ascending: false, nullsFirst: false }) as { data: { company_id: string; period_year: number; period_quarter: number | null; period_month: number | null }[] | null }
-
+  // Process latest periods
   const lastMetricPeriod = new Map<string, string>()
   for (const row of latestPeriodRows ?? []) {
     if (lastMetricPeriod.has(row.company_id)) continue
     if (row.period_month) {
-      // Use last day of the month
       const lastDay = new Date(row.period_year, row.period_month, 0)
       lastMetricPeriod.set(row.company_id, lastDay.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }))
     } else if (row.period_quarter) {
@@ -96,7 +111,7 @@ export default async function DashboardPage() {
     }
   }
 
-  const companies = (companiesRaw ?? []).map((c) => {
+  const companies = companiesRaw.map((c) => {
     const lastReportAt = lastMetricPeriod.get(c.id) ?? null
     const activeMetrics = (c.metrics ?? [])
       .filter((m) => m.is_active)
@@ -120,15 +135,6 @@ export default async function DashboardPage() {
       latestCash,
     }
   })
-
-  // Fetch investment transactions for ALL companies (first investment date + summaries for exited)
-  const allCompanyIds = companies.map(c => c.id)
-  const admin = createAdminClient()
-  const { data: allTxns } = await admin
-    .from('investment_transactions' as any)
-    .select('*')
-    .in('company_id', allCompanyIds)
-    .order('transaction_date', { ascending: true }) as { data: InvestmentTransaction[] | null }
 
   // Group transactions by company
   const txnsByCompany = new Map<string, InvestmentTransaction[]>()
@@ -179,27 +185,31 @@ export default async function DashboardPage() {
   const allGroups = Array.from(new Set(companiesWithInvestments.flatMap(c => c.portfolioGroup ?? []))).sort()
 
   return (
-    <DashboardNotesLayout userId={user.id} isAdmin={isAdmin} companies={companiesWithInvestments.map(c => ({ id: c.id, name: c.name }))}>
-    <div className="p-4 md:py-8 md:pl-8 md:pr-4">
-      <div className="mb-6 space-y-1">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold tracking-tight">Portfolio</h1>
-          <div className="flex items-center gap-2">
-            <DashboardChatButton />
-            <AnalystToggleButton />
+    <DashboardNotesLayout 
+      userId={user.id} 
+      isAdmin={isAdmin} 
+      companies={companiesWithInvestments.map(c => ({ id: c.id, name: c.name }))}
+    >
+      <div className="p-4 md:py-8 md:pl-8 md:pr-4">
+        <div className="mb-6 space-y-1">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold tracking-tight">Portfolio</h1>
+            <div className="flex items-center gap-2">
+              <DashboardChatButton />
+              <AnalystToggleButton />
+            </div>
           </div>
+          <p className="text-sm text-muted-foreground">Track performance and activity across your portfolio companies</p>
         </div>
-        <p className="text-sm text-muted-foreground">Track performance and activity across your portfolio companies</p>
-      </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
-        <div className="flex-1 min-w-0 max-w-7xl w-full">
-          <DashboardCompanies companies={companiesWithInvestments} allGroups={allGroups} />
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+          <div className="flex-1 min-w-0 max-w-7xl w-full">
+            <DashboardCompanies companies={companiesWithInvestments} allGroups={allGroups} />
+          </div>
+          <DashboardNotesPanel />
+          <AnalystPanel />
         </div>
-        <DashboardNotesPanel />
-        <AnalystPanel />
       </div>
-    </div>
     </DashboardNotesLayout>
   )
 }
