@@ -65,7 +65,7 @@ export async function PATCH(req: NextRequest) {
   const { fundId } = writeCheck
 
   const body = await req.json()
-  const { compliance_item_id, applies, dismissed, dismissed_reason, notes, portfolio_group } = body
+  const { compliance_item_id, applies, dismissed, dismissed_reason, completed, completed_note, completed_link, notes, portfolio_group } = body
 
   if (!compliance_item_id) {
     return NextResponse.json({ error: 'compliance_item_id required' }, { status: 400 })
@@ -82,6 +82,35 @@ export async function PATCH(req: NextRequest) {
     updates.dismissed_by = dismissed ? user.id : null
     updates.dismissed_at = dismissed ? new Date().toISOString() : null
     updates.dismissed_reason = dismissed_reason ? String(dismissed_reason).slice(0, 500) : null
+    // Clear completed when dismissing
+    if (dismissed) {
+      updates.completed = false
+      updates.completed_at = null
+      updates.completed_by = null
+      updates.completed_note = null
+      updates.completed_link = null
+    }
+  }
+  if (completed !== undefined) {
+    updates.completed = !!completed
+    updates.completed_by = completed ? user.id : null
+    updates.completed_at = completed ? new Date().toISOString() : null
+    updates.completed_note = completed_note ? String(completed_note).slice(0, 2000) : null
+    updates.completed_link = completed_link ? String(completed_link).slice(0, 2000) : null
+    // Clear dismissed when completing
+    if (completed) {
+      updates.dismissed = false
+      updates.dismissed_by = null
+      updates.dismissed_at = null
+      updates.dismissed_reason = null
+    }
+  }
+  // Allow updating completed_note/link without toggling completed status
+  if (completed_note !== undefined && completed === undefined) {
+    updates.completed_note = completed_note ? String(completed_note).slice(0, 2000) : null
+  }
+  if (completed_link !== undefined && completed === undefined) {
+    updates.completed_link = completed_link ? String(completed_link).slice(0, 2000) : null
   }
   if (notes !== undefined) {
     updates.notes = notes ? String(notes).slice(0, 2000) : null

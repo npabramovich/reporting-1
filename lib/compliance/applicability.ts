@@ -3,7 +3,7 @@
  * Maps intake questionnaire answers to compliance item applicability.
  */
 
-export type Applicability = 'applies' | 'not_applicable' | 'needs_review' | 'monitor'
+export type Applicability = 'applies' | 'not_applicable' | 'needs_review' | 'monitor' | 'completed'
 
 export interface ComplianceProfile {
   registration_status: string | null

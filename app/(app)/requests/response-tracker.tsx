@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import {
   Table,
@@ -12,10 +13,12 @@ import {
 
 interface QuarterInfo {
   label: string
+  year: number
+  quarter: number
 }
 
 interface ResponseCell {
-  responded: boolean
+  status: 'yes' | 'no' | 'na'
 }
 
 interface CompanyResponse {
@@ -27,9 +30,28 @@ interface CompanyResponse {
 interface Props {
   quarters: QuarterInfo[]
   data: CompanyResponse[]
+  onStatusChange?: (companyId: string, quarter: number, year: number, status: 'yes' | 'no' | 'na') => void
 }
 
-export function ResponseTracker({ quarters, data }: Props) {
+const STATUS_CYCLE: Record<string, 'yes' | 'no' | 'na'> = {
+  yes: 'no',
+  no: 'na',
+  na: 'yes',
+}
+
+const STATUS_STYLES = {
+  yes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  no: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  na: 'bg-muted text-muted-foreground',
+}
+
+const STATUS_LABELS = {
+  yes: 'Yes',
+  no: 'No',
+  na: 'N/A',
+}
+
+export function ResponseTracker({ quarters, data, onStatusChange }: Props) {
   if (data.length === 0) return null
 
   return (
@@ -55,19 +77,23 @@ export function ResponseTracker({ quarters, data }: Props) {
                     {row.companyName}
                   </Link>
                 </TableCell>
-                {row.quarters.map((cell, i) => (
-                  <TableCell key={quarters[i].label} className="text-center">
-                    {cell.responded ? (
-                      <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-0.5 text-xs font-medium">
-                        Yes
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 text-xs font-medium">
-                        No
-                      </span>
-                    )}
-                  </TableCell>
-                ))}
+                {row.quarters.map((cell, i) => {
+                  const q = quarters[i]
+                  return (
+                    <TableCell key={q.label} className="text-center">
+                      <button
+                        onClick={() => {
+                          const next = STATUS_CYCLE[cell.status]
+                          onStatusChange?.(row.companyId, q.quarter, q.year, next)
+                        }}
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${STATUS_STYLES[cell.status]}`}
+                        title={`Click to change (${cell.status} → ${STATUS_CYCLE[cell.status]})`}
+                      >
+                        {STATUS_LABELS[cell.status]}
+                      </button>
+                    </TableCell>
+                  )
+                })}
               </TableRow>
             ))}
           </TableBody>

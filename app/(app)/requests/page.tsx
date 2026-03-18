@@ -25,12 +25,14 @@ interface Settings {
 
 interface QuarterInfo {
   label: string
+  year: number
+  quarter: number
 }
 
 interface CompanyResponse {
   companyId: string
   companyName: string
-  quarters: { responded: boolean }[]
+  quarters: { status: 'yes' | 'no' | 'na' }[]
 }
 
 interface SendResult {
@@ -140,6 +142,27 @@ export default function RequestsPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const handleResponseStatusChange = useCallback(async (companyId: string, quarter: number, year: number, status: 'yes' | 'no' | 'na') => {
+    // Optimistic update
+    setTrackerData(prev => prev.map(row => {
+      if (row.companyId !== companyId) return row
+      return {
+        ...row,
+        quarters: row.quarters.map((cell, i) => {
+          const q = trackerQuarters[i]
+          if (q?.quarter === quarter && q?.year === year) return { status }
+          return cell
+        }),
+      }
+    }))
+
+    await fetch('/api/requests/responses', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_id: companyId, quarter, year, status }),
+    })
+  }, [trackerQuarters])
 
   const toggleCompany = (id: string) => {
     setSelected((prev) => {
@@ -274,7 +297,7 @@ export default function RequestsPage() {
         <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 max-w-3xl w-full space-y-6">
           {trackerQuarters.length > 0 && (
-            <ResponseTracker quarters={trackerQuarters} data={trackerData} />
+            <ResponseTracker quarters={trackerQuarters} data={trackerData} onStatusChange={handleResponseStatusChange} />
           )}
           <div className="rounded-lg border border-dashed p-12 text-center space-y-2">
             <p className="text-muted-foreground">
@@ -312,7 +335,7 @@ export default function RequestsPage() {
       <div className="flex flex-col lg:flex-row gap-6 items-start">
       <div className="flex-1 min-w-0 max-w-3xl w-full space-y-6">
       {trackerQuarters.length > 0 && (
-        <ResponseTracker quarters={trackerQuarters} data={trackerData} />
+        <ResponseTracker quarters={trackerQuarters} data={trackerData} onStatusChange={handleResponseStatusChange} />
       )}
 
       <h2 className="text-lg font-semibold tracking-tight">Create an Ask</h2>
