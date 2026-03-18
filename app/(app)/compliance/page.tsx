@@ -38,6 +38,10 @@ interface FundSetting {
   applies: string | null
   dismissed: boolean
   dismissed_reason: string | null
+  completed: boolean
+  completed_at: string | null
+  completed_note: string | null
+  completed_link: string | null
   notes: string | null
 }
 
@@ -187,10 +191,11 @@ const QUESTIONS = [
 ] as const
 
 type View = ComplianceTab
-type StatusFilter = 'active' | 'dismissed' | 'all'
+type StatusFilter = 'active' | 'completed' | 'dismissed' | 'all'
 
 const STATUS_COLORS: Record<Applicability | 'monitor', { bg: string; text: string; icon: typeof Check }> = {
   applies: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400', icon: Check },
+  completed: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400', icon: Check },
   not_applicable: { bg: 'bg-muted', text: 'text-muted-foreground', icon: X },
   needs_review: { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-400', icon: AlertTriangle },
   monitor: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400', icon: Clock },
@@ -279,6 +284,7 @@ export default function CompliancePage() {
   // Get effective status for an item (optionally scoped to a portfolio group)
   const getStatus = useCallback((itemId: string, group?: string): Applicability => {
     const setting = getSetting(itemId, group)
+    if (setting?.completed) return 'completed'
     if (setting?.dismissed) return 'not_applicable'
     if (setting?.applies === 'yes') return 'applies'
     if (setting?.applies === 'no') return 'not_applicable'
@@ -349,6 +355,8 @@ export default function CompliancePage() {
         dismissed: dismiss,
         dismissed_reason: reason,
         applies: dismiss ? 'no' : 'unsure',
+        // Clear completed when dismissing
+        ...(dismiss ? { completed: false } : {}),
       }),
     })
     if (res.ok) {
@@ -359,6 +367,40 @@ export default function CompliancePage() {
       })
     }
   }
+
+  // Mark an item as completed (with optional note and link)
+  async function handleMarkComplete(itemId: string, completed: boolean, note?: string, link?: string, group?: string) {
+    const pg = group ?? ''
+    const res = await fetch('/api/compliance/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        compliance_item_id: itemId,
+        portfolio_group: pg,
+        completed,
+        completed_note: note || null,
+        completed_link: link || null,
+        // Clear dismissed when completing
+        ...(completed ? { dismissed: false } : {}),
+      }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setFundSettings(prev => {
+        const others = prev.filter(s => !(s.compliance_item_id === itemId && (s.portfolio_group ?? '') === pg))
+        return [...others, updated]
+      })
+    }
+  }
+
+  // Check if an item passes the current status filter
+  const passesFilter = useCallback((status: Applicability): boolean => {
+    if (statusFilter === 'all') return true
+    if (statusFilter === 'active') return status !== 'not_applicable' && status !== 'completed'
+    if (statusFilter === 'completed') return status === 'completed'
+    if (statusFilter === 'dismissed') return status === 'not_applicable'
+    return true
+  }, [statusFilter])
 
   // Calendar items grouped by month
   const calendarData = useMemo(() => {
@@ -379,18 +421,15 @@ export default function CompliancePage() {
     function placeItem(item: ComplianceItem, group?: string) {
       if (item.deadline_month) {
         const status = getStatus(item.id, group)
-        if (statusFilter === 'active' && status === 'not_applicable') return
-        if (statusFilter === 'dismissed' && status !== 'not_applicable') return
+        if (!passesFilter(status)) return
         months[item.deadline_month].push({ item, group })
       } else if (item.frequency === 'Quarterly') {
-        // Each quarter gets its own entry so it can be dismissed independently
         const qMonths = QUARTERLY_MONTHS[item.id] ?? DEFAULT_QUARTERLY
         for (const m of qMonths) {
           const qLabel = QUARTER_LABELS[m]
           const qGroup = group ? `${group}::${qLabel}` : qLabel
           const status = getStatus(item.id, qGroup)
-          if (statusFilter === 'active' && status === 'not_applicable') continue
-          if (statusFilter === 'dismissed' && status !== 'not_applicable') continue
+          if (!passesFilter(status)) continue
           months[m].push({ item, group: qGroup })
         }
       } else {
@@ -404,11 +443,9 @@ export default function CompliancePage() {
 
     for (const item of items) {
       if (item.frequency === 'Event-driven') {
-        // Place only in months where a close (commitment entry) occurred
         for (const pg of groupsWithCloses) {
           const status = getStatus(item.id, pg)
-          if (statusFilter === 'active' && status === 'not_applicable') continue
-          if (statusFilter === 'dismissed' && status !== 'not_applicable') continue
+          if (!passesFilter(status)) continue
           addToMonths({ item, group: pg }, closeMonths[pg])
         }
       } else if (item.scope === 'vehicle') {
@@ -417,8 +454,7 @@ export default function CompliancePage() {
             placeItem(item, pg)
           } else {
             const status = getStatus(item.id, pg)
-            if (statusFilter === 'active' && status === 'not_applicable') continue
-            if (statusFilter === 'dismissed' && status !== 'not_applicable') continue
+            if (!passesFilter(status)) continue
             placeItem(item, pg)
           }
         }
@@ -427,14 +463,13 @@ export default function CompliancePage() {
           placeItem(item)
         } else {
           const status = getStatus(item.id)
-          if (statusFilter === 'active' && status === 'not_applicable') continue
-          if (statusFilter === 'dismissed' && status !== 'not_applicable') continue
+          if (!passesFilter(status)) continue
           placeItem(item)
         }
       }
     }
     return { months }
-  }, [items, getStatus, statusFilter, portfolioGroups, closeMonths])
+  }, [items, getStatus, passesFilter, portfolioGroups, closeMonths])
 
 
   if (loading) {
@@ -462,7 +497,7 @@ export default function CompliancePage() {
             <ComplianceNav active={view} onSelect={(tab) => setView(tab)} />
             {(view === 'calendar' || view === 'items') && (
               <div className="flex items-center rounded-md border text-xs">
-                {(['active', 'dismissed', 'all'] as const).map((f, i, arr) => (
+                {(['active', 'completed', 'dismissed', 'all'] as const).map((f, i, arr) => (
                   <button
                     key={f}
                     onClick={() => setStatusFilter(f)}
@@ -509,7 +544,7 @@ export default function CompliancePage() {
               statusFilter={statusFilter}
               setStatusFilter={setStatusFilter}
               onToggleDismiss={handleToggleDismiss}
-
+              onMarkComplete={handleMarkComplete}
               links={links}
             />
           )}
@@ -525,8 +560,10 @@ export default function CompliancePage() {
               statusFilter={statusFilter}
               setStatusFilter={setStatusFilter}
               onToggleDismiss={handleToggleDismiss}
-
+              onMarkComplete={handleMarkComplete}
               links={links}
+              portfolioGroups={portfolioGroups}
+              closeMonths={closeMonths}
             />
           )}
         </div>
@@ -647,7 +684,7 @@ function IntakeQuestionnaire({
 // --- Calendar View ---
 function CalendarView({
   calendarData, items, getStatus, applicability, getSetting, expandedItem, setExpandedItem,
-  statusFilter, setStatusFilter, onToggleDismiss, links,
+  statusFilter, setStatusFilter, onToggleDismiss, onMarkComplete, links,
 }: {
   calendarData: { months: Record<number, CalendarEntry[]> }
   items: ComplianceItem[]
@@ -659,6 +696,7 @@ function CalendarView({
   statusFilter: StatusFilter
   setStatusFilter: (v: StatusFilter) => void
   onToggleDismiss: (id: string, dismiss: boolean, reason?: string, group?: string) => void
+  onMarkComplete: (id: string, completed: boolean, note?: string, link?: string, group?: string) => void
   links: ComplianceLink[]
 }) {
   const now = new Date()
@@ -671,11 +709,6 @@ function CalendarView({
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-3">
-        <h2 className="text-sm font-medium">{now.getFullYear()} Compliance Calendar</h2>
-      </div>
-
       {/* Two-column on desktop, single-column on mobile */}
       <div className="flex flex-col lg:flex-row gap-5 mb-6">
         {/* Month boxes column */}
@@ -698,7 +731,9 @@ function CalendarView({
                     const status = getStatus(item.id, group)
                     const colors = status === 'not_applicable'
                       ? { bg: 'bg-muted', text: 'text-muted-foreground' }
-                      : (CATEGORY_COLORS[item.category] ?? DEFAULT_CATEGORY_COLORS)
+                      : status === 'completed'
+                        ? { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400' }
+                        : (CATEGORY_COLORS[item.category] ?? DEFAULT_CATEGORY_COLORS)
                     const ek = entryKey(entry)
                     const isExpanded = expandedEntry?.itemId === item.id && expandedEntry?.group === group
                     return (
@@ -724,6 +759,7 @@ function CalendarView({
                               group={group}
                               onClose={() => setExpandedEntry(null)}
                               onToggleDismiss={onToggleDismiss}
+                              onMarkComplete={onMarkComplete}
                               links={links.filter(l => l.compliance_item_id === item.id)}
                             />
                           </div>
@@ -741,7 +777,7 @@ function CalendarView({
         {/* Detail panel — sticky on the right, desktop only */}
         <div className="hidden lg:block flex-1 min-w-0">
           {expandedEntry ? (
-            <div className="sticky top-8">
+            <div className="sticky top-8 [&>div]:mt-0">
               <ItemDetail
                 item={items.find(i => i.id === expandedEntry.itemId)!}
                 status={getStatus(expandedEntry.itemId, expandedEntry.group)}
@@ -750,6 +786,7 @@ function CalendarView({
                 group={expandedEntry.group}
                 onClose={() => setExpandedEntry(null)}
                 onToggleDismiss={onToggleDismiss}
+                onMarkComplete={onMarkComplete}
                 links={links.filter(l => l.compliance_item_id === expandedEntry.itemId)}
               />
             </div>
@@ -766,9 +803,16 @@ function CalendarView({
 }
 
 // --- Items List View ---
+type ItemInstance = { item: ComplianceItem; group?: string }
+
+function instanceKey(inst: ItemInstance) {
+  return inst.group ? `${inst.item.id}::${inst.group}` : inst.item.id
+}
+
 function ItemsView({
   items, getStatus, applicability, getSetting, expandedItem, setExpandedItem,
-  statusFilter, setStatusFilter, onToggleDismiss, links,
+  statusFilter, setStatusFilter, onToggleDismiss, onMarkComplete, links,
+  portfolioGroups, closeMonths,
 }: {
   items: ComplianceItem[]
   getStatus: (id: string, group?: string) => Applicability
@@ -779,68 +823,121 @@ function ItemsView({
   statusFilter: StatusFilter
   setStatusFilter: (v: StatusFilter) => void
   onToggleDismiss: (id: string, dismiss: boolean, reason?: string, group?: string) => void
+  onMarkComplete: (id: string, completed: boolean, note?: string, link?: string, group?: string) => void
   links: ComplianceLink[]
+  portfolioGroups: string[]
+  closeMonths: Record<string, number[]>
 }) {
-  // Group items by category
   const CATEGORY_ORDER = ['SEC Filings', 'Securities Offerings', 'Tax Filings', 'Fund Reporting', 'Internal Compliance', 'State Compliance', 'CFTC', 'AML / FinCEN']
+  const QUARTER_LABELS = ['Q1', 'Q2', 'Q3', 'Q4']
 
-  const categoryGroups = useMemo(() => {
-    const groups: Record<string, ComplianceItem[]> = {}
-    for (const item of items) {
-      const status = getStatus(item.id)
-      if (statusFilter === 'active' && status === 'not_applicable') continue
-      if (statusFilter === 'dismissed' && status !== 'not_applicable') continue
+  // Build instances: expand vehicle-scoped items per fund, quarterly items per quarter
+  const categoryInstances = useMemo(() => {
+    const groups: Record<string, ItemInstance[]> = {}
+    const groupsWithCloses = Object.keys(closeMonths).filter(pg => closeMonths[pg].length > 0)
+
+    function passesFilter(status: Applicability) {
+      if (statusFilter === 'all') return true
+      if (statusFilter === 'active') return status !== 'not_applicable' && status !== 'completed'
+      if (statusFilter === 'completed') return status === 'completed'
+      if (statusFilter === 'dismissed') return status === 'not_applicable'
+      return true
+    }
+
+    function addInstance(item: ComplianceItem, group?: string) {
+      const status = getStatus(item.id, group)
+      if (!passesFilter(status)) return
       if (!groups[item.category]) groups[item.category] = []
-      groups[item.category].push(item)
+      groups[item.category].push({ item, group })
+    }
+
+    for (const item of items) {
+      if (item.frequency === 'Event-driven') {
+        // One instance per fund that had closes this year
+        for (const pg of groupsWithCloses) {
+          addInstance(item, pg)
+        }
+      } else if (item.frequency === 'Quarterly') {
+        if (item.scope === 'vehicle') {
+          // Per fund × per quarter
+          for (const pg of portfolioGroups) {
+            for (const qLabel of QUARTER_LABELS) {
+              addInstance(item, `${pg}::${qLabel}`)
+            }
+          }
+        } else {
+          // Firm-level quarterly: one per quarter
+          for (const qLabel of QUARTER_LABELS) {
+            addInstance(item, qLabel)
+          }
+        }
+      } else if (item.scope === 'vehicle') {
+        // Annual vehicle-scoped: one per fund
+        for (const pg of portfolioGroups) {
+          addInstance(item, pg)
+        }
+      } else {
+        // Firm-level annual: single instance
+        addInstance(item)
+      }
     }
     return groups
-  }, [items, getStatus, statusFilter])
+  }, [items, getStatus, statusFilter, portfolioGroups, closeMonths])
 
-  const orderedCategories = CATEGORY_ORDER.filter(c => categoryGroups[c]?.length > 0)
+  const orderedCategories = CATEGORY_ORDER.filter(c => (categoryInstances[c]?.length ?? 0) > 0)
 
   return (
     <div>
-      <div className="mb-4">
-        <h2 className="text-sm font-medium">All Compliance Items</h2>
-      </div>
-
       {orderedCategories.map(category => {
         const catColors = CATEGORY_COLORS[category] ?? DEFAULT_CATEGORY_COLORS
+        const instances = categoryInstances[category]
         return (
           <div key={category} className="mb-6">
-            <h3 className={`text-xs font-medium mb-2 ${catColors.text}`}>{category} ({categoryGroups[category].length})</h3>
+            <h3 className={`text-xs font-medium mb-2 ${catColors.text}`}>{category} ({instances.length})</h3>
             <div className="space-y-1">
-              {categoryGroups[category].map(item => {
-                const status = getStatus(item.id)
+              {instances.map(inst => {
+                const ik = instanceKey(inst)
+                const status = getStatus(inst.item.id, inst.group)
                 const isDismissed = status === 'not_applicable'
-                const colors = isDismissed ? { bg: 'bg-muted', text: 'text-muted-foreground' } : catColors
-                const isExpanded = expandedItem === item.id
+                const isCompleted = status === 'completed'
+                const colors = isDismissed
+                  ? { bg: 'bg-muted', text: 'text-muted-foreground' }
+                  : isCompleted
+                    ? { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400' }
+                    : catColors
+                const isExpanded = expandedItem === ik
                 return (
-                  <div key={item.id}>
+                  <div key={ik}>
                     <button
-                      onClick={() => setExpandedItem(isExpanded ? null : item.id)}
+                      onClick={() => setExpandedItem(isExpanded ? null : ik)}
                       className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm flex items-center justify-between transition-colors ${
                         isExpanded ? 'bg-accent border-foreground/20' : 'hover:bg-accent/50'
                       }`}
                     >
                       <span className="flex items-center gap-2">
                         <span className={`inline-block w-2 h-2 rounded-full ${colors.bg}`} />
-                        <span className={`font-medium ${isDismissed ? 'text-muted-foreground line-through' : ''}`}>{item.short_name}</span>
+                        <span className={`font-medium ${isDismissed ? 'text-muted-foreground line-through' : ''} ${isCompleted ? 'text-blue-700 dark:text-blue-400' : ''}`}>
+                          {inst.item.short_name}
+                        </span>
+                        {inst.group && <span className="text-xs text-muted-foreground">· {inst.group}</span>}
                       </span>
                       <span className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">{item.deadline_description}</span>
+                        {isCompleted && <span className="text-xs text-blue-600 dark:text-blue-400">Completed</span>}
+                        {isDismissed && <span className="text-xs text-muted-foreground">Dismissed</span>}
                         <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                       </span>
                     </button>
                     {isExpanded && (
                       <ItemDetail
-                        item={item}
+                        item={inst.item}
                         status={status}
-                        reason={applicability[item.id]?.reason}
-                        setting={getSetting(item.id)}
+                        reason={applicability[inst.item.id]?.reason}
+                        setting={getSetting(inst.item.id, inst.group)}
+                        group={inst.group}
                         onClose={() => setExpandedItem(null)}
                         onToggleDismiss={onToggleDismiss}
-                        links={links.filter(l => l.compliance_item_id === item.id)}
+                        onMarkComplete={onMarkComplete}
+                        links={links.filter(l => l.compliance_item_id === inst.item.id)}
                       />
                     )}
                   </div>
@@ -856,7 +953,7 @@ function ItemsView({
 
 // --- Item Detail Panel ---
 function ItemDetail({
-  item, status, reason, setting, group, onClose, onToggleDismiss, links,
+  item, status, reason, setting, group, onClose, onToggleDismiss, onMarkComplete, links,
 }: {
   item: ComplianceItem
   status: Applicability
@@ -865,9 +962,17 @@ function ItemDetail({
   group?: string
   onClose: () => void
   onToggleDismiss: (id: string, dismiss: boolean, reason?: string, group?: string) => void
+  onMarkComplete: (id: string, completed: boolean, note?: string, link?: string, group?: string) => void
   links?: ComplianceLink[]
 }) {
+  const [showCompleteForm, setShowCompleteForm] = useState(false)
+  const [completeNote, setCompleteNote] = useState(setting?.completed_note ?? '')
+  const [completeLink, setCompleteLink] = useState(setting?.completed_link ?? '')
+
   if (!item) return null
+
+  const isCompleted = status === 'completed'
+  const isDismissed = status === 'not_applicable' && setting?.dismissed
 
   return (
     <div className="rounded-lg border bg-card p-4 mt-2 mb-4">
@@ -881,9 +986,22 @@ function ItemDetail({
         </button>
       </div>
 
+      {isCompleted && (
+        <div className="text-sm px-2.5 py-1.5 rounded mb-3 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+          <span className="font-medium">Completed</span>
+          {setting?.completed_at && <span> on {new Date(setting.completed_at).toLocaleDateString()}</span>}
+          {setting?.completed_note && <p className="mt-1">{setting.completed_note}</p>}
+          {setting?.completed_link && (
+            <a href={setting.completed_link} target="_blank" rel="noopener noreferrer" className="mt-1 flex items-center gap-1 underline underline-offset-2 hover:opacity-80">
+              <LinkIcon className="h-3 w-3" />{setting.completed_link}
+            </a>
+          )}
+        </div>
+      )}
+
       <p className="text-sm text-muted-foreground mb-3">{item.description}</p>
 
-      {reason && (
+      {reason && !isCompleted && (
         <div className={`text-sm px-2.5 py-1.5 rounded mb-3 ${STATUS_COLORS[status].bg} ${STATUS_COLORS[status].text}`}>
           {reason}
         </div>
@@ -929,6 +1047,45 @@ function ItemDetail({
         </div>
       )}
 
+      {/* Complete form (shown when clicking Mark Complete) */}
+      {showCompleteForm && (
+        <div className="mb-3 rounded border p-3 space-y-2">
+          <p className="text-xs font-medium">Mark as completed</p>
+          <input
+            type="text"
+            placeholder="Note (optional)"
+            value={completeNote}
+            onChange={e => setCompleteNote(e.target.value)}
+            className="w-full text-sm px-2 py-1.5 rounded border bg-background"
+          />
+          <input
+            type="url"
+            placeholder="Link (optional, e.g. filing URL)"
+            value={completeLink}
+            onChange={e => setCompleteLink(e.target.value)}
+            className="w-full text-sm px-2 py-1.5 rounded border bg-background"
+          />
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                onMarkComplete(item.id, true, completeNote || undefined, completeLink || undefined, group)
+                setShowCompleteForm(false)
+              }}
+            >
+              Complete
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCompleteForm(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 flex-wrap">
         {item.regulation_url && (
           <a
@@ -951,24 +1108,63 @@ function ItemDetail({
           </a>
         )}
         <span className="flex-1" />
-        {status !== 'not_applicable' ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => onToggleDismiss(item.id, true, 'Manually dismissed', group)}
-          >
-            Dismiss
-          </Button>
+        {isCompleted ? (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setShowCompleteForm(true)}
+            >
+              Edit
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => onMarkComplete(item.id, false, undefined, undefined, group)}
+            >
+              Restore
+            </Button>
+          </>
+        ) : isDismissed ? (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setShowCompleteForm(true)}
+            >
+              Mark Complete
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => onToggleDismiss(item.id, false, undefined, group)}
+            >
+              Restore
+            </Button>
+          </>
         ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => onToggleDismiss(item.id, false, undefined, group)}
-          >
-            Restore
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setShowCompleteForm(true)}
+            >
+              Mark Complete
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => onToggleDismiss(item.id, true, 'Manually dismissed', group)}
+            >
+              Dismiss
+            </Button>
+          </>
         )}
       </div>
     </div>
