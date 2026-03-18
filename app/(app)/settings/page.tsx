@@ -3732,6 +3732,11 @@ function TeamSection({ isAdmin }: { isAdmin: boolean }) {
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
+  
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviting, setInviting] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [inviteSaved, setInviteSaved] = useState(false)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/settings/members')
@@ -3764,6 +3769,27 @@ function TeamSection({ isAdmin }: { isAdmin: boolean }) {
     if (res.ok) load()
   }
 
+  const handleInvite = async () => {
+    if (!inviteEmail.trim() || !inviteEmail.includes('@')) return
+    setInviting(true)
+    setInviteError(null)
+    const res = await fetch('/api/settings/members/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: inviteEmail.trim() }),
+    })
+    setInviting(false)
+    if (res.ok) {
+      setInviteEmail('')
+      setInviteSaved(true)
+      setTimeout(() => setInviteSaved(false), 2000)
+      load()
+    } else {
+      const data = await res.json()
+      setInviteError(data.error)
+    }
+  }
+
   return (
     <Section title="Team">
       {loading ? (
@@ -3771,7 +3797,36 @@ function TeamSection({ isAdmin }: { isAdmin: boolean }) {
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading...
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* Invite Member */}
+          {isAdmin && (
+            <div className="flex flex-col gap-2 p-4 border rounded-lg bg-muted/20">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+                <div className="flex-1">
+                  <Label>Invite new member</Label>
+                  <p className="text-xs text-muted-foreground mt-1 mb-2">
+                    Send an email invitation. The user will be automatically added to the fund upon logging in.
+                  </p>
+                  <Input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => { setInviteEmail(e.target.value); setInviteError(null) }}
+                    placeholder="teammate@domain.com"
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleInvite() }}
+                  />
+                </div>
+                <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim() || !inviteEmail.includes('@')} size="sm">
+                  {inviting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : inviteSaved ? <Check className="h-3.5 w-3.5" /> : 'Send Invite'}
+                </Button>
+              </div>
+              {inviteError && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" /> {inviteError}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Members list */}
           <div className="border rounded-lg divide-y">
             {members.map(m => (
