@@ -10,6 +10,7 @@ export interface NormalizedEmailPayload {
   from: string
   fromName?: string
   to: string
+  date?: string
   subject: string
   textBody: string
   htmlBody: string
@@ -34,6 +35,7 @@ export function normalizeMailgunPayload(fields: Record<string, string>, attachme
     from: extractEmail(fields.from || fields.sender || ''),
     fromName: extractName(fields.from || ''),
     to: fields.recipient || fields.To || '',
+    date: fields.Date || fields.date || undefined,
     subject: fields.subject || '',
     textBody: fields['body-plain'] || '',
     htmlBody: fields['body-html'] || '',
@@ -56,6 +58,7 @@ export function toPostmarkPayload(normalized: NormalizedEmailPayload): PostmarkP
     FromFull: { Email: normalized.from, Name: normalized.fromName || '' },
     To: normalized.to,
     OriginalRecipient: normalized.to,
+    Date: normalized.date,
     Subject: normalized.subject,
     TextBody: normalized.textBody,
     HtmlBody: normalized.htmlBody,

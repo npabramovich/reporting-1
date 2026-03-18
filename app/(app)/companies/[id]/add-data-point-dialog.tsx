@@ -41,7 +41,7 @@ export function AddDataPointDialog({
       const month = new Date(2000, parseInt(periodMonth) - 1).toLocaleString('en', { month: 'short' })
       return `${month} ${yr}`
     }
-    return `FY ${yr}`
+    return `Year End ${yr}`
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,11 +57,11 @@ export function AddDataPointDialog({
     }
 
     const label = buildPeriodLabel()
-    const pMonth = periodMonth ? parseInt(periodMonth) : null
+    const pMonth = periodMonth ? parseInt(periodMonth) : 12
     const body: Record<string, unknown> = {
       period_label: label,
       period_year: pYear,
-      period_quarter: pMonth ? Math.ceil(pMonth / 3) : null,
+      period_quarter: Math.ceil(pMonth / 3),
       period_month: pMonth,
       value: metric.value_type === 'text' ? value : parseFloat(value),
       notes: notes || null,
@@ -115,7 +115,7 @@ export function AddDataPointDialog({
                 onChange={(e) => setPeriodMonth(e.target.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
               >
-                <option value="">— (annual)</option>
+                <option value="">— (year-end / annual)</option>
                 {Array.from({ length: 12 }, (_, i) => (
                   <option key={i + 1} value={String(i + 1)}>
                     {new Date(2000, i).toLocaleString('en', { month: 'long' })}

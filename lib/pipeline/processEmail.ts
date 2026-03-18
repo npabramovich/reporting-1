@@ -29,6 +29,7 @@ export interface PostmarkPayload {
   FromFull?: { Email: string; Name: string }
   To: string
   OriginalRecipient?: string
+  Date?: string
   Subject?: string
   TextBody?: string
   HtmlBody?: string
@@ -131,6 +132,12 @@ export async function runPipeline(
 
   if (metrics.length === 0) {
     await finalizeEmail(supabase, emailId, { status: 'not_processed', metricsExtracted: 0 })
+    // Still save to file storage even when no metrics are defined
+    try {
+      await saveToFileStorage(supabase, fundId, companyName, payload)
+    } catch (err) {
+      console.error('[pipeline] File storage save failed (non-blocking):', err)
+    }
     if (fundMember) {
       try {
         await maybeExtractInteraction(supabase, fundId, emailId, companyId, fundMember.userId, payload, extracted.emailBody, provider, providerType, model)
@@ -141,7 +148,7 @@ export async function runPipeline(
     return
   }
 
-  const combinedText = buildCombinedText(extracted)
+  const combinedText = buildCombinedText(extracted, payload)
 
   const pdfBase64s = extracted.attachments
     .filter(a => !a.skipped && a.base64Content && isPdf(a.contentType))
@@ -507,8 +514,20 @@ export async function finalizeEmail(
 // Text helpers
 // ---------------------------------------------------------------------------
 
-export function buildCombinedText(extracted: ExtractionResult): string {
-  const parts: string[] = [`[EMAIL BODY]\n${extracted.emailBody}`]
+export function buildCombinedText(extracted: ExtractionResult, payload?: PostmarkPayload): string {
+  const parts: string[] = []
+
+  // Include email metadata so the AI has subject/sender/date context
+  if (payload) {
+    const metaParts: string[] = []
+    if (payload.Subject) metaParts.push(`Subject: ${payload.Subject}`)
+    if (payload.FromFull?.Name) metaParts.push(`From: ${payload.FromFull.Name} <${payload.FromFull.Email}>`)
+    else if (payload.From) metaParts.push(`From: ${payload.From}`)
+    if (payload.Date) metaParts.push(`Date: ${payload.Date}`)
+    if (metaParts.length) parts.push(`[EMAIL METADATA]\n${metaParts.join('\n')}`)
+  }
+
+  parts.push(`[EMAIL BODY]\n${extracted.emailBody}`)
   for (const att of extracted.attachments) {
     if (!att.skipped && att.extractedText) {
       parts.push(`[ATTACHMENT: ${att.filename}]\n${att.extractedText}`)

@@ -26,6 +26,7 @@ ALTER TABLE compliance_deadlines
 -- 4. Mark vehicle-scoped items in seed data
 UPDATE compliance_items SET scope = 'vehicle' WHERE id IN (
   'form-d',
+  'form-d-amendment-review',
   'blue-sky',
   'tax-1065',
   'tax-7004',

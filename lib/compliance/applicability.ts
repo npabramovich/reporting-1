@@ -84,6 +84,14 @@ const rules: Record<string, Rule> = {
     return { result: 'needs_review', reason: 'Reg D exemption status is unclear' }
   },
 
+  'form-d-amendment-review': (p) => {
+    if (p.reg_d_exemption === '506b' || p.reg_d_exemption === '506c')
+      return { result: 'applies', reason: `Fund filed Form D under Reg D (Rule ${p.reg_d_exemption === '506b' ? '506(b)' : '506(c)'}) — annual amendment review required` }
+    if (p.reg_d_exemption === 'no')
+      return { result: 'not_applicable', reason: 'Auto-dismissed: Fund did not raise capital under Reg D' }
+    return { result: 'needs_review', reason: 'Reg D exemption status is unclear' }
+  },
+
   'blue-sky': (p) => {
     if (p.reg_d_exemption === 'no')
       return { result: 'not_applicable', reason: 'Auto-dismissed: Fund did not raise capital under Reg D' }
