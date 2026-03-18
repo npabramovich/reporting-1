@@ -48,15 +48,45 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User is already a member of this fund' }, { status: 400 })
     }
   } else {
-    // User does not exist, send an invite via Supabase Auth
-    const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email)
+    // User does not exist, send an invite via Supabase Auth GenerateLink
+    // We generate the link server-side and extract the token_hash to avoid PKCE cookie errors cross-origin
+    const origin = req.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'https://funds.catalizadores.com'
+    const { data: inviteData, error: inviteError } = await admin.auth.admin.generateLink({
+      type: 'invite',
+      email,
+      options: { redirectTo: `${origin}/dashboard` }
+    })
     
-    if (inviteError || !inviteData.user) {
-      console.error('[invite] Failed to invite user via Supabase:', inviteError)
-      return NextResponse.json({ error: 'Failed to send invite email' }, { status: 500 })
+    if (inviteError || !inviteData.user || !inviteData.properties?.hashed_token) {
+      console.error('[invite] Failed to generate invite link:', inviteError)
+      return NextResponse.json({ error: 'Failed to generate invite token' }, { status: 500 })
     }
     
     invitedUserId = inviteData.user.id
+
+    // Construct the direct OTP link
+    const actionLink = `${origin}/auth/callback?token_hash=${inviteData.properties.hashed_token}&type=invite&next=/dashboard`
+    
+    // We will return this link so the admin can copy it.
+    // Try to send email via the fund's outbound provider.
+    try {
+      const { getOutboundConfig, sendOutboundEmail } = await import('@/lib/email')
+      const config = await getOutboundConfig(admin, fundId, 'system')
+      if (config) {
+        const { data: fund } = await admin.from('funds').select('name').eq('id', fundId).single()
+        const fundName = fund?.name || 'our fund'
+        await sendOutboundEmail(config, {
+          to: email,
+          subject: `You've been invited to join ${fundName}`,
+          html: `<p>You have been invited to join <strong>${fundName}</strong>.</p><p><a href="${actionLink}">Click here to accept the invitation</a></p><p>Or copy this link: <br> ${actionLink}</p>`
+        })
+      }
+    } catch (e) {
+      console.error('[invite] Could not send custom invite email:', e)
+      // We don't fail the request, we just return the link in the response.
+    }
+
+    return NextResponse.json({ success: true, inviteLink: actionLink })
   }
 
   // 2. Insert the user into the fund_members table
@@ -81,5 +111,5 @@ export async function POST(req: NextRequest) {
   // Log the activity
   logActivity(admin, fundId, user.id, 'settings.member.invite', { invitedEmail: email })
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, inviteLink: null })
 }

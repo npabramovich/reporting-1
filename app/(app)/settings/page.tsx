@@ -3736,7 +3736,8 @@ function TeamSection({ isAdmin }: { isAdmin: boolean }) {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviting, setInviting] = useState(false)
   const [inviteError, setInviteError] = useState<string | null>(null)
-  const [inviteSaved, setInviteSaved] = useState(false)
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/settings/members')
@@ -3780,9 +3781,13 @@ function TeamSection({ isAdmin }: { isAdmin: boolean }) {
     })
     setInviting(false)
     if (res.ok) {
+      const data = await res.json()
       setInviteEmail('')
-      setInviteSaved(true)
-      setTimeout(() => setInviteSaved(false), 2000)
+      if (data.inviteLink) {
+        setInviteLink(data.inviteLink)
+      } else {
+        setInviteLink(null)
+      }
       load()
     } else {
       const data = await res.json()
@@ -3816,13 +3821,35 @@ function TeamSection({ isAdmin }: { isAdmin: boolean }) {
                   />
                 </div>
                 <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim() || !inviteEmail.includes('@')} size="sm">
-                  {inviting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : inviteSaved ? <Check className="h-3.5 w-3.5" /> : 'Send Invite'}
+                  {inviting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                 </Button>
               </div>
               {inviteError && (
                 <p className="text-xs text-destructive flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" /> {inviteError}
                 </p>
+              )}
+              {inviteLink && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">
+                    Member added! Copy and share this invite link if they did not receive an email:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-[11px] bg-muted rounded px-2 py-1 break-all font-mono">{inviteLink}</code>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(inviteLink)
+                        setInviteLinkCopied(true)
+                        setTimeout(() => setInviteLinkCopied(false), 2000)
+                      }}
+                    >
+                      {inviteLinkCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
           )}

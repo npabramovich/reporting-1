@@ -8,6 +8,8 @@ import { logActivity } from '@/lib/activity'
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  const token_hash = searchParams.get('token_hash')
+  const type = searchParams.get('type') as 'invite' | 'magiclink' | 'recovery' | 'email' | 'email_change' | null
   let next = searchParams.get('next') ?? '/'
 
   // Prevent open redirect — only allow relative paths
@@ -15,13 +17,23 @@ export async function GET(request: NextRequest) {
     next = '/'
   }
 
-  if (!code) {
+  let authError: Error | null = null;
+  const supabase = createClient()
+
+  if (token_hash && type) {
+    // Handle token_hash + type for PKCE cross-browser issues
+    const { error } = await supabase.auth.verifyOtp({ token_hash, type })
+    authError = error
+  } else if (code) {
+    // Handle code (standard flow)
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    authError = error
+  } else {
+    // Neither code nor token_hash/type are present
     return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent('Invalid or expired link. Please try again.')}`)
   }
 
-  const supabase = createClient()
-  const { error } = await supabase.auth.exchangeCodeForSession(code)
-  if (!error) {
+  if (!authError) {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const admin = createAdminClient()
@@ -40,5 +52,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}${next}`)
   }
 
-  return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(error.message)}`)
+  return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(authError.message)}`)
 }
