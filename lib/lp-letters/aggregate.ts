@@ -332,8 +332,15 @@ export async function aggregatePortfolioData(
 
     const metricData: CompanyMetricData[] = metrics.map(m => {
       const vals = (allValues ?? []).filter(v => v.metric_id === m.id)
-      const currentVals = vals.filter(v => v.period_year === year && v.period_quarter === quarter)
-      const prevVals = vals.filter(v => v.period_year === prevY && v.period_quarter === prevQ)
+      
+      const getQ = (v: any) => v.period_quarter ?? (v.period_month ? Math.ceil(v.period_month / 3) : null)
+      
+      const currentVals = vals.filter(v => v.period_year === year && getQ(v) === quarter)
+        .sort((a, b) => (a.period_month ?? 0) - (b.period_month ?? 0)) // Ensure strict progressive sorting
+        
+      const prevVals = vals.filter(v => v.period_year === prevY && getQ(v) === prevQ)
+        .sort((a, b) => (a.period_month ?? 0) - (b.period_month ?? 0))
+        
       const current = currentVals[currentVals.length - 1]
       const prev = prevVals[prevVals.length - 1]
 
