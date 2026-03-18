@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { computeSummary } from '@/lib/investments'
 import type { InvestmentTransaction, CompanyStatus } from '@/lib/types/database'
+import { Suspense } from 'react'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export const metadata: Metadata = { title: 'Portfolio' }
 import { DashboardCompanies } from './dashboard-companies'
@@ -11,20 +13,27 @@ import { DashboardNotesLayout, DashboardChatButton, DashboardNotesPanel } from '
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 
-export default async function DashboardPage() {
+function DashboardSkeleton() {
+  return (
+    <div className="flex flex-col lg:flex-row gap-6 items-start mt-6 w-full max-w-7xl animate-pulse">
+      <div className="flex-1 w-full space-y-4">
+        {/* Metric cards skeleton */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
+        </div>
+        {/* Table skeleton */}
+        <Skeleton className="h-[400px] w-full rounded-xl" />
+      </div>
+      {/* Side panel skeleton space */}
+    </div>
+  )
+}
+
+// Extracted slow data fetcher component
+async function DashboardContent({ user, isAdmin }: { user: any; isAdmin: boolean }) {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth')
-
-  const { data: membership } = await supabase
-    .from('fund_members')
-    .select('role')
-    .eq('user_id', user.id)
-    .maybeSingle() as { data: { role: string } | null }
-
-  const isAdmin = membership?.role === 'admin'
-
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
 
   // Fetch companies with their first 2 metrics and review counts
   type CompanyRow = {
@@ -180,6 +189,31 @@ export default async function DashboardPage() {
 
   return (
     <DashboardNotesLayout userId={user.id} isAdmin={isAdmin} companies={companiesWithInvestments.map(c => ({ id: c.id, name: c.name }))}>
+      <div className="flex flex-col lg:flex-row gap-6 items-start mt-6">
+        <div className="flex-1 min-w-0 max-w-7xl w-full">
+          <DashboardCompanies companies={companiesWithInvestments} allGroups={allGroups} />
+        </div>
+        <DashboardNotesPanel />
+        <AnalystPanel />
+      </div>
+    </DashboardNotesLayout>
+  )
+}
+
+export default async function DashboardPage() {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/auth')
+
+  const { data: membership } = await supabase
+    .from('fund_members')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle() as { data: { role: string } | null }
+
+  const isAdmin = membership?.role === 'admin'
+
+  return (
     <div className="p-4 md:py-8 md:pl-8 md:pr-4">
       <div className="mb-6 space-y-1">
         <div className="flex items-center justify-between">
@@ -192,14 +226,9 @@ export default async function DashboardPage() {
         <p className="text-sm text-muted-foreground">Track performance and activity across your portfolio companies</p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
-        <div className="flex-1 min-w-0 max-w-7xl w-full">
-          <DashboardCompanies companies={companiesWithInvestments} allGroups={allGroups} />
-        </div>
-        <DashboardNotesPanel />
-        <AnalystPanel />
-      </div>
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardContent user={user} isAdmin={isAdmin} />
+      </Suspense>
     </div>
-    </DashboardNotesLayout>
   )
 }

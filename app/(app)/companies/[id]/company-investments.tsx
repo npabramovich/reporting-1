@@ -12,6 +12,8 @@ import {
 import { useCurrency, formatCurrencyFull, formatCurrencyPrice, getCurrencySymbol } from '@/components/currency-context'
 import type { InvestmentTransaction, CompanyStatus } from '@/lib/types/database'
 import type { CompanyInvestmentSummary } from '@/lib/types/investments'
+import { Skeleton } from '@/components/ui/skeleton'
+
 
 interface Props {
   companyId: string
@@ -242,14 +244,24 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
   if (loading) {
     return (
       <div className="mt-6">
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-4">
           <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-sm font-medium text-muted-foreground">Investment Details</span>
           {adminOnly && <Lock className="h-3 w-3 text-amber-500" />}
         </div>
-        <div className="animate-pulse space-y-2">
-          <div className="h-8 bg-muted rounded w-full" />
-          <div className="h-8 bg-muted rounded w-full" />
+        <div className="border rounded-lg p-0">
+          <div className="border-b bg-muted/50 p-3 flex justify-between px-3 py-2">
+             <Skeleton className="h-4 w-32" />
+             <Skeleton className="h-4 w-32" />
+             <Skeleton className="h-4 w-32" />
+             <Skeleton className="h-4 w-32" />
+             <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="p-3 space-y-3">
+             <Skeleton className="h-6 w-full" />
+             <Skeleton className="h-6 w-full" />
+             <Skeleton className="h-6 w-full" />
+          </div>
         </div>
       </div>
     )

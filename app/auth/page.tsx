@@ -12,11 +12,53 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import { Building2 } from 'lucide-react'
 
+import { Skeleton } from '@/components/ui/skeleton'
+
 export default function AuthPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<AuthSkeleton />}>
       <AuthForm />
     </Suspense>
+  )
+}
+
+function AuthSkeleton() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center">
+          <Skeleton className="h-14 w-14 rounded-xl mx-auto mb-3" />
+          <Skeleton className="h-6 w-48 mx-auto" />
+        </div>
+        <Card>
+          <CardHeader className="pb-4">
+            <Skeleton className="h-6 w-48 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <Skeleton className="h-10 w-full" />
+            <div className="py-2">
+              <Skeleton className="h-px w-full" />
+            </div>
+            <Skeleton className="h-10 w-full" />
+            <div className="pt-2">
+              <Skeleton className="h-4 w-48 mx-auto" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   )
 }
 

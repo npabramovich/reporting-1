@@ -11,6 +11,7 @@ import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
 import { useFeatureVisibility } from '@/components/feature-visibility-context'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface CompanySummary {
   companyId: string
@@ -475,11 +476,17 @@ export default function InvestmentsPage() {
       <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
         {heading}
         <div className="flex flex-col lg:flex-row gap-6 items-start">
-        <div className="flex-1 min-w-0 w-full">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading...
+        <div className="flex-1 min-w-0 w-full animate-pulse">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full rounded-xl" />
+            ))}
           </div>
+          <div className="mb-4 flex items-center gap-4">
+             <Skeleton className="h-8 w-32 rounded" />
+             <Skeleton className="h-8 w-32 rounded" />
+          </div>
+          <Skeleton className="h-[400px] w-full rounded-xl" />
         </div>
         <PortfolioNotesPanel />
         <AnalystPanel />

@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Sparkles, RefreshCw, Upload, Loader2, History, ChevronDown, X } from 'lucide-react'
+import { RefreshCw, Sparkles, Upload, Loader2, History, ChevronDown, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface HistoryEntry {
   id: string
@@ -165,14 +166,17 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
   if (loading) {
     return (
       <div className="rounded-lg border bg-card p-5 mb-6">
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-4">
           <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground">Analyst</span>
         </div>
-        <div className="animate-pulse space-y-2">
-          <div className="h-3 bg-muted rounded w-full" />
-          <div className="h-3 bg-muted rounded w-5/6" />
-          <div className="h-3 bg-muted rounded w-4/6" />
+        <div className="space-y-3">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-[90%]" />
+          <Skeleton className="h-4 w-[95%]" />
+          <Skeleton className="h-4 w-[80%] mt-4" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-[85%]" />
         </div>
       </div>
     )
