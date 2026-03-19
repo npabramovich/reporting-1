@@ -32,5 +32,7 @@ UPDATE compliance_items SET scope = 'vehicle' WHERE id IN (
   'tax-7004',
   'schedule-k1',
   'quarterly-financial-reporting',
-  'valuations-soi'
+  'valuations-soi',
+  'annual-fund-audit',
+  'fatca-crs'
 );
