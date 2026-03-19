@@ -38,7 +38,7 @@ interface LpInvestment {
     id: string
     entity_name: string
     investor_id: string
-    lp_investors: { id: string; name: string }
+    lp_investors: { id: string; name: string; parent_id: string | null }
   }
 }
 
