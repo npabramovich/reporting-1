@@ -1,12 +1,5 @@
 # License
 
-**Version 1.1**
-
-Copyright © 2026 Unstructured Ventures, LLC. All rights reserved.
-
-
-## Summary
-
 This license applies to the portfolio fund reporting software developed by Unstructured Ventures, LLC and available at https://github.com/tdavidson/reporting. It covers the source code in that repository, any instance deployed from it (including installations on hemrock.com, self-hosted deployments, and managed deployments), and all associated documentation, database schemas, and configuration files.
 
 This software is free to use if you are a single fund management company running your own operations — that includes all of your funds, SPVs, and internal team members. You can modify it and deploy it on your own infrastructure. If you are a fund administrator, outsourced CFO, consultant, or any kind of service provider using this software across multiple clients or management companies, you need a paid commercial license. You also cannot resell it, white-label it, offer it as SaaS, or bundle it into another product. All intellectual property stays with Unstructured Ventures, LLC. The software is provided as-is with no warranties, and liability is capped at $100. If you violate the terms, your license ends immediately. For commercial licensing, reach out to hello@hemrock.com.
@@ -133,5 +126,7 @@ Sections 6, 7, 8, and 10 shall survive any termination of this License.
 **Assignment.** You may not assign or transfer this License or any rights granted hereunder without the prior written consent of Licensor. Licensor may assign this License without restriction.
 
 ---
+
+**Version 1.1** Copyright © 2026 Unstructured Ventures, LLC. All rights reserved.
 
 *For questions about this License or commercial licensing, contact hello@hemrock.com.*

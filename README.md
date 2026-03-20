@@ -48,7 +48,7 @@ Managed deployments are available, [contact Taylor](https://portfolio.hemrock.co
 
 If you are a fund administrator, outsourced CFO, consultant, or service provider using this across multiple clients, you need a paid commercial license. You cannot resell it, white-label it, offer it as SaaS, or bundle it into another product.
 
-See [LICENSE](./LICENSE) for full terms. For commercial licensing, [contact Taylor](https://portfolio.hemrock.com/contact).
+See [LICENSE](./LICENSE.md) for full terms. For commercial licensing, [contact Taylor](https://portfolio.hemrock.com/contact).
 
 ## Quick start
 
