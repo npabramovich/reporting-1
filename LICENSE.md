@@ -1,17 +1,8 @@
 # License
 
-**Version 1.1**
-
-Copyright © 2026 Unstructured Ventures, LLC. All rights reserved.
-
-
-## Summary
-
 This license applies to the portfolio fund reporting software developed by Unstructured Ventures, LLC and available at https://github.com/tdavidson/reporting. It covers the source code in that repository, any instance deployed from it (including installations on hemrock.com, self-hosted deployments, and managed deployments), and all associated documentation, database schemas, and configuration files.
 
 This software is free to use if you are a single fund management company running your own operations — that includes all of your funds, SPVs, and internal team members. You can modify it and deploy it on your own infrastructure. If you are a fund administrator, outsourced CFO, consultant, or any kind of service provider using this software across multiple clients or management companies, you need a paid commercial license. You also cannot resell it, white-label it, offer it as SaaS, or bundle it into another product. All intellectual property stays with Unstructured Ventures, LLC. The software is provided as-is with no warranties, and liability is capped at $100. If you violate the terms, your license ends immediately. For commercial licensing, reach out to hello@hemrock.com.
-
----
 
 ## 1. Definitions
 
@@ -38,8 +29,6 @@ For purposes of clarity:
 - Use as part of a managed, hosted, software-as-a-service (SaaS), or white-labeled offering;
 - Embedding within or incorporation into another commercial product or service.
 
----
-
 ## 2. Free License Grant (Single Fund Entity)
 
 Subject to the terms and conditions of this License, Licensor hereby grants you a limited, non-exclusive, non-transferable, non-sublicensable, royalty-free license to:
@@ -50,8 +39,6 @@ Subject to the terms and conditions of this License, Licensor hereby grants you 
 4. Operate the Software across multiple funds and SPVs managed by that Fund Entity.
 
 This license grant applies to one Fund Entity only. Use by or on behalf of any additional Fund Entity requires a separate Commercial License.
-
----
 
 ## 3. Prohibited Uses
 
@@ -65,8 +52,6 @@ Without a separate written Commercial License from Licensor, you may not:
 6. Distribute, sublicense, or otherwise make the Software available to any third party;
 7. Incorporate the Software into another commercial product or service; or
 8. Use the Software in a manner that competes with Licensor's consulting, licensing, or software business.
-
----
 
 ## 4. Commercial License
 
@@ -82,33 +67,23 @@ Commercial License terms shall be set forth in a separate written agreement betw
 
 For commercial licensing inquiries, contact: **hello@hemrock.com**
 
----
-
 ## 5. Modifications
 
 You may modify the Software solely for Internal Use by one Fund Entity in accordance with Section 2. You may not distribute, publish, or otherwise make available any modified version of the Software without a Commercial License.
-
----
 
 ## 6. Ownership and Intellectual Property
 
 The Software is licensed, not sold. Licensor retains all right, title, and interest in and to the Software, including all intellectual property rights therein. Nothing in this License conveys any ownership interest in the Software to you. Any modifications you make to the Software do not transfer ownership of the underlying Software or its intellectual property to you.
 
----
-
 ## 7. No Warranty
 
 THE SOFTWARE IS PROVIDED "AS IS," WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. LICENSOR MAKES NO WARRANTY THAT THE SOFTWARE WILL BE ERROR-FREE, UNINTERRUPTED, OR FREE OF HARMFUL COMPONENTS.
-
----
 
 ## 8. Limitation of Liability
 
 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL LICENSOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS, REVENUE, DATA, OR USE, ARISING OUT OF OR RELATED TO THIS LICENSE OR THE SOFTWARE, REGARDLESS OF THE THEORY OF LIABILITY.
 
 LICENSOR'S TOTAL AGGREGATE LIABILITY UNDER THIS LICENSE SHALL NOT EXCEED ONE HUNDRED U.S. DOLLARS (USD $100.00).
-
----
 
 ## 9. Termination
 
@@ -117,8 +92,6 @@ This License is effective until terminated. Your rights under this License termi
 Licensor reserves the right to terminate this License at any time for any reason upon thirty (30) days' written notice.
 
 Sections 6, 7, 8, and 10 shall survive any termination of this License.
-
----
 
 ## 10. General Provisions
 
@@ -133,5 +106,7 @@ Sections 6, 7, 8, and 10 shall survive any termination of this License.
 **Assignment.** You may not assign or transfer this License or any rights granted hereunder without the prior written consent of Licensor. Licensor may assign this License without restriction.
 
 ---
+
+**Version 1.1** Copyright © 2026 Unstructured Ventures, LLC. All rights reserved.
 
 *For questions about this License or commercial licensing, contact hello@hemrock.com.*

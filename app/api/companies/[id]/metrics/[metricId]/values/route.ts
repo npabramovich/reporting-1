@@ -18,8 +18,8 @@ export async function GET(
     .eq('metric_id', params.metricId)
     .eq('company_id', params.id)
     .order('period_year')
-    .order('period_quarter', { nullsFirst: true })
-    .order('period_month', { nullsFirst: true })
+    .order('period_quarter', { nullsFirst: false })
+    .order('period_month', { nullsFirst: false })
 
   if (error) return dbError(error, 'metric-values')
 

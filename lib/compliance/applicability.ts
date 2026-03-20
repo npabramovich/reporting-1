@@ -17,6 +17,7 @@ export interface ComplianceProfile {
   cftc_activity: string | null
   access_person_count: string | null
   has_foreign_entities: string | null
+  has_foreign_investors: string | null
 }
 
 type Rule = (p: ComplianceProfile) => { result: Applicability; reason: string }
@@ -79,6 +80,14 @@ const rules: Record<string, Rule> = {
   'form-d': (p) => {
     if (p.reg_d_exemption === '506b' || p.reg_d_exemption === '506c')
       return { result: 'applies', reason: `Fund raised capital under Reg D (Rule ${p.reg_d_exemption === '506b' ? '506(b)' : '506(c)'})` }
+    if (p.reg_d_exemption === 'no')
+      return { result: 'not_applicable', reason: 'Auto-dismissed: Fund did not raise capital under Reg D' }
+    return { result: 'needs_review', reason: 'Reg D exemption status is unclear' }
+  },
+
+  'form-d-amendment-review': (p) => {
+    if (p.reg_d_exemption === '506b' || p.reg_d_exemption === '506c')
+      return { result: 'applies', reason: `Fund filed Form D under Reg D (Rule ${p.reg_d_exemption === '506b' ? '506(b)' : '506(c)'}) — annual amendment review required` }
     if (p.reg_d_exemption === 'no')
       return { result: 'not_applicable', reason: 'Auto-dismissed: Fund did not raise capital under Reg D' }
     return { result: 'needs_review', reason: 'Reg D exemption status is unclear' }
@@ -187,6 +196,30 @@ const rules: Record<string, Rule> = {
     if (p.fund_structure === 'lp' || p.fund_structure === 'llc_partnership')
       return { result: 'applies', reason: 'Fund is a partnership — quarterly expense allocation review recommended per LPA terms' }
     return { result: 'needs_review', reason: 'Fund structure is unclear — review LPA expense provisions' }
+  },
+
+  'annual-fund-audit': (_p) => {
+    return { result: 'applies', reason: 'Required for most funds per LPA — confirm audit requirement with your LPA' }
+  },
+
+  'fatca-crs': (p) => {
+    if (p.has_foreign_investors === 'yes')
+      return { result: 'applies', reason: 'Fund has foreign (non-U.S.) investors — FATCA withholding and reporting required' }
+    if (p.has_foreign_investors === 'no')
+      return { result: 'not_applicable', reason: 'Auto-dismissed: All investors are U.S. persons' }
+    return { result: 'needs_review', reason: 'Foreign investor status has not been assessed' }
+  },
+
+  'insurance-eo': (_p) => {
+    return { result: 'needs_review', reason: 'Review whether your firm carries E&O / Professional Liability insurance' }
+  },
+
+  'insurance-do': (_p) => {
+    return { result: 'needs_review', reason: 'Review whether your firm carries D&O liability insurance' }
+  },
+
+  'insurance-cyber': (_p) => {
+    return { result: 'needs_review', reason: 'Review whether your firm carries Cyber Liability insurance' }
   },
 }
 

@@ -188,6 +188,16 @@ const QUESTIONS = [
       { value: 'no', label: 'No — all entities are U.S.-formed' },
     ],
   },
+  {
+    key: 'has_foreign_investors',
+    question: 'Does your fund have any foreign (non-U.S.) investors?',
+    explainer: 'Funds with foreign investors have FATCA withholding and reporting obligations (Form 1042-S, Form 1042) and may have CRS reporting obligations depending on jurisdiction. W-8BEN/W-8BEN-E forms must be collected from foreign investors.',
+    options: [
+      { value: 'yes', label: 'Yes — one or more investors are non-U.S. persons or entities' },
+      { value: 'no', label: 'No — all investors are U.S. persons' },
+      { value: 'unsure', label: 'Unsure' },
+    ],
+  },
 ] as const
 
 type View = ComplianceTab

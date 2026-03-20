@@ -2375,11 +2375,12 @@ function GoogleDriveSection({
                   className="flex items-center justify-between px-3 py-2 hover:bg-muted/50 group"
                 >
                   <button
-                    className="flex items-center gap-2 text-sm flex-1 text-left"
+                    className="flex items-center gap-2 text-sm flex-1 text-left hover:underline"
                     onClick={() => navigateInto(f)}
                   >
-                    <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                    <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
                     {f.name}
+                    <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
                   </button>
                   <Button
                     size="sm"
@@ -2609,9 +2610,10 @@ function GoogleDriveCompanyFolders({ fundId }: { fundId: string }) {
                         ) : (
                           folders.map(f => (
                             <div key={f.id} className="flex items-center justify-between px-3 py-2 hover:bg-muted/50 group">
-                              <button className="flex items-center gap-2 text-sm flex-1 text-left" onClick={() => navigateInto(f)}>
-                                <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                              <button className="flex items-center gap-2 text-sm flex-1 text-left hover:underline" onClick={() => navigateInto(f)}>
+                                <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
                                 {f.name}
+                                <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
                               </button>
                               <Button size="sm" variant="ghost" className="opacity-0 group-hover:opacity-100 h-7 text-xs" onClick={() => selectFolder(c.id, f)} disabled={saving === c.id}>
                                 Select
