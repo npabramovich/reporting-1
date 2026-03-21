@@ -78,7 +78,7 @@ async function handleInbound(req: NextRequest) {
     payload.FromFull?.Email || payload.From,
     payload.Subject ?? null,
     payload.Date ?? null,
-    (payload as Record<string, unknown>).MessageID as string | undefined
+    payload.MessageID
   )
 
   const { data: existingEmail } = await supabase
