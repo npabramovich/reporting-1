@@ -190,9 +190,12 @@ export async function runPipeline(
   const status: ProcessingStatus = reviewCount > 0 ? 'needs_review' : writtenCount > 0 ? 'success' : 'not_processed'
   await finalizeEmail(supabase, emailId, { status, metricsExtracted: writtenCount })
 
-  // Step 9: Save to file storage (non-blocking)
+  // Step 9: Save to file storage (non-blocking, with timeout)
   try {
-    await saveToFileStorage(supabase, fundId, companyName, payload)
+    await Promise.race([
+      saveToFileStorage(supabase, fundId, companyName, payload),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('File storage save timed out after 15s')), 15_000)),
+    ])
   } catch (err) {
     console.error('[pipeline] File storage save failed (non-blocking):', err)
   }
