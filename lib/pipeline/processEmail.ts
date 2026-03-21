@@ -33,6 +33,7 @@ export interface PostmarkPayload {
   Subject?: string
   TextBody?: string
   HtmlBody?: string
+  MessageID?: string
   Attachments?: Array<{
     Name: string
     ContentType: string
