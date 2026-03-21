@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { InboundEmail, Company } from '@/lib/types/database'
 import { dbError } from '@/lib/api-error'
 
 const DEFAULT_PAGE_SIZE = 50
 const MAX_PAGE_SIZE = 1000
+const STALE_PROCESSING_MINUTES = 10
 
 type EmailListRow = Pick<
   InboundEmail,
@@ -17,6 +19,15 @@ export async function GET(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Unstick emails that have been "processing" for too long (serverless timeout)
+  const staleCutoff = new Date(Date.now() - STALE_PROCESSING_MINUTES * 60 * 1000).toISOString()
+  const admin = createAdminClient()
+  await admin
+    .from('inbound_emails')
+    .update({ processing_status: 'failed', processing_error: 'Processing timed out' })
+    .eq('processing_status', 'processing')
+    .lt('received_at', staleCutoff)
 
   const sp = req.nextUrl.searchParams
   const status = sp.get('status')
