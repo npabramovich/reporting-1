@@ -8,12 +8,20 @@ import { classifyDocumentHeuristic } from '@/lib/memo-agent/heuristic-classify'
 
 /**
  * Walk a Google Drive folder and ingest every file into the deal's deal room.
- * Each file is downloaded, uploaded to the diligence-documents bucket, and a
- * row is inserted in diligence_documents with drive_file_id + drive_source_url
- * set so we can detect re-imports later.
  *
- * This is a synchronous endpoint. For folders >50 files, the user should split
- * across multiple imports or rely on Phase 4's job runner once that lands.
+ * Returns a streaming NDJSON response so the client can show live progress:
+ *   {type:'log',message:string}        — human-readable status line
+ *   {type:'listed',count:number}       — total files found across all subfolders
+ *   {type:'progress',current:number,total:number,file:string,relativePath:string}
+ *   {type:'file_imported',file:string} — one document successfully ingested
+ *   {type:'file_skipped',file:string,reason:string}
+ *   {type:'file_error',file:string,error:string}
+ *   {type:'done',imported:number,skipped:number,errors:number}
+ *
+ * Upfront validation (auth, deal scope, Drive credentials, initial listing)
+ * still returns standard JSON 4xx/5xx — the stream only starts after listing
+ * succeeds, so the client knows once headers arrive that processing is
+ * underway.
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -29,7 +37,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
   const fundId = (membership as any).fund_id as string
 
-  // Verify deal.
   const { data: deal } = await admin
     .from('diligence_deals')
     .select('id')
@@ -40,16 +47,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const body = await req.json().catch(() => ({}))
   const folderUrl = typeof body.folder_url === 'string' ? body.folder_url : ''
-  // Require the full Drive folder URL — accepting a raw folder_id let callers
-  // skip URL-format validation. The OAuth scope still permits the fund's
-  // token to read any folder it can see, but requiring a URL surfaces intent
-  // and makes audit logs more legible.
   const folderId = parseDriveFolderUrl(folderUrl)
   if (!folderId) {
     return NextResponse.json({ error: 'Provide a valid Google Drive folder URL (must contain /folders/<id>)' }, { status: 400 })
   }
 
-  // Resolve Google credentials + access token.
   const { data: settings } = await admin
     .from('fund_settings')
     .select('google_refresh_token_encrypted, encryption_key_encrypted')
@@ -78,98 +80,140 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Token refresh failed' }, { status: 502 })
   }
 
-  // List files recursively across subfolders. Data rooms typically have
-  // nested structure (Financials/, Legal/, Team/) — this pass walks them all.
-  let files: Awaited<ReturnType<typeof listFilesRecursive>>
-  try {
-    files = await listFilesRecursive(accessToken, folderId)
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Drive list failed' }, { status: 502 })
-  }
+  // From here on we stream. Listing runs inside the stream so the client sees
+  // the "walking folders" message immediately rather than waiting for the
+  // full recursive walk to complete before headers flush.
+  const dealId = params.id
+  const userId = user.id
 
-  if (files.length === 0) {
-    return NextResponse.json({ ok: true, imported: 0, skipped: 0 })
-  }
-
-  // Skip files already imported by drive_file_id.
-  const driveIds = files.map(f => f.id)
-  const { data: existing } = await admin
-    .from('diligence_documents')
-    .select('drive_file_id')
-    .eq('deal_id', params.id)
-    .eq('fund_id', fundId)
-    .in('drive_file_id', driveIds)
-  const seen = new Set(((existing as any[]) ?? []).map(r => r.drive_file_id as string))
-
-  let imported = 0
-  let skipped = 0
-  const errors: string[] = []
-
-  for (const f of files) {
-    if (seen.has(f.id)) {
-      skipped++
-      continue
-    }
-
-    // Skip Google Docs / Sheets / Slides — they need export, not raw download.
-    // (We can add export-as-pdf later; for v1, partner can save them as files manually.)
-    if (f.mimeType.startsWith('application/vnd.google-apps')) {
-      errors.push(`${f.name}: Google-native file (export not yet supported)`)
-      continue
-    }
-
-    try {
-      const buffer = await downloadFile(accessToken, f.id)
-      // Prefix the stored file_name with the subfolder path so partners can
-      // see which part of the data room each doc came from (e.g.
-      // "Financials/Q1/model.xlsx"). The actual storage object stays under
-      // the deal-scoped path regardless of subfolder.
-      const sanitizedPath = (f.relativePath ?? '').replace(/[\\:*?"<>|]/g, '_').replace(/\.\./g, '_').slice(0, 150)
-      const baseName = f.name.replace(/[\/\\:*?"<>|]/g, '_').replace(/\.\./g, '_').slice(0, 200)
-      const safeName = sanitizedPath ? `${sanitizedPath}/${baseName}` : baseName
-      const ext = (baseName.match(/\.([a-z0-9]+)$/i)?.[1] ?? 'bin').toLowerCase()
-      // Storage path stays flat (one folder per deal) — only file_name carries
-      // the subfolder context. Replace `/` in the storage key portion since
-      // Supabase Storage treats `/` as a folder separator.
-      const storageKeyName = baseName
-      const storagePath = `${params.id}/${Date.now()}_${f.id.slice(0, 8)}_${storageKeyName}`
-
-      const { error: uploadErr } = await admin.storage
-        .from('diligence-documents')
-        .upload(storagePath, buffer, { contentType: f.mimeType, upsert: false })
-      if (uploadErr) {
-        errors.push(`${f.name}: ${uploadErr.message}`)
-        continue
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    async start(controller) {
+      function emit(event: Record<string, unknown>) {
+        controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'))
       }
 
-      const { detected_type, confidence } = classifyDocumentHeuristic(safeName, f.mimeType)
+      let imported = 0
+      let skipped = 0
+      let errorCount = 0
 
-      const { error: insertErr } = await admin
-        .from('diligence_documents')
-        .insert({
-          deal_id: params.id,
-          fund_id: fundId,
-          storage_path: storagePath,
-          file_name: safeName,
-          file_format: ext,
-          file_size_bytes: buffer.length,
-          detected_type,
-          type_confidence: confidence,
-          parse_status: 'pending',
-          drive_file_id: f.id,
-          drive_source_url: f.webViewLink ?? null,
-          uploaded_by: user.id,
-        } as any)
-      if (insertErr) {
-        await admin.storage.from('diligence-documents').remove([storagePath]).catch(() => {})
-        errors.push(`${f.name}: ${insertErr.message}`)
-        continue
+      try {
+        emit({ type: 'log', message: 'Walking Drive folders…' })
+        const files = await listFilesRecursive(accessToken, folderId)
+        emit({ type: 'listed', count: files.length })
+
+        if (files.length === 0) {
+          emit({ type: 'log', message: 'No files found in folder.' })
+          emit({ type: 'done', imported: 0, skipped: 0, errors: 0 })
+          controller.close()
+          return
+        }
+
+        emit({ type: 'log', message: `Found ${files.length} file${files.length === 1 ? '' : 's'} across subfolders.` })
+
+        // Dedupe pass — fetch existing drive_file_ids in one query.
+        const driveIds = files.map(f => f.id)
+        const { data: existing } = await admin
+          .from('diligence_documents')
+          .select('drive_file_id')
+          .eq('deal_id', dealId)
+          .eq('fund_id', fundId)
+          .in('drive_file_id', driveIds)
+        const seen = new Set(((existing as any[]) ?? []).map(r => r.drive_file_id as string))
+
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i]
+          const displayName = f.relativePath ? `${f.relativePath}/${f.name}` : f.name
+          emit({
+            type: 'progress',
+            current: i + 1,
+            total: files.length,
+            file: f.name,
+            relativePath: f.relativePath ?? '',
+          })
+
+          if (seen.has(f.id)) {
+            skipped++
+            emit({ type: 'file_skipped', file: displayName, reason: 'already imported' })
+            continue
+          }
+
+          if (f.mimeType.startsWith('application/vnd.google-apps')) {
+            errorCount++
+            emit({ type: 'file_error', file: displayName, error: 'Google-native file (export not supported)' })
+            continue
+          }
+
+          try {
+            const buffer = await downloadFile(accessToken, f.id)
+            // Strip control characters (NUL, tab, CR, LF, etc.) in addition
+            // to the path-traversal and reserved characters. Drive permits
+            // newlines and other control chars in folder/file names; left
+            // unstripped they could later forge CRLF in HTTP headers (e.g.
+            // Content-Disposition when serving downloads).
+            const sanitizedPath = (f.relativePath ?? '').replace(/[\x00-\x1f\x7f\\:*?"<>|]/g, '_').replace(/\.\./g, '_').slice(0, 150)
+            const baseName = f.name.replace(/[\x00-\x1f\x7f\/\\:*?"<>|]/g, '_').replace(/\.\./g, '_').slice(0, 200)
+            const safeName = sanitizedPath ? `${sanitizedPath}/${baseName}` : baseName
+            const ext = (baseName.match(/\.([a-z0-9]+)$/i)?.[1] ?? 'bin').toLowerCase()
+            const storagePath = `${dealId}/${Date.now()}_${f.id.slice(0, 8)}_${baseName}`
+
+            const { error: uploadErr } = await admin.storage
+              .from('diligence-documents')
+              .upload(storagePath, buffer, { contentType: f.mimeType, upsert: false })
+            if (uploadErr) {
+              errorCount++
+              emit({ type: 'file_error', file: displayName, error: uploadErr.message })
+              continue
+            }
+
+            const { detected_type, confidence } = classifyDocumentHeuristic(safeName, f.mimeType)
+
+            const { error: insertErr } = await admin
+              .from('diligence_documents')
+              .insert({
+                deal_id: dealId,
+                fund_id: fundId,
+                storage_path: storagePath,
+                file_name: safeName,
+                file_format: ext,
+                file_size_bytes: buffer.length,
+                detected_type,
+                type_confidence: confidence,
+                parse_status: 'pending',
+                drive_file_id: f.id,
+                drive_source_url: f.webViewLink ?? null,
+                uploaded_by: userId,
+              } as any)
+            if (insertErr) {
+              await admin.storage.from('diligence-documents').remove([storagePath]).catch(() => {})
+              errorCount++
+              emit({ type: 'file_error', file: displayName, error: insertErr.message })
+              continue
+            }
+
+            imported++
+            emit({ type: 'file_imported', file: displayName })
+          } catch (err) {
+            errorCount++
+            emit({ type: 'file_error', file: displayName, error: err instanceof Error ? err.message : 'unknown error' })
+          }
+        }
+
+        emit({ type: 'done', imported, skipped, errors: errorCount })
+      } catch (err) {
+        emit({ type: 'fatal', error: err instanceof Error ? err.message : 'Drive import failed' })
+      } finally {
+        controller.close()
       }
-      imported++
-    } catch (err) {
-      errors.push(`${f.name}: ${err instanceof Error ? err.message : 'unknown error'}`)
-    }
-  }
+    },
+  })
 
-  return NextResponse.json({ ok: true, imported, skipped, errors })
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson',
+      'Cache-Control': 'no-store',
+      // Disable buffering on reverse proxies — Vercel honors this.
+      'X-Accel-Buffering': 'no',
+    },
+  })
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { safeWebUrl } from '@/lib/deals/submission-validation'
 
 const VALID_DEAL_STATUSES = ['active', 'passed', 'won', 'lost', 'on_hold'] as const
 type DealStatus = typeof VALID_DEAL_STATUSES[number]
@@ -74,7 +75,14 @@ export async function POST(req: NextRequest) {
     insert.lead_partner_id = body.lead_partner_id
   }
   if (typeof body.drive_folder_url === 'string' && body.drive_folder_url.trim()) {
-    insert.drive_folder_url = body.drive_folder_url.trim()
+    // Validate scheme — only http(s). Otherwise an attacker could persist
+    // `javascript:` or `data:` URLs that fire when rendered as an <a href>
+    // anywhere in the deal UI (the Data Room pre-fill, future links, etc.).
+    const safe = safeWebUrl(body.drive_folder_url.trim())
+    if (!safe) {
+      return NextResponse.json({ error: 'drive_folder_url must be a valid http(s) URL' }, { status: 400 })
+    }
+    insert.drive_folder_url = safe
   }
 
   const { data, error } = await admin

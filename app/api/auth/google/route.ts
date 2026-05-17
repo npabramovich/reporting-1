@@ -38,8 +38,15 @@ export async function GET(req: NextRequest) {
   }
   const redirectUri = `${baseUrl}/api/auth/google/callback`
 
-  // Pass return_to in state so callback knows where to redirect
-  const returnTo = req.nextUrl.searchParams.get('return_to') || '/settings'
+  // Pass return_to in state so callback knows where to redirect.
+  // Cap the length and re-validate the open-redirect guard so a very long or
+  // malformed `return_to` query param can't blow past Google's URL-length
+  // limit on the auth request (silent OAuth failure) or smuggle a protocol-
+  // relative redirect target.
+  const rawReturnTo = req.nextUrl.searchParams.get('return_to') ?? ''
+  const returnTo = rawReturnTo.startsWith('/') && !rawReturnTo.startsWith('//')
+    ? rawReturnTo.slice(0, 200)
+    : '/settings'
   const state = Buffer.from(JSON.stringify({
     fund_id: membership.fund_id,
     return_to: returnTo,

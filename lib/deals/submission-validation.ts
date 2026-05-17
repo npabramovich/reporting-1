@@ -39,9 +39,14 @@ export const ALLOWED_ATTACHMENT_EXTS = new Set([
 /** Stricter than `s.includes('@')`. Rejects obvious garbage; RFC 5322 is byzantine and not worth fully enforcing. */
 export const EMAIL_RE = /^[^\s<>@,;:\\"\[\]()]+@[^\s<>@,;:\\"\[\]()]+\.[^\s<>@,;:\\"\[\]()]+$/
 
-/** Sanitize a filename: strip path separators + control characters, collapse `..`, cap length. */
+/**
+ * Sanitize a filename: strip control characters (NUL, CR, LF, etc.), path
+ * separators, and Windows-reserved punctuation; collapse `..`; cap length.
+ * Control-character stripping defends against CRLF injection if the filename
+ * later flows into an HTTP header (e.g. Content-Disposition on download).
+ */
 export function sanitizeFilename(name: string): string {
-  return name.replace(/[\/\\:*?"<>|]/g, '_').replace(/\.\./g, '_').slice(0, 200)
+  return name.replace(/[\x00-\x1f\x7f\/\\:*?"<>|]/g, '_').replace(/\.\./g, '_').slice(0, 200)
 }
 
 /** Extract the lowercased extension from a filename, or empty string. */

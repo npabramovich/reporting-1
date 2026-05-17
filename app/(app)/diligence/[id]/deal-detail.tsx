@@ -419,28 +419,94 @@ function DriveImportDialog({ open, onOpenChange, dealId, initialFolderUrl, onImp
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Live progress state populated from the streamed import events.
+  const [progress, setProgress] = useState<{ current: number; total: number; file: string; relativePath: string } | null>(null)
+  const [logLines, setLogLines] = useState<string[]>([])
+
+  function appendLog(line: string) {
+    setLogLines(prev => {
+      const next = [...prev, line]
+      return next.slice(-50)  // cap the visible tail
+    })
+  }
 
   async function submit() {
     if (!folderUrl.trim()) return
     setImporting(true)
     setError(null)
     setResult(null)
+    setProgress(null)
+    setLogLines([])
     try {
       const res = await fetch(`/api/diligence/${dealId}/documents/from-drive`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folder_url: folderUrl }),
       })
-      const body = await res.json()
+      // Validation/auth errors come back as plain JSON, not a stream.
       if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
         throw new Error(body.error ?? 'Import failed')
       }
-      setResult({ imported: body.imported ?? 0, skipped: body.skipped ?? 0, errors: body.errors ?? [] })
-      onImported(body.imported ?? 0)
+      if (!res.body) throw new Error('Import stream not available')
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      const errorList: string[] = []
+      let final: { imported: number; skipped: number; errors: number } | null = null
+      let fatal: string | null = null
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.trim()) continue
+          let event: any
+          try { event = JSON.parse(line) } catch { continue }
+          switch (event.type) {
+            case 'log':
+              appendLog(event.message)
+              break
+            case 'listed':
+              appendLog(`Listed ${event.count} file${event.count === 1 ? '' : 's'}.`)
+              break
+            case 'progress':
+              setProgress({ current: event.current, total: event.total, file: event.file, relativePath: event.relativePath ?? '' })
+              break
+            case 'file_imported':
+              appendLog(`✓ ${event.file}`)
+              break
+            case 'file_skipped':
+              appendLog(`↷ ${event.file} (${event.reason})`)
+              break
+            case 'file_error':
+              appendLog(`✗ ${event.file}: ${event.error}`)
+              errorList.push(`${event.file}: ${event.error}`)
+              break
+            case 'done':
+              final = { imported: event.imported, skipped: event.skipped, errors: event.errors }
+              break
+            case 'fatal':
+              fatal = event.error
+              break
+          }
+        }
+      }
+
+      if (fatal) throw new Error(fatal)
+      if (final) {
+        setResult({ imported: final.imported, skipped: final.skipped, errors: errorList })
+        onImported(final.imported)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed')
     } finally {
       setImporting(false)
+      setProgress(null)
     }
   }
 
@@ -465,6 +531,36 @@ function DriveImportDialog({ open, onOpenChange, dealId, initialFolderUrl, onImp
           <li>Only files the connected Google account can access are visible. Shared folders work if your account has at least view access.</li>
         </ul>
         {error && <p className="text-sm text-destructive mt-2">{error}</p>}
+
+        {/* Live progress while the import streams. */}
+        {importing && progress && (
+          <div className="mt-3">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="font-mono truncate min-w-0 mr-2">
+                {progress.relativePath ? `${progress.relativePath}/` : ''}{progress.file}
+              </span>
+              <span className="text-muted-foreground shrink-0">{progress.current} / {progress.total}</span>
+            </div>
+            <div className="h-1.5 bg-muted rounded overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${(progress.current / Math.max(progress.total, 1)) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Streaming log tail — shows the most recent ~10 lines while importing. */}
+        {(importing || logLines.length > 0) && (
+          <div className="mt-3 rounded-md border bg-muted/30 p-2 max-h-40 overflow-y-auto text-[11px] font-mono space-y-0.5">
+            {logLines.length === 0 ? (
+              <p className="text-muted-foreground italic">Connecting…</p>
+            ) : (
+              logLines.map((l, i) => <div key={i} className="truncate">{l}</div>)
+            )}
+          </div>
+        )}
+
         {result && (
           <div className="mt-3 text-sm">
             <p>Imported: <span className="font-medium">{result.imported}</span> · Skipped: <span className="font-medium">{result.skipped}</span></p>
@@ -477,7 +573,7 @@ function DriveImportDialog({ open, onOpenChange, dealId, initialFolderUrl, onImp
           </div>
         )}
         <div className="flex justify-end gap-2 mt-4">
-          <Button variant="outline" size="sm" onClick={() => { onOpenChange(false); setFolderUrl(''); setResult(null); setError(null) }} disabled={importing}>
+          <Button variant="outline" size="sm" onClick={() => { onOpenChange(false); setFolderUrl(''); setResult(null); setError(null); setLogLines([]); setProgress(null) }} disabled={importing}>
             Close
           </Button>
           <Button variant="outline" size="sm" onClick={submit} disabled={importing || !folderUrl.trim()}>

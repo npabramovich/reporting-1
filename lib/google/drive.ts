@@ -104,10 +104,15 @@ export async function listFiles(accessToken: string, folderId: string): Promise<
 export async function listFilesRecursive(
   accessToken: string,
   rootFolderId: string,
-  opts: { maxDepth?: number; maxFiles?: number } = {}
+  opts: { maxDepth?: number; maxFiles?: number; maxFolders?: number } = {}
 ): Promise<DriveFileWithMeta[]> {
   const maxDepth = opts.maxDepth ?? 5
   const maxFiles = opts.maxFiles ?? 500
+  // Cap on total folders we visit. Prevents a pathological tree of mostly-
+  // empty subfolders from inflating the BFS queue and burning Drive API
+  // quota even when the maxFiles cap would eventually halt the walk. With
+  // typical data rooms (a dozen subfolders max) this never hits.
+  const maxFolders = opts.maxFolders ?? 200
   if (!rootFolderId || !/^[a-zA-Z0-9_-]+$/.test(rootFolderId)) {
     throw new Error('Invalid folder ID')
   }
@@ -119,9 +124,11 @@ export async function listFilesRecursive(
   const queue: Array<{ folderId: string; path: string; depth: number }> = [
     { folderId: rootFolderId, path: '', depth: 0 },
   ]
+  let foldersVisited = 0
 
-  while (queue.length > 0 && out.length < maxFiles) {
+  while (queue.length > 0 && out.length < maxFiles && foldersVisited < maxFolders) {
     const { folderId, path, depth } = queue.shift()!
+    foldersVisited++
 
     // 1. Files directly in this folder.
     const files = await listFiles(accessToken, folderId)
@@ -130,11 +137,14 @@ export async function listFilesRecursive(
       out.push({ ...f, relativePath: path })
     }
 
-    // 2. Subfolders — enqueue if we have depth budget left.
-    if (depth < maxDepth) {
+    // 2. Subfolders — enqueue if we have depth budget left and haven't
+    //    exhausted the folder cap. We check the cap when enqueueing rather
+    //    than when dequeueing so the queue itself can't grow unboundedly.
+    if (depth < maxDepth && foldersVisited + queue.length < maxFolders) {
       try {
         const subfolders = await listFolders(accessToken, folderId)
         for (const sub of subfolders) {
+          if (foldersVisited + queue.length >= maxFolders) break
           queue.push({
             folderId: sub.id,
             path: path ? `${path}/${sub.name}` : sub.name,
