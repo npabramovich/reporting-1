@@ -54,11 +54,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL(`${returnTo}?drive_error=not_configured`, req.url))
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+  // Must produce the same string as /api/auth/google built — Google enforces
+  // exact-match between the initial redirect_uri and the one supplied at
+  // token exchange. Normalize https + trim trailing slash so a misconfigured
+  // env var can't desync the two halves of the flow.
+  let baseUrl = process.env.NEXT_PUBLIC_APP_URL
     ? process.env.NEXT_PUBLIC_APP_URL
     : process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000'
+  baseUrl = baseUrl.replace(/\/$/, '')
+  if (baseUrl.startsWith('http://') && !baseUrl.startsWith('http://localhost')) {
+    baseUrl = baseUrl.replace(/^http:\/\//, 'https://')
+  }
   const redirectUri = `${baseUrl}/api/auth/google/callback`
 
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {

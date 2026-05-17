@@ -24,12 +24,18 @@ export async function GET(req: NextRequest) {
     }, { status: 400 })
   }
 
-  // Build the redirect URI from the request
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+  // Build the redirect URI. Google's OAuth requires HTTPS in production; if
+  // NEXT_PUBLIC_APP_URL was misconfigured as http://, upgrade it. Trailing
+  // slashes are stripped so the redirect URI matches what's registered.
+  let baseUrl = process.env.NEXT_PUBLIC_APP_URL
     ? process.env.NEXT_PUBLIC_APP_URL
     : process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000'
+  baseUrl = baseUrl.replace(/\/$/, '')
+  if (baseUrl.startsWith('http://') && !baseUrl.startsWith('http://localhost')) {
+    baseUrl = baseUrl.replace(/^http:\/\//, 'https://')
+  }
   const redirectUri = `${baseUrl}/api/auth/google/callback`
 
   // Pass return_to in state so callback knows where to redirect
@@ -52,7 +58,11 @@ export async function GET(req: NextRequest) {
     // gmail.send permits outbound email send for asks/letters.
     scope: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly https://www.googleapis.com/auth/gmail.send',
     access_type: 'offline',
-    prompt: 'consent',
+    // `consent` forces the consent screen so refresh tokens are re-issued
+    // even if the user previously authorized. `select_account` forces the
+    // account picker first, useful when the browser has multiple Google
+    // sessions and the default isn't the one that should own the connection.
+    prompt: 'consent select_account',
     state,
   })
 
