@@ -207,6 +207,9 @@ function NewDealDialog({ open, onOpenChange, onCreated }: {
           name,
           sector: sector || undefined,
           stage_at_consideration: stage || undefined,
+          // Persist the Drive URL on the deal so it's recoverable from the
+          // Data Room tab even if the initial fire-and-forget import below fails.
+          drive_folder_url: folderUrl.trim() || undefined,
         }),
       })
       if (!res.ok) {

@@ -43,7 +43,14 @@ export async function GET(req: NextRequest) {
     client_id: creds.clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly https://www.googleapis.com/auth/gmail.send',
+    // drive.readonly lets the app read any file the user can access in Drive
+    // — required for "import a folder by URL" to read the contents of files
+    // the user didn't explicitly pick via Google Picker. drive.file alone
+    // returns 403 on direct API calls to files the app didn't create.
+    // drive.file is also kept so files uploaded TO Drive by the app (e.g.
+    // rendered memo Google Docs) stay tracked as app-owned.
+    // gmail.send permits outbound email send for asks/letters.
+    scope: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly https://www.googleapis.com/auth/gmail.send',
     access_type: 'offline',
     prompt: 'consent',
     state,

@@ -26,6 +26,7 @@ interface Deal {
   current_memo_stage: string
   lead_partner_id: string | null
   promoted_company_id: string | null
+  drive_folder_url: string | null
   created_at: string
   updated_at: string
 }
@@ -133,7 +134,7 @@ export function DealDetail({ deal: initial, initialDocuments, latestDraft, isAdm
             <DecisionTab deal={deal} documentCount={initialDocuments.length} latestDraft={latestDraft} isAdmin={isAdmin} onJumpToTab={setActiveTab} />
           )}
           {activeTab === 'Data Room' && (
-            <DealRoomTab dealId={deal.id} initialDocuments={initialDocuments} />
+            <DealRoomTab dealId={deal.id} initialDocuments={initialDocuments} initialDriveFolderUrl={deal.drive_folder_url} />
           )}
           {activeTab === 'Diligence' && <AgentStageTab dealId={deal.id} stage="research" />}
           {activeTab === 'Partner Q&A' && <QATabLauncher dealId={deal.id} />}
@@ -178,7 +179,15 @@ function DecisionTab({ deal, documentCount, latestDraft, isAdmin, onJumpToTab }:
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <MemoAgentCard dealId={deal.id} latestDraft={latestDraft} onJumpToTab={onJumpToTab} />
+      <MemoAgentCard
+        dealId={deal.id}
+        latestDraft={latestDraft}
+        onJumpToTab={onJumpToTab}
+        onPromote={promote}
+        canPromote={isAdmin && deal.deal_status !== 'won' && !deal.promoted_company_id}
+        promoted={deal.promoted_company_id ? { companyId: deal.promoted_company_id } : null}
+        promoting={promoting}
+      />
 
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Details</CardTitle></CardHeader>
@@ -189,28 +198,6 @@ function DecisionTab({ deal, documentCount, latestDraft, isAdmin, onJumpToTab }:
           <Row k="Documents" v={String(documentCount)} />
         </CardContent>
       </Card>
-
-      {isAdmin && deal.deal_status !== 'won' && !deal.promoted_company_id && (
-        <Card className="md:col-span-2">
-          <CardHeader className="pb-3"><CardTitle className="text-base">Promote to portfolio</CardTitle></CardHeader>
-          <CardContent className="text-sm">
-            <p className="text-muted-foreground mb-3">When you decide to invest, promote the deal — this creates a portfolio company linked to this record.</p>
-            <Button onClick={promote} disabled={promoting} variant="outline" size="sm">
-              {promoting && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-              Promote to portfolio company
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {deal.promoted_company_id && (
-        <Card className="md:col-span-2 border-green-500/30 bg-green-50/50 dark:bg-green-900/10">
-          <CardContent className="py-3 text-sm">
-            <Check className="h-4 w-4 text-green-600 inline mr-1" /> Promoted to portfolio.{' '}
-            <Link href={`/companies/${deal.promoted_company_id}`} className="underline">View company →</Link>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }
@@ -272,7 +259,7 @@ const DOC_TYPE_OPTIONS = [
   { value: 'other', label: 'Other' },
 ]
 
-function DealRoomTab({ dealId, initialDocuments }: { dealId: string; initialDocuments: DiligenceDocument[] }) {
+function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { dealId: string; initialDocuments: DiligenceDocument[]; initialDriveFolderUrl: string | null }) {
   const confirm = useConfirm()
   const [documents, setDocuments] = useState(initialDocuments)
   const [uploading, setUploading] = useState(false)
@@ -410,6 +397,7 @@ function DealRoomTab({ dealId, initialDocuments }: { dealId: string; initialDocu
         open={driveOpen}
         onOpenChange={setDriveOpen}
         dealId={dealId}
+        initialFolderUrl={initialDriveFolderUrl}
         onImported={imported => {
           // Refresh documents list — easier than appending each.
           fetch(`/api/diligence/${dealId}/documents`).then(r => r.ok ? r.json() : []).then(setDocuments)
@@ -420,13 +408,14 @@ function DealRoomTab({ dealId, initialDocuments }: { dealId: string; initialDocu
   )
 }
 
-function DriveImportDialog({ open, onOpenChange, dealId, onImported }: {
+function DriveImportDialog({ open, onOpenChange, dealId, initialFolderUrl, onImported }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   dealId: string
+  initialFolderUrl: string | null
   onImported: (count: number) => void
 }) {
-  const [folderUrl, setFolderUrl] = useState('')
+  const [folderUrl, setFolderUrl] = useState(initialFolderUrl ?? '')
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -734,7 +723,15 @@ function JobStatusLine({ job, kind, error }: { job: AgentStatus['latest_job']; k
 // Memo Agent overview card — mirrors the Analyst card on Company detail
 // ---------------------------------------------------------------------------
 
-function MemoAgentCard({ dealId, latestDraft, onJumpToTab }: { dealId: string; latestDraft: LatestDraft; onJumpToTab?: (tab: Tab) => void }) {
+function MemoAgentCard({ dealId, latestDraft, onJumpToTab, onPromote, canPromote, promoted, promoting }: {
+  dealId: string
+  latestDraft: LatestDraft
+  onJumpToTab?: (tab: Tab) => void
+  onPromote?: () => void
+  canPromote?: boolean
+  promoted?: { companyId: string } | null
+  promoting?: boolean
+}) {
   const { status } = useAgentStatus(dealId)
   const job = status?.latest_job
   const inFlight = job && (job.status === 'pending' || job.status === 'running')
@@ -749,40 +746,31 @@ function MemoAgentCard({ dealId, latestDraft, onJumpToTab }: { dealId: string; l
       finalized_at: latestDraft.finalized_at,
     } : null)) as any
 
-  function chip(label: string, on: boolean) {
-    return (
-      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${on ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
-        {on ? <Check className="h-2.5 w-2.5" /> : null}
-        {label}
-      </span>
-    )
-  }
-
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-base">Memo Agent</CardTitle>
+        <CardTitle className="text-base">Due Diligence Process</CardTitle>
         {ld?.draft_version && <span className="text-[10px] font-mono text-muted-foreground">{ld.draft_version}</span>}
       </CardHeader>
-      <CardContent className="text-sm space-y-3">
+      <CardContent className="text-sm space-y-1">
         {!ld ? (
           <p className="text-muted-foreground italic">No drafts yet. Run ingestion to start.</p>
         ) : (
           <>
-            <div className="flex flex-wrap gap-1">
-              {chip('Ingest', ld.has_ingestion)}
-              {chip('Research', ld.has_research)}
-              {chip('Q&A', ld.has_qa)}
-              {chip('Draft', ld.has_memo_draft)}
-              {ld.finalized_at && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"><Lock className="h-2.5 w-2.5 inline mr-0.5" />Final</span>}
-            </div>
+            <Row k="Ingest"   v={stageStatus(ld.has_ingestion)} />
+            <Row k="Research" v={stageStatus(ld.has_research)} />
+            <Row k="Q&A"      v={stageStatus(ld.has_qa)} />
+            <Row k="Draft"    v={stageStatus(ld.has_memo_draft)} />
+            <Row k="Final"    v={ld.finalized_at ? 'Locked' : 'Not started'} />
+
             {inFlight && (
-              <div className="text-xs text-muted-foreground inline-flex items-center gap-1">
+              <div className="text-xs text-muted-foreground inline-flex items-center gap-1 pt-1">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 {job!.kind} {job!.status}: {job!.progress_message ?? '…'}
               </div>
             )}
-            <div className="flex flex-wrap gap-2 pt-1">
+
+            <div className="flex flex-wrap gap-2 pt-3">
               {!ld.has_ingestion && onJumpToTab && (
                 <button
                   type="button"
@@ -829,9 +817,38 @@ function MemoAgentCard({ dealId, latestDraft, onJumpToTab }: { dealId: string; l
             </div>
           </>
         )}
+
+        {(canPromote || promoted) && (
+          <div className="mt-4 pt-3 border-t flex items-center justify-between gap-3">
+            <div className="text-xs text-muted-foreground">
+              {promoted
+                ? 'Promoted to portfolio.'
+                : 'When you decide to invest, promote the deal to create a portfolio company.'}
+            </div>
+            {promoted ? (
+              <Link href={`/companies/${promoted.companyId}`} className="text-xs underline text-muted-foreground hover:text-foreground">
+                View company →
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={onPromote}
+                disabled={promoting}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-background text-xs hover:bg-muted/30 disabled:opacity-50"
+              >
+                {promoting && <Loader2 className="h-3 w-3 animate-spin" />}
+                Promote to portfolio →
+              </button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
+}
+
+function stageStatus(done: boolean): string {
+  return done ? 'Done' : 'Not started'
 }
 
 // ---------------------------------------------------------------------------

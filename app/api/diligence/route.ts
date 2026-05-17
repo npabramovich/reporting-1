@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   let query = admin
     .from('diligence_deals')
-    .select('id, fund_id, name, sector, stage_at_consideration, deal_status, current_memo_stage, lead_partner_id, promoted_company_id, created_at, updated_at')
+    .select('id, fund_id, name, sector, stage_at_consideration, deal_status, current_memo_stage, lead_partner_id, promoted_company_id, drive_folder_url, created_at, updated_at')
     .eq('fund_id', (membership as any).fund_id)
     .order('updated_at', { ascending: false })
     .limit(limit)
@@ -72,6 +72,9 @@ export async function POST(req: NextRequest) {
   }
   if (typeof body.lead_partner_id === 'string' && body.lead_partner_id) {
     insert.lead_partner_id = body.lead_partner_id
+  }
+  if (typeof body.drive_folder_url === 'string' && body.drive_folder_url.trim()) {
+    insert.drive_folder_url = body.drive_folder_url.trim()
   }
 
   const { data, error } = await admin

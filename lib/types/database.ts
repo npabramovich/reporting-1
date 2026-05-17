@@ -1088,6 +1088,7 @@ export type Database = {
           current_memo_stage: string
           lead_partner_id: string | null
           promoted_company_id: string | null
+          drive_folder_url: string | null
           notes_summary: string | null
           created_at: string
           updated_at: string
@@ -1104,6 +1105,7 @@ export type Database = {
           current_memo_stage?: string
           lead_partner_id?: string | null
           promoted_company_id?: string | null
+          drive_folder_url?: string | null
           notes_summary?: string | null
           created_at?: string
           updated_at?: string
@@ -1120,6 +1122,7 @@ export type Database = {
           current_memo_stage?: string
           lead_partner_id?: string | null
           promoted_company_id?: string | null
+          drive_folder_url?: string | null
           notes_summary?: string | null
           created_at?: string
           updated_at?: string
