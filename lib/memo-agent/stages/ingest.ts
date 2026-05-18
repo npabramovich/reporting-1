@@ -106,13 +106,21 @@ export async function runIngestDocs(params: {
     detected_type: f.detected_type,
   }))
 
-  await note(`Extracting claims from ${parsed.length} document${parsed.length === 1 ? '' : 's'} in parallel…`)
+  await note(`Extracting claims from ${parsed.length} document${parsed.length === 1 ? '' : 's'} (5 at a time)…`)
   const warnings: string[] = []
   let completed = 0
 
-  const perDocResults = await Promise.all(parsed.map(async (file): Promise<IngestionDocumentOutput | null> => {
+  // Cap concurrent AI calls. Firing all 17+ in true parallel can trip
+  // Anthropic's per-minute input-token limit, causing some calls to fail
+  // even when the docs themselves are fine. Chunking to 5 keeps us under
+  // typical tier 1 caps while still finishing the fan-out comfortably
+  // inside the 300s function budget.
+  const CONCURRENCY = 5
+  const processFile = async (file: ParsedFile): Promise<IngestionDocumentOutput | null> => {
     if (file.errors.length > 0 && !file.text && !file.base64) {
-      warnings.push(`Skipping ${file.file_name}: ${file.errors.join('; ')}`)
+      const reason = file.errors.join('; ')
+      warnings.push(`Skipping ${file.file_name}: ${reason}`)
+      // Don't double-push to file.errors — already populated by the parser.
       return null
     }
 
@@ -138,12 +146,26 @@ export async function runIngestDocs(params: {
       return doc
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
+      const detail = `AI extraction failed: ${msg}`
       warnings.push(`AI call failed for ${file.file_name}: ${msg}`)
+      // Attach the specific failure reason to the file so it lands in
+      // diligence_documents.parse_notes — replaces the unhelpful generic
+      // "AI extraction failed" message users were seeing.
+      file.errors.push(detail)
       completed += 1
       await note(`Extracted ${completed}/${parsed.length}: ${file.file_name} (failed)`)
       return null
     }
-  }))
+  }
+
+  const perDocResults: Array<IngestionDocumentOutput | null> = new Array(parsed.length).fill(null)
+  for (let i = 0; i < parsed.length; i += CONCURRENCY) {
+    const slice = parsed.slice(i, i + CONCURRENCY)
+    const chunkResults = await Promise.all(slice.map(processFile))
+    for (let j = 0; j < chunkResults.length; j++) {
+      perDocResults[i + j] = chunkResults[j]
+    }
+  }
 
   const documents = perDocResults.filter((d): d is IngestionDocumentOutput => d !== null)
 
