@@ -119,7 +119,9 @@ export async function runIngestDocs(params: {
     try {
       const { text, usage } = await provider.createMessage({
         model,
-        maxTokens: 8192,
+        // Bumped from 8192 — large docs with many claims were truncating
+        // mid-JSON, which then failed JSON.parse and dropped the whole doc.
+        maxTokens: 12288,
         system,
         content: buildIngestDocContent({ dealName, file, manifest }),
       })
@@ -146,9 +148,13 @@ export async function runIngestDocs(params: {
   const documents = perDocResults.filter((d): d is IngestionDocumentOutput => d !== null)
 
   // Persist per-doc results to the draft. Synthesis fields stay empty arrays
-  // until the synthesis job fills them in.
+  // until the synthesis job fills them in. When this is a partial re-run
+  // (documentIds is set), merge the new docs with the previously-stored set
+  // by document_id so we don't clobber the successful results from the prior
+  // run.
   await note('Writing per-document output to draft…')
-  const draftId = await persistDocsToDraft(admin, fundId, dealId, documents, params.draftId)
+  const isPartialRun = Array.isArray(documentIds) && documentIds.length > 0
+  const draftId = await persistDocsToDraft(admin, fundId, dealId, documents, params.draftId, isPartialRun)
 
   await note('Updating document classifications…')
   const successIds = new Set(documents.map(d => d.document_id))
@@ -180,13 +186,15 @@ export async function runIngestDocs(params: {
       ),
   ])
 
-  // Bump the deal stage now — per-doc claims are the gating output. Synthesis
-  // adds gap analysis + cross-doc flags but isn't required to start research.
+  // Bump the deal stage forward when it's still on 'ingest'. Don't regress if
+  // the deal is already further along (e.g. a partial re-run of failed docs
+  // while the deal is in 'qa' or 'draft' should not bounce it back).
   await admin
     .from('diligence_deals')
     .update({ current_memo_stage: 'research' } as any)
     .eq('id', dealId)
     .eq('fund_id', fundId)
+    .eq('current_memo_stage', 'ingest')
 
   return {
     draft_id: draftId,
@@ -332,44 +340,70 @@ async function persistDocsToDraft(
   admin: Admin,
   fundId: string,
   dealId: string,
-  documents: IngestionDocumentOutput[],
+  newDocs: IngestionDocumentOutput[],
   draftId?: string,
+  isPartialRun?: boolean,
 ): Promise<string> {
-  const partialOutput: IngestionOutput = {
-    documents,
-    gap_analysis: { missing: [], inadequate: [] },
-    cross_doc_flags: [],
+  // Find the target draft row.
+  let targetId = draftId ?? null
+  let existingIngestion: Partial<IngestionOutput> = {}
+
+  if (!targetId) {
+    const { data: existing } = await admin
+      .from('diligence_memo_drafts')
+      .select('id, ingestion_output')
+      .eq('deal_id', dealId)
+      .eq('fund_id', fundId)
+      .eq('is_draft', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (existing) {
+      targetId = (existing as { id: string }).id
+      existingIngestion = ((existing as any).ingestion_output ?? {}) as Partial<IngestionOutput>
+    }
+  } else {
+    const { data: row } = await admin
+      .from('diligence_memo_drafts')
+      .select('ingestion_output')
+      .eq('id', targetId)
+      .eq('deal_id', dealId)
+      .eq('fund_id', fundId)
+      .maybeSingle()
+    existingIngestion = ((row as any)?.ingestion_output ?? {}) as Partial<IngestionOutput>
   }
 
-  if (draftId) {
+  // Merge: on a partial run, keep existing docs not in newDocs and overwrite
+  // those that match by document_id. On a full run, replace entirely.
+  const mergedDocuments: IngestionDocumentOutput[] = (() => {
+    if (!isPartialRun) return newDocs
+    const newIds = new Set(newDocs.map(d => d.document_id))
+    const prior = Array.isArray(existingIngestion.documents) ? existingIngestion.documents : []
+    const keptPrior = prior.filter(d => !newIds.has(d.document_id))
+    return [...keptPrior, ...newDocs]
+  })()
+
+  // Preserve prior gap_analysis + cross_doc_flags on a partial run so the
+  // user keeps visibility while the synthesis job re-runs. Full runs clear.
+  const mergedOutput: IngestionOutput = {
+    documents: mergedDocuments,
+    gap_analysis: isPartialRun && existingIngestion.gap_analysis
+      ? existingIngestion.gap_analysis as IngestionOutput['gap_analysis']
+      : { missing: [], inadequate: [] },
+    cross_doc_flags: isPartialRun && Array.isArray(existingIngestion.cross_doc_flags)
+      ? existingIngestion.cross_doc_flags
+      : [],
+  }
+
+  if (targetId) {
     const { error } = await admin
       .from('diligence_memo_drafts')
-      .update({ ingestion_output: partialOutput as any })
-      .eq('id', draftId)
+      .update({ ingestion_output: mergedOutput as any })
+      .eq('id', targetId)
       .eq('deal_id', dealId)
       .eq('fund_id', fundId)
     if (error) throw new Error(`Failed to update draft: ${error.message}`)
-    return draftId
-  }
-
-  const { data: existing } = await admin
-    .from('diligence_memo_drafts')
-    .select('id')
-    .eq('deal_id', dealId)
-    .eq('fund_id', fundId)
-    .eq('is_draft', true)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (existing) {
-    const id = (existing as { id: string }).id
-    const { error } = await admin
-      .from('diligence_memo_drafts')
-      .update({ ingestion_output: partialOutput as any })
-      .eq('id', id)
-    if (error) throw new Error(`Failed to update draft: ${error.message}`)
-    return id
+    return targetId
   }
 
   const version = `v0.1-ingest-${new Date().toISOString().slice(0, 10)}`
@@ -380,7 +414,7 @@ async function persistDocsToDraft(
       fund_id: fundId,
       draft_version: version,
       agent_version: 'memo-agent v0.1',
-      ingestion_output: partialOutput as any,
+      ingestion_output: mergedOutput as any,
     } as any)
     .select('id')
     .single()
@@ -424,28 +458,57 @@ function stripCodeFence(raw: string): string {
   return raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
 }
 
-function parsePerDocResponse(raw: string, expectedDocId: string): IngestionDocumentOutput {
+/**
+ * Tolerant JSON extractor. The model sometimes prefixes a JSON object with
+ * "Here's the analysis:" or trails it with commentary, which trips direct
+ * JSON.parse. Falls back to slicing from the first `{` to the matching
+ * close brace before raising.
+ */
+function extractJsonObject(raw: string): unknown {
   const cleaned = stripCodeFence(raw)
-  let parsed: unknown
   try {
-    parsed = JSON.parse(cleaned)
+    return JSON.parse(cleaned)
   } catch {
-    throw new Error(`Ingest AI returned non-JSON: ${cleaned.slice(0, 300)}`)
+    // Fallback: find the outermost {…} block.
+    const start = cleaned.indexOf('{')
+    if (start === -1) throw new Error(`No JSON object in response: ${cleaned.slice(0, 300)}`)
+    let depth = 0
+    let inString = false
+    let escape = false
+    for (let i = start; i < cleaned.length; i++) {
+      const ch = cleaned[i]
+      if (inString) {
+        if (escape) { escape = false; continue }
+        if (ch === '\\') { escape = true; continue }
+        if (ch === '"') { inString = false }
+        continue
+      }
+      if (ch === '"') { inString = true; continue }
+      if (ch === '{') depth += 1
+      else if (ch === '}') {
+        depth -= 1
+        if (depth === 0) {
+          const slice = cleaned.slice(start, i + 1)
+          try { return JSON.parse(slice) } catch {
+            throw new Error(`JSON in response did not parse: ${slice.slice(0, 300)}`)
+          }
+        }
+      }
+    }
+    throw new Error(`Unbalanced JSON in response: ${cleaned.slice(0, 300)}`)
   }
+}
+
+function parsePerDocResponse(raw: string, expectedDocId: string): IngestionDocumentOutput {
+  const parsed = extractJsonObject(raw)
   const doc = coerceDocument(parsed)
-  if (!doc) throw new Error('Ingest AI response missing required fields (document_id, detected_type)')
+  if (!doc) throw new Error(`Ingest AI response missing required fields: ${JSON.stringify(parsed).slice(0, 300)}`)
   doc.document_id = expectedDocId
   return doc
 }
 
 function parseSynthesisResponse(raw: string): { gap_analysis: IngestionOutput['gap_analysis']; cross_doc_flags: IngestionOutput['cross_doc_flags'] } {
-  const cleaned = stripCodeFence(raw)
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(cleaned)
-  } catch {
-    throw new Error(`Synthesis AI returned non-JSON: ${cleaned.slice(0, 300)}`)
-  }
+  const parsed = extractJsonObject(raw)
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('Synthesis AI returned non-object JSON')
   }

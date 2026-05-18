@@ -606,7 +606,7 @@ interface AgentStatus {
   deal: { current_memo_stage: string }
   latest_job: {
     id: string
-    kind: 'ingest' | 'research' | 'qa' | 'draft' | 'render'
+    kind: 'ingest' | 'ingest_synthesis' | 'research' | 'qa' | 'draft' | 'render'
     status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled'
     progress_message: string | null
     error: string | null
@@ -656,29 +656,47 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<any>(null)
   const [fileNamesById, setFileNamesById] = useState<Record<string, string>>({})
+  const [failedDocIds, setFailedDocIds] = useState<string[]>([])
 
-  // Refresh draft + file-name map whenever ingestion lands or the panel mounts.
+  // Refresh draft + file-name map + failed-doc list. The failed list drives
+  // the "Reprocess failed" button so it's important to refetch after every
+  // ingest run, not just on mount.
   useEffect(() => {
-    if (!status?.latest_draft?.has_ingestion) { setDraft(null); return }
-    fetch(`/api/diligence/${dealId}/drafts`).then(r => r.ok ? r.json() : []).then(rows => {
-      const latest = (rows ?? [])[0]
-      setDraft(latest)
-    }).catch(() => {})
+    if (!status?.latest_draft?.has_ingestion) { setDraft(null) }
+    if (status?.latest_draft?.has_ingestion) {
+      fetch(`/api/diligence/${dealId}/drafts`).then(r => r.ok ? r.json() : []).then(rows => {
+        const latest = (rows ?? [])[0]
+        setDraft(latest)
+      }).catch(() => {})
+    }
     fetch(`/api/diligence/${dealId}/documents`).then(r => r.ok ? r.json() : []).then(docs => {
       const map: Record<string, string> = {}
-      for (const d of docs ?? []) map[d.id] = d.file_name
+      const failed: string[] = []
+      for (const d of docs ?? []) {
+        map[d.id] = d.file_name
+        if (d.parse_status === 'failed') failed.push(d.id)
+      }
       setFileNamesById(map)
+      setFailedDocIds(failed)
     }).catch(() => {})
-  }, [dealId, status?.latest_draft?.id, status?.latest_draft?.has_ingestion])
+  }, [dealId, status?.latest_draft?.id, status?.latest_draft?.has_ingestion, status?.latest_job?.status])
 
   const job = status?.latest_job
-  const isInFlight = job && (job.status === 'pending' || job.status === 'running') && job.kind === 'ingest'
+  // Treat the auto-enqueued synthesis job as part of the ingest workflow for
+  // status display + button disabling, so the user sees continuous feedback
+  // across the two-job pipeline rather than a misleading "complete" gap.
+  const isIngestWorkflowJob = job?.kind === 'ingest' || job?.kind === 'ingest_synthesis'
+  const isInFlight = job && (job.status === 'pending' || job.status === 'running') && isIngestWorkflowJob
 
-  async function runIngest() {
+  async function runIngest(documentIds?: string[]) {
     setSubmitting(true)
     setError(null)
     try {
-      const res = await fetch(`/api/diligence/${dealId}/agent/ingest`, { method: 'POST' })
+      const res = await fetch(`/api/diligence/${dealId}/agent/ingest`, {
+        method: 'POST',
+        headers: documentIds ? { 'content-type': 'application/json' } : {},
+        body: documentIds ? JSON.stringify({ document_ids: documentIds }) : undefined,
+      })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? 'Failed to enqueue ingest')
     } catch (err) {
@@ -699,17 +717,31 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
             Re-run after adding more files.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={runIngest} disabled={submitting || !!isInFlight || documentCount === 0}>
-          {isInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : status?.latest_draft?.has_ingestion ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
-          {status?.latest_draft?.has_ingestion ? 'Re-run' : 'Run ingestion'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {failedDocIds.length > 0 && !isInFlight && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => runIngest(failedDocIds)}
+              disabled={submitting}
+              title="Re-run the agent only on documents that failed in the previous ingest"
+            >
+              <RefreshCw className="h-3.5 w-3.5 mr-1" />
+              Reprocess failed ({failedDocIds.length})
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => runIngest()} disabled={submitting || !!isInFlight || documentCount === 0}>
+            {isInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : status?.latest_draft?.has_ingestion ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
+            {status?.latest_draft?.has_ingestion ? 'Re-run' : 'Run ingestion'}
+          </Button>
+        </div>
       </div>
 
       {documentCount === 0 && (
         <p className="text-xs text-muted-foreground italic">Upload at least one document to enable ingestion.</p>
       )}
 
-      <JobStatusLine job={job ?? null} kind="ingest" error={error} />
+      <JobStatusLine job={job ?? null} kind={['ingest', 'ingest_synthesis']} error={error} />
 
       {draft?.ingestion_output && !isInFlight && (
         <div className="mt-4">
@@ -783,7 +815,7 @@ function AgentStageTab({ dealId, stage }: { dealId: string; stage: 'research' })
   )
 }
 
-function JobStatusLine({ job, kind, error }: { job: AgentStatus['latest_job']; kind: string; error: string | null }) {
+function JobStatusLine({ job, kind, error }: { job: AgentStatus['latest_job']; kind: string | string[]; error: string | null }) {
   if (error) {
     return (
       <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
@@ -791,7 +823,11 @@ function JobStatusLine({ job, kind, error }: { job: AgentStatus['latest_job']; k
       </div>
     )
   }
-  if (!job || job.kind !== kind) return null
+  const kinds = Array.isArray(kind) ? kind : [kind]
+  if (!job || !kinds.includes(job.kind)) return null
+  // For multi-kind families (ingest + ingest_synthesis), surface a friendly
+  // label rather than the raw enum value in the success line.
+  const displayLabel = kinds.length > 1 ? kinds[0] : kind as string
 
   const pretty = (s: string | null) => s?.replace(/^[a-z]/, c => c.toUpperCase()) ?? ''
 
@@ -814,7 +850,7 @@ function JobStatusLine({ job, kind, error }: { job: AgentStatus['latest_job']; k
   if (job.status === 'success') {
     return (
       <div className="mt-3 text-xs text-muted-foreground">
-        <Check className="h-3 w-3 inline mr-1" /> Last {kind} run finished {job.finished_at ? new Date(job.finished_at).toLocaleString() : 'just now'}.
+        <Check className="h-3 w-3 inline mr-1" /> Last {displayLabel} run finished {job.finished_at ? new Date(job.finished_at).toLocaleString() : 'just now'}.
       </div>
     )
   }

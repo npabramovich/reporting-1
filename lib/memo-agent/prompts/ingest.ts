@@ -1,7 +1,9 @@
 import type { ContentBlock } from '@/lib/ai/types'
 import type { ParsedFile } from '@/lib/memo-agent/ingestion/parsers'
 
-const PER_FILE_TEXT_BUDGET = 30_000
+// Matches the truncation budget in lib/parsing/extractAttachmentText.ts so
+// the shared extractor's output reaches the model without further clipping.
+const PER_FILE_TEXT_BUDGET = 50_000
 
 /**
  * Build the user-content payload for a single-document ingest call.
