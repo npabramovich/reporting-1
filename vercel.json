@@ -20,7 +20,7 @@
       "maxDuration": 120
     },
     "app/api/cron/memo-agent-worker/route.ts": {
-      "maxDuration": 120
+      "maxDuration": 300
     },
     "app/api/diligence/*/agent/render/route.ts": {
       "maxDuration": 60

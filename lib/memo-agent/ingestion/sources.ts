@@ -53,25 +53,27 @@ export async function loadDealDocuments(
     detected_type: string | null
   }>
 
-  const sources: IngestionFileSource[] = []
-  for (const row of rows) {
+  // Parallel downloads — Supabase storage handles ~10+ concurrent downloads
+  // comfortably, and the alternative (sequential) easily blew past the 120s
+  // worker ceiling for multi-doc data rooms before the ingest even started.
+  const results = await Promise.all(rows.map(async (row): Promise<IngestionFileSource | null> => {
     const { data: blob, error: dlErr } = await admin.storage
       .from('diligence-documents')
       .download(row.storage_path)
     if (dlErr || !blob) {
       console.warn(`[memo-agent.sources] download failed for ${row.storage_path}:`, dlErr?.message)
-      continue
+      return null
     }
     const arr = await blob.arrayBuffer()
     const buffer = Buffer.from(arr)
-    sources.push({
+    return {
       document_id: row.id,
       file_name: row.file_name,
       file_format: row.file_format.toLowerCase(),
       detected_type: row.detected_type,
       buffer,
       byte_size: row.file_size_bytes ?? buffer.length,
-    })
-  }
-  return sources
+    }
+  }))
+  return results.filter((s): s is IngestionFileSource => s !== null)
 }
