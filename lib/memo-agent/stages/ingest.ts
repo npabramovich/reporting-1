@@ -40,30 +40,40 @@ export interface IngestionOutput {
   cross_doc_flags: Array<{ description: string; doc_ids: string[] }>
 }
 
-export interface IngestionResult {
+export interface IngestionDocsResult {
   draft_id: string
-  ingestion_output: IngestionOutput
+  ingestion_documents: IngestionDocumentOutput[]
   documents_processed: number
   warnings: string[]
 }
 
+export interface IngestionSynthesisResult {
+  draft_id: string
+  gap_analysis: IngestionOutput['gap_analysis']
+  cross_doc_flags: IngestionOutput['cross_doc_flags']
+  warnings: string[]
+}
+
 /**
- * Stage 1 — data-room ingestion.
+ * Stage 1A — per-document data-room ingestion.
  *
- * Fans out one AI call per parsed document in parallel (Promise.all), then
- * runs a single small synthesis call over the per-doc summaries to compute
- * gap_analysis + cross_doc_flags. This keeps total wall-clock close to the
- * slowest single doc rather than the sum, so multi-doc data rooms fit inside
- * the 120s Vercel function ceiling instead of orphaning at `running`.
+ * Fans out one AI call per parsed document in parallel, persists the per-doc
+ * results to the draft, classifies each document, and bumps the deal's
+ * `current_memo_stage` to 'research'. Cross-document synthesis (gap analysis
+ * + cross-doc flags) is intentionally NOT done here — see runIngestSynthesis.
+ *
+ * The split exists because a combined run blew past the 300s Vercel ceiling
+ * on multi-doc data rooms. Each phase now gets its own 300s budget, and
+ * per-doc results survive even if synthesis later fails.
  */
-export async function runIngest(params: {
+export async function runIngestDocs(params: {
   admin: Admin
   fundId: string
   dealId: string
   documentIds?: string[]
   draftId?: string
   progressCb?: (msg: string) => Promise<void>
-}): Promise<IngestionResult> {
+}): Promise<IngestionDocsResult> {
   const { admin, fundId, dealId, documentIds, progressCb } = params
   const note = async (msg: string) => { if (progressCb) await progressCb(msg) }
 
@@ -96,15 +106,11 @@ export async function runIngest(params: {
     detected_type: f.detected_type,
   }))
 
-  // Per-document fan-out.
   await note(`Extracting claims from ${parsed.length} document${parsed.length === 1 ? '' : 's'} in parallel…`)
   const warnings: string[] = []
   let completed = 0
 
   const perDocResults = await Promise.all(parsed.map(async (file): Promise<IngestionDocumentOutput | null> => {
-    // Skip files with parse errors and no usable content — surface a warning,
-    // mark the doc as failed downstream, and exclude it from the AI fan-out
-    // so a single bad PPTX doesn't burn an AI call.
     if (file.errors.length > 0 && !file.text && !file.base64) {
       warnings.push(`Skipping ${file.file_name}: ${file.errors.join('; ')}`)
       return null
@@ -139,60 +145,11 @@ export async function runIngest(params: {
 
   const documents = perDocResults.filter((d): d is IngestionDocumentOutput => d !== null)
 
-  // Synthesis call — runs only if we have at least one successful doc. With
-  // zero successful docs we fall through with empty cross-doc results rather
-  // than spending another AI call on nothing.
-  let gapAnalysis: IngestionOutput['gap_analysis'] = { missing: [], inadequate: [] }
-  let crossDocFlags: IngestionOutput['cross_doc_flags'] = []
+  // Persist per-doc results to the draft. Synthesis fields stay empty arrays
+  // until the synthesis job fills them in.
+  await note('Writing per-document output to draft…')
+  const draftId = await persistDocsToDraft(admin, fundId, dealId, documents, params.draftId)
 
-  if (documents.length > 0) {
-    await note('Synthesizing data-room gap analysis…')
-    try {
-      const synthesisContent = buildIngestSynthesisContent({
-        dealName,
-        perDoc: documents.map(d => ({
-          document_id: d.document_id,
-          file_name: parsed.find(p => p.document_id === d.document_id)?.file_name ?? d.document_id,
-          detected_type: d.detected_type,
-          summary: d.summary,
-          claim_fields: d.claims.map(c => c.field),
-          claim_values: d.claims.map(c => ({ field: c.field, value: c.value })),
-        })),
-      })
-
-      const { text, usage } = await provider.createMessage({
-        model,
-        maxTokens: 4096,
-        system,
-        content: synthesisContent,
-      })
-      logAIUsage(admin, {
-        fundId,
-        provider: providerType,
-        model,
-        feature: 'memo_agent_ingest_synthesis',
-        usage,
-      })
-      const synth = parseSynthesisResponse(text)
-      gapAnalysis = synth.gap_analysis
-      crossDocFlags = synth.cross_doc_flags
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      warnings.push(`Synthesis call failed: ${msg}. Continuing without gap_analysis/cross_doc_flags.`)
-    }
-  }
-
-  const output: IngestionOutput = {
-    documents,
-    gap_analysis: gapAnalysis,
-    cross_doc_flags: crossDocFlags,
-  }
-
-  await note('Writing ingestion output to draft…')
-  const draftId = await persistDraft(admin, fundId, dealId, output, params.draftId)
-
-  // Parallelize classification updates for the successfully-extracted docs
-  // and failure marks for the un-extracted ones.
   await note('Updating document classifications…')
   const successIds = new Set(documents.map(d => d.document_id))
   await Promise.all([
@@ -223,6 +180,8 @@ export async function runIngest(params: {
       ),
   ])
 
+  // Bump the deal stage now — per-doc claims are the gating output. Synthesis
+  // adds gap analysis + cross-doc flags but isn't required to start research.
   await admin
     .from('diligence_deals')
     .update({ current_memo_stage: 'research' } as any)
@@ -231,27 +190,161 @@ export async function runIngest(params: {
 
   return {
     draft_id: draftId,
-    ingestion_output: output,
+    ingestion_documents: documents,
     documents_processed: documents.length,
     warnings,
   }
 }
 
+/**
+ * Stage 1B — cross-document synthesis.
+ *
+ * Reads the documents array from the latest draft and runs one synthesis AI
+ * call to produce gap_analysis + cross_doc_flags. The synthesis input is just
+ * summaries and claim fields — the raw documents are not re-sent.
+ */
+export async function runIngestSynthesis(params: {
+  admin: Admin
+  fundId: string
+  dealId: string
+  draftId?: string
+  progressCb?: (msg: string) => Promise<void>
+}): Promise<IngestionSynthesisResult> {
+  const { admin, fundId, dealId, progressCb } = params
+  const note = async (msg: string) => { if (progressCb) await progressCb(msg) }
+
+  await note('Loading draft…')
+  const draft = await loadDraft(admin, fundId, dealId, params.draftId)
+  if (!draft) {
+    throw new Error('No draft found to synthesize. Run ingest first.')
+  }
+  const draftId = draft.id
+  const ingestion = (draft.ingestion_output ?? {}) as Partial<IngestionOutput>
+  const documents = Array.isArray(ingestion.documents) ? ingestion.documents : []
+
+  const warnings: string[] = []
+
+  if (documents.length === 0) {
+    warnings.push('No documents in draft; skipping synthesis.')
+    return {
+      draft_id: draftId,
+      gap_analysis: { missing: [], inadequate: [] },
+      cross_doc_flags: [],
+      warnings,
+    }
+  }
+
+  await note('Building system prompt…')
+  const { prompt: system } = await buildSystemPrompt({ admin, fundId, stage: 'ingest' })
+
+  await note('Loading deal record…')
+  const { data: dealRow } = await admin
+    .from('diligence_deals')
+    .select('name')
+    .eq('id', dealId)
+    .eq('fund_id', fundId)
+    .maybeSingle()
+  const dealName = (dealRow as { name: string } | null)?.name ?? 'this deal'
+
+  // We don't have the original file_names on the draft — best effort: look
+  // them up by document_id so the synthesis prompt mentions human names.
+  const docIds = documents.map(d => d.document_id).filter(Boolean)
+  const { data: docRows } = await admin
+    .from('diligence_documents')
+    .select('id, file_name')
+    .in('id', docIds.length > 0 ? docIds : ['00000000-0000-0000-0000-000000000000'])
+    .eq('deal_id', dealId)
+    .eq('fund_id', fundId)
+  const nameById = new Map<string, string>()
+  for (const row of (docRows ?? []) as Array<{ id: string; file_name: string }>) {
+    nameById.set(row.id, row.file_name)
+  }
+
+  const { provider, model, providerType } = await getStageProvider(admin, fundId, 'ingest')
+
+  await note(`Synthesizing gap analysis across ${documents.length} document${documents.length === 1 ? '' : 's'}…`)
+  let gapAnalysis: IngestionOutput['gap_analysis'] = { missing: [], inadequate: [] }
+  let crossDocFlags: IngestionOutput['cross_doc_flags'] = []
+
+  try {
+    const synthesisContent = buildIngestSynthesisContent({
+      dealName,
+      perDoc: documents.map(d => ({
+        document_id: d.document_id,
+        file_name: nameById.get(d.document_id) ?? d.document_id,
+        detected_type: d.detected_type,
+        summary: d.summary,
+        claim_fields: d.claims.map(c => c.field),
+        claim_values: d.claims.map(c => ({ field: c.field, value: c.value })),
+      })),
+    })
+
+    const { text, usage } = await provider.createMessage({
+      model,
+      maxTokens: 4096,
+      system,
+      content: synthesisContent,
+    })
+    logAIUsage(admin, {
+      fundId,
+      provider: providerType,
+      model,
+      feature: 'memo_agent_ingest_synthesis',
+      usage,
+    })
+    const synth = parseSynthesisResponse(text)
+    gapAnalysis = synth.gap_analysis
+    crossDocFlags = synth.cross_doc_flags
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    warnings.push(`Synthesis call failed: ${msg}. Per-document results are preserved.`)
+  }
+
+  await note('Writing synthesis output to draft…')
+  const mergedOutput: IngestionOutput = {
+    documents,
+    gap_analysis: gapAnalysis,
+    cross_doc_flags: crossDocFlags,
+  }
+  const { error: updateErr } = await admin
+    .from('diligence_memo_drafts')
+    .update({ ingestion_output: mergedOutput as any })
+    .eq('id', draftId)
+    .eq('deal_id', dealId)
+    .eq('fund_id', fundId)
+  if (updateErr) {
+    throw new Error(`Failed to write synthesis to draft: ${updateErr.message}`)
+  }
+
+  return {
+    draft_id: draftId,
+    gap_analysis: gapAnalysis,
+    cross_doc_flags: crossDocFlags,
+    warnings,
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Persist
+// Persist helpers
 // ---------------------------------------------------------------------------
 
-async function persistDraft(
+async function persistDocsToDraft(
   admin: Admin,
   fundId: string,
   dealId: string,
-  output: IngestionOutput,
+  documents: IngestionDocumentOutput[],
   draftId?: string,
 ): Promise<string> {
+  const partialOutput: IngestionOutput = {
+    documents,
+    gap_analysis: { missing: [], inadequate: [] },
+    cross_doc_flags: [],
+  }
+
   if (draftId) {
     const { error } = await admin
       .from('diligence_memo_drafts')
-      .update({ ingestion_output: output as any })
+      .update({ ingestion_output: partialOutput as any })
       .eq('id', draftId)
       .eq('deal_id', dealId)
       .eq('fund_id', fundId)
@@ -259,7 +352,6 @@ async function persistDraft(
     return draftId
   }
 
-  // Find the most recent in-progress draft to update; create if none.
   const { data: existing } = await admin
     .from('diligence_memo_drafts')
     .select('id')
@@ -274,7 +366,7 @@ async function persistDraft(
     const id = (existing as { id: string }).id
     const { error } = await admin
       .from('diligence_memo_drafts')
-      .update({ ingestion_output: output as any })
+      .update({ ingestion_output: partialOutput as any })
       .eq('id', id)
     if (error) throw new Error(`Failed to update draft: ${error.message}`)
     return id
@@ -288,12 +380,40 @@ async function persistDraft(
       fund_id: fundId,
       draft_version: version,
       agent_version: 'memo-agent v0.1',
-      ingestion_output: output as any,
+      ingestion_output: partialOutput as any,
     } as any)
     .select('id')
     .single()
   if (insertErr || !created) throw new Error(`Failed to create draft: ${insertErr?.message ?? 'unknown'}`)
   return (created as { id: string }).id
+}
+
+async function loadDraft(
+  admin: Admin,
+  fundId: string,
+  dealId: string,
+  draftId?: string,
+): Promise<{ id: string; ingestion_output: unknown } | null> {
+  if (draftId) {
+    const { data } = await admin
+      .from('diligence_memo_drafts')
+      .select('id, ingestion_output')
+      .eq('id', draftId)
+      .eq('deal_id', dealId)
+      .eq('fund_id', fundId)
+      .maybeSingle()
+    return data as { id: string; ingestion_output: unknown } | null
+  }
+  const { data } = await admin
+    .from('diligence_memo_drafts')
+    .select('id, ingestion_output')
+    .eq('deal_id', dealId)
+    .eq('fund_id', fundId)
+    .eq('is_draft', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data as { id: string; ingestion_output: unknown } | null
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +434,6 @@ function parsePerDocResponse(raw: string, expectedDocId: string): IngestionDocum
   }
   const doc = coerceDocument(parsed)
   if (!doc) throw new Error('Ingest AI response missing required fields (document_id, detected_type)')
-  // Trust our doc_id over the model's — the model occasionally rewrites it.
   doc.document_id = expectedDocId
   return doc
 }
@@ -386,5 +505,4 @@ function coerceGap(raw: unknown): IngestionGap | null {
   }
 }
 
-// ParsedFile type re-exported for callers that previously imported through this module.
 export type { ParsedFile }
