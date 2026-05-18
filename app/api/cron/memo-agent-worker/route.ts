@@ -31,6 +31,23 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient()
 
+  // Self-heal: any job stuck in `running` past the function timeout was killed
+  // by Vercel mid-stage and will never finish on its own. Fail them so the UI
+  // unblocks and the user can retry without manual DB edits. The 3-min window
+  // is generous — function ceiling is 120s, so anything older is dead for sure.
+  const STALE_RUNNING_MS = 3 * 60 * 1000
+  const staleCutoff = new Date(Date.now() - STALE_RUNNING_MS).toISOString()
+  await admin
+    .from('memo_agent_jobs')
+    .update({
+      status: 'failed',
+      error: 'killed: worker timed out (no progress for >3m)',
+      finished_at: new Date().toISOString(),
+      progress_message: 'killed: timeout',
+    } as any)
+    .eq('status', 'running')
+    .lt('started_at', staleCutoff)
+
   // Atomically claim the next pending job using the SQL helper.
   const { data: claimed, error: claimErr } = await (admin as any)
     .rpc('memo_agent_claim_next_job') as { data: any; error: any }

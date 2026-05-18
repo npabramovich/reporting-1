@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logAIUsage } from '@/lib/ai/usage'
 import { buildSystemPrompt } from '@/lib/memo-agent/prompts/system'
-import { buildIngestUserContent } from '@/lib/memo-agent/prompts/ingest'
+import { buildIngestDocContent, buildIngestSynthesisContent } from '@/lib/memo-agent/prompts/ingest'
 import { getStageProvider } from '@/lib/memo-agent/stage-provider'
 import { loadDealDocuments } from '@/lib/memo-agent/ingestion/sources'
 import { parseAll, type ParsedFile } from '@/lib/memo-agent/ingestion/parsers'
@@ -44,18 +44,17 @@ export interface IngestionResult {
   draft_id: string
   ingestion_output: IngestionOutput
   documents_processed: number
-  /** Flagged but non-fatal issues from parsing/validation. */
   warnings: string[]
 }
 
 /**
- * Run Stage 1 — data-room ingestion. Loads documents, parses them, calls the
- * fund's default AI provider with the system + ingest prompts, validates the
- * JSON response, and writes the result to a `diligence_memo_drafts` row.
+ * Stage 1 — data-room ingestion.
  *
- * On success: also updates each document's detected_type/confidence per the
- * agent's classification (overriding the heuristic from upload), and bumps
- * `diligence_deals.current_memo_stage` to 'research'.
+ * Fans out one AI call per parsed document in parallel (Promise.all), then
+ * runs a single small synthesis call over the per-doc summaries to compute
+ * gap_analysis + cross_doc_flags. This keeps total wall-clock close to the
+ * slowest single doc rather than the sum, so multi-doc data rooms fit inside
+ * the 120s Vercel function ceiling instead of orphaning at `running`.
  */
 export async function runIngest(params: {
   admin: Admin
@@ -66,7 +65,6 @@ export async function runIngest(params: {
   progressCb?: (msg: string) => Promise<void>
 }): Promise<IngestionResult> {
   const { admin, fundId, dealId, documentIds, progressCb } = params
-
   const note = async (msg: string) => { if (progressCb) await progressCb(msg) }
 
   await note('Loading documents…')
@@ -90,85 +88,151 @@ export async function runIngest(params: {
     .maybeSingle()
   const dealName = (dealRow as { name: string } | null)?.name ?? 'this deal'
 
-  await note('Calling AI provider for ingestion…')
   const { provider, model, providerType } = await getStageProvider(admin, fundId, 'ingest')
-  const userContent = buildIngestUserContent({ dealName, files: parsed })
 
-  let raw: string
-  try {
-    const { text, usage } = await provider.createMessage({
-      model,
-      maxTokens: 16384,
-      system,
-      content: userContent,
-    })
-    raw = text
-    logAIUsage(admin, {
-      fundId,
-      provider: providerType,
-      model,
-      feature: 'memo_agent_ingest',
-      usage,
-    })
-  } catch (err) {
-    throw new Error(`Ingest AI call failed: ${err instanceof Error ? err.message : String(err)}`)
-  }
+  const manifest = parsed.map(f => ({
+    file_name: f.file_name,
+    file_format: f.file_format,
+    detected_type: f.detected_type,
+  }))
 
-  await note('Parsing ingestion output…')
-  const output = parseIngestionResponse(raw)
+  // Per-document fan-out.
+  await note(`Extracting claims from ${parsed.length} document${parsed.length === 1 ? '' : 's'} in parallel…`)
   const warnings: string[] = []
+  let completed = 0
 
-  // Validate document_id references against the input set.
-  const validDocIds = new Set(sources.map(s => s.document_id))
-  for (const doc of output.documents) {
-    if (!validDocIds.has(doc.document_id)) {
-      warnings.push(`AI returned document_id "${doc.document_id}" not in input set; ignoring.`)
+  const perDocResults = await Promise.all(parsed.map(async (file): Promise<IngestionDocumentOutput | null> => {
+    // Skip files with parse errors and no usable content — surface a warning,
+    // mark the doc as failed downstream, and exclude it from the AI fan-out
+    // so a single bad PPTX doesn't burn an AI call.
+    if (file.errors.length > 0 && !file.text && !file.base64) {
+      warnings.push(`Skipping ${file.file_name}: ${file.errors.join('; ')}`)
+      return null
+    }
+
+    try {
+      const { text, usage } = await provider.createMessage({
+        model,
+        maxTokens: 8192,
+        system,
+        content: buildIngestDocContent({ dealName, file, manifest }),
+      })
+      logAIUsage(admin, {
+        fundId,
+        provider: providerType,
+        model,
+        feature: 'memo_agent_ingest',
+        usage,
+      })
+      const doc = parsePerDocResponse(text, file.document_id)
+      completed += 1
+      await note(`Extracted ${completed}/${parsed.length}: ${file.file_name}`)
+      return doc
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      warnings.push(`AI call failed for ${file.file_name}: ${msg}`)
+      completed += 1
+      await note(`Extracted ${completed}/${parsed.length}: ${file.file_name} (failed)`)
+      return null
+    }
+  }))
+
+  const documents = perDocResults.filter((d): d is IngestionDocumentOutput => d !== null)
+
+  // Synthesis call — runs only if we have at least one successful doc. With
+  // zero successful docs we fall through with empty cross-doc results rather
+  // than spending another AI call on nothing.
+  let gapAnalysis: IngestionOutput['gap_analysis'] = { missing: [], inadequate: [] }
+  let crossDocFlags: IngestionOutput['cross_doc_flags'] = []
+
+  if (documents.length > 0) {
+    await note('Synthesizing data-room gap analysis…')
+    try {
+      const synthesisContent = buildIngestSynthesisContent({
+        dealName,
+        perDoc: documents.map(d => ({
+          document_id: d.document_id,
+          file_name: parsed.find(p => p.document_id === d.document_id)?.file_name ?? d.document_id,
+          detected_type: d.detected_type,
+          summary: d.summary,
+          claim_fields: d.claims.map(c => c.field),
+          claim_values: d.claims.map(c => ({ field: c.field, value: c.value })),
+        })),
+      })
+
+      const { text, usage } = await provider.createMessage({
+        model,
+        maxTokens: 4096,
+        system,
+        content: synthesisContent,
+      })
+      logAIUsage(admin, {
+        fundId,
+        provider: providerType,
+        model,
+        feature: 'memo_agent_ingest_synthesis',
+        usage,
+      })
+      const synth = parseSynthesisResponse(text)
+      gapAnalysis = synth.gap_analysis
+      crossDocFlags = synth.cross_doc_flags
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      warnings.push(`Synthesis call failed: ${msg}. Continuing without gap_analysis/cross_doc_flags.`)
     }
   }
-  output.documents = output.documents.filter(d => validDocIds.has(d.document_id))
 
-  // Persist to drafts.
+  const output: IngestionOutput = {
+    documents,
+    gap_analysis: gapAnalysis,
+    cross_doc_flags: crossDocFlags,
+  }
+
   await note('Writing ingestion output to draft…')
   const draftId = await persistDraft(admin, fundId, dealId, output, params.draftId)
 
-  // Update document classifications based on agent's output.
+  // Parallelize classification updates for the successfully-extracted docs
+  // and failure marks for the un-extracted ones.
   await note('Updating document classifications…')
-  for (const doc of output.documents) {
-    await admin
-      .from('diligence_documents')
-      .update({
-        detected_type: doc.detected_type,
-        type_confidence: doc.type_confidence,
-        parse_status: 'parsed',
-      })
-      .eq('id', doc.document_id)
-      .eq('deal_id', dealId)
-      .eq('fund_id', fundId)
-  }
-
-  // Mark un-summarized files as failed (e.g. PPTX with no slides).
-  for (const file of parsed) {
-    if (file.errors.length > 0 && !output.documents.find(d => d.document_id === file.document_id)) {
-      await admin
+  const successIds = new Set(documents.map(d => d.document_id))
+  await Promise.all([
+    ...documents.map(doc =>
+      admin
         .from('diligence_documents')
-        .update({ parse_status: 'failed', parse_notes: file.errors.join('; ') })
-        .eq('id', file.document_id)
+        .update({
+          detected_type: doc.detected_type,
+          type_confidence: doc.type_confidence,
+          parse_status: 'parsed',
+        } as any)
+        .eq('id', doc.document_id)
         .eq('deal_id', dealId)
         .eq('fund_id', fundId)
-    }
-  }
+    ),
+    ...parsed
+      .filter(file => !successIds.has(file.document_id))
+      .map(file =>
+        admin
+          .from('diligence_documents')
+          .update({
+            parse_status: 'failed',
+            parse_notes: file.errors.length > 0 ? file.errors.join('; ') : 'AI extraction failed',
+          } as any)
+          .eq('id', file.document_id)
+          .eq('deal_id', dealId)
+          .eq('fund_id', fundId)
+      ),
+  ])
 
-  // Bump deal stage.
   await admin
     .from('diligence_deals')
-    .update({ current_memo_stage: 'research' })
+    .update({ current_memo_stage: 'research' } as any)
     .eq('id', dealId)
     .eq('fund_id', fundId)
 
   return {
     draft_id: draftId,
     ingestion_output: output,
-    documents_processed: output.documents.length,
+    documents_processed: documents.length,
     warnings,
   }
 }
@@ -236,28 +300,44 @@ async function persistDraft(
 // Response parsing
 // ---------------------------------------------------------------------------
 
-function parseIngestionResponse(raw: string): IngestionOutput {
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+function stripCodeFence(raw: string): string {
+  return raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+}
+
+function parsePerDocResponse(raw: string, expectedDocId: string): IngestionDocumentOutput {
+  const cleaned = stripCodeFence(raw)
   let parsed: unknown
   try {
     parsed = JSON.parse(cleaned)
-  } catch (err) {
+  } catch {
     throw new Error(`Ingest AI returned non-JSON: ${cleaned.slice(0, 300)}`)
   }
+  const doc = coerceDocument(parsed)
+  if (!doc) throw new Error('Ingest AI response missing required fields (document_id, detected_type)')
+  // Trust our doc_id over the model's — the model occasionally rewrites it.
+  doc.document_id = expectedDocId
+  return doc
+}
+
+function parseSynthesisResponse(raw: string): { gap_analysis: IngestionOutput['gap_analysis']; cross_doc_flags: IngestionOutput['cross_doc_flags'] } {
+  const cleaned = stripCodeFence(raw)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(cleaned)
+  } catch {
+    throw new Error(`Synthesis AI returned non-JSON: ${cleaned.slice(0, 300)}`)
+  }
   if (!parsed || typeof parsed !== 'object') {
-    throw new Error('Ingest AI returned non-object JSON')
+    throw new Error('Synthesis AI returned non-object JSON')
   }
   const obj = parsed as Record<string, unknown>
-  const documents = Array.isArray(obj.documents) ? obj.documents : []
   const gap = (obj.gap_analysis as any) ?? {}
-
   return {
-    documents: documents.map(coerceDocument).filter(Boolean) as IngestionDocumentOutput[],
     gap_analysis: {
       missing: Array.isArray(gap.missing) ? gap.missing.map(coerceGap).filter(Boolean) as IngestionGap[] : [],
       inadequate: Array.isArray(gap.inadequate) ? gap.inadequate.map(coerceGap).filter(Boolean) as IngestionGap[] : [],
     },
-    cross_doc_flags: Array.isArray(obj.cross_doc_flags) ? obj.cross_doc_flags as any[] : [],
+    cross_doc_flags: Array.isArray(obj.cross_doc_flags) ? obj.cross_doc_flags as IngestionOutput['cross_doc_flags'] : [],
   }
 }
 
@@ -305,3 +385,6 @@ function coerceGap(raw: unknown): IngestionGap | null {
     rationale: r.rationale,
   }
 }
+
+// ParsedFile type re-exported for callers that previously imported through this module.
+export type { ParsedFile }
