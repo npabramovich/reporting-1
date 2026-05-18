@@ -39,6 +39,7 @@ interface DiligenceDocument {
   detected_type: string | null
   type_confidence: string | null
   parse_status: string
+  parse_notes: string | null
   drive_source_url: string | null
   uploaded_at: string
 }
@@ -264,6 +265,8 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { deal
   const [documents, setDocuments] = useState(initialDocuments)
   const [uploading, setUploading] = useState(false)
   const [driveOpen, setDriveOpen] = useState(false)
+  const [reprocessing, setReprocessing] = useState<Set<string>>(new Set())
+  const [reprocessError, setReprocessError] = useState<string | null>(null)
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -299,6 +302,26 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { deal
     })
   }
 
+  async function reprocess(id: string) {
+    setReprocessing(prev => { const next = new Set(prev); next.add(id); return next })
+    setReprocessError(null)
+    try {
+      const res = await fetch(`/api/diligence/${dealId}/agent/ingest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document_ids: [id] }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body?.error ?? 'Failed to enqueue reprocess')
+      // Optimistic — mark pending until the worker picks it up.
+      setDocuments(prev => prev.map(d => d.id === id ? { ...d, parse_status: 'pending', parse_notes: null } : d))
+    } catch (err) {
+      setReprocessError(err instanceof Error ? err.message : 'Failed to enqueue reprocess')
+    } finally {
+      setReprocessing(prev => { const next = new Set(prev); next.delete(id); return next })
+    }
+  }
+
   async function remove(id: string) {
     const ok = await confirm({
       title: 'Delete document?',
@@ -332,6 +355,12 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { deal
           <FolderInput className="h-3.5 w-3.5 mr-1" /> Import from Drive
         </Button>
       </div>
+
+      {reprocessError && (
+        <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+          {reprocessError}
+        </div>
+      )}
 
       {documents.length === 0 ? (
         <div className="rounded-md border bg-card p-12 text-center text-sm text-muted-foreground">
@@ -375,8 +404,23 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { deal
                   </td>
                   <td className="px-3 py-2 text-xs">
                     <span className="capitalize">{d.parse_status}</span>
+                    {d.parse_status === 'failed' && d.parse_notes && (
+                      <div className="text-[10px] text-destructive/80 mt-0.5 max-w-[280px]" title={d.parse_notes}>
+                        {d.parse_notes.length > 80 ? `${d.parse_notes.slice(0, 80)}…` : d.parse_notes}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right">
+                    {(d.parse_status === 'parsed' || d.parse_status === 'failed') && (
+                      <button
+                        onClick={() => reprocess(d.id)}
+                        disabled={reprocessing.has(d.id)}
+                        className="text-[10px] text-muted-foreground hover:text-foreground mr-2 disabled:opacity-50"
+                        title="Re-run ingest on just this document"
+                      >
+                        {reprocessing.has(d.id) ? 'Queuing…' : 'Reprocess'}
+                      </button>
+                    )}
                     {d.parse_status !== 'skipped' && (
                       <button onClick={() => setSkipped(d.id)} className="text-[10px] text-muted-foreground hover:text-foreground mr-2">
                         Skip

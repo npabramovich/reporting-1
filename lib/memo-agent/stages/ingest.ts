@@ -292,14 +292,23 @@ export async function runIngestSynthesis(params: {
 
   const { provider, model, providerType } = await getStageProvider(admin, fundId, 'ingest')
 
-  await note(`Synthesizing gap analysis across ${documents.length} document${documents.length === 1 ? '' : 's'}…`)
+  // Repair previously-stored detected_types that the model returned in
+  // freeform shape (e.g. "Pitch Deck" instead of "pitch_deck"). Without this
+  // the synthesis call can't match docs against the schema's expected_documents
+  // list and incorrectly flags them as missing. Normalization is idempotent.
+  const normalizedDocs = documents.map(d => ({
+    ...d,
+    detected_type: normalizeTypeId(d.detected_type),
+  }))
+
+  await note(`Synthesizing gap analysis across ${normalizedDocs.length} document${normalizedDocs.length === 1 ? '' : 's'}…`)
   let gapAnalysis: IngestionOutput['gap_analysis'] = { missing: [], inadequate: [] }
   let crossDocFlags: IngestionOutput['cross_doc_flags'] = []
 
   try {
     const synthesisContent = buildIngestSynthesisContent({
       dealName,
-      perDoc: documents.map(d => ({
+      perDoc: normalizedDocs.map(d => ({
         document_id: d.document_id,
         file_name: nameById.get(d.document_id) ?? d.document_id,
         detected_type: d.detected_type,
@@ -331,8 +340,11 @@ export async function runIngestSynthesis(params: {
   }
 
   await note('Writing synthesis output to draft…')
+  // Persist normalized docs back to the draft so subsequent reads (UI display,
+  // future synthesis runs) see canonical IDs instead of the legacy "Pitch Deck"
+  // freeform values.
   const mergedOutput: IngestionOutput = {
-    documents,
+    documents: normalizedDocs,
     gap_analysis: gapAnalysis,
     cross_doc_flags: crossDocFlags,
   }
@@ -345,6 +357,20 @@ export async function runIngestSynthesis(params: {
   if (updateErr) {
     throw new Error(`Failed to write synthesis to draft: ${updateErr.message}`)
   }
+
+  // Also update the diligence_documents.detected_type for any rows where the
+  // normalized form differs from what's stored. This keeps the documents list
+  // UI in sync with the canonical IDs.
+  await Promise.all(normalizedDocs.map(d => {
+    const original = documents.find(o => o.document_id === d.document_id)
+    if (!original || original.detected_type === d.detected_type) return Promise.resolve()
+    return admin
+      .from('diligence_documents')
+      .update({ detected_type: d.detected_type } as any)
+      .eq('id', d.document_id)
+      .eq('deal_id', dealId)
+      .eq('fund_id', fundId)
+  }))
 
   return {
     draft_id: draftId,
@@ -545,6 +571,15 @@ function parseSynthesisResponse(raw: string): { gap_analysis: IngestionOutput['g
   }
 }
 
+// Canonicalize whatever the model returned into the schema's snake_case ID
+// form. "Pitch Deck" → "pitch_deck", "Pitch-Deck" → "pitch_deck". Idempotent
+// for already-snake values. Without this, synthesis's gap_analysis can't
+// match the doc against the schema's expected_documents list and incorrectly
+// flags documents as missing.
+function normalizeTypeId(s: string): string {
+  return s.toLowerCase().trim().replace(/[\s\-]+/g, '_').replace(/[^a-z0-9_]/g, '')
+}
+
 function coerceDocument(raw: unknown): IngestionDocumentOutput | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
@@ -552,7 +587,7 @@ function coerceDocument(raw: unknown): IngestionDocumentOutput | null {
   const conf = ['low', 'medium', 'high'].includes(r.type_confidence as string) ? r.type_confidence as 'low' | 'medium' | 'high' : 'low'
   return {
     document_id: r.document_id,
-    detected_type: r.detected_type,
+    detected_type: normalizeTypeId(r.detected_type),
     type_confidence: conf,
     summary: typeof r.summary === 'string' ? r.summary : '',
     claims: Array.isArray(r.claims) ? r.claims.map(coerceClaim).filter(Boolean) as IngestionDocumentOutput['claims'] : [],
