@@ -36,6 +36,9 @@ export async function loadDealDocuments(
     .eq('deal_id', dealId)
     .eq('fund_id', fundId)
     .neq('parse_status', 'skipped')
+    // Raw recordings have no parseable text — the transcribe job will create
+    // a separate call_transcript document that this loader will pick up.
+    .neq('detected_type', 'call_recording')
 
   if (documentIds && documentIds.length > 0) {
     query = query.in('id', documentIds)
