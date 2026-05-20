@@ -7,15 +7,28 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-const STAGES = ['ingest', 'research', 'qa', 'draft', 'score'] as const
+const STAGES = ['ingest', 'ingest_synthesis', 'research', 'qa', 'draft', 'score'] as const
 type Stage = typeof STAGES[number]
 
 const STAGE_LABEL: Record<Stage, string> = {
-  ingest: 'Stage 1 — Ingest',
+  ingest: 'Stage 1 — Ingest (per-doc)',
+  ingest_synthesis: 'Stage 1b — Ingest synthesis',
   research: 'Stage 2 — Research',
   qa: 'Stage 3 — Q&A',
   draft: 'Stage 4 — Draft',
   score: 'Stage 5 — Score',
+}
+
+// Speed-vs-depth tradeoff hint per stage. Stages with heavy structured I/O
+// and modest reasoning are good Haiku candidates; stages that produce prose
+// or do deep multi-source reasoning are better on Sonnet/Opus.
+const STAGE_HINT: Record<Stage, string> = {
+  ingest:           'Structured extraction per document. Speed matters; Haiku is a strong fit.',
+  ingest_synthesis: 'Small reasoning over summaries (gap analysis + cross-doc flags). Haiku is fine.',
+  research:         'Web-search-heavy verification. Haiku speeds this up dramatically without much quality loss.',
+  qa:               'Interactive partner Q&A. Latency-sensitive; Haiku or Sonnet.',
+  draft:            'Memo prose — voice, coherence, sourcing. Use the strongest available model (Sonnet or Opus).',
+  score:            'Rubric scoring with rationale. Sonnet preferred; Haiku acceptable if quality holds.',
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -24,6 +37,13 @@ const PROVIDER_LABEL: Record<string, string> = {
   openai: 'OpenAI',
   gemini: 'Gemini',
   ollama: 'Ollama (self-hosted)',
+}
+
+const PROVIDER_MODELS_ENDPOINT: Record<string, string> = {
+  anthropic: '/api/claude-models',
+  openai: '/api/openai-models',
+  gemini: '/api/gemini-models',
+  ollama: '/api/ollama-models',
 }
 
 interface Defaults {
@@ -36,6 +56,8 @@ interface Defaults {
   month_window: { from: string; to: string }
 }
 
+interface AIModel { id: string; name: string }
+
 export function DefaultsEditor() {
   const [data, setData] = useState<Defaults | null>(null)
   const [perDeal, setPerDeal] = useState<string>('')
@@ -45,6 +67,11 @@ export function DefaultsEditor() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Model dropdowns load from the active provider for each stage. Cached
+  // per provider since multiple stages may pick the same one.
+  const [modelsByProvider, setModelsByProvider] = useState<Record<string, AIModel[]>>({})
+  const [loadingProviders, setLoadingProviders] = useState<Set<string>>(new Set())
 
   async function load() {
     const res = await fetch('/api/firm/memo-agent-defaults')
@@ -58,7 +85,33 @@ export function DefaultsEditor() {
     }
   }
 
+  async function loadModelsFor(provider: string) {
+    if (!provider || modelsByProvider[provider] || loadingProviders.has(provider)) return
+    const endpoint = PROVIDER_MODELS_ENDPOINT[provider]
+    if (!endpoint) return
+    setLoadingProviders(prev => new Set(prev).add(provider))
+    try {
+      const res = await fetch(endpoint)
+      const body = await res.json().catch(() => ({}))
+      const models: AIModel[] = Array.isArray(body?.models) ? body.models : []
+      setModelsByProvider(prev => ({ ...prev, [provider]: models }))
+    } catch {
+      // Leave models empty so the UI falls back to freeform input.
+      setModelsByProvider(prev => ({ ...prev, [provider]: [] }))
+    } finally {
+      setLoadingProviders(prev => { const next = new Set(prev); next.delete(provider); return next })
+    }
+  }
+
   useEffect(() => { load() }, [])
+
+  // Pre-load models for any providers already configured on save load.
+  useEffect(() => {
+    const providers = new Set<string>()
+    for (const v of Object.values(stageModels)) if (v?.provider) providers.add(v.provider)
+    providers.forEach(loadModelsFor)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stageModels])
 
   async function save() {
     setSaving(true)
@@ -93,6 +146,7 @@ export function DefaultsEditor() {
       ...prev,
       [stage]: provider ? { provider, ...(model ? { model } : {}) } : null,
     }))
+    if (provider) loadModelsFor(provider)
   }
 
   if (!data) return <div className="p-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</div>
@@ -167,36 +221,63 @@ export function DefaultsEditor() {
         </Card>
 
         <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Per-stage AI provider</CardTitle></CardHeader>
-          <CardContent className="text-sm space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Override the fund's default provider on a per-stage basis. Useful for cost-tuning
-              (e.g. a cheaper provider for ingest, a stronger one for draft). When unset,
-              {' '}<span className="font-mono">{data.default_ai_provider}</span> is used.
+          <CardHeader className="pb-3"><CardTitle className="text-base">Per-stage AI provider &amp; model</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-4">
+            <p className="text-xs text-muted-foreground max-w-3xl">
+              Override the fund&apos;s default on a per-stage basis. Use a fast model (e.g. Haiku) for
+              high-volume structured stages, and a strong model (e.g. Sonnet or Opus) for prose-heavy
+              ones like draft. When provider is blank, fund default{' '}<span className="font-mono">{data.default_ai_provider}</span> is used.
             </p>
 
-            {STAGES.map(stage => {
-              const current = stageModels[stage]
-              return (
-                <div key={stage} className="grid grid-cols-[160px_1fr_1fr] gap-2 items-center">
-                  <span className="text-sm font-medium">{STAGE_LABEL[stage]}</span>
-                  <select
-                    value={current?.provider ?? ''}
-                    onChange={e => setStage(stage, e.target.value, current?.model)}
-                    className="h-9 px-2 rounded-md border border-input bg-background text-sm"
-                  >
-                    {Object.entries(PROVIDER_LABEL).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-                  </select>
-                  <Input
-                    value={current?.model ?? ''}
-                    onChange={e => current?.provider && setStage(stage, current.provider, e.target.value)}
-                    disabled={!current?.provider}
-                    placeholder={current?.provider ? `Model id (defaults to fund's ${current.provider} model)` : 'Set provider first'}
-                    className="font-mono text-xs"
-                  />
-                </div>
-              )
-            })}
+            <div className="space-y-3">
+              {STAGES.map(stage => {
+                const current = stageModels[stage]
+                const provider = current?.provider ?? ''
+                const models = provider ? modelsByProvider[provider] : undefined
+                const loading = provider ? loadingProviders.has(provider) : false
+                return (
+                  <div key={stage} className="rounded-md border bg-card p-3">
+                    <div className="flex items-baseline justify-between gap-3 mb-2">
+                      <div>
+                        <div className="text-sm font-medium">{STAGE_LABEL[stage]}</div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 max-w-2xl">{STAGE_HINT[stage]}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-[1fr_1fr] gap-2">
+                      <select
+                        value={provider}
+                        onChange={e => setStage(stage, e.target.value, undefined)}
+                        className="h-9 px-2 rounded-md border border-input bg-background text-sm"
+                      >
+                        {Object.entries(PROVIDER_LABEL).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                      </select>
+                      {provider ? (
+                        models && models.length > 0 ? (
+                          <select
+                            value={current?.model ?? ''}
+                            onChange={e => setStage(stage, provider, e.target.value || undefined)}
+                            className="h-9 px-2 rounded-md border border-input bg-background text-sm font-mono"
+                          >
+                            <option value="">(provider default)</option>
+                            {models.map(m => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}
+                          </select>
+                        ) : (
+                          <Input
+                            value={current?.model ?? ''}
+                            onChange={e => setStage(stage, provider, e.target.value || undefined)}
+                            placeholder={loading ? 'Loading models…' : `Model id (defaults to fund's ${provider} model)`}
+                            className="font-mono text-xs"
+                            disabled={loading}
+                          />
+                        )
+                      ) : (
+                        <Input value="" disabled placeholder="Set provider first" className="font-mono text-xs" />
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </CardContent>
         </Card>
 

@@ -1,10 +1,14 @@
-import yaml from 'js-yaml'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logAIUsage } from '@/lib/ai/usage'
 import { getStageProvider } from '@/lib/memo-agent/stage-provider'
 import { getActiveSchema, ensureDefaults } from '@/lib/memo-agent/firm-schemas'
 import { buildSystemPrompt } from '@/lib/memo-agent/prompts/system'
-import { buildDraftUserContent, type QARecord } from '@/lib/memo-agent/prompts/draft'
+import {
+  buildDraftOutlineContent,
+  buildDraftSectionFillContent,
+  type QARecord,
+  type OutlineSection,
+} from '@/lib/memo-agent/prompts/draft'
 import { extractJsonObject } from '@/lib/memo-agent/parse-ai-json'
 import type { IngestionOutput } from './ingest'
 import type { ResearchOutput } from './research'
@@ -43,11 +47,24 @@ export interface DraftResult {
   warnings: string[]
 }
 
+// How many memo sections each fill call writes. ~3 keeps each fill's output
+// well under budget (≈9 paragraphs) while keeping the fan-out to 3-4 calls
+// so input cost stays reasonable.
+const SECTIONS_PER_FILL = 3
+
 /**
- * Stage 4 — assemble the memo draft from all upstream stage outputs.
- * Single AI call producing the entire memo_output JSON. Validation is
- * structural; per-paragraph source IDs are checked against the actual ID
- * sets from ingestion/research/qa.
+ * Stage 4 — assemble the memo draft.
+ *
+ * Two-phase to fit inside the 300s Vercel ceiling:
+ *   4A. Outline call — plans header + per-section paragraph skeletons +
+ *       partner_attention. Small output, always fits.
+ *   4B. Fill calls — the outline's sections are batched and each batch is
+ *       written by a parallel AI call. Each fill call sees the full memo
+ *       shape (to avoid cross-section repetition) but only writes its batch.
+ *
+ * A single fill failure surfaces as a warning; the rest of the memo still
+ * lands, instead of the prior all-or-nothing single call that orphaned via
+ * max_tokens truncation on large memos.
  */
 export async function runDraft(params: {
   admin: Admin
@@ -69,12 +86,8 @@ export async function runDraft(params: {
   const research = (draft.research_output as ResearchOutput | null) ?? null
   const qa_answers = Array.isArray(draft.qa_answers) ? draft.qa_answers as QARecord[] : []
 
-  // Input scale — surfaced in progress messages so the user can correlate
-  // long-running calls with a known cause (large data room) vs. a hang.
   const docCount = ingestion.documents?.length ?? 0
   const claimCount = ingestion.documents?.reduce((acc, d) => acc + (d.claims?.length ?? 0), 0) ?? 0
-  const findingCount = research?.findings?.length ?? 0
-  const qaCount = qa_answers.length
 
   await note('Loading deal record…')
   const { data: dealRow } = await admin
@@ -95,49 +108,101 @@ export async function runDraft(params: {
 
   await note('Building draft prompt…')
   const { prompt: system } = await buildSystemPrompt({ admin, fundId, stage: 'draft' })
+  const { provider, model, providerType } = await getStageProvider(admin, fundId, 'draft')
 
-  const userContent = buildDraftUserContent({
+  // ---- Phase 4A: outline -------------------------------------------------
+  await note(`Planning memo outline (${docCount} docs, ${claimCount} claims)…`)
+  const outlineContent = buildDraftOutlineContent({
     dealName: deal.name,
     memoOutputYaml: memoOutputSchema.yaml_content,
-    rubricYaml: rubricSchema.yaml_content,
     ingestion,
     research,
     qa_answers,
   })
-
-  await note(`Calling AI for draft (${docCount} docs, ${claimCount} claims, ${findingCount} findings, ${qaCount} Q&A)…`)
-  const { provider, model, providerType } = await getStageProvider(admin, fundId, 'draft')
-  const { text, usage, truncated } = await provider.createMessage({
+  const outlineRes = await provider.createMessage({
     model,
-    // Bumped from 16384. Memo drafts with many sections + multi-paragraph
-    // team sections + partner_attention items routinely truncated at 16K,
-    // which threw "non-JSON" via direct JSON.parse. 32K is the Opus ceiling
-    // and well within Sonnet's range.
-    maxTokens: 32768,
+    maxTokens: 8192,
     system,
-    content: userContent,
+    content: outlineContent,
   })
-  logAIUsage(admin, { fundId, provider: providerType, model, feature: 'memo_agent_draft', usage })
-
-  if (truncated) {
-    warnings.push('Draft output was truncated by the model (max_tokens reached). The memo may be missing later sections — consider re-running or splitting the draft.')
+  logAIUsage(admin, { fundId, provider: providerType, model, feature: 'memo_agent_draft_outline', usage: outlineRes.usage })
+  if (outlineRes.truncated) {
+    warnings.push('Memo outline was truncated — later sections may be missing from the plan.')
+  }
+  const outline = parseOutlineResponse(outlineRes.text)
+  if (outline.sections.length === 0) {
+    throw new Error('Draft outline produced 0 sections. Cannot proceed to section fills.')
   }
 
-  await note('Parsing draft…')
-  const parsed = parseDraftResponse(text)
+  // ---- Phase 4B: parallel section fills ----------------------------------
+  const allSectionTopics = outline.sections.map(s => ({
+    section_id: s.section_id,
+    topics: s.paragraphs.map(p => p.topic),
+  }))
+  const batches: OutlineSection[][] = []
+  for (let i = 0; i < outline.sections.length; i += SECTIONS_PER_FILL) {
+    batches.push(outline.sections.slice(i, i + SECTIONS_PER_FILL))
+  }
 
-  // Force the recommendation section to a partner-only placeholder, even if
-  // the model misbehaved.
-  parsed.paragraphs = enforceRecommendationPlaceholder(parsed.paragraphs)
+  await note(`Writing ${outline.sections.length} sections across ${batches.length} parallel fill calls…`)
+  let fillsDone = 0
+  const fillResults = await Promise.all(batches.map(async (batch, idx): Promise<MemoParagraph[]> => {
+    const batchLabel = batch.map(s => s.section_id).join(', ')
+    try {
+      const res = await provider.createMessage({
+        model,
+        maxTokens: 16384,
+        system,
+        content: buildDraftSectionFillContent({
+          dealName: deal.name,
+          sectionsToWrite: batch,
+          allSectionTopics,
+          ingestion,
+          research,
+          qa_answers,
+        }),
+      })
+      logAIUsage(admin, { fundId, provider: providerType, model, feature: 'memo_agent_draft_fill', usage: res.usage })
+      if (res.truncated) {
+        warnings.push(`Section batch "${batchLabel}" was truncated (max_tokens) — some paragraphs may be missing.`)
+      }
+      const paragraphs = parseFillResponse(res.text)
+      fillsDone += 1
+      await note(`Wrote section batch ${fillsDone}/${batches.length}: ${batchLabel}`)
+      return paragraphs
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      warnings.push(`Section batch "${batchLabel}" failed: ${msg}`)
+      fillsDone += 1
+      await note(`Section batch ${fillsDone}/${batches.length} failed: ${batchLabel}`)
+      return []
+    }
+  }))
 
-  // Quality checks — surface as warnings without failing the run so the
-  // partner can still see + edit what came back.
+  // ---- Assemble ----------------------------------------------------------
+  let paragraphs = fillResults.flat().sort((a, b) => {
+    if (a.section_id !== b.section_id) return a.section_id.localeCompare(b.section_id)
+    return a.order - b.order
+  })
+
+  // Force the recommendation section to a partner-only placeholder.
+  paragraphs = enforceRecommendationPlaceholder(paragraphs)
+
+  const parsed: MemoDraftOutput = {
+    header: outline.header,
+    paragraphs,
+    partner_attention: outline.partner_attention,
+  }
+
+  // Quality checks — warnings, not failures.
   if (parsed.paragraphs.length === 0) {
-    warnings.push('Draft produced 0 paragraphs. Model may have ignored the prompt — consider re-running.')
+    warnings.push('Draft produced 0 paragraphs across all fill calls — every batch failed. Re-run recommended.')
   }
-  const sectionsCovered = new Set(parsed.paragraphs.map(p => p.section_id))
-  if (sectionsCovered.size < 3) {
-    warnings.push(`Draft covers only ${sectionsCovered.size} section(s). The model likely stopped early.`)
+  const plannedSections = outline.sections.map(s => s.section_id)
+  const writtenSections = new Set(parsed.paragraphs.map(p => p.section_id))
+  const missingSections = plannedSections.filter(s => !writtenSections.has(s))
+  if (missingSections.length > 0) {
+    warnings.push(`Sections planned but not written (fill failure): ${missingSections.join(', ')}.`)
   }
 
   // Validate source IDs.
@@ -208,27 +273,72 @@ async function loadDraftWithInputs(admin: Admin, fundId: string, dealId: string,
   return (data as any) ?? null
 }
 
-function parseDraftResponse(raw: string): MemoDraftOutput {
+// ---------------------------------------------------------------------------
+// Response parsing
+// ---------------------------------------------------------------------------
+
+interface ParsedOutline {
+  header: Record<string, any>
+  sections: OutlineSection[]
+  partner_attention: PartnerAttentionItem[]
+}
+
+function parseOutlineResponse(raw: string): ParsedOutline {
   const parsed = extractJsonObject(raw)
   if (!parsed || typeof parsed !== 'object') {
-    throw new Error('Draft AI returned non-object JSON')
+    throw new Error('Draft outline AI returned non-object JSON')
   }
   const obj = parsed as Record<string, unknown>
-
-  // Required structure check. Missing top-level keys mean the model didn't
-  // follow the contract — fail loudly rather than silently persisting an
-  // empty memo as a "successful" draft.
-  const required = ['header', 'paragraphs', 'partner_attention'] as const
+  const required = ['header', 'sections'] as const
   const missing = required.filter(k => !(k in obj))
   if (missing.length > 0) {
-    throw new Error(`Draft AI response missing required keys: ${missing.join(', ')}. First 300 chars: ${JSON.stringify(obj).slice(0, 300)}`)
+    throw new Error(`Draft outline missing required keys: ${missing.join(', ')}. First 300 chars: ${JSON.stringify(obj).slice(0, 300)}`)
   }
+
+  const sections: OutlineSection[] = Array.isArray(obj.sections)
+    ? obj.sections.map(coerceOutlineSection).filter(Boolean) as OutlineSection[]
+    : []
 
   return {
     header: (obj.header && typeof obj.header === 'object' ? obj.header : {}) as Record<string, any>,
-    paragraphs: Array.isArray(obj.paragraphs) ? obj.paragraphs.map(coerceParagraph).filter(Boolean) as MemoParagraph[] : [],
-    partner_attention: Array.isArray(obj.partner_attention) ? obj.partner_attention as any[] : [],
+    sections,
+    partner_attention: Array.isArray(obj.partner_attention) ? obj.partner_attention as PartnerAttentionItem[] : [],
   }
+}
+
+function coerceOutlineSection(raw: unknown): OutlineSection | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, any>
+  if (typeof r.section_id !== 'string') return null
+  const paragraphs = Array.isArray(r.paragraphs)
+    ? r.paragraphs.map((p: any, i: number) => {
+        if (!p || typeof p !== 'object') return null
+        return {
+          id: typeof p.id === 'string' ? p.id : `p_${r.section_id}_${i + 1}`,
+          section_id: r.section_id,
+          order: typeof p.order === 'number' ? p.order : i + 1,
+          topic: typeof p.topic === 'string' ? p.topic : '',
+          intended_source_ids: Array.isArray(p.intended_source_ids)
+            ? p.intended_source_ids.filter((s: unknown) => typeof s === 'string')
+            : [],
+        }
+      }).filter(Boolean)
+    : []
+  return { section_id: r.section_id, paragraphs: paragraphs as OutlineSection['paragraphs'] }
+}
+
+function parseFillResponse(raw: string): MemoParagraph[] {
+  const parsed = extractJsonObject(raw)
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Draft fill AI returned non-object JSON')
+  }
+  const obj = parsed as Record<string, unknown>
+  if (!('paragraphs' in obj)) {
+    throw new Error(`Draft fill response missing "paragraphs" key. First 300 chars: ${JSON.stringify(obj).slice(0, 300)}`)
+  }
+  return Array.isArray(obj.paragraphs)
+    ? obj.paragraphs.map(coerceParagraph).filter(Boolean) as MemoParagraph[]
+    : []
 }
 
 function coerceParagraph(raw: unknown): MemoParagraph | null {

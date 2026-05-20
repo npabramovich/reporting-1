@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCapState } from '@/lib/memo-agent/cost'
 
 const VALID_PROVIDERS = ['anthropic', 'openai', 'gemini', 'ollama'] as const
-const VALID_STAGES = ['ingest', 'research', 'qa', 'draft', 'score', 'render'] as const
+const VALID_STAGES = ['ingest', 'ingest_synthesis', 'research', 'qa', 'draft', 'score', 'render'] as const
 
 export async function GET() {
   const guard = await ensureAdmin()

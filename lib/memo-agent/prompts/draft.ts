@@ -9,10 +9,28 @@ export interface QARecord {
   category?: string | null
 }
 
-export function buildDraftUserContent(params: {
+/** A planned (not-yet-written) paragraph from the outline pass. */
+export interface OutlineParagraph {
+  id: string
+  section_id: string
+  order: number
+  topic: string
+  intended_source_ids: string[]
+}
+
+export interface OutlineSection {
+  section_id: string
+  paragraphs: OutlineParagraph[]
+}
+
+/**
+ * Stage 4A — outline pass. Plans the memo structure without writing prose.
+ * Small output (skeletons only) so it always fits comfortably; the heavy
+ * prose generation is fanned out across per-section fill calls.
+ */
+export function buildDraftOutlineContent(params: {
   dealName: string
   memoOutputYaml: string
-  rubricYaml: string
   ingestion: IngestionOutput
   research: ResearchOutput | null
   qa_answers: QARecord[]
@@ -20,8 +38,11 @@ export function buildDraftUserContent(params: {
   const text = [
     `Deal: ${params.dealName}`,
     '',
-    `=== STAGE 4 — MEMO DRAFT ===`,
-    `Produce a structured memo per memo_output.yaml. Cite every paragraph; never fabricate sources.`,
+    `=== STAGE 4A — MEMO OUTLINE ===`,
+    `Plan the memo structure. Do NOT write prose in this call.`,
+    '',
+    `--- MEMO SCHEMA (memo_output.yaml — section list is authoritative) ---`,
+    params.memoOutputYaml,
     '',
     `--- INGESTION OUTPUT (claims with verification_status) ---`,
     summarizeIngestion(params.ingestion),
@@ -32,7 +53,65 @@ export function buildDraftUserContent(params: {
     `--- PARTNER Q&A ANSWERS ---`,
     summarizeQA(params.qa_answers),
     '',
-    DRAFT_INSTRUCTIONS,
+    OUTLINE_INSTRUCTIONS,
+  ].join('\n')
+
+  return [{ type: 'text', text }]
+}
+
+/**
+ * Stage 4B — section fill. Writes prose for one batch of outlined sections.
+ * Each fill call gets the full source data (for correct citation) plus the
+ * complete section topic list (so it doesn't repeat content covered
+ * elsewhere) but only writes the sections in `sectionsToWrite`.
+ */
+export function buildDraftSectionFillContent(params: {
+  dealName: string
+  sectionsToWrite: OutlineSection[]
+  allSectionTopics: Array<{ section_id: string; topics: string[] }>
+  ingestion: IngestionOutput
+  research: ResearchOutput | null
+  qa_answers: QARecord[]
+}): ContentBlock[] {
+  const planLines: string[] = []
+  for (const sec of params.sectionsToWrite) {
+    planLines.push(`## Section: ${sec.section_id}`)
+    for (const p of sec.paragraphs) {
+      planLines.push(`  - paragraph ${p.id} (order ${p.order}): ${p.topic}`)
+      if (p.intended_source_ids.length > 0) {
+        planLines.push(`    intended sources: ${p.intended_source_ids.join(', ')}`)
+      }
+    }
+  }
+
+  const fullMemoShape = params.allSectionTopics
+    .map(s => `  - ${s.section_id}: ${s.topics.join(' | ')}`)
+    .join('\n')
+
+  const text = [
+    `Deal: ${params.dealName}`,
+    '',
+    `=== STAGE 4B — WRITE MEMO SECTIONS ===`,
+    `Write the prose for ONLY the sections planned below. Other sections are`,
+    `written separately — the full memo shape is listed so you avoid repeating`,
+    `content that belongs elsewhere.`,
+    '',
+    `--- FULL MEMO SHAPE (for context — do NOT write these) ---`,
+    fullMemoShape,
+    '',
+    `--- SECTIONS TO WRITE IN THIS CALL ---`,
+    planLines.join('\n'),
+    '',
+    `--- INGESTION OUTPUT (claims with verification_status) ---`,
+    summarizeIngestion(params.ingestion),
+    '',
+    `--- RESEARCH OUTPUT ---`,
+    params.research ? summarizeResearch(params.research) : '(none)',
+    '',
+    `--- PARTNER Q&A ANSWERS ---`,
+    summarizeQA(params.qa_answers),
+    '',
+    SECTION_FILL_INSTRUCTIONS,
   ].join('\n')
 
   return [{ type: 'text', text }]
@@ -76,7 +155,7 @@ export function buildScoreUserContent(params: ScorePromptInput): ContentBlock[] 
 // Instructions
 // ---------------------------------------------------------------------------
 
-const DRAFT_INSTRUCTIONS = `Output JSON ONLY, conforming to memo_output.yaml. Required shape:
+const OUTLINE_INSTRUCTIONS = `Output JSON ONLY. Plan the memo — do NOT write prose.
 
 {
   "header": {
@@ -89,24 +168,17 @@ const DRAFT_INSTRUCTIONS = `Output JSON ONLY, conforming to memo_output.yaml. Re
     "draft_version": string,
     "agent_version": "memo-agent v0.1"
   },
-  "paragraphs": [
+  "sections": [
     {
-      "id": string,                        // "p_<section>_<n>"
       "section_id": string,                // matches a section id from memo_output.yaml
-      "order": integer,
-      "prose": string,                     // Substantive paragraphs. Target 4-6 sentences, 120-220 words — aim toward the upper end. Single-sentence or thin (<70 word) paragraphs are not acceptable; the partner should have enough context to evaluate without re-reading the source material.
-      "sources": [
+      "paragraphs": [
         {
-          "source_type": "claim" | "finding" | "qa_answer" | "assumption" | "partner_only" | "gap",
-          "source_id": string,             // claim id, finding id, qa_answer question_id, etc.
-          "span": string|null              // optional sentence-level attribution
+          "id": string,                    // "p_<section>_<n>"
+          "order": integer,
+          "topic": string,                 // one line: what this paragraph covers
+          "intended_source_ids": [string]  // claim/finding/qa_answer ids this paragraph will draw from
         }
-      ],
-      "origin": "agent_drafted" | "partner_only_placeholder",
-      "confidence": "low" | "medium" | "high" | "n/a",
-      "contains_projection": boolean,
-      "contains_unverified_claim": boolean,
-      "contains_contradiction": boolean
+      ]
     }
   ],
   "partner_attention": [
@@ -119,21 +191,46 @@ const DRAFT_INSTRUCTIONS = `Output JSON ONLY, conforming to memo_output.yaml. Re
   ]
 }
 
+Planning rules:
+  • Include every section from memo_output.yaml EXCEPT "scoring_summary" and "appendix" (those come from later stages).
+  • The "recommendation" section gets exactly ONE paragraph with topic "[partner-only placeholder]" and no intended sources.
+  • The "team" section SHOULD plan MULTIPLE paragraphs: (a) factual_summary — per-founder background; (b) prior_work — what each founder built/shipped/led, with sourced specifics; (c) public_output — papers, talks, OSS, public writing; (d) references_to_qa — partner Q&A about the team. Plus placeholder paragraphs for character_assessment and founder_market_fit_judgment.
+  • intended_source_ids must reference ids that actually appear in the input above. Never invent ids.
+  • Surface unverified material claims, contradictions, gaps, missing Q&A, and partner_only blanks as partner_attention items now — they don't need prose.`
+
+const SECTION_FILL_INSTRUCTIONS = `Output JSON ONLY. Write prose for the planned paragraphs.
+
+{
+  "paragraphs": [
+    {
+      "id": string,                        // echo the planned paragraph id
+      "section_id": string,                // echo the planned section id
+      "order": integer,                    // echo the planned order
+      "prose": string,                     // Substantive. Target 4-6 sentences, 120-220 words — aim toward the upper end. Single-sentence or thin (<70 word) paragraphs are not acceptable; the partner should have enough context to evaluate without re-reading source material.
+      "sources": [
+        {
+          "source_type": "claim" | "finding" | "qa_answer" | "assumption" | "partner_only" | "gap",
+          "source_id": string,
+          "span": string|null
+        }
+      ],
+      "origin": "agent_drafted" | "partner_only_placeholder",
+      "confidence": "low" | "medium" | "high" | "n/a",
+      "contains_projection": boolean,
+      "contains_unverified_claim": boolean,
+      "contains_contradiction": boolean
+    }
+  ]
+}
+
 Hard rules:
-  • The "recommendation" section MUST be a single paragraph with origin="partner_only_placeholder", prose="[Partner to complete]", sources=[], confidence="n/a", contains_*=false. Do NOT draft a recommendation, even tentatively.
-  • The "team" section is hybrid and SHOULD have MULTIPLE agent-drafted paragraphs covering:
-      (a) factual_summary — per-founder background: name, role, prior companies/positions, education, years in domain;
-      (b) prior_work — what each founder built / shipped / led at prior companies, with sourced specifics not generic descriptions;
-      (c) public_output — papers, talks, OSS commits, public writing that demonstrates relevant expertise;
-      (d) references_to_qa — verbatim partner Q&A answers about the team where provided.
-    Then add partner_only_placeholder paragraphs for character_assessment and founder_market_fit_judgment.
-    Do NOT score the team. Do NOT interpret character or fit — just compile the factual material so the partner can form a judgment with rich context.
-  • Every prose paragraph (origin=agent_drafted) MUST have at least one source.
+  • Write a paragraph for every planned paragraph in the sections above — match the planned id, section_id, order.
+  • If the plan includes the "recommendation" section: emit it as origin="partner_only_placeholder", prose="[Partner to complete]", sources=[], confidence="n/a", contains_*=false. Do NOT draft a recommendation.
+  • Team placeholder paragraphs (character_assessment, founder_market_fit_judgment) get origin="partner_only_placeholder", prose="[Partner to complete]". Do NOT interpret character or fit. Do NOT score the team.
+  • Every agent_drafted paragraph MUST have at least one source.
   • Every paragraph that mentions a forward-looking number sets contains_projection=true.
   • Every paragraph relying on an unverified claim sets contains_unverified_claim=true.
-  • Cite source_ids that actually appear in the input data above. Never invent IDs.
-  • Surface unverified material claims, contradictions, gaps, missing Q&A, and partner_only blanks as partner_attention items.
-  • Skip the "scoring_summary" and "appendix" sections — those come from later stages.`
+  • Cite source_ids that actually appear in the input data above. Never invent ids.`
 
 const SCORE_INSTRUCTIONS = `Output JSON ONLY:
 
