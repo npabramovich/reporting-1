@@ -19,6 +19,8 @@ export type DocumentType =
   | 'market_research'
   | 'team_bio'
   | 'press'
+  | 'call_recording'
+  | 'call_transcript'
   | 'other'
 
 export type Confidence = 'low' | 'medium' | 'high'
@@ -49,9 +51,24 @@ function ext(filename: string): string {
   return m ? m[1] : ''
 }
 
+const AUDIO_EXTS = new Set(['mp3', 'm4a', 'wav', 'aac', 'ogg', 'oga', 'flac', 'opus'])
+const VIDEO_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm', 'mkv', 'avi', 'wmv'])
+const TRANSCRIPT_EXTS = new Set(['vtt', 'srt'])
+
 export function classifyDocumentHeuristic(filename: string, contentType?: string): HeuristicResult {
   const lower = filename.toLowerCase()
   const e = ext(filename)
+
+  // Audio / video recordings → transcribe job, not ingest. Confidence is
+  // "high" on extension match because the file format is unambiguous.
+  if (AUDIO_EXTS.has(e) || VIDEO_EXTS.has(e) || contentType?.startsWith('audio/') || contentType?.startsWith('video/')) {
+    return { detected_type: 'call_recording', confidence: 'high' }
+  }
+
+  // Pre-made transcript formats (Zoom-saved .vtt, Meet caption .srt export).
+  if (TRANSCRIPT_EXTS.has(e) || contentType === 'text/vtt' || contentType === 'application/x-subrip') {
+    return { detected_type: 'call_transcript', confidence: 'high' }
+  }
 
   // Excel / sheets — almost always financial model or cap table.
   if (e === 'xlsx' || e === 'xls' || e === 'csv' || contentType?.includes('spreadsheetml')) {
