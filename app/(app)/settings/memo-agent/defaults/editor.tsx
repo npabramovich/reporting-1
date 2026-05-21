@@ -54,9 +54,18 @@ interface Defaults {
   stage_models: Record<string, { provider: string; model?: string } | null>
   web_search_enabled: boolean
   default_ai_provider: string | null
+  export_font_family: string
+  export_font_size: number
   monthly_used: number
   month_window: { from: string; to: string }
 }
+
+// Common document fonts offered in the export font picker. The export still
+// accepts any value the user types, but these cover the usual choices.
+const EXPORT_FONT_OPTIONS = [
+  'DM Sans', 'Arial', 'Calibri', 'Georgia', 'Helvetica',
+  'Inter', 'Lato', 'Times New Roman', 'Verdana',
+]
 
 interface AIModel { id: string; name: string }
 
@@ -66,6 +75,8 @@ export function DefaultsEditor() {
   const [monthly, setMonthly] = useState<string>('')
   const [stageModels, setStageModels] = useState<Record<string, { provider: string; model?: string } | null>>({})
   const [webSearch, setWebSearch] = useState(false)
+  const [exportFont, setExportFont] = useState('DM Sans')
+  const [exportFontSize, setExportFontSize] = useState('11')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -84,6 +95,8 @@ export function DefaultsEditor() {
       setMonthly(body.monthly_token_cap !== null ? String(body.monthly_token_cap) : '')
       setStageModels(body.stage_models ?? {})
       setWebSearch(!!body.web_search_enabled)
+      setExportFont(body.export_font_family || 'DM Sans')
+      setExportFontSize(String(body.export_font_size || 11))
     }
   }
 
@@ -127,6 +140,8 @@ export function DefaultsEditor() {
           monthly_token_cap: monthly === '' ? null : Number(monthly),
           stage_models: stageModels,
           web_search_enabled: webSearch,
+          export_font_family: exportFont,
+          export_font_size: exportFontSize === '' ? 11 : Number(exportFontSize),
         }),
       })
       if (!res.ok) {
@@ -303,6 +318,48 @@ export function DefaultsEditor() {
                 </p>
               </div>
             </label>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Memo export formatting</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-3">
+            <p className="text-xs text-muted-foreground max-w-2xl">
+              Base font and size for Word / Google Doc exports. Headings scale from the base size.
+              Citations and the appendix are omitted from exported documents.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Base font</label>
+                <input
+                  list="export-font-options"
+                  value={exportFont}
+                  onChange={e => setExportFont(e.target.value)}
+                  placeholder="DM Sans"
+                  className="h-9 w-full px-2 rounded-md border border-input bg-background text-sm"
+                />
+                <datalist id="export-font-options">
+                  {EXPORT_FONT_OPTIONS.map(f => <option key={f} value={f} />)}
+                </datalist>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Any font name is accepted. Google Docs renders web fonts like DM Sans natively; Word
+                  substitutes if the font isn&apos;t installed locally.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Base font size (pt)</label>
+                <Input
+                  type="number"
+                  min={6}
+                  max={32}
+                  value={exportFontSize}
+                  onChange={e => setExportFontSize(e.target.value)}
+                  placeholder="11"
+                  className="font-mono"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">Body text size. 6–32pt.</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
