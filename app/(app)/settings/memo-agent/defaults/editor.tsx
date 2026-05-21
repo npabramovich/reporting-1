@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-const STAGES = ['ingest', 'ingest_synthesis', 'research', 'qa', 'draft', 'score'] as const
+const STAGES = ['ingest', 'ingest_synthesis', 'research', 'qa', 'draft', 'draft_review', 'score'] as const
 type Stage = typeof STAGES[number]
 
 const STAGE_LABEL: Record<Stage, string> = {
@@ -15,7 +15,8 @@ const STAGE_LABEL: Record<Stage, string> = {
   ingest_synthesis: 'Stage 1b — Ingest synthesis',
   research: 'Stage 2 — Research',
   qa: 'Stage 3 — Q&A',
-  draft: 'Stage 4 — Draft',
+  draft: 'Stage 4 — Draft (outline + fills)',
+  draft_review: 'Stage 4c — Draft review',
   score: 'Stage 5 — Score',
 }
 
@@ -27,7 +28,8 @@ const STAGE_HINT: Record<Stage, string> = {
   ingest_synthesis: 'Small reasoning over summaries (gap analysis + cross-doc flags). Haiku is fine.',
   research:         'Web-search-heavy verification. Haiku speeds this up dramatically without much quality loss.',
   qa:               'Interactive partner Q&A. Latency-sensitive; Haiku or Sonnet.',
-  draft:            'Memo prose — voice, coherence, sourcing. Use the strongest available model (Sonnet or Opus).',
+  draft:            'Memo outline + first-draft prose. A mid model (Sonnet) or even Haiku works — the review pass cleans it up.',
+  draft_review:     'Reads the first draft and edits it. Use the strongest model here (Opus) — this is the quality pass.',
   score:            'Rubric scoring with rationale. Sonnet preferred; Haiku acceptable if quality holds.',
 }
 

@@ -6,6 +6,7 @@ import { buildSystemPrompt } from '@/lib/memo-agent/prompts/system'
 import {
   buildDraftOutlineContent,
   buildDraftSectionFillContent,
+  buildDraftReviewContent,
   type QARecord,
   type OutlineSection,
 } from '@/lib/memo-agent/prompts/draft'
@@ -47,10 +48,39 @@ export interface DraftResult {
   warnings: string[]
 }
 
-// How many memo sections each fill call writes. ~3 keeps each fill's output
-// well under budget (≈9 paragraphs) while keeping the fan-out to 3-4 calls
-// so input cost stays reasonable.
-const SECTIONS_PER_FILL = 3
+// Fill batches are balanced by PARAGRAPH count, not section count — a single
+// large section (e.g. a 6-paragraph team section) must not land in the same
+// call as several others and produce an oversized response. Each fill call
+// targets ~this many paragraphs; a section larger than the target gets its
+// own call (sections are never split across calls, for coherence).
+const PARAGRAPHS_PER_FILL = 8
+
+// The review pass is chunked the same way — each review call handles at most
+// this many paragraphs so its edit output is always bounded.
+const PARAGRAPHS_PER_REVIEW = 12
+
+/**
+ * Pack sections into batches targeting PARAGRAPHS_PER_FILL paragraphs each.
+ * Sections are kept whole; a section larger than the target becomes its own
+ * batch. Guarantees no fill call is handed an oversized writing task.
+ */
+function balanceSectionBatches(sections: OutlineSection[]): OutlineSection[][] {
+  const batches: OutlineSection[][] = []
+  let current: OutlineSection[] = []
+  let count = 0
+  for (const section of sections) {
+    const secCount = section.paragraphs.length || 1
+    if (count > 0 && count + secCount > PARAGRAPHS_PER_FILL) {
+      batches.push(current)
+      current = []
+      count = 0
+    }
+    current.push(section)
+    count += secCount
+  }
+  if (current.length > 0) batches.push(current)
+  return batches
+}
 
 /**
  * Stage 4 — assemble the memo draft.
@@ -121,7 +151,10 @@ export async function runDraft(params: {
   })
   const outlineRes = await provider.createMessage({
     model,
-    maxTokens: 8192,
+    // 16K — the outline skeleton (no prose, no source-id lists) is compact,
+    // but a memo with many sections still needs headroom so it never
+    // truncates into unbalanced JSON.
+    maxTokens: 16384,
     system,
     content: outlineContent,
   })
@@ -139,10 +172,7 @@ export async function runDraft(params: {
     section_id: s.section_id,
     topics: s.paragraphs.map(p => p.topic),
   }))
-  const batches: OutlineSection[][] = []
-  for (let i = 0; i < outline.sections.length; i += SECTIONS_PER_FILL) {
-    batches.push(outline.sections.slice(i, i + SECTIONS_PER_FILL))
-  }
+  const batches = balanceSectionBatches(outline.sections)
 
   await note(`Writing ${outline.sections.length} sections across ${batches.length} parallel fill calls…`)
   let fillsDone = 0
@@ -243,6 +273,128 @@ export async function runDraft(params: {
 }
 
 // ---------------------------------------------------------------------------
+// Stage 4C — review & edit pass
+// ---------------------------------------------------------------------------
+
+export interface DraftReviewResult {
+  draft_id: string
+  edits_applied: number
+  warnings: string[]
+}
+
+/**
+ * Stage 4C — review/edit pass. Loads the persisted first-draft memo, runs a
+ * single review call (typically on a stronger model via the `draft_review`
+ * stage override), and applies the returned targeted edits in place.
+ *
+ * Runs as its own job so it gets a fresh 300s budget — folding it into the
+ * draft job alongside outline + fills + score would blow the function ceiling.
+ */
+export async function runDraftReview(params: {
+  admin: Admin
+  fundId: string
+  dealId: string
+  draftId?: string
+  progressCb?: (msg: string) => Promise<void>
+}): Promise<DraftReviewResult> {
+  const { admin, fundId, dealId, progressCb } = params
+  const note = async (msg: string) => { if (progressCb) await progressCb(msg) }
+  const warnings: string[] = []
+
+  await note('Loading draft for review…')
+  const row = await loadDraftWithMemo(admin, fundId, dealId, params.draftId)
+  if (!row) throw new Error('No draft found to review. Run Stage 4 draft first.')
+  if (!row.memo_draft_output) throw new Error('memo_draft_output missing — Stage 4 draft must complete first.')
+
+  const memo = row.memo_draft_output as MemoDraftOutput
+  const ingestion = (row.ingestion_output as IngestionOutput | null) ?? { documents: [], gap_analysis: { missing: [], inadequate: [] }, cross_doc_flags: [] }
+  const research = (row.research_output as ResearchOutput | null) ?? null
+  const qa_answers = Array.isArray(row.qa_answers) ? row.qa_answers as QARecord[] : []
+
+  const reviewable = memo.paragraphs.filter(p => p.origin !== 'partner_only_placeholder')
+  if (reviewable.length === 0) {
+    warnings.push('No reviewable paragraphs (draft is empty or all placeholders). Skipping review.')
+    return { draft_id: row.id, edits_applied: 0, warnings }
+  }
+
+  await note('Building review prompt…')
+  const { prompt: system } = await buildSystemPrompt({ admin, fundId, stage: 'draft' })
+  const { provider, model, providerType } = await getStageProvider(admin, fundId, 'draft_review')
+
+  // Chunk the reviewable paragraphs so each review call's edit output is
+  // bounded. Calls run in parallel — wall-clock stays flat regardless of
+  // memo size.
+  const reviewChunks: typeof reviewable[] = []
+  for (let i = 0; i < reviewable.length; i += PARAGRAPHS_PER_REVIEW) {
+    reviewChunks.push(reviewable.slice(i, i + PARAGRAPHS_PER_REVIEW))
+  }
+
+  await note(`Reviewing ${reviewable.length} paragraphs across ${reviewChunks.length} parallel call(s)…`)
+  const editLists = await Promise.all(reviewChunks.map(async (chunk, idx) => {
+    try {
+      const res = await provider.createMessage({
+        model,
+        maxTokens: 16384,
+        system,
+        content: buildDraftReviewContent({
+          dealName: 'this deal',
+          paragraphs: chunk.map(p => ({ id: p.id, section_id: p.section_id, prose: p.prose })),
+          ingestion,
+          research,
+          qa_answers,
+        }),
+      })
+      logAIUsage(admin, { fundId, provider: providerType, model, feature: 'memo_agent_draft_review', usage: res.usage })
+      if (res.truncated) {
+        warnings.push(`Review chunk ${idx + 1} was truncated — some edits may not have been applied.`)
+      }
+      return parseReviewResponse(res.text)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      warnings.push(`Review chunk ${idx + 1} failed: ${msg}. Those paragraphs keep their first-draft prose.`)
+      return []
+    }
+  }))
+  const edits = editLists.flat()
+  const byId = new Map(memo.paragraphs.map(p => [p.id, p]))
+  let applied = 0
+  for (const e of edits) {
+    const target = byId.get(e.paragraph_id)
+    if (!target) continue
+    if (target.origin === 'partner_only_placeholder') continue
+    if (!e.revised_prose.trim()) continue
+    target.prose = e.revised_prose
+    applied += 1
+    if (e.reason) warnings.push(`Review edited ${e.paragraph_id}: ${e.reason}`)
+  }
+
+  await note('Writing reviewed draft…')
+  const { error: updateErr } = await admin
+    .from('diligence_memo_drafts')
+    .update({ memo_draft_output: memo as any })
+    .eq('id', row.id)
+  if (updateErr) throw new Error(`Failed to persist reviewed draft: ${updateErr.message}`)
+
+  return { draft_id: row.id, edits_applied: applied, warnings }
+}
+
+function parseReviewResponse(raw: string): Array<{ paragraph_id: string; revised_prose: string; reason: string }> {
+  const parsed = extractJsonObject(raw)
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Review AI returned non-object JSON')
+  }
+  const obj = parsed as Record<string, unknown>
+  if (!Array.isArray(obj.edits)) return []
+  return obj.edits
+    .filter((e: any) => e && typeof e === 'object' && typeof e.paragraph_id === 'string' && typeof e.revised_prose === 'string')
+    .map((e: any) => ({
+      paragraph_id: e.paragraph_id,
+      revised_prose: e.revised_prose,
+      reason: typeof e.reason === 'string' ? e.reason : '',
+    }))
+}
+
+// ---------------------------------------------------------------------------
 
 interface DraftRow {
   id: string
@@ -264,6 +416,37 @@ async function loadDraftWithInputs(admin: Admin, fundId: string, dealId: string,
   const { data } = await admin
     .from('diligence_memo_drafts')
     .select('id, ingestion_output, research_output, qa_answers')
+    .eq('deal_id', dealId)
+    .eq('fund_id', fundId)
+    .eq('is_draft', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return (data as any) ?? null
+}
+
+interface DraftWithMemoRow {
+  id: string
+  memo_draft_output: unknown
+  ingestion_output: unknown
+  research_output: unknown
+  qa_answers: unknown
+}
+
+async function loadDraftWithMemo(admin: Admin, fundId: string, dealId: string, draftId?: string): Promise<DraftWithMemoRow | null> {
+  const cols = 'id, memo_draft_output, ingestion_output, research_output, qa_answers'
+  if (draftId) {
+    const { data } = await admin
+      .from('diligence_memo_drafts')
+      .select(cols)
+      .eq('id', draftId)
+      .eq('fund_id', fundId)
+      .maybeSingle()
+    return (data as any) ?? null
+  }
+  const { data } = await admin
+    .from('diligence_memo_drafts')
+    .select(cols)
     .eq('deal_id', dealId)
     .eq('fund_id', fundId)
     .eq('is_draft', true)
@@ -318,9 +501,6 @@ function coerceOutlineSection(raw: unknown): OutlineSection | null {
           section_id: r.section_id,
           order: typeof p.order === 'number' ? p.order : i + 1,
           topic: typeof p.topic === 'string' ? p.topic : '',
-          intended_source_ids: Array.isArray(p.intended_source_ids)
-            ? p.intended_source_ids.filter((s: unknown) => typeof s === 'string')
-            : [],
         }
       }).filter(Boolean)
     : []

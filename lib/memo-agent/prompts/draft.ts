@@ -15,7 +15,6 @@ export interface OutlineParagraph {
   section_id: string
   order: number
   topic: string
-  intended_source_ids: string[]
 }
 
 export interface OutlineSection {
@@ -78,9 +77,6 @@ export function buildDraftSectionFillContent(params: {
     planLines.push(`## Section: ${sec.section_id}`)
     for (const p of sec.paragraphs) {
       planLines.push(`  - paragraph ${p.id} (order ${p.order}): ${p.topic}`)
-      if (p.intended_source_ids.length > 0) {
-        planLines.push(`    intended sources: ${p.intended_source_ids.join(', ')}`)
-      }
     }
   }
 
@@ -151,6 +147,50 @@ export function buildScoreUserContent(params: ScorePromptInput): ContentBlock[] 
   return [{ type: 'text', text }]
 }
 
+/**
+ * Stage 4C — review pass. A stronger model reads the assembled first draft
+ * and returns ONLY the paragraphs that need improvement (targeted edits), so
+ * the output stays small enough to fit a single call.
+ */
+export function buildDraftReviewContent(params: {
+  dealName: string
+  paragraphs: Array<{ id: string; section_id: string; prose: string }>
+  ingestion: IngestionOutput
+  research: ResearchOutput | null
+  qa_answers: QARecord[]
+}): ContentBlock[] {
+  const memoLines: string[] = []
+  for (const p of params.paragraphs) {
+    memoLines.push(`### ${p.section_id} — paragraph ${p.id}`)
+    memoLines.push(p.prose || '(empty)')
+    memoLines.push('')
+  }
+
+  const text = [
+    `Deal: ${params.dealName}`,
+    '',
+    `=== STAGE 4C — MEMO REVIEW & EDIT ===`,
+    `Review the first-draft memo below. Return ONLY paragraphs that need`,
+    `improvement — not the whole memo.`,
+    '',
+    `--- FIRST-DRAFT MEMO ---`,
+    memoLines.join('\n'),
+    '',
+    `--- INGESTION OUTPUT (claims with verification_status) ---`,
+    summarizeIngestion(params.ingestion),
+    '',
+    `--- RESEARCH OUTPUT ---`,
+    params.research ? summarizeResearch(params.research) : '(none)',
+    '',
+    `--- PARTNER Q&A ANSWERS ---`,
+    summarizeQA(params.qa_answers),
+    '',
+    REVIEW_INSTRUCTIONS,
+  ].join('\n')
+
+  return [{ type: 'text', text }]
+}
+
 // ---------------------------------------------------------------------------
 // Instructions
 // ---------------------------------------------------------------------------
@@ -175,8 +215,7 @@ const OUTLINE_INSTRUCTIONS = `Output JSON ONLY. Plan the memo — do NOT write p
         {
           "id": string,                    // "p_<section>_<n>"
           "order": integer,
-          "topic": string,                 // one line: what this paragraph covers
-          "intended_source_ids": [string]  // claim/finding/qa_answer ids this paragraph will draw from
+          "topic": string                  // ONE concise line (max 15 words): what this paragraph covers
         }
       ]
     }
@@ -193,9 +232,9 @@ const OUTLINE_INSTRUCTIONS = `Output JSON ONLY. Plan the memo — do NOT write p
 
 Planning rules:
   • Include every section from memo_output.yaml EXCEPT "scoring_summary" and "appendix" (those come from later stages).
-  • The "recommendation" section gets exactly ONE paragraph with topic "[partner-only placeholder]" and no intended sources.
+  • The "recommendation" section gets exactly ONE paragraph with topic "[partner-only placeholder]".
   • The "team" section SHOULD plan MULTIPLE paragraphs: (a) factual_summary — per-founder background; (b) prior_work — what each founder built/shipped/led, with sourced specifics; (c) public_output — papers, talks, OSS, public writing; (d) references_to_qa — partner Q&A about the team. Plus placeholder paragraphs for character_assessment and founder_market_fit_judgment.
-  • intended_source_ids must reference ids that actually appear in the input above. Never invent ids.
+  • Keep each "topic" to one concise line. The section-fill step has the full source data and will pick exact citations — do not enumerate source ids here.
   • Surface unverified material claims, contradictions, gaps, missing Q&A, and partner_only blanks as partner_attention items now — they don't need prose.`
 
 const SECTION_FILL_INSTRUCTIONS = `Output JSON ONLY. Write prose for the planned paragraphs.
@@ -231,6 +270,30 @@ Hard rules:
   • Every paragraph that mentions a forward-looking number sets contains_projection=true.
   • Every paragraph relying on an unverified claim sets contains_unverified_claim=true.
   • Cite source_ids that actually appear in the input data above. Never invent ids.`
+
+const REVIEW_INSTRUCTIONS = `Output JSON ONLY. Return ONLY paragraphs that genuinely need improvement.
+
+{
+  "edits": [
+    {
+      "paragraph_id": string,            // must match a paragraph id from the first-draft memo above
+      "revised_prose": string,           // the improved paragraph text
+      "reason": string                   // one line: what was wrong and what you fixed
+    }
+  ]
+}
+
+Review for, in priority order:
+  1. Sourcing accuracy — prose that asserts something the source data does not support, or that reads as verified when the underlying claim is company-stated/unverified.
+  2. Thin paragraphs — anything under ~70 words or a single sentence. Expand to 120-220 words with substance from the source data.
+  3. Cross-section repetition — if two paragraphs cover the same ground, tighten the weaker one.
+  4. Voice and clarity — marketing language, hedging, or vague phrasing; make it crisp and partner-readable.
+
+Rules:
+  • Do NOT return paragraphs that are already good. An empty edits array is a valid response.
+  • Do NOT rewrite partner_only_placeholder paragraphs (prose "[Partner to complete]"). Leave them alone.
+  • Do NOT draft a recommendation or score the team.
+  • revised_prose replaces the paragraph's prose verbatim — return the full improved paragraph, not a diff.`
 
 const SCORE_INSTRUCTIONS = `Output JSON ONLY:
 

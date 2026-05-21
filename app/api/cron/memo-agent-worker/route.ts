@@ -4,6 +4,7 @@ import { runIngestJob } from '@/lib/memo-agent/jobs/ingest-job'
 import { runIngestSynthesisJob } from '@/lib/memo-agent/jobs/ingest-synthesis-job'
 import { runResearchJob } from '@/lib/memo-agent/jobs/research-job'
 import { runDraftJob } from '@/lib/memo-agent/jobs/draft-job'
+import { runDraftReviewJob } from '@/lib/memo-agent/jobs/draft-review-job'
 import { runRenderJob } from '@/lib/memo-agent/jobs/render-job'
 
 /**
@@ -67,7 +68,7 @@ export async function GET(req: NextRequest) {
     fund_id: string
     deal_id: string
     draft_id: string | null
-    kind: 'ingest' | 'ingest_synthesis' | 'research' | 'qa' | 'draft' | 'render'
+    kind: 'ingest' | 'ingest_synthesis' | 'research' | 'qa' | 'draft' | 'draft_review' | 'render'
     payload: Record<string, unknown>
     enqueued_by: string | null
   }
@@ -88,6 +89,9 @@ export async function GET(req: NextRequest) {
         break
       case 'draft':
         result = await runDraftJob(admin, job)
+        break
+      case 'draft_review':
+        result = await runDraftReviewJob(admin, job)
         break
       case 'render':
         result = await runRenderJob(admin, job)
