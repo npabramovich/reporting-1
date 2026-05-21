@@ -663,7 +663,7 @@ interface AgentStatus {
   deal: { current_memo_stage: string }
   latest_job: {
     id: string
-    kind: 'ingest' | 'ingest_synthesis' | 'research' | 'qa' | 'draft' | 'render'
+    kind: 'ingest' | 'ingest_synthesis' | 'research' | 'qa' | 'draft' | 'draft_review' | 'score' | 'render'
     status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled'
     progress_message: string | null
     error: string | null
@@ -1106,6 +1106,9 @@ function DraftsTab({ dealId }: { dealId: string }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Re-fetch the drafts list whenever the latest job's status changes — the
+  // draft + draft_review jobs both write to the same draft row, so the row
+  // id alone doesn't change and wouldn't trigger a refresh on completion.
   useEffect(() => {
     fetch(`/api/diligence/${dealId}/drafts`).then(r => r.ok ? r.json() : []).then((rows: any[]) => {
       setDrafts(rows.map(r => ({
@@ -1120,10 +1123,15 @@ function DraftsTab({ dealId }: { dealId: string }) {
         has_qa: !!r.qa_answers,
       })))
     }).catch(() => {})
-  }, [dealId, status?.latest_draft?.id])
+  }, [dealId, status?.latest_draft?.id, status?.latest_job?.status, status?.latest_job?.id])
 
   const job = status?.latest_job
-  const isInFlight = job && (job.status === 'pending' || job.status === 'running') && job.kind === 'draft'
+  // Draft is a multi-job workflow: 'draft' (outline + fills) auto-enqueues
+  // 'draft_review' (review + score); 'score' can also run standalone. Treat
+  // all three as in-flight so the panel shows continuous progress.
+  const isDraftWorkflowJob = job?.kind === 'draft' || job?.kind === 'draft_review' || job?.kind === 'score'
+  const isInFlight = job && (job.status === 'pending' || job.status === 'running') && isDraftWorkflowJob
+  const hasMemo = drafts.some(d => d.has_memo_draft)
 
   async function runDraft() {
     setSubmitting(true)
@@ -1132,6 +1140,21 @@ function DraftsTab({ dealId }: { dealId: string }) {
       const res = await fetch(`/api/diligence/${dealId}/agent/draft`, { method: 'POST' })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? 'Failed to enqueue draft')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed')
+    } finally {
+      setSubmitting(false)
+      await refresh()
+    }
+  }
+
+  async function runScore() {
+    setSubmitting(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/diligence/${dealId}/agent/score`, { method: 'POST' })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? 'Failed to enqueue scoring')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed')
     } finally {
@@ -1149,15 +1172,29 @@ function DraftsTab({ dealId }: { dealId: string }) {
             Assemble a structured memo from ingestion, research, and Q&amp;A; score every machine and hybrid rubric dimension; surface partner-attention items.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={runDraft} disabled={submitting || !!isInFlight}>
-          {isInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : drafts.some(d => d.has_memo_draft) ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
-          {drafts.some(d => d.has_memo_draft) ? 'Re-draft' : 'Run draft'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {hasMemo && !isInFlight && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={runScore}
+              disabled={submitting}
+              title="Score the existing memo against the rubric — without re-running the draft"
+            >
+              <RefreshCw className="h-3.5 w-3.5 mr-1" />
+              Run scoring
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={runDraft} disabled={submitting || !!isInFlight}>
+            {isInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : hasMemo ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
+            {hasMemo ? 'Re-draft' : 'Run draft'}
+          </Button>
+        </div>
       </div>
 
       {error && <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
 
-      <JobStatusLine job={job ?? null} kind="draft" error={null} />
+      <JobStatusLine job={job ?? null} kind={['draft', 'draft_review', 'score']} error={null} />
 
       {drafts.length === 0 ? (
         <div className="rounded-md border bg-card p-12 text-center text-sm text-muted-foreground">
@@ -1183,9 +1220,11 @@ function DraftsTab({ dealId }: { dealId: string }) {
                 </div>
               </div>
               {d.has_memo_draft ? (
-                <Link href={`/diligence/${dealId}/drafts/${d.id}`} className="text-xs underline text-muted-foreground hover:text-foreground">
-                  Open
-                </Link>
+                <Button asChild variant="outline" size="sm" className="h-7 text-xs px-2.5">
+                  <Link href={`/diligence/${dealId}/drafts/${d.id}`}>
+                    Open draft
+                  </Link>
+                </Button>
               ) : null}
             </div>
           ))}

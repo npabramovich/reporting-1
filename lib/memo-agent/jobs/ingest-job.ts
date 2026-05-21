@@ -50,7 +50,7 @@ export async function runIngestJob(admin: Admin, job: IngestJob): Promise<unknow
   // synthesis has nothing to do in that case.
   let synthesis_job_id: string | null = null
   if (result.documents_processed > 0) {
-    const { data: enq } = await admin
+    const { data: enq, error: enqErr } = await admin
       .from('memo_agent_jobs')
       .insert({
         fund_id: job.fund_id,
@@ -62,7 +62,15 @@ export async function runIngestJob(admin: Admin, job: IngestJob): Promise<unknow
       } as any)
       .select('id')
       .single()
-    synthesis_job_id = (enq as { id: string } | null)?.id ?? null
+    // Fail loudly rather than silently landing per-doc results with no
+    // gap analysis / cross-doc flags.
+    if (enqErr || !enq) {
+      throw new Error(
+        `Ingest succeeded but the synthesis job could not be enqueued: ${enqErr?.message ?? 'unknown error'}. ` +
+        `If this mentions a check constraint on "kind", apply the memo_agent_jobs kind migration (supabase db push).`
+      )
+    }
+    synthesis_job_id = (enq as { id: string }).id
   }
 
   return {
