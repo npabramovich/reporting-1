@@ -41,27 +41,56 @@ export default function SignUpPage() {
     setInfo(null)
     setLoading(true)
 
+    // Step 1: server-side whitelist check. Each failure mode is handled
+    // distinctly so a recurrence is diagnosable from the message + console
+    // rather than collapsing into one generic "please try again".
+
+    // 1a. Network-level failure reaching our own API.
+    let whitelistRes: Response
     try {
-      // Step 1: Server-side whitelist check
-      const res = await fetch('/api/auth/signup', {
+      whitelistRes = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, acceptedLicense: true }),
       })
-      const data = await res.json()
-      if (!res.ok) {
-        if (data.error === 'not_whitelisted') {
-          setError('not_whitelisted')
-        } else {
-          setError(data.error || 'Unable to create account.')
-        }
-        setLoading(false)
-        return
-      }
+    } catch (err) {
+      console.error('[signup] whitelist request failed to send:', err)
+      setError('Couldn’t reach the server. Check your connection and try again.')
+      setLoading(false)
+      return
+    }
 
-      // Step 2: Create user via browser client (PKCE flow — confirmation link will work)
+    // 1b. Response arrived but isn't JSON — typically an infra error page
+    // (gateway timeout, platform 5xx). The HTTP status pinpoints it.
+    let whitelistData: { ok?: boolean; error?: string }
+    try {
+      whitelistData = await whitelistRes.json()
+    } catch (err) {
+      console.error(`[signup] whitelist response was not JSON (HTTP ${whitelistRes.status}):`, err)
+      setError(`Signup check failed — the server returned an unexpected response (HTTP ${whitelistRes.status}). Please try again in a moment.`)
+      setLoading(false)
+      return
+    }
+
+    // 1c. Whitelist rejected, or the API returned a handled error.
+    if (!whitelistRes.ok) {
+      if (whitelistData.error === 'not_whitelisted') {
+        setError('not_whitelisted')
+      } else {
+        setError(whitelistData.error || 'Unable to create account.')
+      }
+      setLoading(false)
+      return
+    }
+
+    // Step 2: create the user via the browser client (PKCE flow — the
+    // confirmation link will work). signUp normally *returns* errors, but a
+    // 5xx from the Auth server can surface as a *thrown* exception — handle
+    // both so neither is mistaken for the other.
+    let signUpError: { message?: string } | null = null
+    try {
       const supabase = createClient()
-      const { error: signUpError } = await supabase.auth.signUp({
+      const result = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
         options: {
@@ -71,18 +100,28 @@ export default function SignUpPage() {
           },
         },
       })
+      signUpError = result.error
+    } catch (err) {
+      console.error('[signup] supabase.auth.signUp threw:', err)
+      setError(
+        err instanceof Error
+          ? `Account creation failed: ${err.message}`
+          : 'Account creation failed unexpectedly. Please try again.'
+      )
+      setLoading(false)
+      return
+    }
 
-      if (signUpError) {
-        if (signUpError.message?.includes('already') || signUpError.message?.includes('registered')) {
-          setError('Unable to create account. The email may already be registered.')
-        } else {
-          setError(signUpError.message || 'Unable to create account.')
-        }
+    if (signUpError) {
+      console.error('[signup] signUp returned an error:', signUpError)
+      const msg = signUpError.message ?? ''
+      if (msg.includes('already') || msg.includes('registered')) {
+        setError('Unable to create account. The email may already be registered.')
       } else {
-        setInfo('Check your email for a confirmation link.')
+        setError(msg || 'Unable to create account.')
       }
-    } catch {
-      setError('Unable to create account. Please try again.')
+    } else {
+      setInfo('Check your email for a confirmation link.')
     }
     setLoading(false)
   }
