@@ -9,10 +9,13 @@ import { parseCallbackPayload } from '@/lib/transcription/deepgram'
  *      request_id) or by the tag we attached at submit time.
  *   2. Writes the formatted transcript text into the diligence-documents
  *      bucket and creates a new diligence_documents row of type
- *      call_transcript, linked back to the recording via source_document_id.
+ *      call_transcript (parse_status 'pending'), linked back to the
+ *      recording via source_document_id.
  *   3. Bulk-inserts per-utterance turns into diligence_call_transcripts.
- *   4. Marks the transcribe job success and enqueues an ingest job so the
- *      transcript flows into the memo draft.
+ *   4. Marks the transcribe job success. The transcript is left as a
+ *      pending document — transcription is decoupled from memo ingest, so
+ *      a partner explicitly Processes the transcript when they want it in
+ *      the draft.
  *
  * Auth is a shared secret carried in the path; Deepgram's prerecorded
  * callbacks aren't signed, so this is the simplest defensible scheme. Don't
@@ -117,7 +120,10 @@ export async function POST(req: NextRequest, { params }: { params: { secret: str
       file_size_bytes: buffer.length,
       detected_type: 'call_transcript',
       type_confidence: 'high',
-      parse_status: 'parsed',
+      // Pending, not parsed — transcription is decoupled from ingest. The
+      // transcript shows in the data room with a Process action the partner
+      // can run when they want it folded into the memo.
+      parse_status: 'pending',
       source_document_id: documentId,
     } as any)
     .select('id')
@@ -155,27 +161,9 @@ export async function POST(req: NextRequest, { params }: { params: { secret: str
     .update({ parse_status: 'transcribed' } as any)
     .eq('id', documentId)
 
-  // Auto-enqueue an ingest job for the new transcript so it flows into the
-  // memo draft without a second user action. Only if no other job is active.
-  const { data: activeJob } = await admin
-    .from('memo_agent_jobs')
-    .select('id')
-    .eq('deal_id', job.deal_id)
-    .eq('fund_id', job.fund_id)
-    .in('status', ['pending', 'running'])
-    .neq('id', job.id)
-    .limit(1)
-    .maybeSingle()
-  if (!activeJob) {
-    await admin
-      .from('memo_agent_jobs')
-      .insert({
-        fund_id: job.fund_id,
-        deal_id: job.deal_id,
-        kind: 'ingest',
-        payload: { document_ids: [transcriptDocId] },
-      } as any)
-  }
+  // Transcription is decoupled from memo ingest — the transcript document is
+  // left pending for the partner to Process explicitly. No ingest job is
+  // enqueued here.
 
   await admin
     .from('memo_agent_jobs')

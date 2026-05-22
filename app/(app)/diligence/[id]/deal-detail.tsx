@@ -265,8 +265,36 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { deal
   const [documents, setDocuments] = useState(initialDocuments)
   const [uploading, setUploading] = useState(false)
   const [driveOpen, setDriveOpen] = useState(false)
-  const [reprocessing, setReprocessing] = useState<Set<string>>(new Set())
+  // Docs with an in-flight process/transcribe job. Held from click until the
+  // doc reaches a terminal parse_status — the polling effect below clears it.
+  const [processing, setProcessing] = useState<Set<string>>(new Set())
   const [reprocessError, setReprocessError] = useState<string | null>(null)
+
+  // Poll the documents list while anything is processing, so the row reflects
+  // the actual job lifecycle (not just the brief enqueue call) and updates
+  // when the worker finishes — no manual refresh needed.
+  const anyProcessing = processing.size > 0
+  useEffect(() => {
+    if (!anyProcessing) return
+    const TERMINAL = ['parsed', 'failed', 'partial', 'transcribed', 'skipped']
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/diligence/${dealId}/documents`)
+        if (!res.ok) return
+        const rows = await res.json() as DiligenceDocument[]
+        setDocuments(rows)
+        setProcessing(prev => {
+          const next = new Set(prev)
+          for (const id of Array.from(prev)) {
+            const row = rows.find(r => r.id === id)
+            if (!row || TERMINAL.includes(row.parse_status)) next.delete(id)
+          }
+          return next
+        })
+      } catch { /* transient — try again next tick */ }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [anyProcessing, dealId])
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -307,8 +335,12 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { deal
   // doc. The ingest API treats a one-document request as a partial run: the
   // result is merged into the deal's existing ingestion output (other docs
   // untouched) and a synthesis refresh is auto-enqueued — additive, not a reset.
+  //
+  // On success the doc stays in `processing` — the polling effect clears it
+  // once the worker drives it to a terminal status, so the button reflects
+  // the real job lifecycle rather than just the enqueue call.
   async function processDocument(id: string) {
-    setReprocessing(prev => { const next = new Set(prev); next.add(id); return next })
+    setProcessing(prev => { const next = new Set(prev); next.add(id); return next })
     setReprocessError(null)
     try {
       // A skipped doc is filtered out by loadDealDocuments, so it must be
@@ -333,12 +365,32 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { deal
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body?.error ?? 'Failed to enqueue processing')
-      // Optimistic — mark pending until the worker picks it up.
+      // Optimistic — mark pending; the doc stays in `processing` until polled done.
       setDocuments(prev => prev.map(d => d.id === id ? { ...d, parse_status: 'pending', parse_notes: null } : d))
     } catch (err) {
       setReprocessError(err instanceof Error ? err.message : 'Failed to enqueue processing')
-    } finally {
-      setReprocessing(prev => { const next = new Set(prev); next.delete(id); return next })
+      // Failed to even enqueue — release the in-flight state immediately.
+      setProcessing(prev => { const next = new Set(prev); next.delete(id); return next })
+    }
+  }
+
+  // Transcribe a call recording. Standalone — produces a transcript document
+  // (left pending) without auto-running memo ingest.
+  async function transcribe(id: string) {
+    setProcessing(prev => { const next = new Set(prev); next.add(id); return next })
+    setReprocessError(null)
+    try {
+      const res = await fetch(`/api/diligence/${dealId}/agent/transcribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document_id: id }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body?.error ?? 'Failed to enqueue transcription')
+      setDocuments(prev => prev.map(d => d.id === id ? { ...d, parse_status: 'pending' } : d))
+    } catch (err) {
+      setReprocessError(err instanceof Error ? err.message : 'Failed to enqueue transcription')
+      setProcessing(prev => { const next = new Set(prev); next.delete(id); return next })
     }
   }
 
@@ -433,6 +485,26 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { deal
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex items-center gap-1.5">
                       {(() => {
+                        const inFlight = processing.has(d.id)
+                        const isRecording = d.detected_type === 'call_recording'
+                        if (isRecording) {
+                          // Recordings can't be ingested directly — they're
+                          // transcribed, and the transcript is what gets ingested.
+                          return (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs px-2.5 text-muted-foreground hover:text-foreground"
+                              onClick={() => transcribe(d.id)}
+                              disabled={inFlight}
+                              title="Transcribe this recording via Deepgram — produces a transcript document"
+                            >
+                              {inFlight
+                                ? 'Transcribing…'
+                                : d.parse_status === 'transcribed' ? 'Re-transcribe' : 'Transcribe'}
+                            </Button>
+                          )
+                        }
                         const notYetProcessed = d.parse_status === 'pending' || d.parse_status === 'skipped'
                         return (
                           <Button
@@ -440,15 +512,15 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { deal
                             variant="outline"
                             className="h-7 text-xs px-2.5 text-muted-foreground hover:text-foreground"
                             onClick={() => processDocument(d.id)}
-                            disabled={reprocessing.has(d.id)}
+                            disabled={inFlight}
                             title={d.parse_status === 'skipped'
                               ? 'Un-skip and ingest this document — adds it to the existing ingestion output'
                               : d.parse_status === 'pending'
                                 ? 'Ingest just this document — adds it to the existing ingestion output'
                                 : 'Re-run ingest on just this document — replaces its entry, keeps the rest'}
                           >
-                            {reprocessing.has(d.id)
-                              ? 'Queuing…'
+                            {inFlight
+                              ? 'Processing…'
                               : notYetProcessed ? 'Process' : 'Reprocess'}
                           </Button>
                         )
@@ -709,6 +781,10 @@ interface AgentStatus {
     has_qa: boolean
     has_memo_draft: boolean
   } | null
+  /** True when ingestion has run more recently than the memo draft. */
+  memo_stale?: boolean
+  /** Documents uploaded since the memo was last drafted. */
+  documents_added_since_draft?: number
 }
 
 function useAgentStatus(dealId: string) {
@@ -829,8 +905,16 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
 
       <JobStatusLine job={job ?? null} kind={['ingest', 'ingest_synthesis']} error={error} />
 
-      {draft?.ingestion_output && !isInFlight && (
+      {/* Keep the summary visible during a run — a single-doc reprocess
+          shouldn't blank the whole panel. The job status line above shows
+          progress; the summary refreshes when the job completes. */}
+      {draft?.ingestion_output && (
         <div className="mt-4">
+          {isInFlight && (
+            <p className="text-[11px] text-muted-foreground mb-2 italic">
+              Showing the last completed ingestion — updating…
+            </p>
+          )}
           <IngestionSummary output={draft.ingestion_output as IngestionOutput} fileNamesById={fileNamesById} />
         </div>
       )}
@@ -1222,6 +1306,16 @@ function DraftsTab({ dealId }: { dealId: string }) {
       </div>
 
       {error && <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
+
+      {status?.memo_stale && !isInFlight && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-900 dark:text-amber-200">
+          <span className="font-medium">Memo is out of date with the data room.</span>{' '}
+          {status.documents_added_since_draft && status.documents_added_since_draft > 0
+            ? `${status.documents_added_since_draft} document${status.documents_added_since_draft === 1 ? '' : 's'} ${status.documents_added_since_draft === 1 ? 'has' : 'have'} been uploaded since this memo was drafted. `
+            : 'Ingestion has changed since this memo was drafted. '}
+          Re-run research and draft to fold the latest evidence into the memo.
+        </div>
+      )}
 
       <JobStatusLine job={job ?? null} kind={['draft', 'draft_review', 'score']} error={null} />
 

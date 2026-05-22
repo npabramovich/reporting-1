@@ -39,6 +39,39 @@ export interface ParsedDeepgramCallback {
   duration_seconds: number | null
 }
 
+export interface DeepgramConnectionResult {
+  ok: boolean
+  detail: string
+}
+
+/**
+ * Verify the configured DEEPGRAM_API_KEY by calling Deepgram's projects
+ * endpoint. A 200 means the key is valid; 401/403 means it's wrong. Used by
+ * the admin connection-test action so transcription config can be checked
+ * without uploading a recording.
+ */
+export async function testDeepgramConnection(): Promise<DeepgramConnectionResult> {
+  const apiKey = process.env.DEEPGRAM_API_KEY
+  if (!apiKey) return { ok: false, detail: 'DEEPGRAM_API_KEY is not set in the environment.' }
+  try {
+    const res = await fetch('https://api.deepgram.com/v1/projects', {
+      headers: { Authorization: `Token ${apiKey}` },
+    })
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, detail: `Deepgram rejected the API key (HTTP ${res.status}). Check DEEPGRAM_API_KEY.` }
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      return { ok: false, detail: `Deepgram returned HTTP ${res.status}. ${text.slice(0, 200)}`.trim() }
+    }
+    const data = await res.json().catch(() => ({})) as { projects?: unknown[] }
+    const n = Array.isArray(data.projects) ? data.projects.length : 0
+    return { ok: true, detail: `Connected — ${n} Deepgram project${n === 1 ? '' : 's'} accessible.` }
+  } catch (err) {
+    return { ok: false, detail: `Could not reach Deepgram: ${err instanceof Error ? err.message : String(err)}` }
+  }
+}
+
 /**
  * Submit an audio/video URL for prerecorded transcription. Returns
  * immediately with Deepgram's request_id; the actual transcript arrives at

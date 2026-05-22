@@ -29,7 +29,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .maybeSingle()
   if (!deal) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const [{ data: latestJob }, { data: latestDraft }] = await Promise.all([
+  const [{ data: latestJob }, { data: latestDraft }, { data: lastIngestJob }, { data: lastDraftJob }] = await Promise.all([
     admin
       .from('memo_agent_jobs')
       .select('id, kind, status, progress_message, error, attempts, enqueued_at, started_at, finished_at, result')
@@ -46,7 +46,52 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // Most recent successful ingestion (per-doc or synthesis) — the moment
+    // the deal's evidence base last changed.
+    admin
+      .from('memo_agent_jobs')
+      .select('finished_at')
+      .eq('deal_id', params.id)
+      .eq('fund_id', fundId)
+      .eq('status', 'success')
+      .in('kind', ['ingest', 'ingest_synthesis'])
+      .not('finished_at', 'is', null)
+      .order('finished_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    // Most recent successful draft build — the moment the memo prose was
+    // last assembled from the evidence base.
+    admin
+      .from('memo_agent_jobs')
+      .select('finished_at')
+      .eq('deal_id', params.id)
+      .eq('fund_id', fundId)
+      .eq('status', 'success')
+      .in('kind', ['draft', 'draft_review'])
+      .not('finished_at', 'is', null)
+      .order('finished_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ])
+
+  // Memo is "stale" when ingestion has run more recently than the draft —
+  // i.e. evidence was added/changed after the memo prose was assembled.
+  const ingestAt = (lastIngestJob as { finished_at: string } | null)?.finished_at ?? null
+  const draftAt = (lastDraftJob as { finished_at: string } | null)?.finished_at ?? null
+  const hasMemo = !!(latestDraft as any)?.memo_draft_output
+  const memoStale = hasMemo && !!ingestAt && !!draftAt && ingestAt > draftAt
+
+  // Best-effort count of documents uploaded since the memo was drafted.
+  let documentsAddedSinceDraft = 0
+  if (memoStale && draftAt) {
+    const { count } = await admin
+      .from('diligence_documents')
+      .select('id', { count: 'exact', head: true })
+      .eq('deal_id', params.id)
+      .eq('fund_id', fundId)
+      .gt('uploaded_at', draftAt)
+    documentsAddedSinceDraft = count ?? 0
+  }
 
   return NextResponse.json({
     deal: { id: (deal as any).id, current_memo_stage: (deal as any).current_memo_stage },
@@ -62,5 +107,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       has_qa: !!(latestDraft as any).qa_answers,
       has_memo_draft: !!(latestDraft as any).memo_draft_output,
     } : null,
+    memo_stale: memoStale,
+    documents_added_since_draft: documentsAddedSinceDraft,
   })
 }

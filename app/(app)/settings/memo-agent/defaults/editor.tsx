@@ -77,6 +77,13 @@ export function DefaultsEditor() {
   const [webSearch, setWebSearch] = useState(false)
   const [exportFont, setExportFont] = useState('DM Sans')
   const [exportFontSize, setExportFontSize] = useState('11')
+  const [dgTesting, setDgTesting] = useState(false)
+  const [dgResult, setDgResult] = useState<{
+    deepgram: { ok: boolean; detail: string }
+    webhook_secret_set: boolean
+    webhook_url_resolvable: boolean
+    ready: boolean
+  } | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -164,6 +171,26 @@ export function DefaultsEditor() {
       [stage]: provider ? { provider, ...(model ? { model } : {}) } : null,
     }))
     if (provider) loadModelsFor(provider)
+  }
+
+  async function testTranscription() {
+    setDgTesting(true)
+    setDgResult(null)
+    try {
+      const res = await fetch('/api/transcription/test')
+      const body = await res.json()
+      if (!res.ok) throw new Error(body?.error ?? 'Test failed')
+      setDgResult(body)
+    } catch (err) {
+      setDgResult({
+        deepgram: { ok: false, detail: err instanceof Error ? err.message : 'Test failed' },
+        webhook_secret_set: false,
+        webhook_url_resolvable: false,
+        ready: false,
+      })
+    } finally {
+      setDgTesting(false)
+    }
   }
 
   if (!data) return <div className="p-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</div>
@@ -363,12 +390,58 @@ export function DefaultsEditor() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Call transcription (Deepgram)</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-3">
+            <p className="text-xs text-muted-foreground max-w-2xl">
+              Audio/video recordings uploaded to a deal&apos;s data room are transcribed via Deepgram.
+              Test that the API key and webhook environment are configured correctly.
+            </p>
+            <Button variant="outline" size="sm" onClick={testTranscription} disabled={dgTesting}>
+              {dgTesting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
+              Test Deepgram connection
+            </Button>
+            {dgResult && (
+              <div className="rounded-md border bg-muted/20 p-3 space-y-1.5 text-xs">
+                <ResultRow ok={dgResult.deepgram.ok} label="Deepgram API" detail={dgResult.deepgram.detail} />
+                <ResultRow
+                  ok={dgResult.webhook_secret_set}
+                  label="Webhook secret"
+                  detail={dgResult.webhook_secret_set ? 'TRANSCRIPTION_WEBHOOK_SECRET is set.' : 'TRANSCRIPTION_WEBHOOK_SECRET is missing.'}
+                />
+                <ResultRow
+                  ok={dgResult.webhook_url_resolvable}
+                  label="Webhook URL"
+                  detail={dgResult.webhook_url_resolvable ? 'A callback base URL is resolvable.' : 'No callback base URL (set TRANSCRIPTION_WEBHOOK_URL or NEXT_PUBLIC_SITE_URL).'}
+                />
+                <div className={`pt-1 font-medium ${dgResult.ready ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                  {dgResult.ready ? 'Transcription is ready to use.' : 'Transcription is not fully configured.'}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="flex justify-end">
           <Button onClick={save} disabled={saving}>
             {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : saved ? <Check className="h-4 w-4 mr-1" /> : <Save className="h-4 w-4 mr-1" />}
             {saved ? 'Saved' : 'Save'}
           </Button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ResultRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className={ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+        {ok ? '\u2713' : '\u2717'}
+      </span>
+      <div className="min-w-0">
+        <span className="font-medium">{label}</span>
+        <span className="text-muted-foreground">{` \u2014 ${detail}`}</span>
       </div>
     </div>
   )
