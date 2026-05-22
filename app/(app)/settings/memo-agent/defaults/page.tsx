@@ -14,11 +14,11 @@ export default async function DefaultsPage() {
   const admin = createAdminClient()
   const { data: membership } = await admin
     .from('fund_members')
-    .select('fund_id, role')
+    .select('fund_id')
     .eq('user_id', user.id)
     .maybeSingle()
+  // Diligence settings are open to any fund member, not admin-only.
   if (!membership) redirect('/dashboard')
-  if ((membership as any).role !== 'admin') redirect('/settings')
 
   return <DefaultsEditor />
 }
