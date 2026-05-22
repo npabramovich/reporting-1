@@ -257,6 +257,8 @@ const DOC_TYPE_OPTIONS = [
   { value: 'market_research', label: 'Market research' },
   { value: 'team_bio', label: 'Team bio' },
   { value: 'press', label: 'Press' },
+  { value: 'call_recording', label: 'Call recording (audio/video)' },
+  { value: 'call_transcript', label: 'Call transcript' },
   { value: 'other', label: 'Other' },
 ]
 

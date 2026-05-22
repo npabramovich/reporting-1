@@ -1,6 +1,6 @@
 import { extractText as extractPlainText } from '@/lib/memo-agent/extract-text'
 import { extractFromBuffer } from '@/lib/parsing/extractAttachmentText'
-import type { IngestionFileSource } from './sources'
+import { AUDIO_VIDEO_FORMATS, type IngestionFileSource } from './sources'
 
 export interface TranscriptTurn {
   speaker: string | null
@@ -92,6 +92,11 @@ export async function parseFile(source: IngestionFileSource): Promise<ParsedFile
       } else {
         out.text = result.extractedText
       }
+      return out
+    }
+
+    if (AUDIO_VIDEO_FORMATS.has(fmt)) {
+      errors.push(`${fmt} is an audio/video recording — transcribe it (reclassify as "Call recording" and use Transcribe), don't ingest it as a document.`)
       return out
     }
 

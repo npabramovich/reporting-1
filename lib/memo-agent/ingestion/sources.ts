@@ -2,6 +2,15 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 type Admin = ReturnType<typeof createAdminClient>
 
+// Audio/video formats are transcribed (Deepgram), never parsed as documents.
+// The document parser has no handler for them — excluding by file_format here
+// is defence-in-depth so a recording with a stale/missing detected_type can't
+// slip into ingest and fail with "Unsupported format".
+export const AUDIO_VIDEO_FORMATS = new Set([
+  'mp3', 'm4a', 'wav', 'aac', 'ogg', 'oga', 'flac', 'opus',
+  'mp4', 'm4v', 'mov', 'webm', 'mkv', 'avi', 'wmv',
+])
+
 /**
  * A diligence_documents row enriched with the bytes from storage.
  * Whether it came from direct upload or a Drive folder import doesn't
@@ -47,7 +56,7 @@ export async function loadDealDocuments(
   const { data, error } = await query
   if (error) throw new Error(`Failed to list deal documents: ${error.message}`)
 
-  const rows = (data ?? []) as Array<{
+  const allRows = (data ?? []) as Array<{
     id: string
     storage_path: string
     file_name: string
@@ -55,6 +64,12 @@ export async function loadDealDocuments(
     file_size_bytes: number | null
     detected_type: string | null
   }>
+
+  // Drop audio/video files — they go through the transcribe pipeline, not the
+  // document parser. The detected_type filter above catches correctly-
+  // classified recordings; this format check also catches ones with a stale
+  // or missing detected_type.
+  const rows = allRows.filter(r => !AUDIO_VIDEO_FORMATS.has((r.file_format ?? '').toLowerCase()))
 
   // Parallel downloads — Supabase storage handles ~10+ concurrent downloads
   // comfortably, and the alternative (sequential) easily blew past the 120s
