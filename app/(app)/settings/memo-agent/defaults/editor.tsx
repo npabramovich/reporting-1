@@ -69,7 +69,7 @@ const EXPORT_FONT_OPTIONS = [
 
 interface AIModel { id: string; name: string }
 
-export function DefaultsEditor() {
+export function DefaultsEditor({ embedded }: { embedded?: boolean } = {}) {
   const [data, setData] = useState<Defaults | null>(null)
   const [perDeal, setPerDeal] = useState<string>('')
   const [monthly, setMonthly] = useState<string>('')
@@ -199,16 +199,19 @@ export function DefaultsEditor() {
   const monthlyPct = data.monthly_token_cap ? Math.min(100, (data.monthly_used / data.monthly_token_cap) * 100) : 0
 
   return (
-    <div className="p-4 md:py-8 md:pl-8 md:pr-4 max-w-4xl">
-      <Link href="/settings" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to settings
-      </Link>
-
-      <h1 className="text-2xl font-semibold tracking-tight mb-1">Diligence Defaults</h1>
-      <p className="text-sm text-muted-foreground mb-6 max-w-2xl">
-        Cost guardrails and per-stage AI provider overrides. Caps are checked before each agent
-        stage runs; if the estimate would exceed a cap, the run is blocked.
-      </p>
+    <div className={embedded ? '' : 'p-4 md:py-8 md:pl-8 md:pr-4 max-w-4xl'}>
+      {!embedded && (
+        <>
+          <Link href="/settings" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to settings
+          </Link>
+          <h1 className="text-2xl font-semibold tracking-tight mb-1">Diligence Defaults</h1>
+          <p className="text-sm text-muted-foreground mb-6 max-w-2xl">
+            Cost guardrails and per-stage AI provider overrides. Caps are checked before each agent
+            stage runs; if the estimate would exceed a cap, the run is blocked.
+          </p>
+        </>
+      )}
 
       {error && <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive mb-4">{error}</div>}
 

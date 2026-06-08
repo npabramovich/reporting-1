@@ -8,6 +8,7 @@ import { runDraftReviewJob } from '@/lib/memo-agent/jobs/draft-review-job'
 import { runScoreJob } from '@/lib/memo-agent/jobs/score-job'
 import { runRenderJob } from '@/lib/memo-agent/jobs/render-job'
 import { runTranscribeJob, isAwaitingCallback } from '@/lib/memo-agent/jobs/transcribe-job'
+import { runChecklistAssessmentJob } from '@/lib/memo-agent/jobs/checklist-assessment-job'
 
 /**
  * Memo Agent worker. Triggered by Vercel cron every minute (per
@@ -90,7 +91,7 @@ export async function GET(req: NextRequest) {
     fund_id: string
     deal_id: string
     draft_id: string | null
-    kind: 'ingest' | 'ingest_synthesis' | 'research' | 'qa' | 'draft' | 'draft_review' | 'score' | 'render' | 'transcribe'
+    kind: 'ingest' | 'ingest_synthesis' | 'research' | 'qa' | 'draft' | 'draft_review' | 'score' | 'render' | 'transcribe' | 'checklist_assessment'
     payload: Record<string, unknown>
     enqueued_by: string | null
   }
@@ -123,6 +124,9 @@ export async function GET(req: NextRequest) {
         break
       case 'transcribe':
         result = await runTranscribeJob(admin, job)
+        break
+      case 'checklist_assessment':
+        result = await runChecklistAssessmentJob(admin, job)
         break
       case 'qa':
         // Q&A is a synchronous interactive flow rather than a worker job —

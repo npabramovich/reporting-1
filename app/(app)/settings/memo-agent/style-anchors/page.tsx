@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getActiveAnchors, getSynthesisConfidence } from '@/lib/memo-agent/style-anchors'
 import { StyleAnchorsLibrary } from './library'
 
-export const metadata: Metadata = { title: 'Style anchors' }
+export const metadata: Metadata = { title: 'Example memos' }
 
 export default async function StyleAnchorsPage() {
   const supabase = createClient()

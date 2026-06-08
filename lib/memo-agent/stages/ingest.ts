@@ -21,6 +21,10 @@ export interface IngestionDocumentOutput {
     context: string
     verification_status: 'unverified'
     criticality: 'high' | 'medium' | 'low'
+    /** Id of the diligence_checklist_items row this finding helps assess, if
+     *  applicable. Null when the finding doesn't map cleanly to any checklist
+     *  item — the model decides per-finding. */
+    checklist_item_id?: string | null
   }>
   issues?: string[]
 }
@@ -101,6 +105,29 @@ export async function runIngestDocs(params: {
     .maybeSingle()
   const dealName = (dealRow as { name: string } | null)?.name ?? 'this deal'
 
+  // Load the partner's checklist so each per-doc call can tag findings to
+  // specific items. The model receives `id [section] label` and stamps a
+  // `checklist_item_id` on each claim where applicable. Empty checklist =
+  // falls back to plain extraction (instructions adapt automatically).
+  await note('Loading deal checklist…')
+  const { data: checklistRows } = await (admin as any)
+    .from('diligence_checklist_items')
+    .select('id, kind, parent_id, label')
+    .eq('deal_id', dealId)
+    .eq('fund_id', fundId)
+    .order('order_index', { ascending: true })
+  const allChecklistRows = ((checklistRows ?? []) as Array<{ id: string; kind: string; parent_id: string | null; label: string }>)
+  const sectionLabelById = new Map<string, string>()
+  for (const r of allChecklistRows) if (r.kind === 'section') sectionLabelById.set(r.id, r.label)
+  const checklist = allChecklistRows
+    .filter(r => r.kind === 'item')
+    .map(r => ({
+      id: r.id,
+      section: r.parent_id ? (sectionLabelById.get(r.parent_id) ?? null) : null,
+      label: r.label,
+    }))
+  const checklistItemIds = new Set(checklist.map(c => c.id))
+
   const { provider, model, providerType } = await getStageProvider(admin, fundId, 'ingest')
 
   const manifest = parsed.map(f => ({
@@ -134,7 +161,7 @@ export async function runIngestDocs(params: {
         // mid-JSON, which then failed JSON.parse and dropped the whole doc.
         maxTokens: 12288,
         system,
-        content: buildIngestDocContent({ dealName, file, manifest }),
+        content: buildIngestDocContent({ dealName, file, manifest, checklist }),
       })
       logAIUsage(admin, {
         fundId,
@@ -144,6 +171,13 @@ export async function runIngestDocs(params: {
         usage,
       })
       const doc = parsePerDocResponse(text, file.document_id)
+      // Drop any checklist_item_id the model hallucinated (id not in this
+      // deal's checklist). Keep the finding itself — just untag it.
+      for (const c of doc.claims) {
+        if (c.checklist_item_id && !checklistItemIds.has(c.checklist_item_id)) {
+          c.checklist_item_id = null
+        }
+      }
       completed += 1
       await note(`Extracted ${completed}/${parsed.length}: ${file.file_name}`)
       return doc
@@ -560,6 +594,7 @@ function coerceClaim(raw: unknown): IngestionDocumentOutput['claims'][number] | 
   const r = raw as Record<string, unknown>
   if (typeof r.field !== 'string' || typeof r.value !== 'string') return null
   const crit = ['high', 'medium', 'low'].includes(r.criticality as string) ? r.criticality as 'high' | 'medium' | 'low' : 'medium'
+  const checklist_item_id = typeof r.checklist_item_id === 'string' && r.checklist_item_id ? r.checklist_item_id : null
   return {
     id: typeof r.id === 'string' ? r.id : `claim_${Math.random().toString(36).slice(2, 8)}`,
     field: r.field,
@@ -567,6 +602,7 @@ function coerceClaim(raw: unknown): IngestionDocumentOutput['claims'][number] | 
     context: typeof r.context === 'string' ? r.context : '',
     verification_status: 'unverified',
     criticality: crit,
+    checklist_item_id,
   }
 }
 

@@ -40,11 +40,37 @@ export async function runIngestSynthesisJob(admin: Admin, job: IngestSynthesisJo
       .eq('id', job.id)
   }
 
+  // Auto-enqueue checklist_assessment when the deal has a partner checklist.
+  // Skipping silently when there is none — many funds may use the agent
+  // without ever building a checklist.
+  let checklist_job_id: string | null = null
+  const { count: checklistCount } = await (admin as any)
+    .from('diligence_checklist_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('deal_id', job.deal_id)
+    .eq('fund_id', job.fund_id)
+    .eq('kind', 'item')
+  if ((checklistCount ?? 0) > 0) {
+    const { data: enq, error: enqErr } = await admin
+      .from('memo_agent_jobs')
+      .insert({
+        fund_id: job.fund_id,
+        deal_id: job.deal_id,
+        draft_id: result.draft_id,
+        kind: 'checklist_assessment',
+        payload: {},
+      } as any)
+      .select('id')
+      .single()
+    if (!enqErr && enq) checklist_job_id = (enq as { id: string }).id
+  }
+
   return {
     draft_id: result.draft_id,
     missing_documents: result.gap_analysis.missing.length,
     inadequate_documents: result.gap_analysis.inadequate.length,
     cross_doc_flags: result.cross_doc_flags.length,
+    checklist_job_id,
     warnings: result.warnings,
   }
 }

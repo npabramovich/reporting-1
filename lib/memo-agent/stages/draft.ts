@@ -12,6 +12,7 @@ import {
 } from '@/lib/memo-agent/prompts/draft'
 import { extractJsonObject } from '@/lib/memo-agent/parse-ai-json'
 import { buildMemoTemplateBlock } from '@/lib/memo-agent/prompts/memo-template'
+import { buildMemoConfigBlock, type MemoTemplateConfig } from '@/lib/memo-agent/prompts/memo-config'
 import type { IngestionOutput } from './ingest'
 import type { ResearchOutput } from './research'
 
@@ -125,11 +126,19 @@ export async function runDraft(params: {
   await note('Loading deal record…')
   const { data: dealRow } = await admin
     .from('diligence_deals')
-    .select('name, sector, stage_at_consideration')
+    .select('name, sector, stage_at_consideration, partner_memo_guidance, memo_template_config')
     .eq('id', dealId)
     .eq('fund_id', fundId)
     .maybeSingle()
   const deal = (dealRow as any) ?? { name: 'this deal' }
+  const partnerGuidance = (deal.partner_memo_guidance ?? '').toString()
+  const templateConfig = (deal.memo_template_config ?? {}) as MemoTemplateConfig
+  // Style override: when the partner has set one on the memo config, use it
+  // instead of deal.stage_at_consideration for calibration. The config block
+  // also restates this for the model, so both the calibration and the partner
+  // instruction agree.
+  const effectiveStage = templateConfig?.style_override ?? deal.stage_at_consideration ?? null
+  const memoConfigBlock = buildMemoConfigBlock({ partnerGuidance, config: templateConfig })
 
   await note('Loading schemas…')
   await ensureDefaults(fundId, admin)
@@ -150,9 +159,10 @@ export async function runDraft(params: {
   await note(`Planning memo outline (${docCount} docs, ${claimCount} claims)…`)
   const outlineContent = buildDraftOutlineContent({
     dealName: deal.name,
-    stage: deal.stage_at_consideration ?? null,
+    stage: effectiveStage,
     memoOutputYaml: memoOutputSchema.yaml_content,
     memoTemplate,
+    memoConfigBlock,
     ingestion,
     research,
     qa_answers,
@@ -193,8 +203,9 @@ export async function runDraft(params: {
         system,
         content: buildDraftSectionFillContent({
           dealName: deal.name,
-          stage: deal.stage_at_consideration ?? null,
+          stage: effectiveStage,
           memoTemplate,
+          memoConfigBlock,
           sectionsToWrite: batch,
           allSectionTopics,
           ingestion,

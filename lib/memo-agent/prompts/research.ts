@@ -171,7 +171,7 @@ Do not fabricate URLs. When you cannot verify externally, list the topic as a re
 
 const CLAIMS_INSTRUCTIONS_WITH_WEB = `${CLAIMS_COMMON}
 
-Web search is available — use it to verify material claims.`
+Web search is available — use it to verify material claims. When a search result supports or contradicts a finding, copy the page's full URL into the corresponding sources[].url field. Inline citation annotations are not visible to the partner; only what you write into the JSON sources is. If you find a useful page but don't bind it to a finding, still list it as a source on the most relevant finding so the partner can verify your reasoning.`
 
 const CLAIMS_INSTRUCTIONS_NO_WEB = `${CLAIMS_COMMON}
 
@@ -195,7 +195,7 @@ Do not fabricate URLs. If you cannot identify additional competitors with confid
 
 const COMPETITORS_INSTRUCTIONS_WITH_WEB = `${COMPETITORS_COMMON}
 
-Web search is available — use it to identify competitors the company didn't name.`
+Web search is available — use it to identify competitors the company didn't name. When you cite a search result, copy the full URL into sources[].url; inline citations don't reach the partner.`
 
 const COMPETITORS_INSTRUCTIONS_NO_WEB = `${COMPETITORS_COMMON}
 
@@ -224,7 +224,7 @@ Return JSON ONLY:
 
 const FOUNDERS_INSTRUCTIONS_WITH_WEB = `${FOUNDERS_COMMON}
 
-Web search is available — use it (without LinkedIn) to corroborate roles and prior companies.`
+Web search is available — use it (without LinkedIn) to corroborate roles and prior companies. When you cite a result, copy the full URL into sources[].url; inline citations don't reach the partner.`
 
 const FOUNDERS_INSTRUCTIONS_NO_WEB = `${FOUNDERS_COMMON}
 

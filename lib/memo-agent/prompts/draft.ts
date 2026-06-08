@@ -35,6 +35,7 @@ export function buildDraftOutlineContent(params: {
   stage: string | null
   memoOutputYaml: string
   memoTemplate?: string
+  memoConfigBlock?: string
   ingestion: IngestionOutput
   research: ResearchOutput | null
   qa_answers: QARecord[]
@@ -44,6 +45,7 @@ export function buildDraftOutlineContent(params: {
     '',
     stageCalibrationBlock(params.stage),
     ...(params.memoTemplate ? ['', params.memoTemplate] : []),
+    ...(params.memoConfigBlock ? ['', params.memoConfigBlock] : []),
     '',
     `=== STAGE 4A — MEMO OUTLINE ===`,
     `Plan the memo structure. Do NOT write prose in this call.`,
@@ -76,6 +78,7 @@ export function buildDraftSectionFillContent(params: {
   dealName: string
   stage: string | null
   memoTemplate?: string
+  memoConfigBlock?: string
   sectionsToWrite: OutlineSection[]
   allSectionTopics: Array<{ section_id: string; topics: string[] }>
   ingestion: IngestionOutput
@@ -99,6 +102,7 @@ export function buildDraftSectionFillContent(params: {
     '',
     stageCalibrationBlock(params.stage),
     ...(params.memoTemplate ? ['', params.memoTemplate] : []),
+    ...(params.memoConfigBlock ? ['', params.memoConfigBlock] : []),
     '',
     `=== STAGE 4B — WRITE MEMO SECTIONS ===`,
     `Write the prose for ONLY the sections planned below. Other sections are`,

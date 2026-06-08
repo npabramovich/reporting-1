@@ -18,12 +18,20 @@ export function buildIngestDocContent(params: {
   dealName: string
   file: ParsedFile
   manifest: Array<{ file_name: string; file_format: string; detected_type: string | null }>
+  /** Partner-defined checklist items, grouped by section. When provided, the
+   *  model is asked to tag each extracted finding with the id of the matching
+   *  checklist item (or leave checklist_item_id null when no match). */
+  checklist?: Array<{ id: string; section: string | null; label: string }>
 }): ContentBlock[] {
   const { file } = params
   const blocks: ContentBlock[] = []
 
   const manifestLines = params.manifest
     .map((m, i) => `  ${i + 1}. ${m.file_name} (${m.file_format}${m.detected_type ? `, heuristic: ${m.detected_type}` : ''})`)
+    .join('\n')
+
+  const checklistLines = (params.checklist ?? [])
+    .map(it => `  - id=${it.id}${it.section ? ` [${it.section}]` : ''} ${it.label}`)
     .join('\n')
 
   const textParts: string[] = [
@@ -34,7 +42,12 @@ export function buildIngestDocContent(params: {
     '',
     `Target document for this call: ${file.file_name} (doc_id=${file.document_id})${file.detected_type ? `, heuristic type=${file.detected_type}` : ''}`,
     '',
-    INGEST_DOC_INSTRUCTIONS,
+    ...(checklistLines ? [
+      'Partner diligence checklist (what the fund is looking for — tag findings to these items where applicable):',
+      checklistLines,
+      '',
+    ] : []),
+    checklistLines ? INGEST_DOC_INSTRUCTIONS_WITH_CHECKLIST : INGEST_DOC_INSTRUCTIONS,
     '',
   ]
 
@@ -119,10 +132,44 @@ Return JSON ONLY, conforming exactly to:
       "value": string,                    // raw value as stated, with units
       "context": string,                  // surrounding sentence or table label
       "verification_status": "unverified",
-      "criticality": "high" | "medium" | "low"
+      "criticality": "high" | "medium" | "low",
+      "checklist_item_id": null            // no checklist provided for this call
     }
   ],
   "issues": [string]                      // optional inadequacies
+}
+
+Do not produce a memo, recommendation, gap analysis across the data room, or rubric scores in this stage.`
+
+const INGEST_DOC_INSTRUCTIONS_WITH_CHECKLIST = `STAGE 1 — DATA ROOM INGESTION (per-document call, checklist-aware)
+
+For the target document only, produce a structured ingestion record. Do NOT analyze other documents in this call — they're listed only for naming context.
+
+The partner's diligence checklist is what the fund is looking for in this deal. Use it as your search lens: prioritize extracting findings relevant to checklist items, and tag each finding with the id of the matching item where applicable. You may still extract findings that don't map to a checklist item — set checklist_item_id to null for those.
+
+  1. Classify the document per data_room_ingestion.yaml document_types. The detected_type field MUST be the exact \`id\` string from that schema (lowercase, snake_case). Use "unknown" only if none of the schema IDs fit.
+  2. Extract claim_record entries. Each claim is company-stated (this stage does no verification). For each, set checklist_item_id to the matching item's id from the checklist above, or null when the finding doesn't address any checklist item. A single finding maps to at most one item — pick the most specific match.
+  3. Note inadequacies on the issues field if the document is incomplete, illegible, or missing key sections.
+
+Return JSON ONLY:
+
+{
+  "document_id": string,                  // must match the target doc_id above
+  "detected_type": string,
+  "type_confidence": "low" | "medium" | "high",
+  "summary": string,                      // 1-3 sentences describing what this document is
+  "claims": [
+    {
+      "id": string,                       // stable: "claim_<doc>_<n>"
+      "field": string,
+      "value": string,
+      "context": string,
+      "verification_status": "unverified",
+      "criticality": "high" | "medium" | "low",
+      "checklist_item_id": string | null   // exact id from the checklist above, or null
+    }
+  ],
+  "issues": [string]
 }
 
 Do not produce a memo, recommendation, gap analysis across the data room, or rubric scores in this stage.`

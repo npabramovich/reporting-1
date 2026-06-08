@@ -40,6 +40,12 @@ export interface ResearchOutput {
   }>
   research_gaps: Array<{ topic: string; rationale: string; criticality: 'blocker' | 'important' | 'nice_to_have' }>
   research_mode: 'with_web_search' | 'no_web_search'
+  /** URLs the agent cited via the web_search tool, across all sub-calls. Deduped.
+   *  These come from Anthropic's text-block citation metadata, which the model
+   *  often doesn't echo into the per-finding sources JSON. */
+  web_sources?: Array<{ url: string; title: string }>
+  /** Total server-side web searches performed across the 3 sub-calls. */
+  web_search_count?: number
 }
 
 export interface ResearchResult {
@@ -118,13 +124,24 @@ export async function runResearch(params: {
   // Total server-side web searches performed across all sub-calls — lets us
   // tell "tool attached but model didn't search" from "searched, found little".
   let totalWebSearches = 0
+  // Anthropic citations are attached as text-block metadata, not in the JSON
+  // the model writes. We collect them across all sub-calls and surface them
+  // on the research output so the partner sees what was actually consulted
+  // even when the model didn't echo URLs into the per-finding sources.
+  const citationByUrl = new Map<string, { url: string; title: string }>()
+  // Track sub-call completions so the partner sees progress updates while the
+  // 3 parallel calls are in flight (otherwise progress_message goes silent for
+  // 1–5 minutes, which feels like a hang).
+  let completedSubCalls = 0
+  const TOTAL_SUBCALLS = 3
 
   // Sub-call helper — runs one focused AI call, logs usage, parses JSON.
   // Each catches its own errors so a single failure doesn't kill siblings.
   type SubCall<T> = { name: string; content: any; maxTokens: number; parse: (obj: Record<string, unknown>) => T; fallback: T }
   const runSubCall = async <T>(s: SubCall<T>): Promise<T> => {
+    const startedAt = Date.now()
     try {
-      const { text, usage, webSearchCount } = await provider.createMessage({
+      const { text, usage, webSearchCount, webSearchCitations } = await provider.createMessage({
         model,
         maxTokens: s.maxTokens,
         system,
@@ -132,6 +149,15 @@ export async function runResearch(params: {
         enableWebSearch: webSearchEnabled,
       })
       if (typeof webSearchCount === 'number') totalWebSearches += webSearchCount
+      if (Array.isArray(webSearchCitations)) {
+        for (const c of webSearchCitations) {
+          if (!citationByUrl.has(c.url)) citationByUrl.set(c.url, c)
+        }
+      }
+      completedSubCalls += 1
+      const dur = Math.round((Date.now() - startedAt) / 1000)
+      const searchesNote = webSearchCount ? `, ${webSearchCount} web search${webSearchCount === 1 ? '' : 'es'}` : ''
+      await note(`Sub-call "${s.name}" done in ${dur}s${searchesNote} · ${completedSubCalls} of ${TOTAL_SUBCALLS} complete`)
       logAIUsage(admin, {
         fundId,
         provider: providerType,
@@ -147,6 +173,8 @@ export async function runResearch(params: {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       warnings.push(`Research sub-call "${s.name}" failed: ${msg}`)
+      completedSubCalls += 1
+      await note(`Sub-call "${s.name}" failed · ${completedSubCalls} of ${TOTAL_SUBCALLS} complete (continuing)`)
       return s.fallback
     }
   }
@@ -187,6 +215,8 @@ export async function runResearch(params: {
     }),
   ])
 
+  const webSources = Array.from(citationByUrl.values())
+
   const output: ResearchOutput = {
     findings: claimsResult.findings,
     contradictions: claimsResult.contradictions,
@@ -194,6 +224,8 @@ export async function runResearch(params: {
     founder_dossiers: foundersResult,
     research_gaps: claimsResult.research_gaps,
     research_mode: webSearchEnabled ? 'with_web_search' : 'no_web_search',
+    web_sources: webSources,
+    web_search_count: webSearchEnabled ? totalWebSearches : undefined,
   }
 
   // Sanity checks — empty outputs become warnings, not failures, so a partial
@@ -207,8 +239,10 @@ export async function runResearch(params: {
         'Web search was attached but the model performed 0 searches. ' +
         'Verify web search is enabled on the Anthropic account, or that the research prompt instructs the model to search.'
       )
-    } else if (output.findings.length > 0 && output.findings.every(f => f.sources.length === 0)) {
-      warnings.push(`Web search ran (${totalWebSearches} searches) but no finding carries a sourced URL — the model may not be citing what it found.`)
+    } else if (webSources.length === 0 && output.findings.length > 0 && output.findings.every(f => f.sources.length === 0)) {
+      // Searches happened but produced no citation metadata AND the model
+      // didn't echo any URLs into the JSON. Real "no sources" signal.
+      warnings.push(`Web search ran (${totalWebSearches} searches) but no finding or citation carries a URL — the model may not be citing what it found.`)
     }
   }
 

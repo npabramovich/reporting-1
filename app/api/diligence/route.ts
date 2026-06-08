@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { safeWebUrl } from '@/lib/deals/submission-validation'
+import { seedDealChecklistFromFundDefault } from '@/lib/diligence/seed-checklist'
 
 const VALID_DEAL_STATUSES = ['active', 'passed', 'won', 'lost', 'on_hold'] as const
 type DealStatus = typeof VALID_DEAL_STATUSES[number]
@@ -92,5 +93,40 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const fundId = (membership as any).fund_id as string
+  const dealId = (data as { id: string }).id
+  const stageAtConsideration = (data as any).stage_at_consideration as string | null
+
+  // Seed the deal's checklist from the fund template (best-effort — the
+  // helper swallows its own errors so a checklist hiccup can't fail deal
+  // creation, and the partner can always re-seed from the Checklist tab).
+  await seedDealChecklistFromFundDefault({ admin, fundId, dealId })
+
+  // Auto-apply the fund's memo-config preset for this stage when one is set.
+  // Same best-effort posture — a preset hiccup must not fail deal creation.
+  if (stageAtConsideration) {
+    try {
+      const { data: preset } = await (admin as any)
+        .from('fund_memo_presets')
+        .select('partner_memo_guidance, memo_template_config')
+        .eq('fund_id', fundId)
+        .eq('default_for_stage', stageAtConsideration)
+        .maybeSingle()
+      if (preset) {
+        await (admin as any)
+          .from('diligence_deals')
+          .update({
+            partner_memo_guidance: (preset as any).partner_memo_guidance ?? '',
+            memo_template_config: (preset as any).memo_template_config ?? {},
+          })
+          .eq('id', dealId)
+          .eq('fund_id', fundId)
+      }
+    } catch {
+      // swallow — partner can apply manually from the Memo tab
+    }
+  }
+
   return NextResponse.json(data)
 }

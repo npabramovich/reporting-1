@@ -49,9 +49,10 @@ function nextConfidence(count: number): Confidence {
   return 'robust'
 }
 
-export function StyleAnchorsLibrary({ initialAnchors, initialConfidence }: {
+export function StyleAnchorsLibrary({ initialAnchors, initialConfidence, embedded }: {
   initialAnchors: AnchorListItem[]
   initialConfidence: Confidence
+  embedded?: boolean
 }) {
   const router = useRouter()
   const confirm = useConfirm()
@@ -80,14 +81,16 @@ export function StyleAnchorsLibrary({ initialAnchors, initialConfidence }: {
   }
 
   return (
-    <div className="p-4 md:py-8 md:pl-8 md:pr-4 max-w-5xl">
-      <Link href="/settings" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to settings
-      </Link>
+    <div className={embedded ? '' : 'p-4 md:py-8 md:pl-8 md:pr-4 max-w-5xl'}>
+      {!embedded && (
+        <Link href="/settings" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to settings
+        </Link>
+      )}
 
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Style anchors</h1>
+          {!embedded && <h1 className="text-2xl font-semibold tracking-tight">Example memos</h1>}
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Upload past investment memos to teach the agent your firm&rsquo;s voice and structure.
             Reference memos teach style — they never supply facts to a new memo.

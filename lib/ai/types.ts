@@ -40,6 +40,13 @@ export interface AIResult {
    * tool was attached but the model chose not to search (or couldn't).
    */
   webSearchCount?: number
+  /**
+   * URLs the model cited via the web_search tool. Anthropic attaches citations
+   * as metadata on text blocks; when the model writes JSON output it often
+   * doesn't echo the URL into the JSON, so we surface them here for callers
+   * that want to render or merge them. Deduped across blocks.
+   */
+  webSearchCitations?: Array<{ url: string; title: string }>
 }
 
 export interface ChatMessage {

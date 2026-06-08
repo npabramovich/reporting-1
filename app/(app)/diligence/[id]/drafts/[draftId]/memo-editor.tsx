@@ -79,12 +79,15 @@ const URGENCY_BADGE: Record<string, string> = {
   fyi: 'bg-muted text-muted-foreground',
 }
 
-export function MemoEditor({ dealId, dealName, draft: initial, initialAttention, isAdmin }: {
+export function MemoEditor({ dealId, dealName, draft: initial, initialAttention, isAdmin, embedded }: {
   dealId: string
   dealName: string
   draft: Draft
   initialAttention: AttentionItem[]
   isAdmin: boolean
+  /** When true, drop the page wrapper + back link so this can render inside the
+   *  deal-detail Memo tab without extra chrome. */
+  embedded?: boolean
 }) {
   const router = useRouter()
   const confirm = useConfirm()
@@ -269,14 +272,16 @@ export function MemoEditor({ dealId, dealName, draft: initial, initialAttention,
   const openAttention = attention.filter(a => a.status === 'open')
 
   return (
-    <div className="p-4 md:py-8 md:pl-8 md:pr-4 max-w-[1400px]">
+    <div className={embedded ? '' : 'p-4 md:py-8 md:pl-8 md:pr-4 max-w-[1400px]'}>
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="min-w-0">
-          <Link href={`/diligence/${dealId}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-2">
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to deal
-          </Link>
-          <h1 className="text-xl font-semibold tracking-tight truncate flex items-center gap-2">
-            {dealName} memo
+          {!embedded && (
+            <Link href={`/diligence/${dealId}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-2">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to deal
+            </Link>
+          )}
+          <h1 className={`${embedded ? 'text-base' : 'text-xl'} font-semibold tracking-tight truncate flex items-center gap-2`}>
+            {embedded ? 'Memo draft' : `${dealName} memo`}
             {!draft.is_draft && (
               <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
                 <Lock className="h-3 w-3 inline mr-0.5" /> Final

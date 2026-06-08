@@ -61,7 +61,7 @@ export function IngestionSummary({ output, fileNamesById, dealId, draftId, edita
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
         <Stat label="Documents" value={output.documents.length} />
-        <Stat label="Claims extracted" value={totalClaims} />
+        <Stat label="Findings extracted" value={totalClaims} />
         <Stat label="Missing docs" value={activeMissing} />
         <Stat label="Cross-doc flags" value={output.cross_doc_flags.length} />
       </div>
@@ -150,7 +150,7 @@ export function IngestionSummary({ output, fileNamesById, dealId, draftId, edita
               <div className="p-3 border-b">
                 <div className="font-medium text-sm">{fileNamesById[doc.document_id] ?? doc.document_id}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
-                  {doc.detected_type} <span className="text-muted-foreground">· {doc.type_confidence} confidence · {doc.claims.length} claim{doc.claims.length === 1 ? '' : 's'}</span>
+                  {doc.detected_type} <span className="text-muted-foreground">· {doc.type_confidence} confidence · {doc.claims.length} finding{doc.claims.length === 1 ? '' : 's'}</span>
                 </div>
                 {doc.summary && <p className="text-sm mt-2">{doc.summary}</p>}
                 {doc.issues && doc.issues.length > 0 && (
@@ -162,7 +162,7 @@ export function IngestionSummary({ output, fileNamesById, dealId, draftId, edita
               {doc.claims.length > 0 && (
                 <details className="text-sm">
                   <summary className="px-3 py-2 cursor-pointer text-xs text-muted-foreground hover:bg-muted/30">
-                    Show claims
+                    Show findings
                   </summary>
                   <div className="px-3 pb-3 space-y-1">
                     {doc.claims.map(c => (

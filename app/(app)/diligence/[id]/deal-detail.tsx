@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2, Trash2, Upload, FolderInput, Check, Play, RefreshCw, AlertCircle, Lock, ChevronDown } from 'lucide-react'
@@ -11,10 +11,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { DiligenceNotesProvider, DiligenceNotesButton, DiligenceNotesPanel } from '@/components/diligence/diligence-notes'
 import { useConfirm } from '@/components/confirm-dialog'
 import { IngestionSummary } from '@/components/diligence/ingestion-summary'
-import { ResearchSummary } from '@/components/diligence/research-summary'
 import type { IngestionOutput } from '@/lib/memo-agent/stages/ingest'
 import type { ResearchOutput } from '@/lib/memo-agent/stages/research'
 import { uploadDiligenceDocument } from '@/lib/diligence/upload-document'
+import { MemoEditor } from './drafts/[draftId]/memo-editor'
+import { MemoConfigPanel } from '@/components/diligence/memo-config-panel'
 
 interface Deal {
   id: string
@@ -57,7 +58,7 @@ type LatestDraft = {
 // (DDP status, details, finalize/promote), then the pipeline goes Data Room →
 // Diligence (external research) → Partner Q&A → Memo. Notes live in a
 // right-side slide-in panel, mirroring the Companies notes UX.
-const TABS = ['Overview', 'Data Room', 'Diligence', 'Partner Q&A', 'Memo'] as const
+const TABS = ['Checklist', 'Data Room', 'Diligence', 'Q&A', 'Scoring', 'Memo'] as const
 type Tab = typeof TABS[number]
 
 const STATUS_LABEL: Record<Deal['deal_status'], { label: string; cls: string }> = {
@@ -79,7 +80,11 @@ export function DealDetail({ deal: initial, initialDocuments, latestDraft, isAdm
 }) {
   const router = useRouter()
   const [deal, setDeal] = useState(initial)
-  const [activeTab, setActiveTab] = useState<Tab>('Overview')
+  const [activeTab, setActiveTab] = useState<Tab>('Checklist')
+  // Cross-tab doc focus: clicking evidence on the Checklist tab sets this id,
+  // switches to Data Room, and the room scrolls/highlights the matching row.
+  const [focusDocId, setFocusDocId] = useState<string | null>(null)
+  const jumpToDoc = (docId: string) => { setActiveTab('Data Room'); setFocusDocId(docId) }
 
   async function updateStatus(deal_status: Deal['deal_status']) {
     setDeal(d => ({ ...d, deal_status }))
@@ -131,15 +136,16 @@ export function DealDetail({ deal: initial, initialDocuments, latestDraft, isAdm
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 max-w-5xl w-full">
-          {activeTab === 'Overview' && (
-            <OverviewTab deal={deal} documentCount={initialDocuments.length} latestDraft={latestDraft} isAdmin={isAdmin} onJumpToTab={setActiveTab} />
+          {activeTab === 'Checklist' && (
+            <ChecklistTab deal={deal} documentCount={initialDocuments.length} latestDraft={latestDraft} isAdmin={isAdmin} onJumpToTab={setActiveTab} onJumpToDoc={jumpToDoc} />
           )}
           {activeTab === 'Data Room' && (
-            <DealRoomTab dealId={deal.id} initialDocuments={initialDocuments} initialDriveFolderUrl={deal.drive_folder_url} />
+            <DealRoomTab dealId={deal.id} initialDocuments={initialDocuments} initialDriveFolderUrl={deal.drive_folder_url} focusDocId={focusDocId} onFocusConsumed={() => setFocusDocId(null)} />
           )}
-          {activeTab === 'Diligence' && <AgentStageTab dealId={deal.id} stage="research" />}
-          {activeTab === 'Partner Q&A' && <QATabLauncher dealId={deal.id} />}
-          {activeTab === 'Memo' && <DraftsTab dealId={deal.id} />}
+          {activeTab === 'Diligence' && <DiligenceTab dealId={deal.id} />}
+          {activeTab === 'Q&A' && <QATab dealId={deal.id} />}
+          {activeTab === 'Scoring' && <ScoringTab dealId={deal.id} />}
+          {activeTab === 'Memo' && <MemoTab dealId={deal.id} dealName={deal.name} isAdmin={isAdmin} />}
         </div>
         <DiligenceNotesPanel />
       </div>
@@ -149,20 +155,249 @@ export function DealDetail({ deal: initial, initialDocuments, latestDraft, isAdm
 }
 
 // ---------------------------------------------------------------------------
-// Overview — partner landing. Surfaces the Due Diligence Process status,
-// deal details, and the promote action when ready.
+// Checklist — partner-facing landing. Surfaces the partner's diligence
+// checklist with found/missing status from the data room, inline edit, and
+// the promote action.
 // ---------------------------------------------------------------------------
 
-function OverviewTab({ deal, documentCount, latestDraft, isAdmin, onJumpToTab }: {
+type ChecklistItem = {
+  id: string
+  parent_id: string | null
+  kind: 'section' | 'item'
+  label: string
+  status: 'unknown' | 'found' | 'partial' | 'missing' | 'not_applicable'
+  evidence: Array<{ document_id?: string; summary?: string }>
+  agent_notes: string | null
+  order_index: number
+  source: 'template' | 'partner_added' | 'imported' | 'agent_added'
+}
+
+function formatDuration(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds))
+  if (s < 60) return `${s}s`
+  const mins = Math.floor(s / 60)
+  const secs = s % 60
+  return secs === 0 ? `${mins}m` : `${mins}m ${secs}s`
+}
+
+function formatJobTiming(status: string, startedAt: string | null, enqueuedAt: string | null, itemCount: number): string {
+  if (status === 'pending') {
+    if (enqueuedAt) {
+      return `Queued ${formatDuration((Date.now() - new Date(enqueuedAt).getTime()) / 1000)} ago`
+    }
+    return 'Queued'
+  }
+  if (status === 'running' && startedAt) {
+    const elapsed = (Date.now() - new Date(startedAt).getTime()) / 1000
+    // Rough ETA from item count: ~15s baseline + ~0.4s per item, clamped 20–180s.
+    const etaSeconds = Math.max(20, Math.min(180, 15 + Math.floor(itemCount * 0.4)))
+    return `Elapsed ${formatDuration(elapsed)} · typical run ~${formatDuration(etaSeconds)}`
+  }
+  return ''
+}
+
+const STATUS_PILL: Record<ChecklistItem['status'], { label: string; cls: string }> = {
+  unknown:        { label: 'Not yet assessed', cls: 'bg-muted text-muted-foreground' },
+  found:          { label: 'Found',            cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
+  partial:        { label: 'Partial',          cls: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' },
+  missing:        { label: 'Missing',          cls: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
+  not_applicable: { label: 'N/A',              cls: 'bg-muted text-muted-foreground' },
+}
+
+function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
   deal: Deal
   documentCount: number
   latestDraft: LatestDraft
   isAdmin: boolean
   onJumpToTab: (tab: Tab) => void
+  onJumpToDoc: (docId: string) => void
 }) {
   const router = useRouter()
   const confirm = useConfirm()
+  const [items, setItems] = useState<ChecklistItem[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const [pasteText, setPasteText] = useState('')
   const [promoting, setPromoting] = useState(false)
+  const [assessmentJob, setAssessmentJob] = useState<{ id: string; status: string; progress: string | null; started_at: string | null; enqueued_at: string | null; error: string | null } | null>(null)
+  // Findings tagged to checklist items, indexed by checklist_item_id. Loaded
+  // from the latest draft's ingestion_output. Refreshes when ingest finishes.
+  const [findingsByItem, setFindingsByItem] = useState<Record<string, Array<{ doc_id: string; doc_name: string; field: string; value: string; criticality: string }>>>({})
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      fetch(`/api/diligence/${deal.id}/drafts`).then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch(`/api/diligence/${deal.id}/documents`).then(r => r.ok ? r.json() : []).catch(() => []),
+    ]).then(([drafts, docs]) => {
+      if (cancelled) return
+      const latest = Array.isArray(drafts) ? drafts[0] : null
+      const ingest = latest?.ingestion_output
+      if (!ingest?.documents) { setFindingsByItem({}); return }
+      const nameById: Record<string, string> = {}
+      for (const d of (docs ?? [])) nameById[d.id] = d.file_name
+      const grouped: Record<string, Array<{ doc_id: string; doc_name: string; field: string; value: string; criticality: string }>> = {}
+      for (const doc of ingest.documents) {
+        for (const c of (doc.claims ?? [])) {
+          if (!c.checklist_item_id) continue
+          if (!grouped[c.checklist_item_id]) grouped[c.checklist_item_id] = []
+          grouped[c.checklist_item_id].push({
+            doc_id: doc.document_id,
+            doc_name: nameById[doc.document_id] ?? doc.document_id,
+            field: c.field,
+            value: c.value,
+            criticality: c.criticality,
+          })
+        }
+      }
+      setFindingsByItem(grouped)
+    })
+    return () => { cancelled = true }
+  }, [deal.id, assessmentJob?.status])
+  const [, forceTick] = useState(0)
+  // Tick every second while a job is in flight so the elapsed-time label
+  // re-renders. Cheap (no fetches) and only runs while a job is active.
+  useEffect(() => {
+    if (!assessmentJob || assessmentJob.status === 'success' || assessmentJob.status === 'failed') return
+    const t = setInterval(() => forceTick(n => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [assessmentJob])
+  const [hideCompleted, setHideCompleted] = useState(false)
+  // Per-section collapse state. Persisted in localStorage so partners returning
+  // to a deal aren't scrolling through the same expansions every time.
+  const collapseKey = `diligence-checklist-collapsed-${deal.id}`
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    if (typeof window === 'undefined') return {}
+    try {
+      const raw = window.localStorage.getItem(collapseKey)
+      return raw ? JSON.parse(raw) : {}
+    } catch {
+      return {}
+    }
+  })
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try { window.localStorage.setItem(collapseKey, JSON.stringify(collapsed)) } catch {}
+  }, [collapsed, collapseKey])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/diligence/${deal.id}/checklist`)
+        if (!res.ok) throw new Error(await res.text())
+        const json = await res.json()
+        if (!cancelled) setItems(json.items as ChecklistItem[])
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [deal.id])
+
+  async function applyFundDefault() {
+    setError(null)
+    setBusy(true)
+    try {
+      const tpl = await fetch('/api/diligence/checklist-template').then(r => r.json())
+      const res = await fetch(`/api/diligence/${deal.id}/checklist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'replace', text: tpl.template ?? '' }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const json = await res.json()
+      setItems(json.items as ChecklistItem[])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function applyPasted() {
+    if (!pasteText.trim()) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/diligence/${deal.id}/checklist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'replace', text: pasteText }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const json = await res.json()
+      setItems(json.items as ChecklistItem[])
+      setPasteOpen(false)
+      setPasteText('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function deleteItem(itemId: string) {
+    const target = items?.find(i => i.id === itemId)
+    const isSection = target?.kind === 'section'
+    const childCount = isSection ? (items ?? []).filter(i => i.parent_id === itemId).length : 0
+    const ok = await confirm({
+      title: isSection ? `Delete section?` : 'Delete item?',
+      description: isSection
+        ? (childCount > 0
+          ? `Removes the section and its ${childCount} item${childCount === 1 ? '' : 's'} from this deal.`
+          : 'Removes the section from this deal.')
+        : 'This removes the row from this deal only.',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    })
+    if (!ok) return
+    const res = await fetch(`/api/diligence/${deal.id}/checklist?itemId=${itemId}`, { method: 'DELETE' })
+    if (res.ok) setItems(prev => prev?.filter(i => i.id !== itemId && i.parent_id !== itemId) ?? null)
+  }
+
+  async function addSection(label: string) {
+    if (!label.trim()) return
+    setError(null)
+    const res = await fetch(`/api/diligence/${deal.id}/checklist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'add_section', label: label.trim() }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      setError(body.error ?? 'Failed to add section')
+      return
+    }
+    const { item } = await res.json()
+    setItems(prev => (prev ? [...prev, item] : [item]))
+  }
+
+  async function patchItem(itemId: string, patch: Partial<Pick<ChecklistItem, 'label' | 'status'>>) {
+    const res = await fetch(`/api/diligence/${deal.id}/checklist`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId, ...patch }),
+    })
+    if (!res.ok) return
+    const { item } = await res.json()
+    setItems(prev => prev?.map(i => (i.id === itemId ? item : i)) ?? null)
+  }
+
+  async function addItem(label: string, sectionLabel: string | null) {
+    const res = await fetch(`/api/diligence/${deal.id}/checklist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'add', label, sectionLabel: sectionLabel ?? '' }),
+    })
+    if (!res.ok) return
+    const { item } = await res.json()
+    setItems(prev => (prev ? [...prev, item] : [item]))
+  }
 
   async function promote() {
     const ok = await confirm({
@@ -178,27 +413,507 @@ function OverviewTab({ deal, documentCount, latestDraft, isAdmin, onJumpToTab }:
     else alert('Promote failed')
   }
 
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <MemoAgentCard
-        dealId={deal.id}
-        latestDraft={latestDraft}
-        onJumpToTab={onJumpToTab}
-        onPromote={promote}
-        canPromote={isAdmin && deal.deal_status !== 'won' && !deal.promoted_company_id}
-        promoted={deal.promoted_company_id ? { companyId: deal.promoted_company_id } : null}
-        promoting={promoting}
-      />
+  async function runAssessment() {
+    setError(null)
+    const res = await fetch(`/api/diligence/${deal.id}/agent/checklist-assessment`, { method: 'POST' })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setError(json.error ?? 'Assessment failed to enqueue')
+      return
+    }
+    setAssessmentJob({ id: json.job_id, status: 'pending', progress: 'Queued…', started_at: null, enqueued_at: new Date().toISOString(), error: null })
+  }
 
-      <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Details</CardTitle></CardHeader>
-        <CardContent className="text-sm space-y-1">
-          <Row k="Sector" v={deal.sector} />
-          <Row k="Stage" v={deal.stage_at_consideration} />
-          <Row k="Memo stage" v={deal.current_memo_stage.replace(/_/g, ' ')} />
-          <Row k="Documents" v={String(documentCount)} />
-        </CardContent>
-      </Card>
+  // Poll for any in-flight checklist_assessment job — covers both partner-
+  // triggered runs and the auto-enqueued one after ingest_synthesis. Refresh
+  // the checklist rows when the job completes so the new statuses land.
+  useEffect(() => {
+    let cancelled = false
+    let lastSeenSuccessId: string | null = null
+
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/diligence/${deal.id}/agent/status`)
+        if (!res.ok || cancelled) return
+        const j = await res.json()
+        const latest = j.latest_job as { id: string; kind: string; status: string; progress_message: string | null; started_at: string | null; enqueued_at: string | null; error: string | null } | null
+        if (!latest || latest.kind !== 'checklist_assessment') return
+
+        // Discover an in-flight job we didn't enqueue ourselves (e.g. the
+        // auto-trigger after ingest_synthesis).
+        if ((latest.status === 'pending' || latest.status === 'running') && (!assessmentJob || assessmentJob.id !== latest.id)) {
+          setAssessmentJob({ id: latest.id, status: latest.status, progress: latest.progress_message, started_at: latest.started_at, enqueued_at: latest.enqueued_at, error: null })
+          return
+        }
+        if (assessmentJob && latest.id === assessmentJob.id) {
+          setAssessmentJob(prev => prev ? { ...prev, status: latest.status, progress: latest.progress_message, started_at: latest.started_at ?? prev.started_at, error: latest.error ?? prev.error } : prev)
+          if (latest.status === 'success' && lastSeenSuccessId !== latest.id) {
+            lastSeenSuccessId = latest.id
+            const itemsRes = await fetch(`/api/diligence/${deal.id}/checklist`)
+            if (itemsRes.ok && !cancelled) {
+              const j2 = await itemsRes.json()
+              setItems(j2.items as ChecklistItem[])
+            }
+          }
+        }
+      } catch {
+        // network blip — try again next tick
+      }
+    }
+
+    tick()
+    const t = setInterval(tick, 3000)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [deal.id, assessmentJob?.id])
+
+  if (loading) return <div className="text-sm text-muted-foreground py-8">Loading checklist…</div>
+
+  const sections = (items ?? []).filter(i => i.kind === 'section')
+  const itemsBySection: Record<string, ChecklistItem[]> = {}
+  for (const it of items ?? []) {
+    if (it.kind !== 'item') continue
+    const key = it.parent_id ?? '__root__'
+    if (!itemsBySection[key]) itemsBySection[key] = []
+    itemsBySection[key].push(it)
+  }
+  const orphanItems = itemsBySection['__root__'] ?? []
+  const allItems = (items ?? []).filter(i => i.kind === 'item')
+  const counts = {
+    found: allItems.filter(i => i.status === 'found').length,
+    partial: allItems.filter(i => i.status === 'partial').length,
+    missing: allItems.filter(i => i.status === 'missing').length,
+    unknown: allItems.filter(i => i.status === 'unknown' || i.status === 'not_applicable').length,
+  }
+  const isEmpty = (items ?? []).length === 0
+
+  return (
+    <div className="space-y-4">
+      {/* Action bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-sm text-muted-foreground">
+          {isEmpty ? (
+            <>No checklist yet for this deal.</>
+          ) : (
+            <>
+              <span className="font-medium text-foreground">{allItems.length}</span> items ·
+              <span className="ml-1 text-green-700 dark:text-green-400">{counts.found} found</span> ·
+              <span className="ml-1 text-amber-700 dark:text-amber-400">{counts.partial} partial</span> ·
+              <span className="ml-1 text-red-700 dark:text-red-400">{counts.missing} missing</span> ·
+              <span className="ml-1">{counts.unknown} pending</span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {!isEmpty && (
+            <>
+              <label className="text-xs text-muted-foreground inline-flex items-center gap-1.5 mr-1 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={hideCompleted}
+                  onChange={e => setHideCompleted(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                Hide completed
+              </label>
+              <Button size="sm" onClick={runAssessment} disabled={busy}>
+                Run AI assessment
+              </Button>
+            </>
+          )}
+          <Button variant="outline" size="sm" onClick={applyFundDefault} disabled={busy}>
+            {isEmpty ? 'Apply fund default' : 'Reset from fund default'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setPasteOpen(true)} disabled={busy}>
+            Paste checklist
+          </Button>
+        </div>
+      </div>
+
+      {error && <div className="text-sm text-red-600">{error}</div>}
+
+      {assessmentJob && assessmentJob.status !== 'success' && assessmentJob.status !== 'failed' && (
+        <div className="flex items-start gap-2 text-sm rounded-md border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/30 px-3 py-2">
+          <Loader2 className="h-4 w-4 animate-spin text-blue-600 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-blue-900 dark:text-blue-200 font-medium">
+              {assessmentJob.status === 'pending' ? 'Queued — worker picks up within ~1 minute' : 'AI assessment in progress'}
+            </div>
+            <div className="text-xs text-blue-700 dark:text-blue-300 mt-0.5 flex flex-wrap gap-x-3">
+              {assessmentJob.progress && <span className="truncate">{assessmentJob.progress}</span>}
+              <span>{formatJobTiming(assessmentJob.status, assessmentJob.started_at, assessmentJob.enqueued_at, allItems.length)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+      {assessmentJob && assessmentJob.status === 'failed' && (
+        <div className="text-sm rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-red-700 dark:text-red-300">
+          <div className="font-medium">AI assessment failed</div>
+          {assessmentJob.error ? (
+            <div className="text-xs mt-1 break-words whitespace-pre-wrap">{assessmentJob.error}</div>
+          ) : (
+            <div className="text-xs mt-1 opacity-80">No error detail was recorded. Check the cron worker logs.</div>
+          )}
+          <div className="mt-2">
+            <Button size="sm" variant="outline" onClick={runAssessment}>Try again</Button>
+          </div>
+        </div>
+      )}
+
+      {pasteOpen && (
+        <Card>
+          <CardContent className="pt-4 space-y-2">
+            <div className="text-sm font-medium">Paste a checklist</div>
+            <div className="text-xs text-muted-foreground">
+              Section headers on their own line; items below. Replaces any existing checklist on this deal.
+            </div>
+            <textarea
+              className="w-full min-h-[200px] rounded border bg-background p-2 text-sm font-mono"
+              value={pasteText}
+              onChange={e => setPasteText(e.target.value)}
+              placeholder={`Business Summary\nUpdated pitch deck\nProduct demo\n\nMarket\nTAM analysis\n...`}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { setPasteOpen(false); setPasteText('') }}>Cancel</Button>
+              <Button size="sm" onClick={applyPasted} disabled={busy || !pasteText.trim()}>Apply</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Empty state */}
+      {isEmpty && !pasteOpen && (
+        <Card>
+          <CardContent className="py-10 text-center space-y-2">
+            <div className="text-sm text-muted-foreground">
+              Start by applying your fund's default diligence checklist, or paste your own.
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Sections */}
+      {sections.map(sec => (
+        <ChecklistSection
+          key={sec.id}
+          section={sec}
+          items={itemsBySection[sec.id] ?? []}
+          findingsByItem={findingsByItem}
+          hideCompleted={hideCompleted}
+          collapsed={!!collapsed[sec.id]}
+          onToggleCollapsed={() => setCollapsed(prev => ({ ...prev, [sec.id]: !prev[sec.id] }))}
+          onDelete={deleteItem}
+          onPatch={patchItem}
+          onAdd={(label) => addItem(label, sec.label)}
+          onJumpToDoc={onJumpToDoc}
+        />
+      ))}
+
+      {orphanItems.length > 0 && (
+        <ChecklistSection
+          section={null}
+          items={orphanItems}
+          findingsByItem={findingsByItem}
+          hideCompleted={hideCompleted}
+          collapsed={!!collapsed['__orphan__']}
+          onToggleCollapsed={() => setCollapsed(prev => ({ ...prev, __orphan__: !prev.__orphan__ }))}
+          onDelete={deleteItem}
+          onPatch={patchItem}
+          onAdd={(label) => addItem(label, '')}
+          onJumpToDoc={onJumpToDoc}
+        />
+      )}
+
+      {!isEmpty && <AddSectionRow onAdd={addSection} />}
+
+      {/* Data-room ingestion summary — partner runs ingest from here, gap
+          analysis + per-doc findings show inline. Moved from the Data Room
+          tab so the checklist + the evidence behind it live side by side. */}
+      <div className="pt-2">
+        <IngestionPanel dealId={deal.id} documentCount={documentCount} />
+      </div>
+
+      {/* Footer — details + promote. Process/stage intentionally omitted. */}
+      <div className="grid gap-4 md:grid-cols-2 pt-2">
+        <Card>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Details</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-1">
+            <Row k="Sector" v={deal.sector} />
+            <Row k="Documents" v={String(documentCount)} />
+          </CardContent>
+        </Card>
+        {isAdmin && deal.deal_status !== 'won' && !deal.promoted_company_id && (
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Promote</CardTitle></CardHeader>
+            <CardContent className="text-sm space-y-2">
+              <div className="text-muted-foreground">When the deal closes, promote to a portfolio company.</div>
+              <Button size="sm" onClick={promote} disabled={promoting}>
+                {promoting ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : null}
+                Promote to portfolio
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ChecklistSection({ section, items, findingsByItem, hideCompleted, collapsed, onToggleCollapsed, onDelete, onPatch, onAdd, onJumpToDoc }: {
+  section: ChecklistItem | null
+  items: ChecklistItem[]
+  findingsByItem: Record<string, Array<{ doc_id: string; doc_name: string; field: string; value: string; criticality: string }>>
+  hideCompleted: boolean
+  collapsed: boolean
+  onToggleCollapsed: () => void
+  onDelete: (itemId: string) => void
+  onPatch: (itemId: string, patch: Partial<Pick<ChecklistItem, 'label' | 'status'>>) => void
+  onAdd: (label: string) => void
+  onJumpToDoc: (docId: string) => void
+}) {
+  const [adding, setAdding] = useState('')
+  const visibleItems = hideCompleted
+    ? items.filter(it => it.status !== 'found' && it.status !== 'not_applicable')
+    : items
+  const hiddenCount = items.length - visibleItems.length
+  // Per-section status mini-counts for the collapsed header.
+  const counts = {
+    found: items.filter(i => i.status === 'found').length,
+    partial: items.filter(i => i.status === 'partial').length,
+    missing: items.filter(i => i.status === 'missing').length,
+  }
+  const [editingSection, setEditingSection] = useState(false)
+  const [sectionDraft, setSectionDraft] = useState(section?.label ?? '')
+  useEffect(() => { setSectionDraft(section?.label ?? '') }, [section?.label])
+
+  return (
+    <div className="border rounded-md">
+      <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/40 text-sm font-medium">
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-80"
+        >
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform shrink-0 ${collapsed ? '-rotate-90' : ''}`} />
+          {section && editingSection ? (
+            <Input
+              autoFocus
+              value={sectionDraft}
+              onChange={e => setSectionDraft(e.target.value)}
+              onClick={e => e.stopPropagation()}
+              onBlur={() => {
+                if (sectionDraft.trim() && sectionDraft !== section.label) onPatch(section.id, { label: sectionDraft.trim() })
+                setEditingSection(false)
+              }}
+              onKeyDown={e => {
+                e.stopPropagation()
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                if (e.key === 'Escape') { setSectionDraft(section.label); setEditingSection(false) }
+              }}
+              className="h-6 text-sm font-medium"
+            />
+          ) : (
+            <span className="truncate">{section?.label ?? 'Other'}</span>
+          )}
+        </button>
+        <span className="text-xs font-normal text-muted-foreground shrink-0">
+          {items.length} item{items.length === 1 ? '' : 's'}
+          {counts.found > 0 && <span className="ml-1.5 text-green-700 dark:text-green-400">· {counts.found} found</span>}
+          {counts.partial > 0 && <span className="ml-1.5 text-amber-700 dark:text-amber-400">· {counts.partial} partial</span>}
+          {counts.missing > 0 && <span className="ml-1.5 text-red-700 dark:text-red-400">· {counts.missing} missing</span>}
+        </span>
+        {section && !editingSection && (
+          <>
+            <button
+              type="button"
+              onClick={() => setEditingSection(true)}
+              className="text-muted-foreground hover:text-foreground text-xs"
+              title="Rename section"
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(section.id)}
+              className="text-muted-foreground hover:text-red-600 p-1"
+              aria-label="Delete section"
+              title="Delete section"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </>
+        )}
+      </div>
+      {!collapsed && (
+      <div className="divide-y">
+        {visibleItems.map(it => (
+          <ChecklistRow key={it.id} item={it} findings={findingsByItem[it.id] ?? []} onDelete={onDelete} onPatch={onPatch} onJumpToDoc={onJumpToDoc} />
+        ))}
+        {visibleItems.length === 0 && items.length === 0 && (
+          <div className="px-3 py-2 text-xs text-muted-foreground">No items in this section yet.</div>
+        )}
+        {visibleItems.length === 0 && items.length > 0 && (
+          <div className="px-3 py-2 text-xs text-muted-foreground italic">All {hiddenCount} items completed.</div>
+        )}
+        <div className="flex items-center gap-2 px-3 py-2">
+          <Input
+            value={adding}
+            onChange={e => setAdding(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && adding.trim()) {
+                onAdd(adding.trim())
+                setAdding('')
+              }
+            }}
+            placeholder="Add item — press Enter"
+            className="h-8 text-sm"
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!adding.trim()}
+            onClick={() => { onAdd(adding.trim()); setAdding('') }}
+          >
+            Add
+          </Button>
+        </div>
+      </div>
+      )}
+    </div>
+  )
+}
+
+function AddSectionRow({ onAdd }: { onAdd: (label: string) => void }) {
+  const [draft, setDraft] = useState('')
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 border-dashed border rounded-md bg-muted/20">
+      <Input
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && draft.trim()) {
+            onAdd(draft.trim())
+            setDraft('')
+          }
+        }}
+        placeholder="Add a new section — press Enter"
+        className="h-8 text-sm"
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={!draft.trim()}
+        onClick={() => { onAdd(draft.trim()); setDraft('') }}
+      >
+        Add section
+      </Button>
+    </div>
+  )
+}
+
+function ChecklistRow({ item, findings, onDelete, onPatch, onJumpToDoc }: {
+  item: ChecklistItem
+  findings: Array<{ doc_id: string; doc_name: string; field: string; value: string; criticality: string }>
+  onDelete: (itemId: string) => void
+  onPatch: (itemId: string, patch: Partial<Pick<ChecklistItem, 'label' | 'status'>>) => void
+  onJumpToDoc: (docId: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(item.label)
+  const [findingsOpen, setFindingsOpen] = useState(false)
+  const pill = STATUS_PILL[item.status]
+  return (
+    <div className="flex items-start gap-2 px-3 py-2">
+      <div className="flex-1 min-w-0">
+        {editing ? (
+          <Input
+            autoFocus
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={() => {
+              if (draft.trim() && draft !== item.label) onPatch(item.id, { label: draft.trim() })
+              setEditing(false)
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+              if (e.key === 'Escape') { setDraft(item.label); setEditing(false) }
+            }}
+            className="h-7 text-sm"
+          />
+        ) : (
+          <button
+            type="button"
+            className="text-sm text-left hover:underline truncate w-full"
+            onClick={() => setEditing(true)}
+          >
+            {item.label}
+          </button>
+        )}
+        {item.agent_notes && (
+          <div className="text-xs text-muted-foreground mt-1">{item.agent_notes}</div>
+        )}
+        {item.evidence?.length > 0 && (
+          <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+            {item.evidence.slice(0, 3).map((e, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => e.document_id && onJumpToDoc(e.document_id)}
+                disabled={!e.document_id}
+                className="block truncate text-left w-full hover:text-foreground hover:underline disabled:hover:no-underline disabled:cursor-default"
+                title={e.document_id ? 'Jump to document in Data Room' : undefined}
+              >
+                <span className="text-foreground/70">↳</span> {e.summary || e.document_id}
+              </button>
+            ))}
+          </div>
+        )}
+        {findings.length > 0 && (
+          <div className="mt-1">
+            <button
+              type="button"
+              onClick={() => setFindingsOpen(o => !o)}
+              className="text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              {findingsOpen ? '▾' : '▸'} {findings.length} finding{findings.length === 1 ? '' : 's'} from ingestion
+            </button>
+            {findingsOpen && (
+              <div className="mt-1 space-y-0.5 pl-3 text-[11px] text-muted-foreground">
+                {findings.map((f, i) => (
+                  <div key={i} className="truncate">
+                    <button
+                      type="button"
+                      onClick={() => onJumpToDoc(f.doc_id)}
+                      className="hover:text-foreground hover:underline"
+                      title="Jump to source document"
+                    >
+                      <span className="text-foreground/70">·</span>{' '}
+                      <span className="font-mono">{f.field}</span>: {f.value}
+                      <span className="text-foreground/40 ml-1">— {f.doc_name}</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <select
+        value={item.status}
+        onChange={e => onPatch(item.id, { status: e.target.value as ChecklistItem['status'] })}
+        className={`text-[11px] rounded px-1.5 py-0.5 border-0 outline-none focus:ring-1 focus:ring-primary ${pill.cls}`}
+      >
+        {(Object.keys(STATUS_PILL) as ChecklistItem['status'][]).map(s => (
+          <option key={s} value={s}>{STATUS_PILL[s].label}</option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => onDelete(item.id)}
+        className="text-muted-foreground hover:text-red-600 p-1"
+        aria-label="Delete"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
     </div>
   )
 }
@@ -257,14 +972,32 @@ const DOC_TYPE_OPTIONS = [
   { value: 'market_research', label: 'Market research' },
   { value: 'team_bio', label: 'Team bio' },
   { value: 'press', label: 'Press' },
+  { value: 'industry_expert', label: 'Industry expert' },
+  { value: 'sales', label: 'Sales' },
   { value: 'call_recording', label: 'Call recording (audio/video)' },
   { value: 'call_transcript', label: 'Call transcript' },
   { value: 'other', label: 'Other' },
 ]
 
-function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { dealId: string; initialDocuments: DiligenceDocument[]; initialDriveFolderUrl: string | null }) {
+function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl, focusDocId, onFocusConsumed }: { dealId: string; initialDocuments: DiligenceDocument[]; initialDriveFolderUrl: string | null; focusDocId: string | null; onFocusConsumed: () => void }) {
   const confirm = useConfirm()
   const [documents, setDocuments] = useState(initialDocuments)
+  // When the partner jumps from a checklist evidence row, scroll to and
+  // briefly highlight the target document so the connection is obvious.
+  const [highlightedDocId, setHighlightedDocId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!focusDocId) return
+    const el = document.getElementById(`doc-row-${focusDocId}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setHighlightedDocId(focusDocId)
+      const t = setTimeout(() => setHighlightedDocId(null), 2500)
+      onFocusConsumed()
+      return () => clearTimeout(t)
+    }
+    // If the doc isn't in the current list (e.g. deleted), just clear the focus.
+    onFocusConsumed()
+  }, [focusDocId, onFocusConsumed])
   const [uploading, setUploading] = useState(false)
   const [driveOpen, setDriveOpen] = useState(false)
   // Docs with an in-flight process/transcribe job. Held from click until the
@@ -411,8 +1144,6 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { deal
 
   return (
     <div className="space-y-6">
-      <IngestionPanel dealId={dealId} documentCount={documents.length} />
-
       <div>
       <div className="flex items-center gap-2 mb-3">
         <label className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border bg-card text-sm hover:bg-muted/50 cursor-pointer">
@@ -460,7 +1191,11 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl }: { deal
             </thead>
             <tbody>
               {documents.map(d => (
-                <tr key={d.id} className="border-t">
+                <tr
+                  key={d.id}
+                  id={`doc-row-${d.id}`}
+                  className={`border-t transition-colors ${highlightedDocId === d.id ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}`}
+                >
                   <td className="px-3 py-2">
                     <div className="font-medium truncate max-w-[280px]">{d.file_name}</div>
                     {d.drive_source_url && (
@@ -920,7 +1655,7 @@ interface AgentStatus {
   deal: { current_memo_stage: string }
   latest_job: {
     id: string
-    kind: 'ingest' | 'ingest_synthesis' | 'research' | 'qa' | 'draft' | 'draft_review' | 'score' | 'render'
+    kind: 'ingest' | 'ingest_synthesis' | 'research' | 'qa' | 'draft' | 'draft_review' | 'score' | 'render' | 'transcribe' | 'checklist_assessment'
     status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled'
     progress_message: string | null
     error: string | null
@@ -1031,7 +1766,7 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
         <div>
           <h3 className="text-sm font-medium">Stage 1 — data-room ingestion</h3>
           <p className="text-xs text-muted-foreground mt-1 max-w-xl">
-            Run the agent across uploaded documents to extract claims, classify each file, and surface gaps.
+            Run the agent across uploaded documents to extract findings, classify each file, and surface gaps.
             Re-run after adding more files.
           </p>
         </div>
@@ -1084,70 +1819,376 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
   )
 }
 
-function AgentStageTab({ dealId, stage }: { dealId: string; stage: 'research' }) {
+// ---------------------------------------------------------------------------
+// Accordion helper — used by the Diligence tab to organize Internal /
+// External / Q&A library so the partner can scan it without scrolling
+// through every section at once.
+// ---------------------------------------------------------------------------
+function Accordion({ title, subtitle, defaultOpen, children }: { title: string; subtitle?: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(!!defaultOpen)
+  return (
+    <div className="border rounded-md bg-card">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          <ChevronDown className={`h-4 w-4 transition-transform ${open ? '' : '-rotate-90'}`} />
+          <span className="font-medium">{title}</span>
+        </span>
+        {subtitle && <span className="text-xs text-muted-foreground">{subtitle}</span>}
+      </button>
+      {open && <div className="px-4 pb-4 pt-1 border-t">{children}</div>}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Diligence tab — Internal (contradictions, founders), External (web research),
+// and the Q&A library, all in accordions for easier scanning.
+// ---------------------------------------------------------------------------
+function DiligenceTab({ dealId }: { dealId: string }) {
   const { status, refresh } = useAgentStatus(dealId)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<any>(null)
 
   useEffect(() => {
-    if (!status?.latest_draft) { setDraft(null); return }
     fetch(`/api/diligence/${dealId}/drafts`).then(r => r.ok ? r.json() : []).then(rows => {
-      setDraft((rows ?? [])[0])
+      setDraft((rows ?? [])[0] ?? null)
     }).catch(() => {})
-  }, [dealId, status?.latest_draft?.id, status?.latest_draft?.has_research])
+  }, [dealId, status?.latest_draft?.id, status?.latest_job?.status])
 
   const job = status?.latest_job
-  const isInFlight = job && (job.status === 'pending' || job.status === 'running') && job.kind === stage
+  const isResearchInFlight = job && (job.status === 'pending' || job.status === 'running') && job.kind === 'research'
   const ingestReady = !!status?.latest_draft?.has_ingestion
+  const research: ResearchOutput | null = draft?.research_output ?? null
 
-  async function run() {
+  async function runResearch() {
     setSubmitting(true)
     setError(null)
     try {
-      const res = await fetch(`/api/diligence/${dealId}/agent/${stage}`, { method: 'POST' })
+      const res = await fetch(`/api/diligence/${dealId}/agent/research`, { method: 'POST' })
       const body = await res.json()
-      if (!res.ok) throw new Error(body.error ?? `Failed to enqueue ${stage}`)
+      if (!res.ok) throw new Error(body.error ?? 'Failed to enqueue research')
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to enqueue ${stage}`)
+      setError(err instanceof Error ? err.message : 'Failed to enqueue research')
     } finally {
       setSubmitting(false)
       await refresh()
     }
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="rounded-md border bg-card p-4 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-medium">Stage 2 — external research</h3>
-          <p className="text-xs text-muted-foreground mt-1 max-w-xl">
-            Verify or contradict company claims, surface unnamed competitors, build founder dossiers, list research gaps.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={run} disabled={submitting || !!isInFlight || !ingestReady}>
-          {isInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : status?.latest_draft?.has_research ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
-          {status?.latest_draft?.has_research ? 'Re-run' : 'Run research'}
-        </Button>
-      </div>
+  const internalCounts = research
+    ? `${research.contradictions.length} contradiction${research.contradictions.length === 1 ? '' : 's'} · ${research.founder_dossiers.length} founder${research.founder_dossiers.length === 1 ? '' : 's'}`
+    : 'No research yet'
+  const externalCounts = research
+    ? `${research.findings.length} finding${research.findings.length === 1 ? '' : 's'} · ${research.research_gaps.length} gap${research.research_gaps.length === 1 ? '' : 's'}`
+    : 'Not run'
 
+  return (
+    <div className="space-y-3">
       {!ingestReady && (
         <div className="rounded-md border border-amber-500/40 bg-amber-50/50 dark:bg-amber-900/10 p-3 text-sm">
           <AlertCircle className="h-4 w-4 inline mr-1" />
-          Run Stage 1 ingest first — research depends on the ingestion output.
+          Run data-room ingestion first (Checklist tab) — research depends on it.
         </div>
       )}
 
-      <JobStatusLine job={job ?? null} kind={stage} error={error} />
+      <Accordion title="Internal diligence" subtitle={internalCounts} defaultOpen>
+        {!research ? (
+          <p className="text-xs text-muted-foreground italic py-2">No research output yet. Run external research below to populate.</p>
+        ) : (
+          <InternalDiligenceView research={research} />
+        )}
+      </Accordion>
 
-      {draft?.research_output && !isInFlight && (
-        <ResearchSummary output={draft.research_output as ResearchOutput} />
+      <Accordion title="External research" subtitle={externalCounts} defaultOpen={!research}>
+        <div className="space-y-3 py-1">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground max-w-xl">
+                Verify findings via web search, surface competitors not named by the company, build founder dossiers, list research gaps.
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Typical run: <span className="font-medium">1–3 minutes</span> · with web search on, add roughly 30–60 seconds per query the model needs (often <span className="font-medium">3–6 minutes total</span>). Three sub-calls run in parallel; progress updates as each finishes.
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Web search runs only when (a) it's enabled in <Link href="/diligence/settings" className="underline">Diligence Settings</Link> and (b) the research stage uses an Anthropic model.
+                {research?.research_mode === 'no_web_search' && <span className="text-amber-700 dark:text-amber-400"> Last run: web search was off.</span>}
+                {research?.research_mode === 'with_web_search' && <span className="text-emerald-700 dark:text-emerald-400"> Last run: web search was on.</span>}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={runResearch} disabled={submitting || !!isResearchInFlight || !ingestReady}>
+              {isResearchInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : research ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
+              {research ? 'Re-run' : 'Run research'}
+            </Button>
+          </div>
+          <JobStatusLine job={job ?? null} kind="research" error={error} />
+          {research && !isResearchInFlight && <ExternalResearchView research={research} />}
+        </div>
+      </Accordion>
+
+      <Accordion title="Q&A library" subtitle={`${draft?.qa_answers?.length ?? 0} entries`}>
+        <QALibraryPanel dealId={dealId} qaAnswers={draft?.qa_answers ?? []} onAdded={() => refresh()} />
+      </Accordion>
+    </div>
+  )
+}
+
+function InternalDiligenceView({ research }: { research: ResearchOutput }) {
+  return (
+    <div className="space-y-4 pt-2">
+      {research.contradictions.length > 0 && (
+        <section>
+          <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Contradictions</h4>
+          <div className="rounded-md border divide-y">
+            {research.contradictions.map((c, i) => (
+              <div key={i} className="p-3 text-sm flex items-start gap-2">
+                <span className={`shrink-0 inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${c.severity === 'material' ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'}`}>{c.severity}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium">{c.topic}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{c.description}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {research.founder_dossiers.length > 0 && (
+        <section>
+          <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Founder dossiers</h4>
+          <div className="space-y-3">
+            {research.founder_dossiers.map((f, i) => (
+              <div key={i} className="rounded-md border p-3">
+                <div className="font-medium">{f.founder_name}</div>
+                <div className="text-xs text-muted-foreground mb-2">{f.role}</div>
+                <p className="text-sm">{f.background_summary}</p>
+                {f.open_questions.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-xs font-medium text-muted-foreground">Open questions</div>
+                    <ul className="text-xs list-disc list-inside mt-0.5 space-y-0.5">
+                      {f.open_questions.map((q, j) => <li key={j}>{q}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {research.contradictions.length === 0 && research.founder_dossiers.length === 0 && (
+        <p className="text-xs text-muted-foreground italic">No contradictions or founder dossiers in the latest research output.</p>
+      )}
+    </div>
+  )
+}
+
+function ExternalResearchView({ research }: { research: ResearchOutput }) {
+  const sourcedFindings = research.findings.filter(f => f.sources.some(s => !!s.url)).length
+  const searchCount = research.web_search_count ?? null
+  const webSources = research.web_sources ?? []
+  return (
+    <div className="space-y-4 pt-2">
+      {research.research_mode === 'with_web_search' && (
+        <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs space-y-1">
+          <div className="font-medium">Web search diagnostic</div>
+          <div className="text-muted-foreground">
+            {searchCount !== null && <>Searches performed: <span className="text-foreground font-medium">{searchCount}</span> · </>}
+            URLs cited: <span className="text-foreground font-medium">{webSources.length}</span> ·
+            Findings with a URL in sources: <span className="text-foreground font-medium">{sourcedFindings} / {research.findings.length}</span>
+          </div>
+          {searchCount !== null && searchCount > 0 && webSources.length === 0 && sourcedFindings === 0 && (
+            <div className="text-amber-700 dark:text-amber-400 text-[11px]">Searches ran but no URLs landed in the output. Re-run — the prompt was tightened to require URL echoing into JSON sources.</div>
+          )}
+          {webSources.length > 0 && (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Sources consulted ({webSources.length})</summary>
+              <ul className="mt-1 space-y-0.5 pl-3">
+                {webSources.slice(0, 30).map((s, i) => (
+                  <li key={i} className="truncate"><a href={s.url} target="_blank" rel="noreferrer" className="hover:underline">{s.title || s.url}</a></li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
+      {research.findings.length > 0 && (
+        <section>
+          <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Findings</h4>
+          <div className="rounded-md border divide-y">
+            {research.findings.slice(0, 50).map(f => (
+              <div key={f.id} className="p-3 text-sm">
+                <div className="flex items-start gap-2">
+                  <span className={`shrink-0 inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${f.verification_status === 'verified' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' : f.verification_status === 'contradicted' ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' : f.verification_status === 'company_stated' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'}`}>
+                    {f.verification_status.replace(/_/g, ' ')}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium">{f.topic}</div>
+                    <div className="text-xs mt-0.5">{f.evidence}</div>
+                    {f.sources.length > 0 && (
+                      <div className="text-[11px] text-muted-foreground mt-1 space-y-0.5">
+                        {f.sources.map((s, i) => (
+                          <div key={i} className="truncate">
+                            <span className="mr-1">[{s.tier.replace('tier_', 'T')}]</span>
+                            {s.url ? <a href={s.url} target="_blank" rel="noreferrer" className="hover:underline">{s.title}</a> : <span>{s.title}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(research.competitive_map.named_by_company.length > 0 || research.competitive_map.named_by_research.length > 0) && (
+        <section>
+          <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Competitive map</h4>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-md border p-3">
+              <div className="text-xs font-medium text-muted-foreground mb-2">Named by company</div>
+              {research.competitive_map.named_by_company.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">None.</p>
+              ) : (
+                <ul className="space-y-1.5 text-sm">
+                  {research.competitive_map.named_by_company.map((c, i) => (
+                    <li key={i}><span className="font-medium">{c.name}</span>{c.note && <span className="text-xs text-muted-foreground ml-2">{c.note}</span>}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="rounded-md border p-3">
+              <div className="text-xs font-medium text-muted-foreground mb-2">Identified by research</div>
+              {research.competitive_map.named_by_research.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">None.</p>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {research.competitive_map.named_by_research.map((c, i) => (
+                    <li key={i}>
+                      <div className="font-medium">{c.name}</div>
+                      <div className="text-xs text-muted-foreground">{c.rationale}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {research.research_gaps.length > 0 && (
+        <section>
+          <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Research gaps</h4>
+          <div className="rounded-md border divide-y">
+            {research.research_gaps.map((g, i) => (
+              <div key={i} className="p-3 text-sm flex items-start gap-2">
+                <span className={`shrink-0 inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${g.criticality === 'blocker' ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' : g.criticality === 'important' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}>{g.criticality.replace(/_/g, ' ')}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium">{g.topic}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{g.rationale}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
+
+function QALibraryPanel({ dealId, qaAnswers, onAdded }: { dealId: string; qaAnswers: any[]; onAdded: () => void }) {
+  const [q, setQ] = useState('')
+  const [a, setA] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [localAnswers, setLocalAnswers] = useState(qaAnswers)
+  useEffect(() => { setLocalAnswers(qaAnswers) }, [qaAnswers])
+
+  async function add() {
+    if (!q.trim() || !a.trim()) return
+    setBusy(true); setErr(null)
+    try {
+      const res = await fetch(`/api/diligence/${dealId}/agent/qa/add-question`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_text: q.trim(), answer_text: a.trim() }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? 'Failed to add Q&A')
+      setLocalAnswers(prev => [...prev, { question_id: body.question_id, question_text: q.trim(), answer_text: a.trim(), category: 'partner_question', answered_at: new Date().toISOString() }])
+      setQ(''); setA('')
+      onAdded()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Failed to add Q&A')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="rounded-md border p-3 space-y-2">
+        <div className="text-xs font-medium">Add a Q&amp;A entry</div>
+        <Input
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Question (your or the founder's)"
+          className="h-8 text-sm"
+        />
+        <textarea
+          value={a}
+          onChange={e => setA(e.target.value)}
+          rows={3}
+          placeholder="Answer / your judgment / conversation notes"
+          className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
+        <div className="flex justify-end gap-2">
+          {err && <span className="text-xs text-destructive mr-auto self-center">{err}</span>}
+          <Button size="sm" disabled={busy || !q.trim() || !a.trim()} onClick={add}>
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />} Add Q&amp;A
+          </Button>
+        </div>
+      </div>
+
+      {localAnswers.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">No Q&amp;A entries yet. Add one above, or run the agent Q&amp;A flow once the structured library is back in place.</p>
+      ) : (
+        <div className="rounded-md border divide-y">
+          {localAnswers.map((entry, i) => (
+            <div key={entry.question_id ?? i} className="p-3 text-sm">
+              <div className="flex items-start gap-2">
+                <span className="shrink-0 inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground capitalize">
+                  {(entry.category ?? 'q&a').replace(/_/g, ' ')}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium">{entry.question_text ?? entry.question_id}</div>
+                  <div className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{entry.answer_text ?? '—'}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
 }
 
 function JobStatusLine({ job, kind, error }: { job: AgentStatus['latest_job']; kind: string | string[]; error: string | null }) {
+  // Tick every second so the elapsed-time label updates live.
+  const [, forceTick] = useState(0)
+  useEffect(() => {
+    if (!job || (job.status !== 'pending' && job.status !== 'running')) return
+    const t = setInterval(() => forceTick(n => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [job?.id, job?.status])
+
   if (error) {
     return (
       <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
@@ -1164,10 +2205,15 @@ function JobStatusLine({ job, kind, error }: { job: AgentStatus['latest_job']; k
   const pretty = (s: string | null) => s?.replace(/^[a-z]/, c => c.toUpperCase()) ?? ''
 
   if (job.status === 'pending' || job.status === 'running') {
+    const elapsedFrom = job.started_at ?? job.enqueued_at ?? null
+    const elapsedLabel = elapsedFrom
+      ? `${formatDuration((Date.now() - new Date(elapsedFrom).getTime()) / 1000)} ${job.started_at ? 'running' : 'queued'}`
+      : null
     return (
       <div className="mt-3 rounded-md border bg-muted/30 p-2 text-xs flex items-center gap-2">
         <Loader2 className="h-3 w-3 animate-spin" />
-        <span>{job.status === 'pending' ? 'Queued — worker picks up within ~1 minute.' : (pretty(job.progress_message) || 'Running…')}</span>
+        <span className="flex-1">{job.status === 'pending' ? 'Queued — worker picks up within ~1 minute.' : (pretty(job.progress_message) || 'Running…')}</span>
+        {elapsedLabel && <span className="text-muted-foreground tabular-nums">{elapsedLabel}</span>}
       </div>
     )
   }
@@ -1193,166 +2239,162 @@ function JobStatusLine({ job, kind, error }: { job: AgentStatus['latest_job']; k
 // Memo Agent overview card — mirrors the Analyst card on Company detail
 // ---------------------------------------------------------------------------
 
-function MemoAgentCard({ dealId, latestDraft, onJumpToTab, onPromote, canPromote, promoted, promoting }: {
-  dealId: string
-  latestDraft: LatestDraft
-  onJumpToTab?: (tab: Tab) => void
-  onPromote?: () => void
-  canPromote?: boolean
-  promoted?: { companyId: string } | null
-  promoting?: boolean
-}) {
-  const { status } = useAgentStatus(dealId)
-  const job = status?.latest_job
-  const inFlight = job && (job.status === 'pending' || job.status === 'running')
-  const ld: (NonNullable<AgentStatus['latest_draft']> & { finalized_at?: string | null }) | null =
-    (status?.latest_draft ?? (latestDraft ? {
-      id: latestDraft.id,
-      draft_version: latestDraft.draft_version,
-      has_ingestion: false,
-      has_research: false,
-      has_qa: false,
-      has_memo_draft: false,
-      finalized_at: latestDraft.finalized_at,
-    } : null)) as any
-
-  return (
-    <Card>
-      <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-base">Due Diligence Process</CardTitle>
-        {ld?.draft_version && <span className="text-[10px] font-mono text-muted-foreground">{ld.draft_version}</span>}
-      </CardHeader>
-      <CardContent className="text-sm space-y-1">
-        {!ld ? (
-          <p className="text-muted-foreground italic">No drafts yet. Run ingestion to start.</p>
-        ) : (
-          <>
-            <Row k="Ingest"   v={stageStatus(ld.has_ingestion)} />
-            <Row k="Research" v={stageStatus(ld.has_research)} />
-            <Row k="Q&A"      v={stageStatus(ld.has_qa)} />
-            <Row k="Draft"    v={stageStatus(ld.has_memo_draft)} />
-            <Row k="Final"    v={ld.finalized_at ? 'Locked' : 'Not started'} />
-
-            {inFlight && (
-              <div className="text-xs text-muted-foreground inline-flex items-center gap-1 pt-1">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                {job!.kind} {job!.status}: {job!.progress_message ?? '…'}
-              </div>
-            )}
-
-            <div className="flex flex-wrap gap-2 pt-3">
-              {!ld.has_ingestion && onJumpToTab && (
-                <button
-                  type="button"
-                  onClick={() => onJumpToTab('Data Room')}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-background text-xs hover:bg-muted/30"
-                >
-                  Run ingestion →
-                </button>
-              )}
-              {ld.has_ingestion && !ld.has_research && onJumpToTab && (
-                <button
-                  type="button"
-                  onClick={() => onJumpToTab('Diligence')}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-background text-xs hover:bg-muted/30"
-                >
-                  Run research →
-                </button>
-              )}
-              {ld.has_ingestion && !ld.has_qa && onJumpToTab && (
-                <button
-                  type="button"
-                  onClick={() => onJumpToTab('Partner Q&A')}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-background text-xs hover:bg-muted/30"
-                >
-                  Run Q&amp;A →
-                </button>
-              )}
-              {ld.has_memo_draft ? (
-                <Link
-                  href={`/diligence/${dealId}/drafts/${ld.id}`}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-background text-xs hover:bg-muted/30"
-                >
-                  Open memo editor
-                </Link>
-              ) : ld.has_ingestion && onJumpToTab ? (
-                <button
-                  type="button"
-                  onClick={() => onJumpToTab('Memo')}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-background text-xs hover:bg-muted/30"
-                >
-                  Draft memo →
-                </button>
-              ) : null}
-            </div>
-          </>
-        )}
-
-        {(canPromote || promoted) && (
-          <div className="mt-4 pt-3 border-t flex items-center justify-between gap-3">
-            <div className="text-xs text-muted-foreground">
-              {promoted
-                ? 'Promoted to portfolio.'
-                : 'When you decide to invest, promote the deal to create a portfolio company.'}
-            </div>
-            {promoted ? (
-              <Link href={`/companies/${promoted.companyId}`} className="text-xs underline text-muted-foreground hover:text-foreground">
-                View company →
-              </Link>
-            ) : (
-              <button
-                type="button"
-                onClick={onPromote}
-                disabled={promoting}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-background text-xs hover:bg-muted/30 disabled:opacity-50"
-              >
-                {promoting && <Loader2 className="h-3 w-3 animate-spin" />}
-                Promote to portfolio →
-              </button>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function stageStatus(done: boolean): string {
-  return done ? 'Done' : 'Not started'
-}
-
 // ---------------------------------------------------------------------------
 // Q&A tab launcher — points at /diligence/[id]/qa
 // ---------------------------------------------------------------------------
 
-function QATabLauncher({ dealId }: { dealId: string }) {
-  const { status } = useAgentStatus(dealId)
-  const ingestReady = !!status?.latest_draft?.has_ingestion
-  const qaDone = !!status?.latest_draft?.has_qa
+// ---------------------------------------------------------------------------
+// Q&A tab — free-form chat. Partner asks questions; the agent answers from
+// the data room, ingestion findings, research output, the Q&A library, and
+// the diligence checklist, citing documents where it relied on them.
+// ---------------------------------------------------------------------------
+interface QAChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  citations: Array<{ document_id: string; summary: string }>
+  created_at: string
+}
+
+function QATab({ dealId }: { dealId: string }) {
+  const confirm = useConfirm()
+  const [messages, setMessages] = useState<QAChatMessage[]>([])
+  const [loading, setLoading] = useState(true)
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const bottomRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/diligence/${dealId}/qa-chat`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('Load failed')))
+      .then(j => { if (!cancelled) setMessages(j.messages ?? []) })
+      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Load failed') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [dealId])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages.length, sending])
+
+  async function send() {
+    const q = input.trim()
+    if (!q || sending) return
+    setSending(true)
+    setError(null)
+    // Optimistic user message — replaced by the server's persisted copy on response.
+    const tempId = `tmp-${Date.now()}`
+    setMessages(prev => [...prev, { id: tempId, role: 'user', content: q, citations: [], created_at: new Date().toISOString() }])
+    setInput('')
+    try {
+      const res = await fetch(`/api/diligence/${dealId}/qa-chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error ?? 'Chat failed')
+      setMessages(prev => {
+        const trimmed = prev.filter(m => m.id !== tempId)
+        const next = [...trimmed]
+        if (body.user_message) next.push(body.user_message as QAChatMessage)
+        if (body.assistant_message) next.push(body.assistant_message as QAChatMessage)
+        return next
+      })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Chat failed')
+      setMessages(prev => prev.filter(m => m.id !== tempId))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  async function clearAll() {
+    if (messages.length === 0) return
+    const ok = await confirm({
+      title: 'Clear conversation?',
+      description: 'Deletes every message in this Q&A. The deal\'s evidence (data room, research, checklist) is unaffected.',
+      confirmLabel: 'Clear',
+      variant: 'destructive',
+    })
+    if (!ok) return
+    const res = await fetch(`/api/diligence/${dealId}/qa-chat`, { method: 'DELETE' })
+    if (res.ok) setMessages([])
+  }
 
   return (
-    <div className="rounded-md border bg-card p-6">
-      <h3 className="text-sm font-medium mb-1">Stage 3 — Partner Q&amp;A</h3>
-      <p className="text-sm text-muted-foreground mb-4 max-w-xl">
-        The agent walks you through 4–6 questions per batch from your Q&amp;A library, applies skip logic against the data room and research, and records your answers.
-      </p>
-      {!ingestReady && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-50/50 dark:bg-amber-900/10 p-3 text-sm mb-4">
-          <AlertCircle className="h-4 w-4 inline mr-1" />
-          Run Stage 1 ingest before starting Q&amp;A.
+    <div className="flex flex-col gap-3 h-[calc(100vh-220px)] min-h-[400px]">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-medium">Ask anything about this deal</h3>
+          <p className="text-xs text-muted-foreground">
+            The agent answers from the data room, research output, Q&amp;A library, and checklist. Citations link to the document.
+          </p>
         </div>
-      )}
-      <div className="flex items-center gap-2">
-        <Link
-          href={`/diligence/${dealId}/qa`}
-          className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm ${ingestReady ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-muted text-muted-foreground pointer-events-none'}`}
-        >
-          {qaDone ? 'Continue Q&A' : 'Start Q&A session'}
-        </Link>
-        {qaDone && (
-          <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
-            <Check className="h-3 w-3" /> Q&amp;A completed for the latest draft
-          </span>
+        {messages.length > 0 && (
+          <Button variant="ghost" size="sm" onClick={clearAll}>Clear</Button>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto rounded-md border bg-card p-4 space-y-4">
+        {loading ? (
+          <div className="text-sm text-muted-foreground"><Loader2 className="h-3.5 w-3.5 inline animate-spin mr-1" /> Loading conversation…</div>
+        ) : messages.length === 0 ? (
+          <div className="text-sm text-muted-foreground italic">No questions yet. Try: <em className="not-italic">&ldquo;What's the company's ARR growth?&rdquo;</em> or <em className="not-italic">&ldquo;What did research say about the founders?&rdquo;</em></div>
+        ) : (
+          messages.map(m => <QAChatBubble key={m.id} message={m} />)
+        )}
+        {sending && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Thinking…
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {error && <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">{error}</div>}
+
+      <div className="flex gap-2">
+        <textarea
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              send()
+            }
+          }}
+          placeholder="Ask a question — ⏎ to send, ⇧⏎ for newline"
+          rows={2}
+          className="flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          disabled={sending}
+        />
+        <Button onClick={send} disabled={sending || !input.trim()}>
+          {sending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
+          Send
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function QAChatBubble({ message }: { message: QAChatMessage }) {
+  const isUser = message.role === 'user'
+  return (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div className={`max-w-[85%] rounded-md px-3 py-2 text-sm ${isUser ? 'bg-primary/10 border border-primary/20' : 'bg-muted/40 border'}`}>
+        <div className="whitespace-pre-wrap">{message.content}</div>
+        {message.citations && message.citations.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-border/60 text-[11px] text-muted-foreground space-y-0.5">
+            {message.citations.map((c, i) => (
+              <div key={i} className="truncate">
+                <span className="text-foreground/70">↳</span> {c.summary || c.document_id}
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -1360,53 +2402,131 @@ function QATabLauncher({ dealId }: { dealId: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Drafts tab — list + Run Draft button
+// Scoring tab — surfaces rubric scoring derived from the latest memo draft.
+// Run-scoring button stays in the Memo tab; this tab is the read-out.
 // ---------------------------------------------------------------------------
-
-interface DraftRow {
-  id: string
-  draft_version: string
-  agent_version: string
-  is_draft: boolean
-  finalized_at: string | null
-  created_at: string
-  has_memo_draft?: boolean
-  has_research?: boolean
-  has_qa?: boolean
-}
-
-function DraftsTab({ dealId }: { dealId: string }) {
+function ScoringTab({ dealId }: { dealId: string }) {
   const { status, refresh } = useAgentStatus(dealId)
-  const [drafts, setDrafts] = useState<DraftRow[]>([])
+  const [draft, setDraft] = useState<any>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Re-fetch the drafts list whenever the latest job's status changes — the
-  // draft + draft_review jobs both write to the same draft row, so the row
-  // id alone doesn't change and wouldn't trigger a refresh on completion.
   useEffect(() => {
-    fetch(`/api/diligence/${dealId}/drafts`).then(r => r.ok ? r.json() : []).then((rows: any[]) => {
-      setDrafts(rows.map(r => ({
-        id: r.id,
-        draft_version: r.draft_version,
-        agent_version: r.agent_version,
-        is_draft: r.is_draft,
-        finalized_at: r.finalized_at,
-        created_at: r.created_at,
-        has_memo_draft: !!r.memo_draft_output,
-        has_research: !!r.research_output,
-        has_qa: !!r.qa_answers,
-      })))
+    fetch(`/api/diligence/${dealId}/drafts`).then(r => r.ok ? r.json() : []).then(rows => {
+      setDraft((rows ?? [])[0] ?? null)
     }).catch(() => {})
+  }, [dealId, status?.latest_draft?.id, status?.latest_job?.status])
+
+  const job = status?.latest_job
+  const memoOutput = draft?.memo_draft_output as { scores?: Array<{ dimension_id: string; mode: string; score: number | null; confidence: 'low' | 'medium' | 'high' | null; rationale: string | null }> } | null
+  const scores = memoOutput?.scores ?? []
+
+  async function runScore() {
+    setSubmitting(true); setError(null)
+    try {
+      const res = await fetch(`/api/diligence/${dealId}/agent/score`, { method: 'POST' })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? 'Failed to enqueue scoring')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to enqueue scoring')
+    } finally {
+      setSubmitting(false)
+      await refresh()
+    }
+  }
+
+  const hasMemo = !!memoOutput
+  const isScoreInFlight = job && (job.status === 'pending' || job.status === 'running') && job.kind === 'score'
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-md border bg-card p-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium">Rubric scoring</h3>
+          <p className="text-xs text-muted-foreground mt-1 max-w-xl">
+            Machine and hybrid dimensions are scored from the memo draft and evidence. Team and overall recommendation stay partner-only — they show as <span className="font-medium">partner-only</span>.
+          </p>
+        </div>
+        {hasMemo && (
+          <Button variant="outline" size="sm" onClick={runScore} disabled={submitting || !!isScoreInFlight}>
+            {isScoreInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+            Re-run scoring
+          </Button>
+        )}
+      </div>
+
+      <JobStatusLine job={job ?? null} kind="score" error={error} />
+
+      {!hasMemo ? (
+        <div className="rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">
+          No memo draft yet. Run draft from the Memo tab — scoring runs automatically as part of the draft workflow.
+        </div>
+      ) : scores.length === 0 ? (
+        <div className="rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">
+          Memo exists but scoring hasn&apos;t produced output yet. Click &ldquo;Re-run scoring&rdquo; above.
+        </div>
+      ) : (
+        <div className="rounded-md border bg-card divide-y">
+          {scores.map((s, i) => (
+            <div key={`${s.dimension_id}-${i}`} className="p-3 text-sm flex items-start gap-3">
+              <div className="w-16 shrink-0 text-right">
+                <div className="text-2xl font-semibold tabular-nums">{s.score ?? '—'}</div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.mode.replace(/_/g, ' ')}</div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium">{s.dimension_id.replace(/_/g, ' ')}</div>
+                {s.rationale && <div className="text-xs text-muted-foreground mt-0.5">{s.rationale}</div>}
+              </div>
+              {s.confidence && (
+                <span className={`shrink-0 inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${s.confidence === 'high' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' : s.confidence === 'medium' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-muted text-muted-foreground'}`}>
+                  {s.confidence}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Memo tab — fetches the latest draft + attention items and renders the
+// existing MemoEditor inline (no click-through to a separate page). When no
+// memo exists yet, shows the Run draft action.
+// ---------------------------------------------------------------------------
+
+function MemoTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: string; isAdmin: boolean }) {
+  const { status, refresh } = useAgentStatus(dealId)
+  const [draft, setDraft] = useState<any | null>(null)
+  const [attention, setAttention] = useState<any[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Re-fetch whenever the draft job lifecycle changes so the inline editor
+  // picks up the new memo_draft_output the moment the worker finishes.
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    Promise.all([
+      fetch(`/api/diligence/${dealId}/drafts`).then(r => r.ok ? r.json() : []),
+      fetch(`/api/diligence/${dealId}/attention?status=all`).then(r => r.ok ? r.json() : []),
+    ]).then(([drafts, atts]) => {
+      if (cancelled) return
+      const latest = Array.isArray(drafts) ? drafts[0] ?? null : null
+      setDraft(latest)
+      setAttention(Array.isArray(atts) ? atts : [])
+    }).catch(() => {}).finally(() => {
+      if (!cancelled) setLoading(false)
+    })
+    return () => { cancelled = true }
   }, [dealId, status?.latest_draft?.id, status?.latest_job?.status, status?.latest_job?.id])
 
   const job = status?.latest_job
-  // Draft is a multi-job workflow: 'draft' (outline + fills) auto-enqueues
-  // 'draft_review' (review + score); 'score' can also run standalone. Treat
-  // all three as in-flight so the panel shows continuous progress.
   const isDraftWorkflowJob = job?.kind === 'draft' || job?.kind === 'draft_review' || job?.kind === 'score'
   const isInFlight = job && (job.status === 'pending' || job.status === 'running') && isDraftWorkflowJob
-  const hasMemo = drafts.some(d => d.has_memo_draft)
+  const hasMemo = !!draft?.memo_draft_output
 
   async function runDraft() {
     setSubmitting(true)
@@ -1423,49 +2543,23 @@ function DraftsTab({ dealId }: { dealId: string }) {
     }
   }
 
-  async function runScore() {
-    setSubmitting(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/diligence/${dealId}/agent/score`, { method: 'POST' })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.error ?? 'Failed to enqueue scoring')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed')
-    } finally {
-      setSubmitting(false)
-      await refresh()
-    }
-  }
-
   return (
     <div className="space-y-4">
+      {/* Run / Re-run + staleness banner stay at the top of the tab. */}
       <div className="rounded-md border bg-card p-4 flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-medium">Stage 4 + 5 — draft + score</h3>
+          <h3 className="text-sm font-medium">Memo draft</h3>
           <p className="text-xs text-muted-foreground mt-1 max-w-xl">
-            Assemble a structured memo from ingestion, research, and Q&amp;A; score every machine and hybrid rubric dimension; surface partner-attention items.
+            Assemble a structured memo from ingestion, research, and Q&amp;A. Scoring runs automatically as a follow-up; view it in the Scoring tab.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {hasMemo && !isInFlight && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={runScore}
-              disabled={submitting}
-              title="Score the existing memo against the rubric — without re-running the draft"
-            >
-              <RefreshCw className="h-3.5 w-3.5 mr-1" />
-              Run scoring
-            </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={runDraft} disabled={submitting || !!isInFlight}>
-            {isInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : hasMemo ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
-            {hasMemo ? 'Re-draft' : 'Run draft'}
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={runDraft} disabled={submitting || !!isInFlight}>
+          {isInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : hasMemo ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
+          {hasMemo ? 'Re-draft' : 'Run draft'}
+        </Button>
       </div>
+
+      <MemoConfigPanel dealId={dealId} />
 
       {error && <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
 
@@ -1481,39 +2575,23 @@ function DraftsTab({ dealId }: { dealId: string }) {
 
       <JobStatusLine job={job ?? null} kind={['draft', 'draft_review', 'score']} error={null} />
 
-      {drafts.length === 0 ? (
+      {loading ? (
         <div className="rounded-md border bg-card p-12 text-center text-sm text-muted-foreground">
-          No drafts yet. Run draft after Q&A.
+          <Loader2 className="h-4 w-4 inline animate-spin mr-2" /> Loading memo…
+        </div>
+      ) : !hasMemo ? (
+        <div className="rounded-md border bg-card p-12 text-center text-sm text-muted-foreground">
+          No memo yet. Click &ldquo;Run draft&rdquo; above once ingest + research + Q&amp;A are ready.
         </div>
       ) : (
-        <div className="rounded-md border bg-card divide-y">
-          {drafts.map(d => (
-            <div key={d.id} className="p-3 flex items-center justify-between gap-3 text-sm">
-              <div>
-                <div className="font-medium">
-                  <span className="font-mono text-xs">{d.draft_version}</span>
-                  {!d.is_draft && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Final</span>}
-                </div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  {new Date(d.created_at).toLocaleString()}
-                  {' · '}
-                  {[
-                    d.has_memo_draft && 'memo',
-                    d.has_research && 'research',
-                    d.has_qa && 'Q&A',
-                  ].filter(Boolean).join(' · ') || 'no stages yet'}
-                </div>
-              </div>
-              {d.has_memo_draft ? (
-                <Button asChild variant="outline" size="sm" className="h-7 text-xs px-2.5">
-                  <Link href={`/diligence/${dealId}/drafts/${d.id}`}>
-                    Open draft
-                  </Link>
-                </Button>
-              ) : null}
-            </div>
-          ))}
-        </div>
+        <MemoEditor
+          dealId={dealId}
+          dealName={dealName}
+          draft={draft}
+          initialAttention={attention}
+          isAdmin={isAdmin}
+          embedded
+        />
       )}
     </div>
   )

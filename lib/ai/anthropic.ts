@@ -50,6 +50,27 @@ export class AnthropicProvider implements AIProvider {
       ? response.content.filter((b: any) => b.type === 'web_search_tool_result').length
       : undefined
 
+    // Anthropic attaches citations to text blocks as metadata (not in the text
+    // itself). When the model produces JSON output, it usually doesn't echo
+    // the citation URL into a JSON sources field — so we expose them here for
+    // callers to merge in. Deduped by URL across blocks.
+    let webSearchCitations: Array<{ url: string; title: string }> | undefined
+    if (params.enableWebSearch) {
+      const seen = new Set<string>()
+      const out: Array<{ url: string; title: string }> = []
+      for (const block of response.content) {
+        if (block.type !== 'text') continue
+        const cites = (block as any).citations as Array<{ type?: string; url?: string; title?: string }> | undefined
+        if (!Array.isArray(cites)) continue
+        for (const c of cites) {
+          if (!c || typeof c.url !== 'string' || !c.url || seen.has(c.url)) continue
+          seen.add(c.url)
+          out.push({ url: c.url, title: typeof c.title === 'string' ? c.title : c.url })
+        }
+      }
+      webSearchCitations = out
+    }
+
     return {
       text,
       usage: {
@@ -58,6 +79,7 @@ export class AnthropicProvider implements AIProvider {
       },
       truncated: response.stop_reason === 'max_tokens',
       webSearchCount,
+      webSearchCitations,
     }
   }
 
