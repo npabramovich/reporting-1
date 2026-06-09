@@ -7,7 +7,21 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DefaultsEditor } from '@/app/(app)/settings/memo-agent/defaults/editor'
 import { StyleAnchorsLibrary } from '@/app/(app)/settings/memo-agent/style-anchors/library'
-import { SCHEMA_NAMES, type SchemaName } from '@/lib/memo-agent/validate'
+
+// Schema list — duplicated here rather than imported from lib/memo-agent/validate
+// because that module pulls in node:fs/node:path (server-only) and the build
+// fails when a client component touches it. Keep these in sync if a new schema
+// is added.
+const SCHEMA_NAMES = [
+  'instructions',
+  'rubric',
+  'qa_library',
+  'data_room_ingestion',
+  'research_dossier',
+  'memo_output',
+  'style_anchors',
+] as const
+type SchemaName = typeof SCHEMA_NAMES[number]
 
 const SCHEMA_LABELS: Record<SchemaName, { label: string; description: string }> = {
   rubric: { label: 'Rubric', description: 'Scoring dimensions, scale, criteria' },
