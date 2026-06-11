@@ -45,7 +45,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/diligence', label: 'Diligence', icon: Microscope, featureKey: 'diligence',
     children: [
       { href: '/diligence/inbox',     label: 'Inbox' },
-      { href: '/diligence/analytics', label: 'Analytics' },
+      { href: '/diligence/analytics', label: 'Analytics', adminOnly: true },
     ],
   },
   {
@@ -178,6 +178,7 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, up
                 <div className="ml-5 border-l border-border pl-2 mt-0.5 space-y-0.5">
                   {visibleChildren.map(child => {
                     const childIsActive = pathname === child.href || pathname.startsWith(child.href + '/')
+                    const childShowLock = child.adminOnly || (child.featureKey && featureVisibility?.[child.featureKey] === 'admin')
                     return (
                       <Link
                         key={child.href}
@@ -190,6 +191,7 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, up
                         }`}
                       >
                         <span>{child.label}</span>
+                        {childShowLock && <Lock className="h-3 w-3 text-amber-500 shrink-0" />}
                       </Link>
                     )
                   })}

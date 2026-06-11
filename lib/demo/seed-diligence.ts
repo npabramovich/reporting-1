@@ -46,7 +46,7 @@ interface AttentionDef {
   kind: string
   urgency: 'must_address' | 'should_address' | 'fyi'
   body: string
-  status: 'open' | 'addressed' | 'deferred'
+  status: 'open' | 'ignore' | 'done'
 }
 
 const DEALS: DiligenceDealDef[] = [
@@ -534,7 +534,7 @@ const DEALS: DiligenceDealDef[] = [
       { kind: 'data_room_gap',           urgency: 'should_address', body: 'No security/SOC 2 documentation in the data room — required for an infra product that sees customer queries.', status: 'open' },
       { kind: 'partner_only_blank',      urgency: 'must_address',   body: 'Recommendation section is empty.', status: 'open' },
       { kind: 'partner_only_blank',      urgency: 'must_address',   body: 'Team character assessment is empty.', status: 'open' },
-      { kind: 'low_confidence_score',    urgency: 'should_address', body: 'business_model: Year-3 model assumes sustained 138% NRR, which is unproven at scale.', status: 'addressed' },
+      { kind: 'low_confidence_score',    urgency: 'should_address', body: 'business_model: Year-3 model assumes sustained 138% NRR, which is unproven at scale.', status: 'done' },
     ],
   },
 

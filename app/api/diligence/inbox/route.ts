@@ -65,16 +65,16 @@ export async function GET(req: NextRequest) {
   // Per-bucket counts for the header badges.
   const counts = {
     open: 0,
-    addressed: 0,
-    deferred: 0,
+    ignore: 0,
+    done: 0,
     must_address: 0,
     should_address: 0,
     fyi: 0,
   }
   for (const r of (items as any[]) ?? []) {
     if (r.status === 'open') counts.open++
-    else if (r.status === 'addressed') counts.addressed++
-    else if (r.status === 'deferred') counts.deferred++
+    else if (r.status === 'ignore') counts.ignore++
+    else if (r.status === 'done') counts.done++
     if (r.urgency === 'must_address') counts.must_address++
     else if (r.urgency === 'should_address') counts.should_address++
     else if (r.urgency === 'fyi') counts.fyi++

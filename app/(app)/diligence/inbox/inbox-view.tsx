@@ -13,7 +13,7 @@ interface InboxItem {
   urgency: 'must_address' | 'should_address' | 'fyi'
   body: string
   links: Array<{ source_type: string; source_id: string }> | null
-  status: 'open' | 'addressed' | 'deferred'
+  status: 'open' | 'ignore' | 'done'
   resolved_at: string | null
   created_at: string
   deal_name: string
@@ -25,8 +25,8 @@ interface InboxResponse {
   items: InboxItem[]
   counts: {
     open: number
-    addressed: number
-    deferred: number
+    ignore: number
+    done: number
     must_address: number
     should_address: number
     fyi: number
@@ -41,7 +41,7 @@ const URGENCY_BADGE: Record<string, string> = {
 
 export function InboxView() {
   const [data, setData] = useState<InboxResponse | null>(null)
-  const [statusFilter, setStatusFilter] = useState<'open' | 'addressed' | 'deferred' | 'all'>('open')
+  const [statusFilter, setStatusFilter] = useState<'open' | 'ignore' | 'done' | 'all'>('open')
   const [urgencyFilter, setUrgencyFilter] = useState<string>('')
   const [loading, setLoading] = useState(true)
 
@@ -57,7 +57,7 @@ export function InboxView() {
 
   useEffect(() => { load() }, [statusFilter, urgencyFilter])
 
-  async function updateStatus(item: InboxItem, status: 'open' | 'addressed' | 'deferred') {
+  async function updateStatus(item: InboxItem, status: 'open' | 'ignore' | 'done') {
     setData(prev => prev ? {
       ...prev,
       items: prev.items.map(i => i.id === item.id ? { ...i, status } : i),
@@ -86,7 +86,7 @@ export function InboxView() {
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <div className="flex items-center rounded-md border text-xs">
-          {(['open', 'addressed', 'deferred', 'all'] as const).map((s, i, arr) => (
+          {(['open', 'ignore', 'done', 'all'] as const).map((s, i, arr) => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
@@ -154,11 +154,11 @@ export function InboxView() {
                     )}
                     {item.status === 'open' ? (
                       <>
-                        <button onClick={() => updateStatus(item, 'addressed')} className="text-[11px] underline text-muted-foreground hover:text-foreground">
-                          Mark addressed
+                        <button onClick={() => updateStatus(item, 'done')} className="text-[11px] underline text-muted-foreground hover:text-foreground">
+                          Mark done
                         </button>
-                        <button onClick={() => updateStatus(item, 'deferred')} className="text-[11px] underline text-muted-foreground hover:text-foreground">
-                          Defer
+                        <button onClick={() => updateStatus(item, 'ignore')} className="text-[11px] underline text-muted-foreground hover:text-foreground">
+                          Ignore
                         </button>
                       </>
                     ) : (

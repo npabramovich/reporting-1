@@ -55,7 +55,7 @@ interface AttentionItem {
   urgency: 'must_address' | 'should_address' | 'fyi'
   body: string
   links: Array<{ source_type: string; source_id: string }> | null
-  status: 'open' | 'addressed' | 'deferred'
+  status: 'open' | 'ignore' | 'done'
   created_at: string
 }
 
@@ -260,7 +260,7 @@ export function MemoEditor({ dealId, dealName, draft: initial, initialAttention,
     }
   }
 
-  async function updateAttentionStatus(itemId: string, status: 'open' | 'addressed' | 'deferred') {
+  async function updateAttentionStatus(itemId: string, status: 'open' | 'ignore' | 'done') {
     setAttention(prev => prev.map(a => a.id === itemId ? { ...a, status } : a))
     await fetch(`/api/diligence/${dealId}/attention/${itemId}`, {
       method: 'PATCH',
@@ -475,8 +475,8 @@ export function MemoEditor({ dealId, dealName, draft: initial, initialAttention,
                     </div>
                     {item.status === 'open' && (
                       <div className="flex gap-1 mt-2">
-                        <button onClick={() => updateAttentionStatus(item.id, 'addressed')} className="text-[10px] underline text-muted-foreground hover:text-foreground">Addressed</button>
-                        <button onClick={() => updateAttentionStatus(item.id, 'deferred')} className="text-[10px] underline text-muted-foreground hover:text-foreground">Defer</button>
+                        <button onClick={() => updateAttentionStatus(item.id, 'done')} className="text-[10px] underline text-muted-foreground hover:text-foreground">Done</button>
+                        <button onClick={() => updateAttentionStatus(item.id, 'ignore')} className="text-[10px] underline text-muted-foreground hover:text-foreground">Ignore</button>
                       </div>
                     )}
                     {item.status !== 'open' && (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, BarChart3 } from 'lucide-react'
+import { Loader2, BarChart3, Lock } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -34,6 +34,7 @@ export function AnalyticsView() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
           <BarChart3 className="h-5 w-5" /> Diligence Analytics
+          <Lock className="h-4 w-4 text-amber-500" />
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Status mix, conversion funnel, time-in-stage, throughput by partner. Updates live as deals move.

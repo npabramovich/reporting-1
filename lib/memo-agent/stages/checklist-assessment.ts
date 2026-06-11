@@ -3,10 +3,21 @@ import { logAIUsage } from '@/lib/ai/usage'
 import { buildSystemPrompt } from '@/lib/memo-agent/prompts/system'
 import { buildChecklistAssessmentContent } from '@/lib/memo-agent/prompts/checklist-assessment'
 import { getStageProvider } from '@/lib/memo-agent/stage-provider'
-import { extractJsonObject } from '@/lib/memo-agent/parse-ai-json'
+import { extractJsonObject, recoverArrayItems } from '@/lib/memo-agent/parse-ai-json'
 import type { IngestionOutput } from './ingest'
 
 type Admin = ReturnType<typeof createAdminClient>
+
+// Items are assessed in batches (see below), so each call's output stays well
+// under this cap regardless of total checklist length. Kept generous as a
+// backstop; per-batch salvage handles the rare overflow.
+const ASSESSMENT_MAX_TOKENS = 16384
+
+// Checklist items assessed per LLM call. The data-room context is shared across
+// batches (resent each call), but only this many items are scored per call —
+// bounding output size so the token cap stops being load-bearing on long
+// checklists. ~25 terse item assessments is a few thousand output tokens.
+const ASSESSMENT_BATCH_SIZE = 25
 
 export interface ChecklistAssessmentResult {
   items_assessed: number
@@ -111,55 +122,95 @@ export async function runChecklistAssessment(params: {
 
   const { provider, model, providerType } = await getStageProvider(admin, fundId, 'ingest')
 
-  await note(`Assessing ${items.length} checklist items against ${docs.length} document${docs.length === 1 ? '' : 's'}…`)
-  const content = buildChecklistAssessmentContent({
-    dealName,
-    stage: dealStage,
-    checklist: items,
-    perDoc: docs.map(d => ({
-      document_id: d.document_id,
-      file_name: nameById.get(d.document_id) ?? d.document_id,
-      detected_type: d.detected_type,
-      summary: d.summary,
-      claims: d.claims.map(c => ({ field: c.field, value: c.value })),
-    })),
-  })
+  // Shared data-room context — resent with every batch.
+  const perDoc = docs.map(d => ({
+    document_id: d.document_id,
+    file_name: nameById.get(d.document_id) ?? d.document_id,
+    detected_type: d.detected_type,
+    summary: d.summary,
+    claims: d.claims.map(c => ({ field: c.field, value: c.value })),
+  }))
 
-  // The LLM call is the assessment — if it fails or returns nothing usable,
-  // the whole job has failed. Throw with the real reason so the worker marks
-  // the job as failed (with the cause in job.error) rather than success-with-
-  // warnings (which looks like nothing happened to the partner).
-  let assessments: AssessmentEntry[] = []
-  let rawText = ''
-  try {
-    const { text, usage } = await provider.createMessage({
-      model,
-      maxTokens: 4096,
-      system,
-      content,
-    })
-    logAIUsage(admin, {
-      fundId,
-      provider: providerType,
-      model,
-      feature: 'memo_agent_checklist_assessment',
-      usage,
-    })
-    rawText = text
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    throw new Error(`Checklist assessment LLM call failed: ${msg}`)
+  const batches: (typeof items)[] = []
+  for (let i = 0; i < items.length; i += ASSESSMENT_BATCH_SIZE) {
+    batches.push(items.slice(i, i + ASSESSMENT_BATCH_SIZE))
   }
 
-  try {
-    assessments = parseAssessmentResponse(rawText)
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    throw new Error(`Checklist assessment response was unparseable: ${msg}. First 200 chars: ${rawText.slice(0, 200)}`)
+  // The LLM calls ARE the assessment. A single batch failing transiently
+  // shouldn't nuke the whole run, so per-batch failures are collected as
+  // warnings and we keep going — but if *every* batch yields nothing usable
+  // the job fails (below) with the collected reasons, so the worker marks it
+  // failed rather than success-with-nothing.
+  const assessments: AssessmentEntry[] = []
+  const batchErrors: string[] = []
+  for (let b = 0; b < batches.length; b++) {
+    const batch = batches[b]
+    const from = b * ASSESSMENT_BATCH_SIZE + 1
+    const to = from + batch.length - 1
+    await note(
+      batches.length === 1
+        ? `Assessing ${items.length} checklist items against ${docs.length} document${docs.length === 1 ? '' : 's'}…`
+        : `Assessing checklist items ${from}–${to} of ${items.length}…`,
+    )
+
+    const content = buildChecklistAssessmentContent({ dealName, stage: dealStage, checklist: batch, perDoc })
+
+    let rawText = ''
+    let truncated = false
+    try {
+      const { text, usage, truncated: cut } = await provider.createMessage({
+        model,
+        maxTokens: ASSESSMENT_MAX_TOKENS,
+        system,
+        content,
+      })
+      logAIUsage(admin, {
+        fundId,
+        provider: providerType,
+        model,
+        feature: 'memo_agent_checklist_assessment',
+        usage,
+      })
+      rawText = text
+      truncated = !!cut
+    } catch (err) {
+      batchErrors.push(`batch ${b + 1}/${batches.length}: ${err instanceof Error ? err.message : String(err)}`)
+      continue
+    }
+
+    let batchAssessments: AssessmentEntry[]
+    try {
+      batchAssessments = parseAssessmentResponse(rawText)
+    } catch (err) {
+      // Whole-response parse failed — almost always a mid-array truncation.
+      // Salvage every item the model finished before the cut.
+      batchAssessments = recoverArrayItems(rawText, 'items')
+        .map(toAssessmentEntry)
+        .filter((e): e is AssessmentEntry => e !== null)
+      if (batchAssessments.length === 0) {
+        batchErrors.push(
+          truncated
+            ? `batch ${b + 1}/${batches.length}: truncated at the ${ASSESSMENT_MAX_TOKENS}-token output limit before any item could be recovered`
+            : `batch ${b + 1}/${batches.length}: unparseable response (${err instanceof Error ? err.message : String(err)})`,
+        )
+      } else {
+        warnings.push(
+          truncated
+            ? `Batch ${b + 1} hit the ${ASSESSMENT_MAX_TOKENS}-token output limit; recovered ${batchAssessments.length} item(s) completed before the cut and left the rest unchanged.`
+            : `Batch ${b + 1} response was partially malformed; recovered ${batchAssessments.length} item assessment(s) and skipped the rest.`,
+        )
+      }
+    }
+    assessments.push(...batchAssessments)
   }
 
   if (assessments.length === 0) {
-    throw new Error(`Checklist assessment returned no item entries. Model response head: ${rawText.slice(0, 200)}`)
+    throw new Error(
+      `Checklist assessment produced no usable item entries${batchErrors.length ? ` (${batchErrors.join('; ')})` : ''}.`,
+    )
+  }
+  if (batchErrors.length > 0) {
+    warnings.push(`${batchErrors.length} of ${batches.length} batch(es) failed: ${batchErrors.join('; ')}.`)
   }
 
   await note('Writing checklist assessments…')
@@ -196,31 +247,32 @@ function parseAssessmentResponse(raw: string): AssessmentEntry[] {
   if (!parsed || typeof parsed !== 'object') return []
   const obj = parsed as { items?: unknown }
   const items = Array.isArray(obj.items) ? obj.items : []
-  const out: AssessmentEntry[] = []
-  for (const raw of items) {
-    if (!raw || typeof raw !== 'object') continue
-    const r = raw as Record<string, unknown>
-    const id = typeof r.id === 'string' ? r.id : null
-    if (!id) continue
-    const status = (['found', 'partial', 'missing', 'unknown'] as const).includes(r.status as any)
-      ? (r.status as AssessmentEntry['status'])
-      : 'unknown'
-    const evidence: AssessmentEntry['evidence'] = []
-    if (Array.isArray(r.evidence)) {
-      for (const e of r.evidence) {
-        if (!e || typeof e !== 'object') continue
-        const er = e as Record<string, unknown>
-        const document_id = typeof er.document_id === 'string' ? er.document_id : ''
-        const summary = typeof er.summary === 'string' ? er.summary : ''
-        if (document_id) evidence.push({ document_id, summary })
-      }
+  return items.map(toAssessmentEntry).filter((e): e is AssessmentEntry => e !== null)
+}
+
+/** Normalize one raw item object into an AssessmentEntry, or null if unusable. */
+function toAssessmentEntry(raw: unknown): AssessmentEntry | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const id = typeof r.id === 'string' ? r.id : null
+  if (!id) return null
+  const status = (['found', 'partial', 'missing', 'unknown'] as const).includes(r.status as any)
+    ? (r.status as AssessmentEntry['status'])
+    : 'unknown'
+  const evidence: AssessmentEntry['evidence'] = []
+  if (Array.isArray(r.evidence)) {
+    for (const e of r.evidence) {
+      if (!e || typeof e !== 'object') continue
+      const er = e as Record<string, unknown>
+      const document_id = typeof er.document_id === 'string' ? er.document_id : ''
+      const summary = typeof er.summary === 'string' ? er.summary : ''
+      if (document_id) evidence.push({ document_id, summary })
     }
-    out.push({
-      id,
-      status,
-      evidence,
-      notes: typeof r.notes === 'string' ? r.notes : '',
-    })
   }
-  return out
+  return {
+    id,
+    status,
+    evidence,
+    notes: typeof r.notes === 'string' ? r.notes : '',
+  }
 }

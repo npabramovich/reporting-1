@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-const VALID_STATUSES = ['open', 'addressed', 'deferred'] as const
+const VALID_STATUSES = ['open', 'ignore', 'done'] as const
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string; itemId: string } }) {
   const supabase = createClient()

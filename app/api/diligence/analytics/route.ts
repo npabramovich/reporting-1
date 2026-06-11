@@ -10,10 +10,11 @@ export async function GET(_req: NextRequest) {
   const admin = createAdminClient()
   const { data: membership } = await admin
     .from('fund_members')
-    .select('fund_id')
+    .select('fund_id, role')
     .eq('user_id', user.id)
     .maybeSingle()
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+  if ((membership as any).role !== 'admin') return NextResponse.json({ error: 'Admin only' }, { status: 403 })
   const fundId = (membership as any).fund_id as string
 
   // Pull every deal + relevant draft timing. For a fund with hundreds of deals
