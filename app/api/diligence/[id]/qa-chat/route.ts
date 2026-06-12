@@ -6,6 +6,13 @@ import { getStageProvider } from '@/lib/memo-agent/stage-provider'
 import { extractJsonObject } from '@/lib/memo-agent/parse-ai-json'
 import { buildQAChatContext } from '@/lib/diligence/qa-chat-context'
 
+// The POST handler makes a synchronous, user-facing LLM call plus several DB
+// round-trips. Netlify functions default to a 10s timeout, which the model
+// call alone can exceed — the function is then killed before returning a
+// Response and the browser surfaces a bare "Failed to fetch". Extend it to
+// match the other LLM-bound routes in this repo (companies/documents = 60).
+export const maxDuration = 60
+
 interface ChatRow {
   id: string
   role: 'user' | 'assistant'
