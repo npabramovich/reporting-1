@@ -92,6 +92,17 @@ function sanitizeConfig(raw: unknown): MemoTemplateConfig {
   if (typeof r.complexity === 'string' && VALID_COMPLEXITY.has(r.complexity)) {
     clean.complexity = r.complexity as MemoTemplateConfig['complexity']
   }
+  if (Array.isArray(r.sections)) {
+    clean.sections = (r.sections as unknown[])
+      .filter((s): s is Record<string, unknown> => !!s && typeof s === 'object' && typeof (s as any).id === 'string' && typeof (s as any).title === 'string')
+      .slice(0, 50)
+      .map((s) => ({
+        id: s.id as string,
+        title: (s.title as string).slice(0, 120),
+        included: s.included !== false,
+        ...(s.custom ? { custom: true, cover: typeof s.cover === 'string' ? (s.cover as string).slice(0, 500) : '' } : {}),
+      }))
+  }
   if (Array.isArray(r.emphasis)) {
     clean.emphasis = r.emphasis.filter((e): e is string => typeof e === 'string').map(e => e.trim()).filter(Boolean).slice(0, 20)
   }

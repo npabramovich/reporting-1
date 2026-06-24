@@ -9,6 +9,16 @@
 
 export type MemoComplexity = 'brief' | 'standard' | 'detailed' | 'comprehensive'
 
+export interface MemoSectionConfig {
+  id: string
+  title: string
+  included: boolean
+  /** Partner-added section the agent should draft (vs a built-in schema section). */
+  custom?: boolean
+  /** For custom sections: a short note on what the agent should cover. */
+  cover?: string
+}
+
 export interface MemoTemplateConfig {
   style_override?: 'pre_seed' | 'seed' | 'series_a' | 'series_b' | 'growth' | null
   analyst_persona?: string
@@ -16,6 +26,10 @@ export interface MemoTemplateConfig {
   // older per-section target_paragraphs inputs (still read for back-compat).
   complexity?: MemoComplexity
   emphasis?: string[]
+  /** Ordered, user-managed section list (array order = memo order). When present,
+   *  it is authoritative for which sections appear and in what order, overriding
+   *  the section list/order in memo_output.yaml. */
+  sections?: MemoSectionConfig[]
   section_overrides?: Record<string, { included?: boolean; target_paragraphs?: number | null }>
 }
 
@@ -43,6 +57,7 @@ export function buildMemoConfigBlock(params: {
     !!(config.analyst_persona && config.analyst_persona.trim()) ||
     !!config.complexity ||
     (Array.isArray(config.emphasis) && config.emphasis.some(e => e && e.trim())) ||
+    (Array.isArray(config.sections) && config.sections.length > 0) ||
     (config.section_overrides && Object.keys(config.section_overrides).length > 0)
   )
   if (!guidance && !hasConfig) return ''
@@ -68,15 +83,36 @@ export function buildMemoConfigBlock(params: {
     for (const e of emphasis) lines.push(`  - ${e}`)
   }
 
-  const overrides = config?.section_overrides ?? {}
-  const excluded: string[] = []
-  for (const [sectionId, ov] of Object.entries(overrides)) {
-    if (ov?.included === false) excluded.push(sectionId)
-  }
-
-  if (excluded.length > 0) {
-    lines.push('Sections to OMIT entirely from the memo (do not outline or write them):')
-    for (const id of excluded) lines.push(`  - ${id}`)
+  const sections = Array.isArray(config?.sections) ? config!.sections : null
+  if (sections && sections.length > 0) {
+    // Authoritative, user-defined section set + order. Overrides memo_output.yaml.
+    const included = sections.filter(s => s.included !== false)
+    lines.push('Memo sections — write EXACTLY these sections, in THIS exact order, and NO others. This overrides the section list and order in memo_output.yaml:')
+    included.forEach((s, i) => {
+      const title = (s.title ?? s.id).trim()
+      if (s.custom) {
+        const cover = (s.cover ?? '').trim()
+        lines.push(`  ${i + 1}. ${title} [id: ${s.id}] — partner-added section.${cover ? ` Cover: ${cover}` : ''}`)
+      } else {
+        lines.push(`  ${i + 1}. ${title} [id: ${s.id}]`)
+      }
+    })
+    const omitted = sections.filter(s => s.included === false).map(s => s.id)
+    if (omitted.length > 0) {
+      lines.push(`Do NOT outline or write these sections: ${omitted.join(', ')}.`)
+    }
+    lines.push('Use each section\'s [id] as the section_id on its paragraphs, and use its title as the section heading.')
+  } else {
+    // Legacy fallback — include/exclude only; schema drives order.
+    const overrides = config?.section_overrides ?? {}
+    const excluded: string[] = []
+    for (const [sectionId, ov] of Object.entries(overrides)) {
+      if (ov?.included === false) excluded.push(sectionId)
+    }
+    if (excluded.length > 0) {
+      lines.push('Sections to OMIT entirely from the memo (do not outline or write them):')
+      for (const id of excluded) lines.push(`  - ${id}`)
+    }
   }
 
   if (guidance) {

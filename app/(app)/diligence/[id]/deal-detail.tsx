@@ -503,6 +503,11 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
 
   return (
     <div className="space-y-4">
+      {/* Data-room analysis — the primary action sits at the top of the tab;
+          the gaps + inconsistencies it finds render here, above the checklist
+          they inform. */}
+      <IngestionPanel dealId={deal.id} documentCount={documentCount} />
+
       {/* Action bar */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-muted-foreground">
@@ -636,12 +641,6 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
       )}
 
       {!isEmpty && <AddSectionRow onAdd={addSection} />}
-
-      {/* Data-room analysis — gaps, inconsistencies, and per-doc findings show
-          inline alongside the checklist they inform. */}
-      <div className="pt-2">
-        <IngestionPanel dealId={deal.id} documentCount={documentCount} />
-      </div>
     </div>
   )
 }

@@ -270,7 +270,7 @@ single biggest risk? Plan the memo so it builds that argument — every
 section should advance it, not just catalogue facts.
 
 Planning rules:
-  • Include every section from memo_output.yaml EXCEPT "scoring_summary" and "appendix" (those come from later stages).
+  • Section set & order: if the PER-DEAL MEMO CONFIG block specifies an explicit section list, use EXACTLY that set and order (those are partner-defined and override the schema) — still excluding "scoring_summary" and "appendix" if present. Otherwise, include every section from memo_output.yaml EXCEPT "scoring_summary" and "appendix" (those come from later stages).
   • Plan FEWER, sharper paragraphs over exhaustive coverage. A section that makes one clear point in two paragraphs beats one that makes five diffuse ones. Only plan a paragraph if it earns its place in the argument.
   • The "recommendation" section gets exactly ONE paragraph with topic "[partner-only placeholder]".
   • The "team" section SHOULD plan MULTIPLE paragraphs: (a) factual_summary — per-founder background; (b) prior_work — what each founder built/shipped/led, with sourced specifics; (c) public_output — papers, talks, OSS, public writing; (d) references_to_qa — partner Q&A about the team. Plus placeholder paragraphs for character_assessment and founder_market_fit_judgment.

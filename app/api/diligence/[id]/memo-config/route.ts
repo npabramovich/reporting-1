@@ -56,6 +56,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       clean.complexity = raw.complexity as MemoTemplateConfig['complexity']
     }
 
+    if (Array.isArray(raw.sections)) {
+      clean.sections = (raw.sections as unknown[])
+        .filter((s): s is Record<string, unknown> => !!s && typeof s === 'object' && typeof (s as any).id === 'string' && typeof (s as any).title === 'string')
+        .slice(0, 50)
+        .map((s) => ({
+          id: s.id as string,
+          title: (s.title as string).slice(0, 120),
+          included: s.included !== false,
+          ...(s.custom ? { custom: true, cover: typeof s.cover === 'string' ? (s.cover as string).slice(0, 500) : '' } : {}),
+        }))
+    }
+
     if (Array.isArray(raw.emphasis)) {
       clean.emphasis = raw.emphasis
         .filter((e): e is string => typeof e === 'string')

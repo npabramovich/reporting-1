@@ -1,18 +1,32 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ChevronDown, Loader2, Save, Trash2 } from 'lucide-react'
+import { ChevronDown, Loader2, Save, Trash2, GripVertical, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useConfirm } from '@/components/confirm-dialog'
 
 export type MemoComplexity = 'brief' | 'standard' | 'detailed' | 'comprehensive'
 
+export interface SectionConfig {
+  id: string
+  title: string
+  included: boolean
+  /** Partner-added section the agent should draft (vs a built-in schema section). */
+  custom?: boolean
+  /** For custom sections: a short note on what the agent should cover. */
+  cover?: string
+}
+
 export interface MemoTemplateConfig {
   style_override?: 'pre_seed' | 'seed' | 'series_a' | 'series_b' | 'growth' | null
   analyst_persona?: string
   complexity?: MemoComplexity
   emphasis?: string[]
+  /** Ordered, user-managed section list (array order = memo order). Authoritative
+   *  for which sections appear and in what order; overrides the schema order. */
+  sections?: SectionConfig[]
+  // Legacy include/exclude map — still written for back-compat; superseded by `sections`.
   section_overrides?: Record<string, { included?: boolean; target_paragraphs?: number | null }>
 }
 
@@ -85,7 +99,9 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
   const [complexity, setComplexity] = useState<MemoComplexity>('standard')
   const [emphasis, setEmphasis] = useState<string[]>([])
   const [emphasisDraft, setEmphasisDraft] = useState('')
-  const [sectionOverrides, setSectionOverrides] = useState<Record<string, { included: boolean; target_paragraphs: number | null }>>({})
+  const [sections, setSections] = useState<SectionConfig[]>([])
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
 
   // Presets — fund-level saved configs.
   const [presets, setPresets] = useState<MemoPreset[]>([])
@@ -117,15 +133,22 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
     setPersonaCustom(!!p && !PERSONA_PRESETS.includes(p))
     setComplexity(cfg.complexity ?? 'standard')
     setEmphasis(Array.isArray(cfg.emphasis) ? cfg.emphasis : [])
-    const ov: Record<string, { included: boolean; target_paragraphs: number | null }> = {}
-    for (const s of SECTIONS) {
-      const o = cfg.section_overrides?.[s.id]
-      ov[s.id] = {
-        included: o?.included !== false,
-        target_paragraphs: typeof o?.target_paragraphs === 'number' ? o.target_paragraphs : null,
-      }
+    if (Array.isArray(cfg.sections) && cfg.sections.length > 0) {
+      setSections(cfg.sections.map(s => ({
+        id: s.id,
+        title: s.title ?? s.id,
+        included: s.included !== false,
+        custom: !!s.custom,
+        cover: s.cover ?? '',
+      })))
+    } else {
+      // Back-compat: seed the default section list, honoring legacy include flags.
+      setSections(SECTIONS.map(s => ({
+        id: s.id,
+        title: s.title,
+        included: cfg.section_overrides?.[s.id]?.included !== false,
+      })))
     }
-    setSectionOverrides(ov)
   }
 
   function currentConfig(): MemoTemplateConfig {
@@ -134,9 +157,14 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
       analyst_persona: persona,
       complexity,
       emphasis,
-      section_overrides: Object.fromEntries(
-        SECTIONS.map(s => [s.id, { included: sectionOverrides[s.id]?.included ?? true }]),
-      ),
+      sections: sections.map(s => ({
+        id: s.id,
+        title: s.title,
+        included: s.included,
+        ...(s.custom ? { custom: true, cover: (s.cover ?? '').trim() } : {}),
+      })),
+      // Back-compat for any consumer still reading section_overrides.
+      section_overrides: Object.fromEntries(sections.map(s => [s.id, { included: s.included }])),
     }
   }
 
@@ -216,11 +244,29 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
   }
 
   // ---- helpers ----
-  function setSection(id: string, patch: Partial<{ included: boolean; target_paragraphs: number | null }>) {
-    setSectionOverrides(prev => ({
-      ...prev,
-      [id]: { ...(prev[id] ?? { included: true, target_paragraphs: null }), ...patch },
-    }))
+  function patchSection(id: string, patch: Partial<SectionConfig>) {
+    setSections(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)))
+  }
+  function removeSection(id: string) {
+    setSections(prev => prev.filter(s => s.id !== id))
+  }
+  function addSection() {
+    const id = `custom_${Math.random().toString(36).slice(2, 9)}`
+    setSections(prev => [...prev, { id, title: 'New section', included: true, custom: true, cover: '' }])
+  }
+  function dropSectionOnto(targetId: string) {
+    setSections(prev => {
+      if (!dragId || dragId === targetId) return prev
+      const from = prev.findIndex(s => s.id === dragId)
+      const to = prev.findIndex(s => s.id === targetId)
+      if (from === -1 || to === -1) return prev
+      const next = prev.slice()
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+    setDragId(null)
+    setOverId(null)
   }
   function addEmphasis() {
     const v = emphasisDraft.trim()
@@ -232,7 +278,7 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
     setEmphasis(prev => prev.filter((_, idx) => idx !== i))
   }
 
-  const includedCount = Object.values(sectionOverrides).filter(o => o?.included).length
+  const includedCount = sections.filter(s => s.included).length
   const summary = !loaded
     ? 'Loading…'
     : [
@@ -240,7 +286,7 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
         COMPLEXITY_OPTIONS.find(c => c.value === complexity)?.label.toLowerCase(),
         persona ? `persona: ${persona.length > 30 ? persona.slice(0, 30) + '…' : persona}` : null,
         emphasis.length > 0 ? `${emphasis.length} emphasis point${emphasis.length === 1 ? '' : 's'}` : null,
-        `${includedCount}/${SECTIONS.length} sections`,
+        `${includedCount}/${sections.length} sections`,
       ].filter(Boolean).join(' · ')
 
   return (
@@ -421,24 +467,62 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
           </div>
 
           <div>
-            <label className="block text-xs font-medium mb-1">Sections</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium">Sections</label>
+              <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={addSection}>
+                <Plus className="h-3 w-3 mr-1" /> Add section
+              </Button>
+            </div>
             <div className="rounded-md border divide-y">
-              {SECTIONS.map(s => {
-                const ov = sectionOverrides[s.id] ?? { included: true, target_paragraphs: null }
-                return (
-                  <label key={s.id} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer">
+              {sections.map(s => (
+                <div
+                  key={s.id}
+                  onDragOver={dragId && dragId !== s.id ? (e) => { e.preventDefault(); if (overId !== s.id) setOverId(s.id) } : undefined}
+                  onDrop={dragId ? (e) => { e.preventDefault(); dropSectionOnto(s.id) } : undefined}
+                  className={`px-2 py-2 ${dragId && dragId !== s.id && overId === s.id ? 'border-t-2 border-primary' : ''}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      draggable
+                      onDragStart={() => setDragId(s.id)}
+                      onDragEnd={() => { setDragId(null); setOverId(null) }}
+                      className="cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-foreground shrink-0"
+                      title="Drag to reorder"
+                      aria-label="Drag to reorder"
+                    >
+                      <GripVertical className="h-3.5 w-3.5" />
+                    </span>
                     <input
                       type="checkbox"
-                      checked={ov.included}
-                      onChange={e => setSection(s.id, { included: e.target.checked })}
-                      className="h-3.5 w-3.5"
+                      checked={s.included}
+                      onChange={e => patchSection(s.id, { included: e.target.checked })}
+                      className="h-3.5 w-3.5 shrink-0"
+                      title={s.included ? 'Included' : 'Omitted'}
                     />
-                    <span className="font-medium truncate flex-1 min-w-0">{s.title}</span>
-                  </label>
-                )
-              })}
+                    <Input
+                      value={s.title}
+                      onChange={e => patchSection(s.id, { title: e.target.value })}
+                      className={`h-7 text-sm flex-1 ${s.included ? '' : 'opacity-50'}`}
+                    />
+                    {s.custom && <span className="text-[9px] uppercase tracking-wide text-muted-foreground shrink-0">custom</span>}
+                    {s.custom && (
+                      <button onClick={() => removeSection(s.id)} className="text-muted-foreground hover:text-destructive shrink-0" aria-label="Remove section" title="Remove section">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {s.custom && s.included && (
+                    <Input
+                      value={s.cover ?? ''}
+                      onChange={e => patchSection(s.id, { cover: e.target.value })}
+                      placeholder="What should the agent cover in this section?"
+                      className="h-7 text-xs mt-1.5 ml-7"
+                    />
+                  )}
+                </div>
+              ))}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">Unchecked sections are omitted entirely from the memo. Length and depth are driven by Complexity above.</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Drag to reorder. Unchecked sections are omitted. Add custom sections the agent drafts from your &ldquo;what to cover&rdquo; note. Length and depth come from Complexity above.</p>
           </div>
 
           <div>
