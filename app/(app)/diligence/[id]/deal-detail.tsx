@@ -220,7 +220,6 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
   const [error, setError] = useState<string | null>(null)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [pasteText, setPasteText] = useState('')
-  const [promoting, setPromoting] = useState(false)
   const [assessmentJob, setAssessmentJob] = useState<{ id: string; status: string; progress: string | null; started_at: string | null; enqueued_at: string | null; error: string | null } | null>(null)
   // Findings tagged to checklist items, indexed by checklist_item_id. Loaded
   // from the latest draft's ingestion_output. Refreshes when ingest finishes.
@@ -428,19 +427,6 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
     }
   }
 
-  async function promote() {
-    const ok = await confirm({
-      title: 'Promote to portfolio',
-      description: `Create a portfolio company from "${deal.name}" and link them. Status flips to "Won".`,
-      confirmLabel: 'Promote',
-    })
-    if (!ok) return
-    setPromoting(true)
-    const res = await fetch(`/api/diligence/${deal.id}/promote`, { method: 'POST' })
-    setPromoting(false)
-    if (res.ok) router.refresh()
-    else alert('Promote failed')
-  }
 
   async function runAssessment() {
     setError(null)
@@ -534,20 +520,15 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
         </div>
         <div className="flex items-center gap-2">
           {!isEmpty && (
-            <>
-              <label className="text-xs text-muted-foreground inline-flex items-center gap-1.5 mr-1 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={hideCompleted}
-                  onChange={e => setHideCompleted(e.target.checked)}
-                  className="h-3.5 w-3.5"
-                />
-                Hide completed
-              </label>
-              <Button size="sm" onClick={runAssessment} disabled={busy}>
-                Run Assessment
-              </Button>
-            </>
+            <label className="text-xs text-muted-foreground inline-flex items-center gap-1.5 mr-1 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={hideCompleted}
+                onChange={e => setHideCompleted(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              Hide completed
+            </label>
           )}
           <Button variant="outline" size="sm" onClick={applyFundDefault} disabled={busy}>
             {isEmpty ? 'Apply fund default' : 'Reset from fund default'}
@@ -656,34 +637,10 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
 
       {!isEmpty && <AddSectionRow onAdd={addSection} />}
 
-      {/* Data-room ingestion summary — partner runs ingest from here, gap
-          analysis + per-doc findings show inline. Moved from the Data Room
-          tab so the checklist + the evidence behind it live side by side. */}
+      {/* Data-room analysis — gaps, inconsistencies, and per-doc findings show
+          inline alongside the checklist they inform. */}
       <div className="pt-2">
         <IngestionPanel dealId={deal.id} documentCount={documentCount} />
-      </div>
-
-      {/* Footer — details + promote. Process/stage intentionally omitted. */}
-      <div className="grid gap-4 md:grid-cols-2 pt-2">
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Details</CardTitle></CardHeader>
-          <CardContent className="text-sm space-y-1">
-            <Row k="Sector" v={deal.sector} />
-            <Row k="Documents" v={String(documentCount)} />
-          </CardContent>
-        </Card>
-        {isAdmin && deal.deal_status !== 'won' && !deal.promoted_company_id && (
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Promote</CardTitle></CardHeader>
-            <CardContent className="text-sm space-y-2">
-              <div className="text-muted-foreground">When the deal closes, promote to a portfolio company.</div>
-              <Button size="sm" onClick={promote} disabled={promoting}>
-                {promoting ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : null}
-                Promote to portfolio
-              </Button>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   )
@@ -1837,10 +1794,10 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
     <div className="rounded-md border bg-card p-4">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
-          <h3 className="text-sm font-medium">Stage 1 — data-room ingestion</h3>
+          <h3 className="text-sm font-medium">Data room analysis</h3>
           <p className="text-xs text-muted-foreground mt-1 max-w-xl">
-            Run the agent across uploaded documents to extract findings, classify each file, and surface gaps.
-            Re-run after adding more files.
+            Reads your uploaded documents, checks them against this checklist (marking items found / partial / missing),
+            and surfaces gaps and cross-document inconsistencies. Re-run after adding files.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1856,9 +1813,9 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
               Reprocess failed ({failedDocIds.length})
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => runIngest()} disabled={submitting || !!isInFlight || documentCount === 0}>
+          <Button size="sm" onClick={() => runIngest()} disabled={submitting || !!isInFlight || documentCount === 0}>
             {isInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : status?.latest_draft?.has_ingestion ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
-            {status?.latest_draft?.has_ingestion ? 'Re-run' : 'Run ingestion'}
+            {status?.latest_draft?.has_ingestion ? 'Re-analyze data room' : 'Analyze data room'}
           </Button>
         </div>
       </div>
@@ -1867,7 +1824,7 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
         <p className="text-xs text-muted-foreground italic">Upload at least one document to enable ingestion.</p>
       )}
 
-      <JobStatusLine job={job ?? null} kind={['ingest', 'ingest_synthesis']} error={error} />
+      <JobStatusLine job={job ?? null} kind={['ingest', 'ingest_synthesis', 'checklist_assessment']} error={error} />
 
       {/* Keep the summary visible during a run — a single-doc reprocess
           shouldn't blank the whole panel. The job status line above shows

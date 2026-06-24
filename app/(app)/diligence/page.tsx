@@ -14,7 +14,7 @@ export default async function DiligencePage() {
   const admin = createAdminClient()
   const { data: membership } = await admin
     .from('fund_members')
-    .select('fund_id')
+    .select('fund_id, role')
     .eq('user_id', user.id)
     .maybeSingle()
   if (!membership) redirect('/dashboard')
@@ -26,5 +26,6 @@ export default async function DiligencePage() {
     .order('updated_at', { ascending: false })
     .limit(200)
 
-  return <DiligenceIndex initialDeals={(deals as any) ?? []} />
+  const isAdmin = (membership as any).role === 'admin'
+  return <DiligenceIndex initialDeals={(deals as any) ?? []} isAdmin={isAdmin} />
 }
