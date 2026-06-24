@@ -76,6 +76,15 @@ lp_authorized_users    -- which authorized-user accounts act for which principal
 - GP-side resolution (`fund_members`, single-fund invariant) is **unchanged**. We add a parallel
   helper `resolveLpAccess()` (mirrors `assertWriteAccess`) and an RLS function
   `get_my_lp_investor_ids()` (mirrors `get_my_fund_ids`).
+- **A single login can be both a GP member and an LP** (decided 2026-06-24). The same
+  `auth.users` row may have a `fund_members` row *and* an `lp_account`. The two access graphs are
+  independent and never merged; **which one applies is resolved by route context** — `/app/*`
+  resolves GP scope via `fund_members`, `/portal/*` resolves LP scope via `lp_accounts`. A
+  GP-and-LP user switches "hats" by switching route group (e.g. a header link between the GP app
+  and their LP portal); they never see LP and GP data combined in one view. Concretely:
+  middleware allows such a user into *both* route groups; each portal API still calls
+  `resolveLpAccess()` (never `fund_members`), and each GP API still calls `assertWriteAccess()`
+  (never `lp_accounts`), so a GP membership can never widen LP visibility or vice-versa.
 
 ### A2. Data upgrade: link snapshots to logins
 
@@ -198,7 +207,8 @@ and the reusable code-entry component is then ready for Workstream A's invites.
   template (post-2026-05-30 fresh installs break otherwise).
 - **Don't edit shipped migrations** — always add new ones.
 - **Don't apply migrations remotely** — only create local files in `supabase/migrations/`.
-- **Auth-user binding:** an `auth.users` row could in principle be both a GP member and an LP.
-  Decide early whether to forbid that or resolve by route context; the route-group split makes
-  context-based resolution clean.
+- **Auth-user binding (decided):** an `auth.users` row **may** be both a GP member and an LP.
+  Resolution is by route context (see A1) — never by merging the two graphs. The risk to guard is
+  a portal endpoint accidentally falling back to `fund_members` (or a GP endpoint reading
+  `lp_accounts`); keep the two resolution helpers strictly separate and never cross-reference them.
 
