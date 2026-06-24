@@ -245,6 +245,9 @@ export async function findOrCreateFolder(
   searchUrl.searchParams.set('q', q)
   searchUrl.searchParams.set('fields', 'files(id)')
   searchUrl.searchParams.set('pageSize', '1')
+  // Include Shared Drives so an existing subfolder there is reused, not duplicated.
+  searchUrl.searchParams.set('includeItemsFromAllDrives', 'true')
+  searchUrl.searchParams.set('supportsAllDrives', 'true')
 
   const searchRes = await fetch(searchUrl.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -257,8 +260,8 @@ export async function findOrCreateFolder(
     }
   }
 
-  // Create the folder
-  const createRes = await fetch(`${DRIVE_API}/files`, {
+  // Create the folder. supportsAllDrives lets the parent be a Shared Drive folder.
+  const createRes = await fetch(`${DRIVE_API}/files?supportsAllDrives=true`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -307,7 +310,7 @@ export async function uploadFile(
   if (contentBuffer.length > 4 * 1024 * 1024) {
     // Step 1: Initiate resumable upload
     const initRes = await fetch(
-      'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true',
       {
         method: 'POST',
         headers: {
@@ -351,7 +354,7 @@ export async function uploadFile(
     const body = Buffer.concat([prefix, contentBuffer, suffix])
 
     res = await fetch(
-      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true',
       {
         method: 'POST',
         headers: {

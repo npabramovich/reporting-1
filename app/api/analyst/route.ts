@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createFundAIProviderWithOverride } from '@/lib/ai'
+import { withTopicalGuardrail } from '@/lib/ai/topical-guard'
 import type { ChatMessage } from '@/lib/ai/types'
 import type { Json } from '@/lib/types/database'
 import { logAIUsage } from '@/lib/ai/usage'
@@ -211,7 +212,7 @@ export async function POST(req: NextRequest) {
     const { text, usage } = await provider.createChat({
       model: aiModel,
       maxTokens: 2000,
-      system: systemPrompt,
+      system: withTopicalGuardrail(systemPrompt),
       messages,
     })
 

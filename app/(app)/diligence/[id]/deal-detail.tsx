@@ -2398,7 +2398,7 @@ function QATab({ dealId }: { dealId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-3 h-[calc(100vh-220px)] min-h-[400px]">
+    <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-medium">Ask anything about this deal</h3>
@@ -2411,7 +2411,7 @@ function QATab({ dealId }: { dealId: string }) {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto rounded-md border bg-card p-4 space-y-4">
+      <div className="overflow-y-auto rounded-md border bg-card p-4 space-y-4 max-h-[calc(100vh-260px)]">
         {loading ? (
           <div className="text-sm text-muted-foreground"><Loader2 className="h-3.5 w-3.5 inline animate-spin mr-1" /> Loading conversation…</div>
         ) : messages.length === 0 ? (
@@ -2508,6 +2508,32 @@ function ScoringTab({ dealId }: { dealId: string }) {
     }
   }
 
+  async function patchScore(dimensionId: string, patch: { score?: number | null; confidence?: string | null; rationale?: string }) {
+    if (!draft?.id) return
+    // Optimistic local update so the control responds immediately.
+    setDraft((d: any) => d?.memo_draft_output ? {
+      ...d,
+      memo_draft_output: {
+        ...d.memo_draft_output,
+        scores: (d.memo_draft_output.scores ?? []).map((s: any) =>
+          s.dimension_id === dimensionId ? { ...s, ...patch, partner_edited: true } : s),
+      },
+    } : d)
+    try {
+      const res = await fetch(`/api/diligence/${dealId}/drafts/${draft.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ score_edits: [{ dimension_id: dimensionId, ...patch }] }),
+      })
+      if (res.ok) {
+        const body = await res.json()
+        if (body.memo_draft_output) setDraft((d: any) => d ? { ...d, memo_draft_output: body.memo_draft_output } : d)
+      }
+    } catch {
+      // Keep the optimistic value; a later refetch resyncs.
+    }
+  }
+
   const hasMemo = !!memoOutput
   const isScoreInFlight = job && (job.status === 'pending' || job.status === 'running') && job.kind === 'score'
 
@@ -2517,7 +2543,7 @@ function ScoringTab({ dealId }: { dealId: string }) {
         <div>
           <h3 className="text-sm font-medium">Rubric scoring</h3>
           <p className="text-xs text-muted-foreground mt-1 max-w-xl">
-            Machine and hybrid dimensions are scored from the memo draft and evidence. Team and overall recommendation stay partner-only — they show as <span className="font-medium">partner-only</span>.
+            Scores are derived from the memo draft and evidence. Edit any score, rating, or rationale below — changes save to the deal.
           </p>
         </div>
         {hasMemo && (
@@ -2541,24 +2567,60 @@ function ScoringTab({ dealId }: { dealId: string }) {
       ) : (
         <div className="rounded-md border bg-card divide-y">
           {scores.map((s, i) => (
-            <div key={`${s.dimension_id}-${i}`} className="p-3 text-sm flex items-start gap-3">
-              <div className="w-16 shrink-0 text-right">
-                <div className="text-2xl font-semibold tabular-nums">{s.score ?? '—'}</div>
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.mode.replace(/_/g, ' ')}</div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium">{s.dimension_id.replace(/_/g, ' ')}</div>
-                {s.rationale && <div className="text-xs text-muted-foreground mt-0.5">{s.rationale}</div>}
-              </div>
-              {s.confidence && (
-                <span className={`shrink-0 inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${s.confidence === 'high' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' : s.confidence === 'medium' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-muted text-muted-foreground'}`}>
-                  {s.confidence}
-                </span>
-              )}
-            </div>
+            <ScoreEditRow key={`${s.dimension_id}-${i}`} score={s} onSave={(patch) => patchScore(s.dimension_id, patch)} />
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// One editable rubric-score row: score (1–5 / —), rationale, and confidence
+// rating. Each control persists via score_edits on change/blur.
+function ScoreEditRow({ score, onSave }: {
+  score: { dimension_id: string; score: number | null; confidence: 'low' | 'medium' | 'high' | null; rationale: string | null }
+  onSave: (patch: { score?: number | null; confidence?: string | null; rationale?: string }) => void
+}) {
+  const [rationale, setRationale] = useState(score.rationale ?? '')
+  useEffect(() => { setRationale(score.rationale ?? '') }, [score.rationale])
+  const confCls = score.confidence === 'high'
+    ? 'border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200'
+    : score.confidence === 'medium'
+      ? 'border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200'
+      : 'border-input text-muted-foreground'
+  return (
+    <div className="p-3 text-sm flex items-start gap-3">
+      <select
+        value={score.score ?? ''}
+        onChange={e => onSave({ score: e.target.value === '' ? null : Number(e.target.value) })}
+        className="w-14 shrink-0 h-9 rounded-md border border-input bg-background text-center text-lg font-semibold tabular-nums"
+        aria-label={`Score for ${score.dimension_id}`}
+      >
+        <option value="">—</option>
+        {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+      </select>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium mb-1">{score.dimension_id.replace(/_/g, ' ')}</div>
+        <textarea
+          value={rationale}
+          onChange={e => setRationale(e.target.value)}
+          onBlur={() => { if (rationale !== (score.rationale ?? '')) onSave({ rationale }) }}
+          rows={2}
+          placeholder="Rationale…"
+          className="w-full resize-y rounded-md border border-input bg-transparent px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
+      </div>
+      <select
+        value={score.confidence ?? ''}
+        onChange={e => onSave({ confidence: e.target.value === '' ? null : e.target.value })}
+        className={`shrink-0 h-7 rounded-md border bg-background px-1.5 text-[11px] font-medium ${confCls}`}
+        aria-label={`Confidence for ${score.dimension_id}`}
+      >
+        <option value="">—</option>
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+      </select>
     </div>
   )
 }

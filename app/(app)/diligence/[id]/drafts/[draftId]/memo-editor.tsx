@@ -403,38 +403,8 @@ export function MemoEditor({ dealId, dealName, draft: initial, initialAttention,
             )
           })}
 
-          {/* Scoring summary inline */}
-          {memo.scores && memo.scores.length > 0 && (
-            <section className="mb-6">
-              <h2 className="text-base font-semibold tracking-tight mb-2">Scoring Summary</h2>
-              <div className="rounded-md border bg-card overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium">Dimension</th>
-                      <th className="px-3 py-2 text-left font-medium">Mode</th>
-                      <th className="px-3 py-2 text-left font-medium">Score</th>
-                      <th className="px-3 py-2 text-left font-medium">Confidence</th>
-                      <th className="px-3 py-2 text-left font-medium">Rationale</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {memo.scores.map(s => (
-                      <tr key={s.dimension_id} className="border-t align-top">
-                        <td className="px-3 py-2 font-medium">{s.dimension_id}</td>
-                        <td className="px-3 py-2 text-xs">{s.mode}</td>
-                        <td className="px-3 py-2">
-                          {s.score === null ? (s.mode === 'partner_only' ? <span className="italic text-muted-foreground">[partner]</span> : '—') : <span className="font-medium">{s.score}</span>}
-                        </td>
-                        <td className="px-3 py-2 text-xs">{s.confidence ?? '—'}</td>
-                        <td className="px-3 py-2 text-xs">{s.rationale}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
+          {/* Scoring lives on the Scoring tab (and in the exported memo output) —
+              not duplicated inline here. */}
         </div>
 
         <aside className="space-y-4">

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logAIUsage } from '@/lib/ai/usage'
+import { withTopicalGuardrail } from '@/lib/ai/topical-guard'
 import { getStageProvider } from '@/lib/memo-agent/stage-provider'
 import { extractJsonObject } from '@/lib/memo-agent/parse-ai-json'
 import { buildQAChatContext } from '@/lib/diligence/qa-chat-context'
@@ -120,7 +121,7 @@ ${ctx.text}`
     const { text, usage } = await provider.createMessage({
       model,
       maxTokens: 1500,
-      system: systemPrompt,
+      system: withTopicalGuardrail(systemPrompt),
       content: userTurn,
     })
     logAIUsage(admin, {
