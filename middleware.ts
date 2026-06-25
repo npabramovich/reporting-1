@@ -87,6 +87,12 @@ export async function middleware(request: NextRequest) {
     const isActiveLp = lpStatus === 'active'
 
     if (isPortalRoute) {
+      // An already-active LP has no business on the onboarding page.
+      if (isActiveLp && isPortalWelcome) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/portal/snapshots'
+        return NextResponse.redirect(url)
+      }
       // Only active LPs (incl. active LPs who are also GPs) belong in the portal.
       if (!isActiveLp) {
         const url = request.nextUrl.clone()

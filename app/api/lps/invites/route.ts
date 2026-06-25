@@ -121,3 +121,27 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, lp_account_id: lpAccountId })
 }
+
+// DELETE ?id=<lp_account_links.id> → revoke a direct LP-investor link for this fund.
+export async function DELETE(req: NextRequest) {
+  const supabase = createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const writeCheck = await assertWriteAccess(admin, user.id)
+  if (writeCheck instanceof NextResponse) return writeCheck
+  if (writeCheck.role !== 'admin') return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+
+  const id = new URL(req.url).searchParams.get('id') ?? ''
+  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
+
+  // Scope the unlink to the admin's own fund.
+  const { error } = await (admin as any)
+    .from('lp_account_links')
+    .delete()
+    .eq('id', id)
+    .eq('fund_id', writeCheck.fundId)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}

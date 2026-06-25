@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { useCurrency, formatCurrency } from '@/components/currency-context'
 import { PortfolioGroupFilter } from '@/components/lp-portfolio-group-filter'
-import { LpSnapshotShare } from '@/components/lp-snapshot-share'
+import { LpShareControl } from '@/components/lp-share-control'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
@@ -775,7 +775,7 @@ export default function SnapshotDetailPage() {
       </div>
 
       <div className="mb-6 max-w-2xl">
-        <LpSnapshotShare snapshotId={snapshotId} />
+        <LpShareControl shareEndpoint={`/api/lps/snapshots/${snapshotId}/share`} />
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">

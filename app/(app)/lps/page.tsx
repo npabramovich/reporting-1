@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
+import { LpAuthorizedUsers } from '@/components/lp-authorized-users'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -255,6 +256,13 @@ export default function LPsPage() {
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </div>
           ))}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="mt-8 max-w-2xl">
+          <h3 className="text-base font-medium text-muted-foreground mb-3">Portal access</h3>
+          <LpAuthorizedUsers />
         </div>
       )}
 

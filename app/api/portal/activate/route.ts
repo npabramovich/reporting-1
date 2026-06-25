@@ -40,6 +40,17 @@ export async function POST() {
     return NextResponse.json({ error: 'This invitation is linked to a different account.' }, { status: 409 })
   }
 
+  // Already activated for this same user — idempotent no-op.
+  if (account.status === 'active' && account.auth_user_id === user.id) {
+    return NextResponse.json({ ok: true })
+  }
+
+  // An active account with no bound auth user is a corrupted state; refuse to
+  // (re)bind it via the email path rather than risk an unintended takeover.
+  if (account.status === 'active' && !account.auth_user_id) {
+    return NextResponse.json({ error: 'This account needs to be re-invited.' }, { status: 409 })
+  }
+
   const { error } = await (admin as any)
     .from('lp_accounts')
     .update({ auth_user_id: user.id, status: 'active', updated_at: new Date().toISOString() })

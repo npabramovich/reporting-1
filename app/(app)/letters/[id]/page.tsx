@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useFeatureVisibility } from '@/components/feature-visibility-context'
+import { LpShareControl } from '@/components/lp-share-control'
 
 const DEFAULT_PROMPT_PLACEHOLDER = `## LP Letter Style Guide (Default)
 
@@ -408,6 +409,10 @@ export default function LetterEditorPage() {
             </Button>
           )}
         </div>
+      </div>
+
+      <div className="mb-4 max-w-2xl">
+        <LpShareControl shareEndpoint={`/api/lp-letters/${letterId}/share`} />
       </div>
 
       {/* Analyst prompt editor — only on Edit Company Summaries tab */}

@@ -104,7 +104,7 @@ function AuthForm() {
         <Card>
           <CardHeader className="pb-4">
             <CardTitle className="text-lg">Sign in with your account</CardTitle>
-            <CardDescription>Sign in with password or magic link.</CardDescription>
+            <CardDescription>Sign in with password or a one-time code.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {emailConfirmed && (
@@ -162,7 +162,7 @@ function AuthForm() {
 
             <Link href="/auth/magic-link">
               <Button variant="outline" className="w-full">
-                Sign in with magic link
+                Sign in with a one-time code
               </Button>
             </Link>
 

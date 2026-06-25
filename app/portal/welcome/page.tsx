@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Building2 } from 'lucide-react'
+import { Building2, Loader2 } from 'lucide-react'
 
 /**
  * LP onboarding. The invite email carries a 6-digit code; the LP enters their
@@ -22,8 +22,31 @@ export default function PortalWelcomePage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [resent, setResent] = useState(false)
+  const [checking, setChecking] = useState(true)
+  const [authedEmail, setAuthedEmail] = useState<string | null>(null)
+  const [activating, setActivating] = useState(false)
 
   const supabase = createClient()
+
+  // A user who already has a session (e.g. a GP also invited as an LP, or someone
+  // returning mid-onboarding) skips the code+password step — they just need their
+  // LP account activated.
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setAuthedEmail(data.user.email ?? '')
+      setChecking(false)
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function directActivate() {
+    setError(null)
+    setActivating(true)
+    const res = await fetch('/api/portal/activate', { method: 'POST' })
+    if (res.ok) { window.location.href = '/portal/snapshots'; return }
+    const b = await res.json().catch(() => ({}))
+    setError(b.error ?? 'Could not activate your portal access.')
+    setActivating(false)
+  }
 
   async function complete() {
     setError(null)
@@ -61,6 +84,43 @@ export default function PortalWelcomePage() {
     if (!email.trim()) { setError('Enter your email first.'); return }
     await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: false } })
     setResent(true)
+  }
+
+  if (checking) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-4 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…
+      </div>
+    )
+  }
+
+  if (authedEmail !== null) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-6">
+          <div className="text-center">
+            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center mx-auto mb-2">
+              <Building2 className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <h1 className="text-lg font-semibold tracking-tight">Investor Portal</h1>
+          </div>
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg">Activate your access</CardTitle>
+              <CardDescription>
+                You&apos;re signed in{authedEmail ? ` as ${authedEmail}` : ''}. Activate your investor portal access to continue.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+              <Button className="w-full" onClick={directActivate} disabled={activating}>
+                {activating ? 'Activating…' : 'Activate portal access'}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
   }
 
   return (

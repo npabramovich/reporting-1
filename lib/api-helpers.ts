@@ -62,12 +62,20 @@ export async function resolveLpAccess(
 
   const [{ data: links }, { data: delegated }] = await Promise.all([
     admin.from('lp_account_links').select('lp_investor_id').eq('lp_account_id', account.id),
-    admin.from('lp_authorized_users').select('lp_investor_id').eq('authorized_user_account_id', account.id),
+    // Embed the principal account's status: a delegation grants access only
+    // while the principal LP it acts for is still active. Disabling the LP must
+    // also cut their authorized users.
+    admin
+      .from('lp_authorized_users')
+      .select('lp_investor_id, lp_accounts!lp_authorized_users_principal_lp_account_id_fkey(status)')
+      .eq('authorized_user_account_id', account.id),
   ])
 
   const investorIds = Array.from(new Set([
     ...((links ?? []) as { lp_investor_id: string }[]).map(l => l.lp_investor_id),
-    ...((delegated ?? []) as { lp_investor_id: string }[]).map(d => d.lp_investor_id),
+    ...((delegated ?? []) as any[])
+      .filter(d => d.lp_accounts?.status === 'active')
+      .map(d => d.lp_investor_id as string),
   ]))
 
   return { lpAccountId: account.id as string, investorIds }

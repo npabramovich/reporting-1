@@ -2200,6 +2200,30 @@ function GoogleDriveSection({
   const [breadcrumbs, setBreadcrumbs] = useState<{ id: string | null; name: string; shared?: boolean }[]>([{ id: null, name: 'My Drive' }])
   const [saving, setSaving] = useState(false)
   const [browseMode, setBrowseMode] = useState<'my' | 'shared'>('my')
+  const [urlInput, setUrlInput] = useState('')
+
+  // Resolve a pasted Drive folder URL directly to the saved folder — skips the
+  // browser entirely, which matters for deeply-nested or shared-drive folders
+  // ("Shared with me" lists every shared folder flat, unusable on a big drive).
+  const selectByUrl = async () => {
+    if (!urlInput.trim()) return
+    setSaving(true)
+    setFolderError(null)
+    const res = await fetch('/api/settings/drive/folders', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: urlInput.trim() }),
+    })
+    if (!res.ok) {
+      setSaving(false)
+      const data = await res.json().catch(() => ({}))
+      setFolderError(data.error || 'Failed to use folder')
+      return
+    }
+    const { folderId, folderName } = await res.json()
+    setUrlInput('')
+    await selectFolder({ id: folderId, name: folderName })
+  }
 
   const loadFolders = async (parentId?: string, shared?: boolean) => {
     setLoadingFolders(true)
@@ -2229,6 +2253,7 @@ function GoogleDriveSection({
   const openPicker = () => {
     setShowPicker(true)
     setBrowseMode('my')
+    setUrlInput('')
     setBreadcrumbs([{ id: null, name: 'My Drive' }])
     loadFolders()
   }
@@ -2338,6 +2363,29 @@ function GoogleDriveSection({
 
       {showPicker ? (
         <div className="border rounded-lg p-3 space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Paste a Google Drive folder URL</label>
+            <div className="flex gap-2">
+              <Input
+                value={urlInput}
+                onChange={e => setUrlInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); selectByUrl() } }}
+                placeholder="https://drive.google.com/drive/folders/..."
+                className="h-8 text-sm"
+                disabled={saving}
+              />
+              <Button size="sm" onClick={selectByUrl} disabled={saving || !urlInput.trim()}>
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Use'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">or browse</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
           <div className="flex items-center gap-2 text-xs">
             <button
               onClick={switchToMyDrive}
@@ -2409,7 +2457,7 @@ function GoogleDriveSection({
           )}
 
           <div className="flex gap-2 justify-end">
-            <Button size="sm" variant="outline" onClick={() => { setShowPicker(false); setFolderError(null) }}>
+            <Button size="sm" variant="outline" onClick={() => { setShowPicker(false); setFolderError(null); setUrlInput('') }}>
               Cancel
             </Button>
             <Button size="sm" onClick={selectCurrentFolder} disabled={saving}>
@@ -2442,6 +2490,7 @@ function GoogleDriveCompanyFolders({ fundId }: { fundId: string }) {
   const [browseMode, setBrowseMode] = useState<'my' | 'shared'>('my')
   const [saving, setSaving] = useState<string | null>(null)
   const [folderError, setFolderError] = useState<string | null>(null)
+  const [urlInput, setUrlInput] = useState('')
 
   const loadCompanies = async () => {
     setLoading(true)
@@ -2494,9 +2543,33 @@ function GoogleDriveCompanyFolders({ fundId }: { fundId: string }) {
   const openPicker = (companyId: string) => {
     setPickerCompanyId(companyId)
     setBrowseMode('my')
+    setUrlInput('')
     setBreadcrumbs([{ id: null, name: 'My Drive' }])
     setFolderError(null)
     loadFolders()
+  }
+
+  // Resolve a pasted Drive folder URL → folder, then save it for this company.
+  // Mirrors the fund-level picker; the resolve endpoint reads the folder name,
+  // the company PATCH (in selectFolder) persists it.
+  const selectByUrl = async (companyId: string) => {
+    if (!urlInput.trim()) return
+    setSaving(companyId)
+    setFolderError(null)
+    const res = await fetch('/api/settings/drive/folders', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: urlInput.trim() }),
+    })
+    if (!res.ok) {
+      setSaving(null)
+      const data = await res.json().catch(() => ({}))
+      setFolderError(data.error || 'Failed to use folder')
+      return
+    }
+    const { folderId, folderName } = await res.json()
+    setUrlInput('')
+    await selectFolder(companyId, { id: folderId, name: folderName })
   }
 
   const selectFolder = async (companyId: string, folder: { id: string; name: string }) => {
@@ -2584,6 +2657,29 @@ function GoogleDriveCompanyFolders({ fundId }: { fundId: string }) {
 
                   {pickerCompanyId === c.id && (
                     <div className="border rounded-lg p-3 mt-2 space-y-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-muted-foreground">Paste a Google Drive folder URL</label>
+                        <div className="flex gap-2">
+                          <Input
+                            value={urlInput}
+                            onChange={e => setUrlInput(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); selectByUrl(c.id) } }}
+                            placeholder="https://drive.google.com/drive/folders/..."
+                            className="h-8 text-sm"
+                            disabled={saving === c.id}
+                          />
+                          <Button size="sm" onClick={() => selectByUrl(c.id)} disabled={saving === c.id || !urlInput.trim()}>
+                            {saving === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Use'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">or browse</span>
+                        <div className="h-px flex-1 bg-border" />
+                      </div>
+
                       <div className="flex items-center gap-2 text-xs">
                         <button
                           onClick={() => { setBrowseMode('my'); setBreadcrumbs([{ id: null, name: 'My Drive' }]); loadFolders() }}
@@ -2636,7 +2732,7 @@ function GoogleDriveCompanyFolders({ fundId }: { fundId: string }) {
                       )}
 
                       <div className="flex gap-2 justify-end">
-                        <Button size="sm" variant="outline" onClick={() => { setPickerCompanyId(null); setFolderError(null) }}>
+                        <Button size="sm" variant="outline" onClick={() => { setPickerCompanyId(null); setFolderError(null); setUrlInput('') }}>
                           Cancel
                         </Button>
                       </div>
@@ -3526,7 +3622,7 @@ interface WhitelistEntry {
 const AUTH_EMAIL_TEMPLATES = [
   { name: 'Confirm signup', file: 'confirmation.html', desc: 'Sent when a user signs up' },
   { name: 'Invite user', file: 'invite.html', desc: 'Sent when an admin invites someone' },
-  { name: 'Magic link', file: 'magic_link.html', desc: 'Passwordless sign-in link' },
+  { name: 'One-time code', file: 'magic_link.html', desc: 'Passwordless sign-in code' },
   { name: 'Reset password', file: 'recovery.html', desc: 'Password reset request' },
   { name: 'Change email', file: 'email_change.html', desc: 'Confirm new email address' },
   { name: 'Reauthentication', file: 'reauthentication.html', desc: 'OTP code for re-verification' },
@@ -3542,7 +3638,7 @@ function AuthEmailTemplatesSection() {
   return (
     <Section title="Authentication">
       <p className="text-xs text-muted-foreground mb-3">
-        Email/password authentication is handled by Supabase Auth. This install includes preconfigured email templates for all authentication emails — signup confirmation, invitations, password reset, magic links, email change, and security notifications.
+        Email/password authentication is handled by Supabase Auth. This install includes preconfigured email templates for all authentication emails — signup confirmation, invitations, password reset, one-time sign-in codes, email change, and security notifications.
       </p>
 
       {showGuide ? (

@@ -193,6 +193,37 @@ export function parseDriveFolderUrl(url: string): string | null {
   return m ? m[1] : null
 }
 
+/**
+ * Resolve a folder's display name from its ID. Used when a partner pastes a
+ * Drive folder URL directly into the picker — we have the ID but need a
+ * human-readable name to store and show. Verifies the target is a folder (not
+ * a file) and that the connected account can actually see it.
+ */
+export async function getFolderName(accessToken: string, folderId: string): Promise<string> {
+  if (!/^[a-zA-Z0-9_-]+$/.test(folderId)) {
+    throw new Error('Invalid folder ID')
+  }
+  const url = new URL(`${DRIVE_API}/files/${folderId}`)
+  url.searchParams.set('fields', 'id,name,mimeType')
+  url.searchParams.set('supportsAllDrives', 'true')
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("Folder not found, or the connected Google account can't access it")
+    const text = await res.text()
+    throw new Error(`Failed to load folder: ${text}`)
+  }
+
+  const data = await res.json()
+  if (data.mimeType !== 'application/vnd.google-apps.folder') {
+    throw new Error('That link points to a file, not a folder')
+  }
+  return data.name as string
+}
+
 export async function listFolders(
   accessToken: string,
   parentId?: string,

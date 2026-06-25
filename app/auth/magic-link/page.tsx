@@ -66,7 +66,7 @@ export default function MagicLinkPage() {
 
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Sign in with a code</CardTitle>
+            <CardTitle className="text-lg">Sign in with a one-time code</CardTitle>
             <CardDescription>
               {sent
                 ? 'Enter the 6-digit code we emailed you.'

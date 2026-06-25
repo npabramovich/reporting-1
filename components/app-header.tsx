@@ -5,6 +5,7 @@ import { Menu, LogOut, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { AppSidebar } from '@/components/app-sidebar'
+import { LpPortalSwitchLink } from '@/components/lp-portal-switch-link'
 import { useSidebar } from '@/components/sidebar-context'
 import type { FeatureVisibilityMap } from '@/lib/types/features'
 
@@ -61,6 +62,7 @@ export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge, settings
 
       {/* Right: user + sign out */}
       <div className="flex items-center gap-3">
+        <LpPortalSwitchLink />
         <span className="text-xs text-muted-foreground truncate hidden sm:block max-w-[200px]">
           {userEmail}
         </span>
