@@ -23,7 +23,7 @@ interface Deal {
   name: string
   sector: string | null
   stage_at_consideration: string | null
-  deal_status: 'active' | 'passed' | 'won' | 'lost' | 'on_hold'
+  deal_status: 'active' | 'passed' | 'invested' | 'won' | 'lost' | 'on_hold'
   current_memo_stage: string
   lead_partner_id: string | null
   promoted_company_id: string | null
@@ -61,15 +61,20 @@ type LatestDraft = {
 const TABS = ['Checklist', 'Data Room', 'Diligence', 'Q&A', 'Scoring', 'Memo'] as const
 type Tab = typeof TABS[number]
 
-const STATUS_LABEL: Record<Deal['deal_status'], { label: string; cls: string }> = {
-  active:   { label: 'Active',   cls: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' },
-  passed:   { label: 'Passed',   cls: 'bg-muted text-muted-foreground' },
-  won:      { label: 'Won',      cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
-  lost:     { label: 'Lost',     cls: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
-  on_hold:  { label: 'On hold',  cls: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' },
+// Deal stages: Invested, Active, Passed. No color accents — the label alone
+// communicates state. Legacy values (won/lost/on_hold) map onto the current
+// three so existing rows still render.
+const STATUS_LABEL: Record<string, string> = {
+  invested: 'Invested',
+  active:   'Active',
+  passed:   'Passed',
+  won:      'Invested',
+  lost:     'Passed',
+  on_hold:  'Active',
 }
 
-const STATUS_OPTIONS = Object.keys(STATUS_LABEL) as Deal['deal_status'][]
+const STATUS_OPTIONS: Deal['deal_status'][] = ['invested', 'active', 'passed']
+const statusLabel = (s: string) => STATUS_LABEL[s] ?? s
 
 export function DealDetail({ deal: initial, initialDocuments, latestDraft, isAdmin, currentUserId }: {
   deal: Deal
@@ -523,9 +528,9 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
           ) : (
             <>
               <span className="font-medium text-foreground">{allItems.length}</span> items ·
-              <span className="ml-1 text-green-700 dark:text-green-400">{counts.found} found</span> ·
-              <span className="ml-1 text-amber-700 dark:text-amber-400">{counts.partial} partial</span> ·
-              <span className="ml-1 text-red-700 dark:text-red-400">{counts.missing} missing</span> ·
+              <span className="ml-1">{counts.found} found</span> ·
+              <span className="ml-1">{counts.partial} partial</span> ·
+              <span className="ml-1">{counts.missing} missing</span> ·
               <span className="ml-1">{counts.unknown} pending</span>
             </>
           )}
@@ -741,9 +746,9 @@ function ChecklistSection({ section, items, findingsByItem, hideCompleted, colla
         </button>
         <span className="text-xs font-normal text-muted-foreground shrink-0">
           {items.length} item{items.length === 1 ? '' : 's'}
-          {counts.found > 0 && <span className="ml-1.5 text-green-700 dark:text-green-400">· {counts.found} found</span>}
-          {counts.partial > 0 && <span className="ml-1.5 text-amber-700 dark:text-amber-400">· {counts.partial} partial</span>}
-          {counts.missing > 0 && <span className="ml-1.5 text-red-700 dark:text-red-400">· {counts.missing} missing</span>}
+          {counts.found > 0 && <span className="ml-1.5">· {counts.found} found</span>}
+          {counts.partial > 0 && <span className="ml-1.5">· {counts.partial} partial</span>}
+          {counts.missing > 0 && <span className="ml-1.5">· {counts.missing} missing</span>}
         </span>
         {section && !editingSection && (
           <>
@@ -1006,9 +1011,9 @@ function StatusDropdown({ value, onPick }: { value: Deal['deal_status']; onPick:
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`inline-flex items-center h-8 px-3 rounded-md text-xs font-medium hover:opacity-90 ${STATUS_LABEL[value].cls}`}
+          className="inline-flex items-center h-8 px-3 rounded-md text-xs font-medium border bg-background hover:bg-muted"
         >
-          {STATUS_LABEL[value].label}
+          {statusLabel(value)}
           <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-60" />
         </button>
       </PopoverTrigger>
@@ -1019,7 +1024,7 @@ function StatusDropdown({ value, onPick }: { value: Deal['deal_status']; onPick:
             onClick={() => { setOpen(false); onPick(s) }}
             className={`w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted ${s === value ? 'bg-muted font-medium' : ''}`}
           >
-            {STATUS_LABEL[s].label}
+            {statusLabel(s)}
           </button>
         ))}
       </PopoverContent>
@@ -2610,52 +2615,92 @@ function ScoringTab({ dealId }: { dealId: string }) {
   )
 }
 
-// One editable rubric-score row: score (1–5 / —), rationale, and confidence
-// rating. Each control persists via score_edits on change/blur.
+// One editable rubric-score row. A read-only summary by default; clicking Edit
+// reveals the score (1–5 / —) and confidence dropdowns side-by-side plus a
+// roomy rationale field. Nothing persists until Save is clicked.
 function ScoreEditRow({ score, onSave }: {
   score: { dimension_id: string; score: number | null; confidence: 'low' | 'medium' | 'high' | null; rationale: string | null }
   onSave: (patch: { score?: number | null; confidence?: string | null; rationale?: string }) => void
 }) {
+  const [editing, setEditing] = useState(false)
+  const [scoreVal, setScoreVal] = useState<number | null>(score.score)
+  const [confidence, setConfidence] = useState<string | null>(score.confidence)
   const [rationale, setRationale] = useState(score.rationale ?? '')
-  useEffect(() => { setRationale(score.rationale ?? '') }, [score.rationale])
-  const confCls = score.confidence === 'high'
-    ? 'border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200'
-    : score.confidence === 'medium'
-      ? 'border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200'
-      : 'border-input text-muted-foreground'
-  return (
-    <div className="p-3 text-sm flex items-start gap-3">
-      <select
-        value={score.score ?? ''}
-        onChange={e => onSave({ score: e.target.value === '' ? null : Number(e.target.value) })}
-        className="w-14 shrink-0 h-9 rounded-md border border-input bg-background text-center text-lg font-semibold tabular-nums"
-        aria-label={`Score for ${score.dimension_id}`}
-      >
-        <option value="">—</option>
-        {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
-      </select>
-      <div className="flex-1 min-w-0">
-        <div className="font-medium mb-1 capitalize">{score.dimension_id.replace(/_/g, ' ')}</div>
-        <textarea
-          value={rationale}
-          onChange={e => setRationale(e.target.value)}
-          onBlur={() => { if (rationale !== (score.rationale ?? '')) onSave({ rationale }) }}
-          rows={2}
-          placeholder="Rationale…"
-          className="w-full resize-y rounded-md border border-input bg-transparent px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        />
+
+  // Resync from upstream (e.g. a re-run) only while not actively editing, so a
+  // background refresh never clobbers in-progress edits.
+  useEffect(() => {
+    if (editing) return
+    setScoreVal(score.score)
+    setConfidence(score.confidence)
+    setRationale(score.rationale ?? '')
+  }, [score.score, score.confidence, score.rationale, editing])
+
+  const label = score.dimension_id.replace(/_/g, ' ')
+
+  function save() {
+    onSave({ score: scoreVal, confidence, rationale })
+    setEditing(false)
+  }
+  function cancel() {
+    setScoreVal(score.score)
+    setConfidence(score.confidence)
+    setRationale(score.rationale ?? '')
+    setEditing(false)
+  }
+
+  if (!editing) {
+    return (
+      <div className="p-3 text-sm flex items-start gap-3">
+        <div className="w-14 shrink-0 text-center text-lg font-semibold tabular-nums">{score.score ?? '—'}</div>
+        <div className="flex-1 min-w-0">
+          <div className="font-medium capitalize flex items-center gap-2">
+            {label}
+            {score.confidence && <span className="text-[11px] font-normal text-muted-foreground capitalize">· {score.confidence}</span>}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{score.rationale || 'No rationale yet.'}</p>
+        </div>
+        <Button variant="ghost" size="sm" className="shrink-0 h-7" onClick={() => setEditing(true)}>Edit</Button>
       </div>
-      <select
-        value={score.confidence ?? ''}
-        onChange={e => onSave({ confidence: e.target.value === '' ? null : e.target.value })}
-        className={`shrink-0 h-7 rounded-md border bg-background px-1.5 text-[11px] font-medium ${confCls}`}
-        aria-label={`Confidence for ${score.dimension_id}`}
-      >
-        <option value="">—</option>
-        <option value="low">low</option>
-        <option value="medium">medium</option>
-        <option value="high">high</option>
-      </select>
+    )
+  }
+
+  return (
+    <div className="p-3 text-sm">
+      <div className="font-medium capitalize mb-2">{label}</div>
+      <div className="flex items-center gap-2 mb-2">
+        <select
+          value={scoreVal ?? ''}
+          onChange={e => setScoreVal(e.target.value === '' ? null : Number(e.target.value))}
+          className="w-14 shrink-0 h-9 rounded-md border border-input bg-background text-center text-lg font-semibold tabular-nums"
+          aria-label={`Score for ${score.dimension_id}`}
+        >
+          <option value="">—</option>
+          {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <select
+          value={confidence ?? ''}
+          onChange={e => setConfidence(e.target.value === '' ? null : e.target.value)}
+          className="shrink-0 h-9 rounded-md border border-input bg-background px-2 text-xs font-medium"
+          aria-label={`Confidence for ${score.dimension_id}`}
+        >
+          <option value="">—</option>
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+        </select>
+      </div>
+      <textarea
+        value={rationale}
+        onChange={e => setRationale(e.target.value)}
+        rows={6}
+        placeholder="Rationale…"
+        className="w-full min-h-[140px] resize-y rounded-md border border-input bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      />
+      <div className="flex justify-end gap-2 mt-2">
+        <Button variant="ghost" size="sm" className="h-7" onClick={cancel}>Cancel</Button>
+        <Button size="sm" className="h-7" onClick={save}>Save</Button>
+      </div>
     </div>
   )
 }

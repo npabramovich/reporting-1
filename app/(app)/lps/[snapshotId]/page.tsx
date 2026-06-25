@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useCurrency, formatCurrency } from '@/components/currency-context'
 import { PortfolioGroupFilter } from '@/components/lp-portfolio-group-filter'
 import { LpShareControl } from '@/components/lp-share-control'
+import { useFeatureVisibility, useIsAdmin } from '@/components/feature-visibility-context'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
@@ -140,6 +141,8 @@ export default function SnapshotDetailPage() {
   const router = useRouter()
   const params = useParams()
   const snapshotId = params.snapshotId as string
+  const fv = useFeatureVisibility()
+  const isAdmin = useIsAdmin()
   const fmt = (val: number) => formatCurrency(val, currency)
 
   // Snapshot metadata
@@ -772,10 +775,9 @@ export default function SnapshotDetailPage() {
           <Settings className="h-4 w-4 mr-1" />
           Settings
         </Button>
-      </div>
-
-      <div className="mb-6 max-w-2xl">
-        <LpShareControl shareEndpoint={`/api/lps/snapshots/${snapshotId}/share`} />
+        {isAdmin && (fv.lp_portal_access === 'everyone' || fv.lp_portal_access === 'admin') && (
+          <LpShareControl shareEndpoint={`/api/lps/snapshots/${snapshotId}/share`} />
+        )}
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">

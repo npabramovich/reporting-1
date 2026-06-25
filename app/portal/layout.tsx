@@ -24,6 +24,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             <Link href="/portal/letters" className="text-sm text-muted-foreground hover:text-foreground py-2 border-b-2 border-transparent">
               Letters
             </Link>
+            <Link href="/portal/documents" className="text-sm text-muted-foreground hover:text-foreground py-2 border-b-2 border-transparent">
+              Documents
+            </Link>
             <Link href="/portal/authorized-users" className="text-sm text-muted-foreground hover:text-foreground py-2 border-b-2 border-transparent">
               Authorized users
             </Link>

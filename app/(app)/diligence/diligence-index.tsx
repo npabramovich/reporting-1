@@ -16,7 +16,7 @@ interface Deal {
   name: string
   sector: string | null
   stage_at_consideration: string | null
-  deal_status: 'active' | 'passed' | 'won' | 'lost' | 'on_hold'
+  deal_status: 'active' | 'passed' | 'invested' | 'won' | 'lost' | 'on_hold'
   current_memo_stage: 'not_started' | 'ingest' | 'research' | 'qa' | 'draft' | 'score' | 'render' | 'finalized'
   lead_partner_id: string | null
   promoted_company_id: string | null
@@ -24,13 +24,19 @@ interface Deal {
   updated_at: string
 }
 
-const STATUS_LABEL: Record<Deal['deal_status'], { label: string; cls: string }> = {
-  active:   { label: 'Active',   cls: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' },
-  passed:   { label: 'Passed',   cls: 'bg-muted text-muted-foreground' },
-  won:      { label: 'Won',      cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
-  lost:     { label: 'Lost',     cls: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
-  on_hold:  { label: 'On hold',  cls: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' },
+// Deal stages: Invested, Active, Passed. No color accents — the label alone
+// communicates state. Legacy values (won/lost/on_hold) map onto the current
+// three so existing rows still render.
+const STATUS_LABEL: Record<string, string> = {
+  invested: 'Invested',
+  active:   'Active',
+  passed:   'Passed',
+  won:      'Invested',
+  lost:     'Passed',
+  on_hold:  'Active',
 }
+const STATUS_OPTIONS = ['invested', 'active', 'passed'] as const
+const statusLabel = (s: string) => STATUS_LABEL[s] ?? s
 
 const STAGE_LABEL: Record<Deal['current_memo_stage'], string> = {
   not_started: 'Not started',
@@ -66,7 +72,7 @@ export function DiligenceIndex({ initialDeals, isAdmin }: { initialDeals: Deal[]
     if (res.ok) {
       const body = await res.json().catch(() => ({}))
       setDeals(prev => prev.map(x => x.id === deal.id
-        ? { ...x, deal_status: 'won', promoted_company_id: body.company_id ?? 'promoted' }
+        ? { ...x, deal_status: 'invested', promoted_company_id: body.company_id ?? 'promoted' }
         : x))
     } else {
       const body = await res.json().catch(() => ({}))
@@ -167,7 +173,7 @@ export function DiligenceIndex({ initialDeals, isAdmin }: { initialDeals: Deal[]
           className="h-9 px-3 rounded-md border border-input bg-background text-sm"
         >
           <option value="all">All statuses</option>
-          {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          {STATUS_OPTIONS.map(k => <option key={k} value={k}>{statusLabel(k)}</option>)}
         </select>
         <div className="ml-auto text-sm text-muted-foreground">
           {filtered.length} deal{filtered.length === 1 ? '' : 's'}
@@ -190,8 +196,8 @@ export function DiligenceIndex({ initialDeals, isAdmin }: { initialDeals: Deal[]
             >
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="font-medium truncate">{d.name}</div>
-                <span className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-medium ${STATUS_LABEL[d.deal_status].cls}`}>
-                  {STATUS_LABEL[d.deal_status].label}
+                <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
+                  {statusLabel(d.deal_status)}
                 </span>
               </div>
               <div className="text-xs text-muted-foreground space-y-0.5">
@@ -199,7 +205,7 @@ export function DiligenceIndex({ initialDeals, isAdmin }: { initialDeals: Deal[]
                 <div>Stage: <span className="font-medium">{STAGE_LABEL[d.current_memo_stage]}</span></div>
                 <div>Updated {new Date(d.updated_at).toLocaleDateString()}</div>
               </div>
-              {isAdmin && d.deal_status !== 'won' && !d.promoted_company_id && (
+              {isAdmin && d.deal_status !== 'invested' && d.deal_status !== 'won' && !d.promoted_company_id && (
                 <div className="mt-3 pt-2 border-t flex justify-end">
                   <Button
                     size="sm"

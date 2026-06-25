@@ -17,6 +17,11 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import Link from 'next/link'
+import { DefaultsEditor } from './memo-agent/defaults/editor'
+import { StyleAnchorsInline } from './memo-agent/style-anchors/style-anchors-inline'
+import { SchemasInline } from './memo-agent/schemas/schemas-inline'
+import { LpAccessSettings } from '@/components/lp-access-settings'
+import { LpDocumentsSettings } from '@/components/lp-documents-settings'
 import { AlertCircle, Check, ChevronDown, ChevronRight, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X, Lock, ArrowDownCircle, Eye } from 'lucide-react'
 import { DEFAULT_FEATURE_VISIBILITY, FEATURES_WITH_OFF } from '@/lib/types/features'
 import type { FeatureKey, FeatureVisibility } from '@/lib/types/features'
@@ -240,6 +245,15 @@ export default function SettingsPage() {
 
           <GroupHeader label="LP Portal" />
           <LpPortalSection enabled={settings.lpPortalEnabled} onSaved={load} />
+          <Section title="LP access">
+            <p className="text-xs text-muted-foreground mb-4">
+              Invite LPs and their authorized users — in bulk from a pasted sheet, or one at a time. Investors are matched by name; new ones are created.
+            </p>
+            <LpAccessSettings />
+          </Section>
+          <Section title="LP documents">
+            <LpDocumentsSettings />
+          </Section>
 
           <GroupHeader label="Storage" />
           <StorageSection
@@ -644,6 +658,7 @@ const FEATURE_META: Record<FeatureKey, { label: string; description: string; hre
   asks: { label: 'Asks', description: 'Track and send portfolio company requests to your network', href: '/support#asks' },
   lps: { label: 'LPs', description: 'Investor-level report cards with consolidated performance across fund vehicles', href: '/support#lps' },
   lp_associates: { label: 'GP Entities', description: 'Entity ownership mappings and pro-rata associates calculations for LP reporting', href: '/support#lps' },
+  lp_portal_access: { label: 'LP portal controls', description: 'Admin controls for the LP portal: the "Share with LPs" panels on snapshots and letters, and managing authorized users', href: '/support#lps' },
   compliance: { label: 'Compliance', description: 'Track regulatory deadlines, filings, and compliance workflows', href: '/support#compliance' },
   deals: { label: 'Deals', description: 'Inbound deal pitches screened against your fund thesis', href: '/support#deals' },
   diligence: { label: 'Diligence', description: 'Pre-investment record-keeping and AI-assisted memo drafting', href: '/support#diligence' },
@@ -4173,7 +4188,7 @@ function LpPortalSection({ enabled, onSaved }: { enabled: boolean; onSaved: () =
   return (
     <Section title="LP Portal">
       <p className="text-xs text-muted-foreground mb-4">
-        When on, snapshots you share with an investor become visible to them in their own LP portal. When off, the portal is disabled for this fund — nothing reaches LPs even if individual snapshots are marked as shared. Invite investors and choose what to share from each snapshot&apos;s &ldquo;Share with LPs&rdquo; panel.
+        When on, snapshots you share with an investor become visible to them in their own LP portal. When off, the portal is disabled for this fund, and nothing reaches LPs even if individual snapshots are marked as shared. Invite investors and choose what to share from each snapshot&apos;s &ldquo;Share with LPs&rdquo; panel.
       </p>
       <div className="flex items-center gap-3">
         <Switch checked={on} onCheckedChange={handleToggle} disabled={saving} />
@@ -4540,43 +4555,50 @@ function RoutingSection({ threshold, model, onSaved }: {
 
 // ──────────────────────────── Diligence ────────────────────────────
 
+function MemoAgentSubsection({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-md border bg-background">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-start gap-2 px-3 py-3 text-left hover:bg-muted/30 transition-colors"
+      >
+        {open ? <ChevronDown className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />}
+        <div className="min-w-0">
+          <div className="text-sm font-medium">{title}</div>
+          <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
+        </div>
+      </button>
+      {open && <div className="border-t px-3 py-3">{children}</div>}
+    </div>
+  )
+}
+
 function MemoAgentSection() {
   return (
     <Section title="Diligence">
       <p className="text-xs text-muted-foreground mb-3">
         Configure how the diligence agent reads data rooms, sources external research, runs partner Q&amp;A, and drafts memos.
       </p>
-      <div className="grid gap-2 sm:grid-cols-3">
-        <Link
-          href="/settings/memo-agent/schemas"
-          className="rounded-md border bg-background p-3 hover:bg-muted/30 transition-colors block"
+      <div className="space-y-2">
+        <MemoAgentSubsection
+          title="Schemas"
+          desc="The seven YAML/MD files that govern the agent: rubric, Q&A library, ingestion shape, research shape, memo output, style anchors, and instructions."
         >
-          <div className="text-sm font-medium mb-0.5">Schemas →</div>
-          <p className="text-[11px] text-muted-foreground">
-            The seven YAML/MD files that govern the agent: rubric, Q&amp;A library, ingestion shape,
-            research shape, memo output, style anchors, and instructions.
-          </p>
-        </Link>
-        <Link
-          href="/settings/memo-agent/style-anchors"
-          className="rounded-md border bg-background p-3 hover:bg-muted/30 transition-colors block"
+          <SchemasInline />
+        </MemoAgentSubsection>
+        <MemoAgentSubsection
+          title="Style anchors"
+          desc="Upload past investment memos so the agent learns your firm's voice and structure. Reference only; never copied into new memos as facts."
         >
-          <div className="text-sm font-medium mb-0.5">Style anchors →</div>
-          <p className="text-[11px] text-muted-foreground">
-            Upload past investment memos so the agent learns your firm&apos;s voice and structure.
-            Used as reference only; never copied into new memos as facts.
-          </p>
-        </Link>
-        <Link
-          href="/settings/memo-agent/defaults"
-          className="rounded-md border bg-background p-3 hover:bg-muted/30 transition-colors block"
+          <StyleAnchorsInline />
+        </MemoAgentSubsection>
+        <MemoAgentSubsection
+          title="Defaults & caps"
+          desc="Per-stage AI provider overrides, per-deal and monthly token caps, and the web-search toggle for the research stage."
         >
-          <div className="text-sm font-medium mb-0.5">Defaults &amp; caps →</div>
-          <p className="text-[11px] text-muted-foreground">
-            Per-stage AI provider overrides, per-deal and monthly token caps, and the web-search
-            toggle for the research stage.
-          </p>
-        </Link>
+          <DefaultsEditor embedded />
+        </MemoAgentSubsection>
       </div>
     </Section>
   )

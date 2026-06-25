@@ -2,25 +2,23 @@
 
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Loader2, Share2, Mail } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Loader2, Share2 } from 'lucide-react'
 
 interface Investor { id: string; name: string }
 
 /**
- * Admin control: choose which LP investors can see this item (a snapshot or a
- * letter) in their portal, and invite an investor's contact to create a login.
- * `shareEndpoint` is the item's share route (GET/POST { lp_investor_ids }).
+ * A "Share with LPs" button that opens a modal to choose which investors can
+ * see this item (snapshot or letter) in their portal. Share-only — inviting LPs
+ * lives in Settings → LP access. `shareEndpoint` is the item's share route
+ * (GET/POST { lp_investor_ids }). Render it inside an action-button row.
  */
-export function LpShareControl({ shareEndpoint, label = 'Share with LPs' }: { shareEndpoint: string; label?: string }) {
+export function LpShareControl({ shareEndpoint }: { shareEndpoint: string }) {
   const [open, setOpen] = useState(false)
   const [investors, setInvestors] = useState<Investor[]>([])
   const [shared, setShared] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [inviteFor, setInviteFor] = useState<string | null>(null)
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [msg, setMsg] = useState<string | null>(null)
   const [portalEnabled, setPortalEnabled] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -57,72 +55,57 @@ export function LpShareControl({ shareEndpoint, label = 'Share with LPs' }: { sh
     persist(next)
   }
 
-  async function invite(investorId: string) {
-    if (!inviteEmail.trim()) return
-    const res = await fetch('/api/lps/invites', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lp_investor_id: investorId, email: inviteEmail.trim() }),
-    })
-    setMsg(res.ok ? `Invitation sent to ${inviteEmail.trim()}.` : 'Invite failed.')
-    setInviteEmail('')
-    setInviteFor(null)
-  }
-
   const allShared = investors.length > 0 && investors.every(i => shared.has(i.id))
 
   return (
-    <div className="rounded-md border bg-card">
-      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-muted/40 transition-colors">
-        <Share2 className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium text-sm">{label}</span>
-        {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground ml-1" />}
-        <span className="text-xs text-muted-foreground ml-auto">{shared.size > 0 ? `${shared.size} shared` : 'not shared'}</span>
-      </button>
-      {open && (
-        <div className="px-4 pb-4 border-t pt-3 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">Check an investor to share with them. Invite to create their login.</p>
-            {investors.length > 0 && (
-              <button onClick={() => persist(allShared ? new Set() : new Set(investors.map(i => i.id)))} className="shrink-0 text-[11px] text-primary hover:underline">
-                {allShared ? 'Deselect all' : 'Select all'}
-              </button>
+    <>
+      <Button variant="outline" size="sm" className="text-muted-foreground" onClick={() => setOpen(true)}>
+        <Share2 className="h-4 w-4 mr-1" />
+        Share with LPs
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              Share with LPs
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            </DialogTitle>
+            <DialogDescription>Check an investor to make this visible in their portal. Invite LPs from Settings → LP access.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {portalEnabled === false && (
+              <div className="text-xs rounded-md border border-amber-300/50 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 px-2.5 py-2">
+                The LP portal is off for this fund — shares won&apos;t reach LPs until you enable it in{' '}
+                <a href="/settings" className="underline">Settings → LP Portal</a>.
+              </div>
+            )}
+
+            {loading ? (
+              <div className="text-xs text-muted-foreground py-4"><Loader2 className="h-3.5 w-3.5 inline animate-spin mr-1" /> Loading…</div>
+            ) : investors.length === 0 ? (
+              <div className="text-xs text-muted-foreground py-4">No LP investors yet — add them from Settings → LP access.</div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">{shared.size} of {investors.length} shared</span>
+                  <button onClick={() => persist(allShared ? new Set() : new Set(investors.map(i => i.id)))} className="text-[11px] text-primary hover:underline">
+                    {allShared ? 'Deselect all' : 'Select all'}
+                  </button>
+                </div>
+                <div className="rounded-md border divide-y max-h-[55vh] overflow-y-auto">
+                  {investors.map(inv => (
+                    <label key={inv.id} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-muted/30">
+                      <input type="checkbox" checked={shared.has(inv.id)} onChange={() => toggle(inv.id)} className="h-3.5 w-3.5" />
+                      <span className="flex-1 min-w-0 truncate">{inv.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
             )}
           </div>
-          {portalEnabled === false && (
-            <div className="text-xs rounded-md border border-amber-300/50 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 px-2.5 py-2">
-              The LP portal is off for this fund — shares won&apos;t reach LPs until you enable it in{' '}
-              <a href="/settings" className="underline">Settings → LP Portal</a>.
-            </div>
-          )}
-          {msg && <div className="text-xs text-emerald-600 dark:text-emerald-400">{msg}</div>}
-          {loading ? (
-            <div className="text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 inline animate-spin mr-1" /> Loading…</div>
-          ) : investors.length === 0 ? (
-            <div className="text-xs text-muted-foreground">No LP investors yet — add them in the LPs section first.</div>
-          ) : (
-            <div className="rounded-md border divide-y">
-              {investors.map(inv => (
-                <div key={inv.id} className="px-3 py-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <input type="checkbox" checked={shared.has(inv.id)} onChange={() => toggle(inv.id)} className="h-3.5 w-3.5" />
-                    <span className="flex-1 min-w-0 truncate">{inv.name}</span>
-                    <button onClick={() => { setInviteFor(inviteFor === inv.id ? null : inv.id); setInviteEmail('') }} className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-                      <Mail className="h-3 w-3" /> Invite
-                    </button>
-                  </div>
-                  {inviteFor === inv.id && (
-                    <div className="flex gap-2 mt-2 ml-5">
-                      <Input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="lp@email.com" className="h-7 text-xs" />
-                      <Button size="sm" className="h-7 text-xs" onClick={() => invite(inv.id)} disabled={!inviteEmail.trim()}>Send</Button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
