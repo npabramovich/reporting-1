@@ -27,6 +27,34 @@ export interface IngestionFileSource {
 }
 
 /**
+ * Resolve the ordered list of document ids that ingest should process for a
+ * deal — applying the same filters as loadDealDocuments (skip `skipped`,
+ * `call_recording`, and audio/video formats) but WITHOUT downloading any
+ * bytes. Used by the ingest worker to batch a large data room across multiple
+ * function invocations instead of loading + parsing every document in one run
+ * (which blows past the Vercel function ceiling). Ordered oldest-first so
+ * batching is deterministic across continuation ticks.
+ */
+export async function listIngestableDocumentIds(
+  admin: Admin,
+  dealId: string,
+  fundId: string,
+): Promise<string[]> {
+  const { data, error } = await admin
+    .from('diligence_documents')
+    .select('id, file_format, uploaded_at')
+    .eq('deal_id', dealId)
+    .eq('fund_id', fundId)
+    .neq('parse_status', 'skipped')
+    .neq('detected_type', 'call_recording')
+    .order('uploaded_at', { ascending: true })
+  if (error) throw new Error(`Failed to list deal documents: ${error.message}`)
+  return ((data ?? []) as Array<{ id: string; file_format: string | null }>)
+    .filter(r => !AUDIO_VIDEO_FORMATS.has((r.file_format ?? '').toLowerCase()))
+    .map(r => r.id)
+}
+
+/**
  * Load every non-skipped document for a deal, downloading the bytes from
  * Supabase storage. Skipped (`parse_status = 'skipped'`) files are excluded.
  *

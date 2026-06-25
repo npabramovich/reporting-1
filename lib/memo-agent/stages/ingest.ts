@@ -51,6 +51,10 @@ export interface IngestionDocsResult {
   draft_id: string
   ingestion_documents: IngestionDocumentOutput[]
   documents_processed: number
+  /** Documents from this batch that were NOT attempted because the soft time
+   *  budget ran out mid-run. The caller re-enqueues these so they're processed
+   *  on a later worker tick rather than orphaned at the function ceiling. */
+  deferred_document_ids: string[]
   warnings: string[]
 }
 
@@ -79,9 +83,20 @@ export async function runIngestDocs(params: {
   dealId: string
   documentIds?: string[]
   draftId?: string
+  /** When true (the default), replace the draft's ingestion documents. When
+   *  false, merge this batch's results into the existing set by document_id —
+   *  used for continuation batches and failed-doc re-runs so earlier results
+   *  are preserved. */
+  replaceExisting?: boolean
+  /** Stop launching new concurrency chunks once this many ms have elapsed.
+   *  Any not-yet-attempted documents are returned as deferred so the worker
+   *  re-enqueues them. Defaults to a comfortable margin under the 300s ceiling. */
+  softBudgetMs?: number
   progressCb?: (msg: string) => Promise<void>
 }): Promise<IngestionDocsResult> {
   const { admin, fundId, dealId, documentIds, progressCb } = params
+  const replaceExisting = params.replaceExisting !== false
+  const softBudgetMs = params.softBudgetMs ?? 210_000
   const note = async (msg: string) => { if (progressCb) await progressCb(msg) }
 
   await note('Loading documents…')
@@ -195,8 +210,18 @@ export async function runIngestDocs(params: {
     }
   }
 
+  // Stop launching new chunks once the soft budget is spent so the function
+  // returns (and re-enqueues the rest) well before Vercel's hard kill. Index
+  // from which documents were never attempted — they become `deferred`.
+  const startedAt = Date.now()
+  let attemptedCount = parsed.length
   const perDocResults: Array<IngestionDocumentOutput | null> = new Array(parsed.length).fill(null)
   for (let i = 0; i < parsed.length; i += CONCURRENCY) {
+    if (i > 0 && Date.now() - startedAt > softBudgetMs) {
+      attemptedCount = i
+      await note(`Time budget reached after ${i}/${parsed.length}; deferring the rest to the next run…`)
+      break
+    }
     const slice = parsed.slice(i, i + CONCURRENCY)
     const chunkResults = await Promise.all(slice.map(processFile))
     for (let j = 0; j < chunkResults.length; j++) {
@@ -204,19 +229,21 @@ export async function runIngestDocs(params: {
     }
   }
 
-  const documents = perDocResults.filter((d): d is IngestionDocumentOutput => d !== null)
+  const attemptedFiles = parsed.slice(0, attemptedCount)
+  const deferredDocumentIds = parsed.slice(attemptedCount).map(f => f.document_id)
+  const documents = perDocResults.slice(0, attemptedCount).filter((d): d is IngestionDocumentOutput => d !== null)
 
   // Persist per-doc results to the draft. Synthesis fields stay empty arrays
-  // until the synthesis job fills them in. When this is a partial re-run
-  // (documentIds is set), merge the new docs with the previously-stored set
-  // by document_id so we don't clobber the successful results from the prior
-  // run.
+  // until the synthesis job fills them in. Merge the new docs into the
+  // previously-stored set by document_id unless this is a fresh full run —
+  // continuation batches and failed-doc re-runs must preserve earlier results.
   await note('Writing per-document output to draft…')
-  const isPartialRun = Array.isArray(documentIds) && documentIds.length > 0
-  const draftId = await persistDocsToDraft(admin, fundId, dealId, documents, params.draftId, isPartialRun)
+  const draftId = await persistDocsToDraft(admin, fundId, dealId, documents, params.draftId, !replaceExisting)
 
   await note('Updating document classifications…')
   const successIds = new Set(documents.map(d => d.document_id))
+  // Only touch parse_status for documents we actually attempted this run —
+  // deferred documents stay untouched so a later batch can process them.
   await Promise.all([
     ...documents.map(doc =>
       admin
@@ -230,7 +257,7 @@ export async function runIngestDocs(params: {
         .eq('deal_id', dealId)
         .eq('fund_id', fundId)
     ),
-    ...parsed
+    ...attemptedFiles
       .filter(file => !successIds.has(file.document_id))
       .map(file =>
         admin
@@ -245,20 +272,14 @@ export async function runIngestDocs(params: {
       ),
   ])
 
-  // Bump the deal stage forward when it's still on 'ingest'. Don't regress if
-  // the deal is already further along (e.g. a partial re-run of failed docs
-  // while the deal is in 'qa' or 'draft' should not bounce it back).
-  await admin
-    .from('diligence_deals')
-    .update({ current_memo_stage: 'research' } as any)
-    .eq('id', dealId)
-    .eq('fund_id', fundId)
-    .eq('current_memo_stage', 'ingest')
+  // Note: advancing the deal stage to 'research' is the caller's job — it only
+  // happens once every batch of a multi-run ingest has completed.
 
   return {
     draft_id: draftId,
     ingestion_documents: documents,
     documents_processed: documents.length,
+    deferred_document_ids: deferredDocumentIds,
     warnings,
   }
 }
