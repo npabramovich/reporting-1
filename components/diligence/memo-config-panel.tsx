@@ -12,6 +12,8 @@ export interface SectionConfig {
   id: string
   title: string
   included: boolean
+  /** Per-section depth/length. Defaults to 'standard'. */
+  complexity?: MemoComplexity
   /** Partner-added section the agent should draft (vs a built-in schema section). */
   custom?: boolean
   /** For custom sections: a short note on what the agent should cover. */
@@ -96,7 +98,6 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
   const [styleOverride, setStyleOverride] = useState<'' | NonNullable<MemoTemplateConfig['style_override']>>('')
   const [persona, setPersona] = useState('')
   const [personaCustom, setPersonaCustom] = useState(false)
-  const [complexity, setComplexity] = useState<MemoComplexity>('standard')
   const [emphasis, setEmphasis] = useState<string[]>([])
   const [emphasisDraft, setEmphasisDraft] = useState('')
   const [sections, setSections] = useState<SectionConfig[]>([])
@@ -131,13 +132,16 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
     const p = cfg.analyst_persona ?? ''
     setPersona(p)
     setPersonaCustom(!!p && !PERSONA_PRESETS.includes(p))
-    setComplexity(cfg.complexity ?? 'standard')
     setEmphasis(Array.isArray(cfg.emphasis) ? cfg.emphasis : [])
+    // Legacy configs carry a single memo-wide complexity; seed each section from
+    // it (then 'standard') so older deals/presets migrate cleanly to per-section.
+    const defaultComplexity: MemoComplexity = cfg.complexity ?? 'standard'
     if (Array.isArray(cfg.sections) && cfg.sections.length > 0) {
       setSections(cfg.sections.map(s => ({
         id: s.id,
         title: s.title ?? s.id,
         included: s.included !== false,
+        complexity: s.complexity ?? defaultComplexity,
         custom: !!s.custom,
         cover: s.cover ?? '',
       })))
@@ -147,6 +151,7 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
         id: s.id,
         title: s.title,
         included: cfg.section_overrides?.[s.id]?.included !== false,
+        complexity: defaultComplexity,
       })))
     }
   }
@@ -155,12 +160,12 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
     return {
       style_override: (styleOverride || null) as MemoTemplateConfig['style_override'],
       analyst_persona: persona,
-      complexity,
       emphasis,
       sections: sections.map(s => ({
         id: s.id,
         title: s.title,
         included: s.included,
+        complexity: s.complexity ?? 'standard',
         ...(s.custom ? { custom: true, cover: (s.cover ?? '').trim() } : {}),
       })),
       // Back-compat for any consumer still reading section_overrides.
@@ -252,7 +257,7 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
   }
   function addSection() {
     const id = `custom_${Math.random().toString(36).slice(2, 9)}`
-    setSections(prev => [...prev, { id, title: 'New section', included: true, custom: true, cover: '' }])
+    setSections(prev => [...prev, { id, title: 'New section', included: true, complexity: 'standard', custom: true, cover: '' }])
   }
   function dropSectionOnto(targetId: string) {
     setSections(prev => {
@@ -283,7 +288,6 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
     ? 'Loading…'
     : [
         styleOverride && STYLE_OPTIONS.find(s => s.value === styleOverride)?.label,
-        COMPLEXITY_OPTIONS.find(c => c.value === complexity)?.label.toLowerCase(),
         persona ? `persona: ${persona.length > 30 ? persona.slice(0, 30) + '…' : persona}` : null,
         emphasis.length > 0 ? `${emphasis.length} emphasis point${emphasis.length === 1 ? '' : 's'}` : null,
         `${includedCount}/${sections.length} sections`,
@@ -448,25 +452,6 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
           </div>
 
           <div>
-            <label className="block text-xs font-medium mb-1">Complexity</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {COMPLEXITY_OPTIONS.map(o => (
-                <button
-                  key={o.value}
-                  type="button"
-                  onClick={() => setComplexity(o.value)}
-                  className={`rounded-md border px-2.5 py-2 text-left text-xs transition-colors ${complexity === o.value ? 'border-foreground bg-muted' : 'border-input hover:bg-muted/40'}`}
-                  aria-pressed={complexity === o.value}
-                >
-                  <div className="font-medium">{o.label}</div>
-                  <div className="text-[10px] text-muted-foreground leading-tight mt-0.5">{o.hint}</div>
-                </button>
-              ))}
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-1">Sets completeness, depth of evidence, and length across the whole memo.</p>
-          </div>
-
-          <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-medium">Sections</label>
               <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={addSection}>
@@ -504,6 +489,16 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
                       onChange={e => patchSection(s.id, { title: e.target.value })}
                       className={`h-7 text-sm flex-1 ${s.included ? '' : 'opacity-50'}`}
                     />
+                    <select
+                      value={s.complexity ?? 'standard'}
+                      onChange={e => patchSection(s.id, { complexity: e.target.value as MemoComplexity })}
+                      disabled={!s.included}
+                      title="Depth & length for this section"
+                      aria-label={`Depth for ${s.title}`}
+                      className={`h-7 rounded-md border border-input bg-background px-1.5 text-xs shrink-0 ${s.included ? '' : 'opacity-50'}`}
+                    >
+                      {COMPLEXITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
                     {s.custom && <span className="text-[9px] uppercase tracking-wide text-muted-foreground shrink-0">custom</span>}
                     {s.custom && (
                       <button onClick={() => removeSection(s.id)} className="text-muted-foreground hover:text-destructive shrink-0" aria-label="Remove section" title="Remove section">
@@ -522,7 +517,7 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
                 </div>
               ))}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">Drag to reorder. Unchecked sections are omitted. Add custom sections the agent drafts from your &ldquo;what to cover&rdquo; note. Length and depth come from Complexity above.</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Drag to reorder. Unchecked sections are omitted. Each section&apos;s depth dropdown sets its length and level of detail independently. Add custom sections the agent drafts from your &ldquo;what to cover&rdquo; note. Save as a preset to reuse this as a default.</p>
           </div>
 
           <div>

@@ -100,6 +100,7 @@ function sanitizeConfig(raw: unknown): MemoTemplateConfig {
         id: s.id as string,
         title: (s.title as string).slice(0, 120),
         included: s.included !== false,
+        ...(typeof s.complexity === 'string' && VALID_COMPLEXITY.has(s.complexity) ? { complexity: s.complexity as MemoTemplateConfig['complexity'] } : {}),
         ...(s.custom ? { custom: true, cover: typeof s.cover === 'string' ? (s.cover as string).slice(0, 500) : '' } : {}),
       }))
   }

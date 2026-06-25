@@ -1848,7 +1848,7 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
               Reprocess failed ({failedDocIds.length})
             </Button>
           )}
-          <Button size="sm" onClick={() => runIngest()} disabled={submitting || !!isInFlight || documentCount === 0}>
+          <Button variant="outline" size="sm" onClick={() => runIngest()} disabled={submitting || !!isInFlight || documentCount === 0}>
             {isInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : status?.latest_draft?.has_ingestion ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
             {status?.latest_draft?.has_ingestion ? 'Re-analyze data room' : 'Analyze data room'}
           </Button>
