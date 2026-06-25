@@ -13,6 +13,8 @@ interface RenderInput {
   fontFamily?: string
   /** Base font size in points. Defaults to 11. */
   fontSize?: number
+  /** Partner-defined section order/titles (incl. custom sections). Overrides the schema order when set. */
+  sectionConfig?: Array<{ id: string; title: string; included?: boolean }>
 }
 
 const DEFAULT_FONT_FAMILY = 'DM Sans'
@@ -33,18 +35,33 @@ const FALLBACK_ORDER = [
  */
 export async function renderDocx(input: RenderInput): Promise<Buffer> {
   const sections = parseSections(input.memoOutputYaml)
-  const baseOrder = sections.length ? sections.map(s => s.id) : FALLBACK_ORDER
-  // Append any section_ids referenced by paragraphs that aren't in the
-  // schema's explicit order — keeps newly-added memo sections (product,
-  // outcomes_analysis) renderable even on funds with an older schema row.
+  const sectionMeta = new Map(sections.map(s => [s.id, s]))
+
+  // Section order + titles: partner section config when present (authoritative,
+  // incl. custom + renamed sections), else the schema order. The structured tail
+  // (scoring_summary, appendix) is always appended.
+  let baseOrder: string[]
+  if (input.sectionConfig && input.sectionConfig.length > 0) {
+    const included = input.sectionConfig.filter(s => s.included !== false)
+    baseOrder = included.map(s => s.id)
+    for (const s of included) {
+      const meta = sectionMeta.get(s.id)
+      sectionMeta.set(s.id, { id: s.id, title: s.title || meta?.title || humanizeSectionId(s.id), kind: meta?.kind ?? 'prose' })
+    }
+    for (const tail of ['scoring_summary', 'appendix']) {
+      if (!baseOrder.includes(tail) && sectionMeta.has(tail)) baseOrder.push(tail)
+    }
+  } else {
+    baseOrder = sections.length ? sections.map(s => s.id) : FALLBACK_ORDER
+  }
+
+  // Append any section_ids on paragraphs not in baseOrder so no content is hidden
+  // (e.g. a section removed from the config that still has paragraphs).
   const paragraphSectionIds = Array.from(new Set(input.memo.paragraphs.map(p => p.section_id)))
   const extras = paragraphSectionIds.filter(id => !baseOrder.includes(id))
   const order = [...baseOrder, ...extras]
-  const sectionMeta = new Map(sections.map(s => [s.id, s]))
-  // Fill in fallback meta for any section id in the order that the parsed
-  // YAML didn't define — happens when memoOutputYaml is empty or stale.
-  // Without this the loop below would skip every section and the doc would
-  // come out empty.
+  // Fill in fallback meta for any section id in the order that wasn't defined
+  // above — keeps the doc non-empty when the schema is empty or stale.
   for (const id of order) {
     if (!sectionMeta.has(id)) {
       sectionMeta.set(id, { id, title: humanizeSectionId(id), kind: id === 'scoring_summary' || id === 'appendix' ? 'structured' : 'prose' })

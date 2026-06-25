@@ -118,7 +118,8 @@ export async function runDraft(params: {
 
   const ingestion = draft.ingestion_output as IngestionOutput
   const research = (draft.research_output as ResearchOutput | null) ?? null
-  const qa_answers = Array.isArray(draft.qa_answers) ? draft.qa_answers as QARecord[] : []
+  // Partner-excluded Q&A entries are dropped from evaluation entirely.
+  const qa_answers = (Array.isArray(draft.qa_answers) ? draft.qa_answers as QARecord[] : []).filter(r => !r.excluded)
 
   const docCount = ingestion.documents?.length ?? 0
   const claimCount = ingestion.documents?.reduce((acc, d) => acc + (d.claims?.length ?? 0), 0) ?? 0
@@ -330,7 +331,7 @@ export async function runDraftReview(params: {
   const memo = row.memo_draft_output as MemoDraftOutput
   const ingestion = (row.ingestion_output as IngestionOutput | null) ?? { documents: [], gap_analysis: { missing: [], inadequate: [] }, cross_doc_flags: [] }
   const research = (row.research_output as ResearchOutput | null) ?? null
-  const qa_answers = Array.isArray(row.qa_answers) ? row.qa_answers as QARecord[] : []
+  const qa_answers = (Array.isArray(row.qa_answers) ? row.qa_answers as QARecord[] : []).filter(r => !r.excluded)
 
   const reviewable = memo.paragraphs.filter(p => p.origin !== 'partner_only_placeholder')
   if (reviewable.length === 0) {

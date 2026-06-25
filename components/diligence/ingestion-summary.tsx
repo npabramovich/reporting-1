@@ -27,9 +27,30 @@ export function IngestionSummary({ output, fileNamesById, dealId, draftId, edita
   const totalClaims = output.documents.reduce((acc, d) => acc + d.claims.length, 0)
   const canEdit = !!(editable && dealId && draftId)
 
-  // Local copy of gap_analysis so dismiss toggles are instant.
+  // Local copies so dismiss / re-rate toggles are instant.
   const [gap, setGap] = useState(output.gap_analysis)
+  const [flags, setFlags] = useState(output.cross_doc_flags)
   const [saveError, setSaveError] = useState<string | null>(null)
+
+  async function setCrossFlag(index: number, patch: Partial<{ severity: 'high' | 'medium' | 'low'; dismissed: boolean }>) {
+    const next = flags.map((f, i) => (i === index ? { ...f, ...patch } : f))
+    setFlags(next)
+    setSaveError(null)
+    try {
+      const res = await fetch(`/api/diligence/${dealId}/drafts/${draftId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ingestion_cross_doc_flags: next }),
+      })
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}))
+        throw new Error(b.error ?? 'Save failed')
+      }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Save failed')
+      setFlags(flags) // revert
+    }
+  }
 
   async function setDismissed(kind: 'missing' | 'inadequate', index: number, dismissed: boolean) {
     const next = {
@@ -63,7 +84,7 @@ export function IngestionSummary({ output, fileNamesById, dealId, draftId, edita
         <Stat label="Documents" value={output.documents.length} />
         <Stat label="Findings extracted" value={totalClaims} />
         <Stat label="Missing docs" value={activeMissing} />
-        <Stat label="Cross-doc flags" value={output.cross_doc_flags.length} />
+        <Stat label="Cross-doc flags" value={flags.filter(f => !f.dismissed).length} />
       </div>
 
       {saveError && (
@@ -126,18 +147,48 @@ export function IngestionSummary({ output, fileNamesById, dealId, draftId, edita
         </section>
       )}
 
-      {output.cross_doc_flags.length > 0 && (
+      {flags.length > 0 && (
         <section>
-          <h3 className="text-sm font-medium mb-2">Cross-document inconsistencies</h3>
+          <h3 className="text-sm font-medium mb-2">
+            Cross-document inconsistencies
+            {canEdit && <span className="ml-2 text-xs font-normal text-muted-foreground">— re-rate or dismiss</span>}
+          </h3>
           <div className="rounded-md border bg-card divide-y">
-            {output.cross_doc_flags.map((f, i) => (
-              <div key={i} className="p-3 text-sm">
-                <div>{f.description}</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Across: {f.doc_ids.map(id => fileNamesById[id] ?? id).join(', ')}
+            {flags.map((f, i) => {
+              const sev = f.severity ?? 'medium'
+              return (
+                <div key={i} className={`p-3 text-sm flex items-start gap-2 ${f.dismissed ? 'opacity-50' : ''}`}>
+                  {canEdit ? (
+                    <select
+                      value={sev}
+                      onChange={e => setCrossFlag(i, { severity: e.target.value as 'high' | 'medium' | 'low' })}
+                      className={`shrink-0 cursor-pointer rounded px-1 py-0.5 text-[10px] font-medium border-0 outline-none ${CRIT_BADGE[sev] ?? CRIT_BADGE.medium}`}
+                      title="Severity"
+                    >
+                      <option value="high">high</option>
+                      <option value="medium">medium</option>
+                      <option value="low">low</option>
+                    </select>
+                  ) : (
+                    <Crit level={sev}>{sev}</Crit>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className={f.dismissed ? 'line-through' : ''}>{f.description}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Across: {f.doc_ids.map(id => fileNamesById[id] ?? id).join(', ')}
+                    </div>
+                  </div>
+                  {canEdit && (
+                    <button
+                      onClick={() => setCrossFlag(i, { dismissed: !f.dismissed })}
+                      className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground"
+                    >
+                      {f.dismissed ? 'Restore' : 'Dismiss'}
+                    </button>
+                  )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </section>
       )}

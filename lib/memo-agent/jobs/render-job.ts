@@ -42,12 +42,18 @@ export async function runRenderJob(admin: Admin, job: RenderJob): Promise<unknow
 
   const { data: deal } = await admin
     .from('diligence_deals')
-    .select('name, drive_folder_url')
+    .select('name, drive_folder_url, memo_template_config')
     .eq('id', job.deal_id)
     .eq('fund_id', job.fund_id)
     .maybeSingle()
   const dealName = (deal as { name: string } | null)?.name ?? 'Untitled deal'
   const dealDriveFolderUrl = (deal as { drive_folder_url: string | null } | null)?.drive_folder_url ?? null
+  // Partner-defined section order/titles (incl. custom sections) override the
+  // schema's section list in the export, matching the editor.
+  const templateConfig = (deal as any)?.memo_template_config ?? {}
+  const sectionConfig = Array.isArray(templateConfig?.sections) && templateConfig.sections.length > 0
+    ? (templateConfig.sections as Array<{ id: string; title: string; included?: boolean }>)
+    : undefined
 
   // Fund-configurable export formatting.
   const { data: settings } = await admin
@@ -75,6 +81,7 @@ export async function runRenderJob(admin: Admin, job: RenderJob): Promise<unknow
     draftVersion: (draft as any).draft_version,
     fontFamily: fontFamily ?? undefined,
     fontSize: fontSize ?? undefined,
+    sectionConfig,
   }
 
   if (format === 'markdown') {

@@ -267,6 +267,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (typeof body.label === 'string') patch.label = body.label.trim()
   if (typeof body.status === 'string') patch.status = body.status
   if (typeof body.agent_notes === 'string') patch.agent_notes = body.agent_notes
+  if (typeof body.partner_notes === 'string') patch.partner_notes = body.partner_notes
 
   const { data, error } = await (admin as any)
     .from('diligence_checklist_items')

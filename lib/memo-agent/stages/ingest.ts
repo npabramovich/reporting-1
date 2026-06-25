@@ -44,7 +44,7 @@ export interface IngestionOutput {
     missing: IngestionGap[]
     inadequate: IngestionGap[]
   }
-  cross_doc_flags: Array<{ description: string; doc_ids: string[] }>
+  cross_doc_flags: Array<{ description: string; doc_ids: string[]; severity?: 'high' | 'medium' | 'low'; dismissed?: boolean }>
 }
 
 export interface IngestionDocsResult {

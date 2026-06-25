@@ -9,6 +9,8 @@ export interface RenderInput {
   isDraft: boolean
   dealName: string
   draftVersion: string
+  /** Partner-defined section order/titles (incl. custom sections). Overrides the schema order when set. */
+  sectionConfig?: Array<{ id: string; title: string; included?: boolean }>
 }
 
 const SECTION_FALLBACK_ORDER = [
@@ -42,13 +44,30 @@ const SECTION_FALLBACK_ORDER = [
  */
 export function renderMarkdown(input: RenderInput): string {
   const sections = parseSections(input.memoOutputYaml)
-  const baseOrder = sections.length ? sections.map(s => s.id) : SECTION_FALLBACK_ORDER
-  // Append section_ids from paragraphs that aren't in the schema's order —
-  // keeps newly-added memo sections renderable on funds with older schemas.
+  const sectionMeta = new Map(sections.map(s => [s.id, s]))
+
+  // Section order + titles: partner section config when present (authoritative,
+  // incl. custom + renamed sections), else the schema order. The structured tail
+  // (scoring_summary, appendix) is always appended.
+  let baseOrder: string[]
+  if (input.sectionConfig && input.sectionConfig.length > 0) {
+    const included = input.sectionConfig.filter(s => s.included !== false)
+    baseOrder = included.map(s => s.id)
+    for (const s of included) {
+      const meta = sectionMeta.get(s.id)
+      sectionMeta.set(s.id, { id: s.id, title: s.title || meta?.title || s.id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), kind: meta?.kind ?? 'prose' })
+    }
+    for (const tail of ['scoring_summary', 'appendix']) {
+      if (!baseOrder.includes(tail) && sectionMeta.has(tail)) baseOrder.push(tail)
+    }
+  } else {
+    baseOrder = sections.length ? sections.map(s => s.id) : SECTION_FALLBACK_ORDER
+  }
+
+  // Append section_ids from paragraphs that aren't in baseOrder so no content is hidden.
   const paragraphSectionIds = Array.from(new Set(input.memo.paragraphs.map(p => p.section_id)))
   const extras = paragraphSectionIds.filter(id => !baseOrder.includes(id))
   const sectionOrder = [...baseOrder, ...extras]
-  const sectionMeta = new Map(sections.map(s => [s.id, s]))
   // Fill in fallback meta for any section id in the order that the parsed
   // YAML didn't define — keeps render output non-empty when the schema is
   // missing or stale.

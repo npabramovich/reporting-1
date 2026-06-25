@@ -75,7 +75,7 @@ export async function getActiveAnchors(fundId: string, admin?: Admin): Promise<S
  *   8+         → robust
  */
 export function getSynthesisConfidence(anchorCount: number): SynthesisConfidence {
-  if (anchorCount <= 0) return 'unavailable'
+  if (!Number.isFinite(anchorCount) || anchorCount <= 0) return 'unavailable'
   if (anchorCount <= 2) return 'preliminary'
   if (anchorCount <= 7) return 'reliable'
   return 'robust'

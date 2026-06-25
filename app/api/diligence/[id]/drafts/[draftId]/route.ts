@@ -129,6 +129,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     ingestionChanged = true
   }
 
+  if (Array.isArray(body.ingestion_cross_doc_flags) && ingestionOutput) {
+    ingestionOutput.cross_doc_flags = body.ingestion_cross_doc_flags
+    ingestionChanged = true
+  }
+
   if (Array.isArray(body.score_edits)) {
     const editsById = new Map<string, { score?: number | null; confidence?: string | null; rationale?: string }>()
     for (const e of body.score_edits) {

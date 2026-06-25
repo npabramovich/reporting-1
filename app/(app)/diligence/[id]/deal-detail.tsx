@@ -168,6 +168,7 @@ type ChecklistItem = {
   status: 'unknown' | 'found' | 'partial' | 'missing' | 'not_applicable'
   evidence: Array<{ document_id?: string; summary?: string }>
   agent_notes: string | null
+  partner_notes: string | null
   order_index: number
   source: 'template' | 'partner_added' | 'imported' | 'agent_added'
 }
@@ -376,7 +377,7 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
     setItems(prev => (prev ? [...prev, item] : [item]))
   }
 
-  async function patchItem(itemId: string, patch: Partial<Pick<ChecklistItem, 'label' | 'status'>>) {
+  async function patchItem(itemId: string, patch: Partial<Pick<ChecklistItem, 'label' | 'status' | 'partner_notes'>>) {
     const res = await fetch(`/api/diligence/${deal.id}/checklist`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -653,7 +654,7 @@ function ChecklistSection({ section, items, findingsByItem, hideCompleted, colla
   collapsed: boolean
   onToggleCollapsed: () => void
   onDelete: (itemId: string) => void
-  onPatch: (itemId: string, patch: Partial<Pick<ChecklistItem, 'label' | 'status'>>) => void
+  onPatch: (itemId: string, patch: Partial<Pick<ChecklistItem, 'label' | 'status' | 'partner_notes'>>) => void
   onAdd: (label: string) => void
   onReorder: (orderedIds: string[]) => void
   onJumpToDoc: (docId: string) => void
@@ -841,13 +842,16 @@ function ChecklistRow({ item, findings, onDelete, onPatch, onJumpToDoc, dragHand
   item: ChecklistItem
   findings: Array<{ doc_id: string; doc_name: string; field: string; value: string; criticality: string }>
   onDelete: (itemId: string) => void
-  onPatch: (itemId: string, patch: Partial<Pick<ChecklistItem, 'label' | 'status'>>) => void
+  onPatch: (itemId: string, patch: Partial<Pick<ChecklistItem, 'label' | 'status' | 'partner_notes'>>) => void
   onJumpToDoc: (docId: string) => void
   dragHandle?: React.ReactNode
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(item.label)
   const [findingsOpen, setFindingsOpen] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(false)
+  const [notesDraft, setNotesDraft] = useState(item.partner_notes ?? '')
+  useEffect(() => { setNotesDraft(item.partner_notes ?? '') }, [item.partner_notes])
   const pill = STATUS_PILL[item.status]
   return (
     <div className="flex items-start gap-2 px-3 py-2">
@@ -879,6 +883,24 @@ function ChecklistRow({ item, findings, onDelete, onPatch, onJumpToDoc, dragHand
         )}
         {item.agent_notes && (
           <div className="text-xs text-muted-foreground mt-1">{item.agent_notes}</div>
+        )}
+        {(notesOpen || item.partner_notes) ? (
+          <Input
+            value={notesDraft}
+            onChange={e => setNotesDraft(e.target.value)}
+            onBlur={() => { if (notesDraft !== (item.partner_notes ?? '')) onPatch(item.id, { partner_notes: notesDraft }) }}
+            placeholder="Your note — a fact or person not in the data room"
+            className="h-7 text-xs mt-1"
+            autoFocus={notesOpen && !item.partner_notes}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setNotesOpen(true)}
+            className="text-[11px] text-muted-foreground hover:text-foreground mt-1"
+          >
+            + Add note
+          </button>
         )}
         {item.evidence?.length > 0 && (
           <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
@@ -2133,12 +2155,43 @@ function ExternalResearchView({ research }: { research: ResearchOutput }) {
 }
 
 function QALibraryPanel({ dealId, qaAnswers, onAdded }: { dealId: string; qaAnswers: any[]; onAdded: () => void }) {
+  const confirm = useConfirm()
   const [q, setQ] = useState('')
   const [a, setA] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [localAnswers, setLocalAnswers] = useState(qaAnswers)
   useEffect(() => { setLocalAnswers(qaAnswers) }, [qaAnswers])
+
+  async function toggleExclude(entry: any, excluded: boolean) {
+    setLocalAnswers(prev => prev.map(e => (e.question_id === entry.question_id ? { ...e, excluded } : e)))
+    const res = await fetch(`/api/diligence/${dealId}/agent/qa/entry`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question_id: entry.question_id, excluded }),
+    })
+    if (!res.ok) {
+      // Revert on failure.
+      setLocalAnswers(prev => prev.map(e => (e.question_id === entry.question_id ? { ...e, excluded: !excluded } : e)))
+    } else {
+      onAdded()
+    }
+  }
+
+  async function removeEntry(entry: any) {
+    const ok = await confirm({
+      title: 'Delete Q&A entry?',
+      description: 'Removes this question and answer from the deal. This cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    })
+    if (!ok) return
+    const prev = localAnswers
+    setLocalAnswers(p => p.filter(e => e.question_id !== entry.question_id))
+    const res = await fetch(`/api/diligence/${dealId}/agent/qa/entry?question_id=${encodeURIComponent(entry.question_id)}`, { method: 'DELETE' })
+    if (!res.ok) setLocalAnswers(prev)
+    else onAdded()
+  }
 
   async function add() {
     if (!q.trim() || !a.trim()) return
@@ -2191,15 +2244,39 @@ function QALibraryPanel({ dealId, qaAnswers, onAdded }: { dealId: string; qaAnsw
       ) : (
         <div className="rounded-md border divide-y">
           {localAnswers.map((entry, i) => (
-            <div key={entry.question_id ?? i} className="p-3 text-sm">
+            <div key={entry.question_id ?? i} className={`p-3 text-sm ${entry.excluded ? 'opacity-50' : ''}`}>
               <div className="flex items-start gap-2">
                 <span className="shrink-0 inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground capitalize">
                   {(entry.category ?? 'q&a').replace(/_/g, ' ')}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium">{entry.question_text ?? entry.question_id}</div>
+                  <div className={`font-medium ${entry.excluded ? 'line-through' : ''}`}>{entry.question_text ?? entry.question_id}</div>
                   <div className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{entry.answer_text ?? '—'}</div>
+                  {entry.excluded && (
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-1">Excluded from evaluation</div>
+                  )}
                 </div>
+                {entry.question_id && (
+                  <div className="shrink-0 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleExclude(entry, !entry.excluded)}
+                      className="text-[11px] text-muted-foreground hover:text-foreground"
+                      title={entry.excluded ? 'Include in the memo + scoring' : 'Exclude from the memo + scoring'}
+                    >
+                      {entry.excluded ? 'Include' : 'Exclude'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeEntry(entry)}
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label="Delete entry"
+                      title="Delete entry"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}

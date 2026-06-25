@@ -73,6 +73,12 @@ const SECTION_ORDER: Array<{ id: string; title: string }> = [
   { id: 'risks_and_open_questions', title: 'Risks & Open Questions' },
 ]
 
+// Title for a section_id not covered by the deal's section config (e.g. an
+// older draft's section). Mirrors the renderers' humanizer.
+function humanizeSectionId(id: string): string {
+  return id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+}
+
 const URGENCY_BADGE: Record<string, string> = {
   must_address: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
   should_address: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400',
@@ -103,9 +109,24 @@ export function MemoEditor({ dealId, dealName, draft: initial, initialAttention,
   const [finalizing, setFinalizing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [exportResult, setExportResult] = useState<null | { url: string | null; format: string }>(null)
+  // The deal's user-managed section config (order + titles + custom sections).
+  const [sectionCfg, setSectionCfg] = useState<Array<{ id: string; title: string; included?: boolean }> | null>(null)
 
   const memo = draft.memo_draft_output ?? { paragraphs: [], scores: [] }
   const isReadOnly = !draft.is_draft
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/diligence/${dealId}/memo-config`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(body => {
+        if (cancelled || !body) return
+        const secs = body.memo_template_config?.sections
+        if (Array.isArray(secs) && secs.length > 0) setSectionCfg(secs)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [dealId])
 
   const paragraphsBySection = useMemo(() => {
     const map = new Map<string, Paragraph[]>()
@@ -115,6 +136,22 @@ export function MemoEditor({ dealId, dealName, draft: initial, initialAttention,
     }
     return map
   }, [memo.paragraphs])
+
+  // Section order + titles for rendering: the deal's section config when set
+  // (authoritative, includes custom sections), else the built-in order. Any
+  // section_ids present on paragraphs but not in that list are appended so no
+  // content is ever hidden.
+  const usingConfig = !!(sectionCfg && sectionCfg.length > 0)
+  const renderSections = useMemo(() => {
+    const base = usingConfig
+      ? sectionCfg!.filter(s => s.included !== false).map(s => ({ id: s.id, title: s.title }))
+      : SECTION_ORDER
+    const known = new Set(base.map(s => s.id))
+    const extras = Array.from(new Set((memo.paragraphs ?? []).map(p => p.section_id)))
+      .filter(id => !known.has(id))
+      .map(id => ({ id, title: humanizeSectionId(id) }))
+    return [...base, ...extras]
+  }, [usingConfig, sectionCfg, memo.paragraphs])
 
   const selectedPara = useMemo(() => (memo.paragraphs ?? []).find(p => p.id === selected) ?? null, [memo.paragraphs, selected])
 
@@ -348,9 +385,12 @@ export function MemoEditor({ dealId, dealName, draft: initial, initialAttention,
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <div>
-          {SECTION_ORDER.map(section => {
+          {renderSections.map(section => {
             const paragraphs = (paragraphsBySection.get(section.id) ?? []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-            if (paragraphs.length === 0 && section.id !== 'recommendation') return null
+            // Hide empty sections only in the default (non-config) view. When the
+            // partner has defined a section list, show every included section so
+            // the structure is visible and paragraphs can be added.
+            if (!usingConfig && paragraphs.length === 0 && section.id !== 'recommendation') return null
             return (
               <section key={section.id} className="mb-6" id={`sec-${section.id}`}>
                 <h2 className="text-base font-semibold tracking-tight mb-2">{section.title}</h2>

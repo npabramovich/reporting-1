@@ -66,7 +66,8 @@ export async function runScore(params: {
 
   const ingestion = (draft as any).ingestion_output as IngestionOutput
   const research = ((draft as any).research_output as ResearchOutput | null) ?? null
-  const qa_answers = Array.isArray((draft as any).qa_answers) ? (draft as any).qa_answers as QARecord[] : []
+  // Partner-excluded Q&A entries are dropped from evaluation entirely.
+  const qa_answers = (Array.isArray((draft as any).qa_answers) ? (draft as any).qa_answers as QARecord[] : []).filter((r: QARecord) => !r.excluded)
   const memo = (draft as any).memo_draft_output as MemoDraftOutput
 
   // Seed-on-demand for funds that never visited the Schemas editor.

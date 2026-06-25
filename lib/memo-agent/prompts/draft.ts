@@ -10,6 +10,8 @@ export interface QARecord {
   category?: string | null
   /** Set for partner-authored questions (the partner wrote the question itself). */
   question_text?: string
+  /** Partner-excluded from deal evaluation — filtered out before draft/scoring. */
+  excluded?: boolean
 }
 
 /** A planned (not-yet-written) paragraph from the outline pass. */
