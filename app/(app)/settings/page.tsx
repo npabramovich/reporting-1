@@ -91,6 +91,7 @@ interface Settings {
   dealSubmissionToken: string | null
   routingConfidenceThreshold: number | null
   routingModel: string | null
+  lpPortalEnabled: boolean
 }
 
 export default function SettingsPage() {
@@ -236,6 +237,9 @@ export default function SettingsPage() {
 
           <GroupHeader label="Diligence" />
           <MemoAgentSection />
+
+          <GroupHeader label="LP Portal" />
+          <LpPortalSection enabled={settings.lpPortalEnabled} onSaved={load} />
 
           <GroupHeader label="Storage" />
           <StorageSection
@@ -4046,6 +4050,38 @@ function UsageTrackingSection({
         <Label className="text-sm font-normal">
           Disable user activity tracking
         </Label>
+        {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+      </div>
+    </Section>
+  )
+}
+
+// ──────────────────────────── LP Portal ────────────────────────────
+
+function LpPortalSection({ enabled, onSaved }: { enabled: boolean; onSaved: () => void }) {
+  const [on, setOn] = useState(enabled)
+  const [saving, setSaving] = useState(false)
+
+  const handleToggle = async (checked: boolean) => {
+    setOn(checked)
+    setSaving(true)
+    const res = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lpPortalEnabled: checked }),
+    })
+    setSaving(false)
+    if (res.ok) onSaved()
+  }
+
+  return (
+    <Section title="LP Portal">
+      <p className="text-xs text-muted-foreground mb-4">
+        When on, snapshots you share with an investor become visible to them in their own LP portal. When off, the portal is disabled for this fund — nothing reaches LPs even if individual snapshots are marked as shared. Invite investors and choose what to share from each snapshot&apos;s &ldquo;Share with LPs&rdquo; panel.
+      </p>
+      <div className="flex items-center gap-3">
+        <Switch checked={on} onCheckedChange={handleToggle} disabled={saving} />
+        <Label className="text-sm font-normal">Enable the LP portal for this fund</Label>
         {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
       </div>
     </Section>

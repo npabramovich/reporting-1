@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -9,10 +9,12 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Building2 } from 'lucide-react'
+import { OtpCodeForm } from '@/components/auth/otp-code-form'
 
 export default function MagicLinkPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
+  const [verifying, setVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
 
@@ -25,18 +27,31 @@ export default function MagicLinkPage() {
     }
     setError(null)
     setLoading(true)
+    // Sign-in only — don't create accounts from this flow.
     const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      email: email.trim().toLowerCase(),
+      options: { shouldCreateUser: false },
+    })
+    if (error) setError(error.message)
+    else setSent(true)
+    setLoading(false)
+  }
+
+  async function handleVerify(code: string) {
+    setError(null)
+    setVerifying(true)
+    const { error } = await supabase.auth.verifyOtp({
+      type: 'email',
+      email: email.trim().toLowerCase(),
+      token: code,
     })
     if (error) {
       setError(error.message)
+      setVerifying(false)
     } else {
-      setSent(true)
+      // Run server-side post-login side effects, then land the user.
+      window.location.href = '/auth/post-login?method=magic_link&next=/'
     }
-    setLoading(false)
   }
 
   return (
@@ -51,37 +66,29 @@ export default function MagicLinkPage() {
 
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Sign in with magic link</CardTitle>
+            <CardTitle className="text-lg">Sign in with a code</CardTitle>
             <CardDescription>
               {sent
-                ? 'Check your email for a sign-in link.'
-                : "We'll email you a link that signs you in instantly — no password needed."}
+                ? 'Enter the 6-digit code we emailed you.'
+                : "We'll email you a 6-digit code that signs you in — no password needed."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
             {sent ? (
-              <div className="space-y-4">
-                <Alert>
-                  <AlertDescription>
-                    A sign-in link has been sent to <strong>{email}</strong>. Click the link in the email to sign in.
-                  </AlertDescription>
-                </Alert>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => { setSent(false); setEmail('') }}
-                >
-                  Send again
-                </Button>
-              </div>
+              <OtpCodeForm
+                email={email.trim().toLowerCase()}
+                onVerify={handleVerify}
+                onResend={handleSend}
+                verifying={verifying}
+                error={error}
+              />
             ) : (
               <>
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <Input
@@ -95,9 +102,8 @@ export default function MagicLinkPage() {
                     autoFocus
                   />
                 </div>
-
                 <Button className="w-full" onClick={handleSend} disabled={loading}>
-                  {loading ? 'Sending…' : 'Send magic link'}
+                  {loading ? 'Sending…' : 'Email me a code'}
                 </Button>
               </>
             )}

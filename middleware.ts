@@ -47,10 +47,13 @@ export async function middleware(request: NextRequest) {
   const isPublicTokenRoute = pathname.startsWith('/submit/')
 
   const isSetupRoute = pathname === '/setup' && process.env.ENABLE_SETUP_PAGE === 'true'
+  const isPortalRoute = pathname.startsWith('/portal')
+  // Onboarding begins before the LP has a session, so it must be reachable unauthenticated.
+  const isPortalWelcome = pathname === '/portal/welcome'
 
   // Unauthenticated users can only access /auth, API, marketing pages (if
   // enabled), the token-gated public submit form, and setup routes.
-  if (!user && !isAuthRoute && !isApiRoute && !isPublicMarketingRoute && !isPublicTokenRoute && !isSetupRoute) {
+  if (!user && !isAuthRoute && !isApiRoute && !isPublicMarketingRoute && !isPublicTokenRoute && !isSetupRoute && !isPortalWelcome) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth'
     return NextResponse.redirect(url)
@@ -65,6 +68,35 @@ export async function middleware(request: NextRequest) {
       }
       const url = request.nextUrl.clone()
       url.pathname = '/auth/mfa-verify'
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // ── LP / GP route separation ─────────────────────────────────────────────
+  // The GP (fund_members) and LP (lp_accounts) access graphs are independent;
+  // route context decides which applies. /portal is LP-only; the GP app is for
+  // members. A dual GP+LP user is allowed in both. Resolved from the user's OWN
+  // rows (RLS-scoped) — never cross-referenced.
+  if (user && !isApiRoute && !isAuthRoute && !isPublicMarketingRoute && !isPublicTokenRoute && !isSetupRoute) {
+    const [{ data: membership }, { data: lpAccount }] = await Promise.all([
+      supabase.from('fund_members').select('fund_id').eq('user_id', user.id).maybeSingle(),
+      supabase.from('lp_accounts').select('status').eq('auth_user_id', user.id).maybeSingle(),
+    ])
+    const isGp = !!membership
+    const lpStatus = (lpAccount as { status?: string } | null)?.status ?? null
+    const isActiveLp = lpStatus === 'active'
+
+    if (isPortalRoute) {
+      // Only active LPs (incl. active LPs who are also GPs) belong in the portal.
+      if (!isActiveLp) {
+        const url = request.nextUrl.clone()
+        url.pathname = lpStatus === 'invited' ? '/portal/welcome' : (isGp ? '/' : '/auth')
+        if (url.pathname !== pathname) return NextResponse.redirect(url)
+      }
+    } else if (isActiveLp && !isGp) {
+      // LP-only user on a GP route → their portal.
+      const url = request.nextUrl.clone()
+      url.pathname = '/portal/snapshots'
       return NextResponse.redirect(url)
     }
   }

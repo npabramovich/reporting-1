@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { DiligenceNotesProvider, DiligenceNotesButton, DiligenceNotesPanel } from '@/components/diligence/diligence-notes'
 import { useConfirm } from '@/components/confirm-dialog'
-import { IngestionSummary } from '@/components/diligence/ingestion-summary'
+import { IngestionSummary, InconsistenciesList } from '@/components/diligence/ingestion-summary'
 import type { IngestionOutput } from '@/lib/memo-agent/stages/ingest'
 import type { ResearchOutput } from '@/lib/memo-agent/stages/research'
 import { uploadDiligenceDocument } from '@/lib/diligence/upload-document'
@@ -225,6 +225,10 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
   // Findings tagged to checklist items, indexed by checklist_item_id. Loaded
   // from the latest draft's ingestion_output. Refreshes when ingest finishes.
   const [findingsByItem, setFindingsByItem] = useState<Record<string, Array<{ doc_id: string; doc_name: string; field: string; value: string; criticality: string }>>>({})
+  // Latest draft + doc-name map drive the collapsible "Data-room findings"
+  // section rendered below the checklist (gaps + per-document extraction).
+  const [ingestionDraft, setIngestionDraft] = useState<any>(null)
+  const [fileNamesById, setFileNamesById] = useState<Record<string, string>>({})
   useEffect(() => {
     let cancelled = false
     Promise.all([
@@ -233,10 +237,12 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
     ]).then(([drafts, docs]) => {
       if (cancelled) return
       const latest = Array.isArray(drafts) ? drafts[0] : null
-      const ingest = latest?.ingestion_output
-      if (!ingest?.documents) { setFindingsByItem({}); return }
       const nameById: Record<string, string> = {}
       for (const d of (docs ?? [])) nameById[d.id] = d.file_name
+      setFileNamesById(nameById)
+      setIngestionDraft(latest)
+      const ingest = latest?.ingestion_output
+      if (!ingest?.documents) { setFindingsByItem({}); return }
       const grouped: Record<string, Array<{ doc_id: string; doc_name: string; field: string; value: string; criticality: string }>> = {}
       for (const doc of ingest.documents) {
         for (const c of (doc.claims ?? [])) {
@@ -642,6 +648,21 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
       )}
 
       {!isEmpty && <AddSectionRow onAdd={addSection} />}
+
+      {/* Data-room findings — gaps + per-document extraction from the latest
+          ingestion, tucked into a collapsible below the checklist so the
+          checklist itself stays front-and-center. */}
+      {ingestionDraft?.ingestion_output && (
+        <Accordion title="Data-room findings" subtitle="Missing docs & per-document extraction">
+          <IngestionSummary
+            output={ingestionDraft.ingestion_output as IngestionOutput}
+            fileNamesById={fileNamesById}
+            dealId={deal.id}
+            draftId={ingestionDraft.id}
+            editable={ingestionDraft.is_draft !== false}
+          />
+        </Accordion>
+      )}
     </div>
   )
 }
@@ -1758,29 +1779,17 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
   const { status, refresh } = useAgentStatus(dealId)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [draft, setDraft] = useState<any>(null)
-  const [fileNamesById, setFileNamesById] = useState<Record<string, string>>({})
   const [failedDocIds, setFailedDocIds] = useState<string[]>([])
 
-  // Refresh draft + file-name map + failed-doc list. The failed list drives
-  // the "Reprocess failed" button so it's important to refetch after every
-  // ingest run, not just on mount.
+  // Refresh the failed-doc list, which drives the "Reprocess failed" button,
+  // after every ingest run (not just on mount). The findings summary itself
+  // now renders below the checklist in the Checklist tab.
   useEffect(() => {
-    if (!status?.latest_draft?.has_ingestion) { setDraft(null) }
-    if (status?.latest_draft?.has_ingestion) {
-      fetch(`/api/diligence/${dealId}/drafts`).then(r => r.ok ? r.json() : []).then(rows => {
-        const latest = (rows ?? [])[0]
-        setDraft(latest)
-      }).catch(() => {})
-    }
     fetch(`/api/diligence/${dealId}/documents`).then(r => r.ok ? r.json() : []).then(docs => {
-      const map: Record<string, string> = {}
       const failed: string[] = []
       for (const d of docs ?? []) {
-        map[d.id] = d.file_name
         if (d.parse_status === 'failed') failed.push(d.id)
       }
-      setFileNamesById(map)
       setFailedDocIds(failed)
     }).catch(() => {})
   }, [dealId, status?.latest_draft?.id, status?.latest_draft?.has_ingestion, status?.latest_job?.status])
@@ -1846,26 +1855,6 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
       )}
 
       <JobStatusLine job={job ?? null} kind={['ingest', 'ingest_synthesis', 'checklist_assessment']} error={error} />
-
-      {/* Keep the summary visible during a run — a single-doc reprocess
-          shouldn't blank the whole panel. The job status line above shows
-          progress; the summary refreshes when the job completes. */}
-      {draft?.ingestion_output && (
-        <div className="mt-4">
-          {isInFlight && (
-            <p className="text-[11px] text-muted-foreground mb-2 italic">
-              Showing the last completed ingestion — updating…
-            </p>
-          )}
-          <IngestionSummary
-            output={draft.ingestion_output as IngestionOutput}
-            fileNamesById={fileNamesById}
-            dealId={dealId}
-            draftId={draft.id}
-            editable={draft.is_draft !== false}
-          />
-        </div>
-      )}
     </div>
   )
 }
@@ -1904,10 +1893,17 @@ function DiligenceTab({ dealId }: { dealId: string }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<any>(null)
+  // Doc-name map so cross-document inconsistencies can render "Across: <file>, <file>".
+  const [fileNamesById, setFileNamesById] = useState<Record<string, string>>({})
 
   useEffect(() => {
     fetch(`/api/diligence/${dealId}/drafts`).then(r => r.ok ? r.json() : []).then(rows => {
       setDraft((rows ?? [])[0] ?? null)
+    }).catch(() => {})
+    fetch(`/api/diligence/${dealId}/documents`).then(r => r.ok ? r.json() : []).then(docs => {
+      const map: Record<string, string> = {}
+      for (const d of docs ?? []) map[d.id] = d.file_name
+      setFileNamesById(map)
     }).catch(() => {})
   }, [dealId, status?.latest_draft?.id, status?.latest_job?.status])
 
@@ -1915,6 +1911,8 @@ function DiligenceTab({ dealId }: { dealId: string }) {
   const isResearchInFlight = job && (job.status === 'pending' || job.status === 'running') && job.kind === 'research'
   const ingestReady = !!status?.latest_draft?.has_ingestion
   const research: ResearchOutput | null = draft?.research_output ?? null
+  const crossDocFlags: IngestionOutput['cross_doc_flags'] = draft?.ingestion_output?.cross_doc_flags ?? []
+  const activeInconsistencies = (research?.contradictions.length ?? 0) + crossDocFlags.filter(f => !f.dismissed).length
 
   async function runResearch() {
     setSubmitting(true)
@@ -1931,9 +1929,7 @@ function DiligenceTab({ dealId }: { dealId: string }) {
     }
   }
 
-  const internalCounts = research
-    ? `${research.contradictions.length} contradiction${research.contradictions.length === 1 ? '' : 's'} · ${research.founder_dossiers.length} founder${research.founder_dossiers.length === 1 ? '' : 's'}`
-    : 'No research yet'
+  const internalCounts = `${activeInconsistencies} inconsistenc${activeInconsistencies === 1 ? 'y' : 'ies'} · ${research?.founder_dossiers.length ?? 0} founder${(research?.founder_dossiers.length ?? 0) === 1 ? '' : 's'}`
   const externalCounts = research
     ? `${research.findings.length} finding${research.findings.length === 1 ? '' : 's'} · ${research.research_gaps.length} gap${research.research_gaps.length === 1 ? '' : 's'}`
     : 'Not run'
@@ -1952,10 +1948,17 @@ function DiligenceTab({ dealId }: { dealId: string }) {
       </Accordion>
 
       <Accordion title="Internal diligence" subtitle={internalCounts} defaultOpen>
-        {!research ? (
-          <p className="text-xs text-muted-foreground italic py-2">No research output yet. Run external research below to populate.</p>
+        {!research && crossDocFlags.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic py-2">No findings yet. Run data-room analysis (Checklist tab) and external research below to populate.</p>
         ) : (
-          <InternalDiligenceView research={research} />
+          <InternalDiligenceView
+            research={research}
+            crossDocFlags={crossDocFlags}
+            fileNamesById={fileNamesById}
+            dealId={dealId}
+            draftId={draft?.id}
+            editable={draft?.is_draft !== false}
+          />
         )}
       </Accordion>
 
@@ -1988,31 +1991,34 @@ function DiligenceTab({ dealId }: { dealId: string }) {
   )
 }
 
-function InternalDiligenceView({ research }: { research: ResearchOutput }) {
+function InternalDiligenceView({ research, crossDocFlags, fileNamesById, dealId, draftId, editable }: {
+  research: ResearchOutput | null
+  crossDocFlags: IngestionOutput['cross_doc_flags']
+  fileNamesById: Record<string, string>
+  dealId?: string
+  draftId?: string
+  editable?: boolean
+}) {
+  const founderDossiers = research?.founder_dossiers ?? []
   return (
     <div className="space-y-4 pt-2">
-      {research.contradictions.length > 0 && (
-        <section>
-          <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Contradictions</h4>
-          <div className="rounded-md border divide-y">
-            {research.contradictions.map((c, i) => (
-              <div key={i} className="p-3 text-sm flex items-start gap-2">
-                <span className={`shrink-0 inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${c.severity === 'material' ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'}`}>{c.severity}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium">{c.topic}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{c.description}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      <section>
+        <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Inconsistencies &amp; contradictions</h4>
+        <InconsistenciesList
+          contradictions={research?.contradictions ?? []}
+          crossDocFlags={crossDocFlags}
+          fileNamesById={fileNamesById}
+          dealId={dealId}
+          draftId={draftId}
+          editable={editable}
+        />
+      </section>
 
-      {research.founder_dossiers.length > 0 && (
+      {founderDossiers.length > 0 && (
         <section>
           <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Founder dossiers</h4>
           <div className="space-y-3">
-            {research.founder_dossiers.map((f, i) => (
+            {founderDossiers.map((f, i) => (
               <div key={i} className="rounded-md border p-3">
                 <div className="font-medium">{f.founder_name}</div>
                 <div className="text-xs text-muted-foreground mb-2">{f.role}</div>
@@ -2029,10 +2035,6 @@ function InternalDiligenceView({ research }: { research: ResearchOutput }) {
             ))}
           </div>
         </section>
-      )}
-
-      {research.contradictions.length === 0 && research.founder_dossiers.length === 0 && (
-        <p className="text-xs text-muted-foreground italic">No contradictions or founder dossiers in the latest research output.</p>
       )}
     </div>
   )
@@ -2633,7 +2635,7 @@ function ScoreEditRow({ score, onSave }: {
         {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
       </select>
       <div className="flex-1 min-w-0">
-        <div className="font-medium mb-1">{score.dimension_id.replace(/_/g, ' ')}</div>
+        <div className="font-medium mb-1 capitalize">{score.dimension_id.replace(/_/g, ' ')}</div>
         <textarea
           value={rationale}
           onChange={e => setRationale(e.target.value)}

@@ -9,15 +9,41 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Building2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { OtpCodeForm } from '@/components/auth/otp-code-form'
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [acceptedLicense, setAcceptedLicense] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [isHemrock, setIsHemrock] = useState(false)
+
+  async function handleVerify(code: string) {
+    setError(null)
+    setVerifying(true)
+    const supabase = createClient()
+    const { error } = await supabase.auth.verifyOtp({
+      type: 'signup',
+      email: email.trim().toLowerCase(),
+      token: code,
+    })
+    if (error) {
+      setError(error.message)
+      setVerifying(false)
+    } else {
+      window.location.href = '/auth/post-login?method=signup&next=/'
+    }
+  }
+
+  async function handleResend() {
+    setError(null)
+    const supabase = createClient()
+    await supabase.auth.resend({ type: 'signup', email: email.trim().toLowerCase() })
+  }
 
   useEffect(() => {
     const host = window.location.hostname
@@ -121,7 +147,8 @@ export default function SignUpPage() {
         setError(msg || 'Unable to create account.')
       }
     } else {
-      setInfo('Check your email for a confirmation link.')
+      // Email confirmation sent as a 6-digit code — move to the verify step.
+      setSent(true)
     }
     setLoading(false)
   }
@@ -147,6 +174,16 @@ export default function SignUpPage() {
             <CardDescription>Enter your email and a password to get started.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {sent ? (
+              <OtpCodeForm
+                email={email.trim().toLowerCase()}
+                onVerify={handleVerify}
+                onResend={handleResend}
+                verifying={verifying}
+                error={error}
+              />
+            ) : (
+              <>
             {error && error !== 'not_whitelisted' && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
@@ -229,6 +266,8 @@ export default function SignUpPage() {
             <Button className="w-full" onClick={signUp} disabled={loading || !acceptedLicense}>
               {loading ? 'Creating account…' : 'Create account'}
             </Button>
+              </>
+            )}
 
             <p className="text-center text-sm text-muted-foreground">
               Already have an account?{' '}

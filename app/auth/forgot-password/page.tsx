@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,31 +10,47 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Building2 } from 'lucide-react'
+import { OtpCodeForm } from '@/components/auth/otp-code-form'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
+  const [verifying, setVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
 
+  const router = useRouter()
   const supabase = createClient()
 
-  async function handleReset() {
+  async function handleSend() {
     if (!email.trim()) {
       setError('Enter your email address.')
       return
     }
     setError(null)
     setLoading(true)
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+    // No redirectTo — the email carries a 6-digit recovery code, not a link.
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase())
+    if (error) setError(error.message)
+    else setSent(true)
+    setLoading(false)
+  }
+
+  async function handleVerify(code: string) {
+    setError(null)
+    setVerifying(true)
+    const { error } = await supabase.auth.verifyOtp({
+      type: 'recovery',
+      email: email.trim().toLowerCase(),
+      token: code,
     })
     if (error) {
       setError(error.message)
+      setVerifying(false)
     } else {
-      setSent(true)
+      // Recovery session is now active — let the user set a new password.
+      router.push('/auth/reset-password')
     }
-    setLoading(false)
   }
 
   return (
@@ -51,34 +68,26 @@ export default function ForgotPasswordPage() {
             <CardTitle className="text-lg">Reset your password</CardTitle>
             <CardDescription>
               {sent
-                ? 'Check your email for a password reset link.'
-                : "Enter your email and we'll send you a link to reset your password."}
+                ? 'Enter the 6-digit code we emailed you, then set a new password.'
+                : "Enter your email and we'll send you a 6-digit code to reset your password."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
             {sent ? (
-              <div className="space-y-4">
-                <Alert>
-                  <AlertDescription>
-                    If an account exists for <strong>{email}</strong>, you will receive an email with a link to set a new password.
-                  </AlertDescription>
-                </Alert>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => { setSent(false); setEmail('') }}
-                >
-                  Send again
-                </Button>
-              </div>
+              <OtpCodeForm
+                email={email.trim().toLowerCase()}
+                onVerify={handleVerify}
+                onResend={handleSend}
+                verifying={verifying}
+                error={error}
+              />
             ) : (
               <>
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <Input
@@ -87,14 +96,13 @@ export default function ForgotPasswordPage() {
                     placeholder="you@example.com"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleReset()}
+                    onKeyDown={e => e.key === 'Enter' && handleSend()}
                     autoComplete="email"
                     autoFocus
                   />
                 </div>
-
-                <Button className="w-full" onClick={handleReset} disabled={loading}>
-                  {loading ? 'Sending…' : 'Send reset link'}
+                <Button className="w-full" onClick={handleSend} disabled={loading}>
+                  {loading ? 'Sending…' : 'Email me a code'}
                 </Button>
               </>
             )}
