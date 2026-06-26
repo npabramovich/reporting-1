@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { ACCENT_PRESETS, FONT_OPTIONS, type FundTheme } from '@/lib/theme'
+import { ACCENT_PRESETS, FONT_OPTIONS, isValidHsl, type FundTheme } from '@/lib/theme'
 
 async function ctx() {
   const supabase = createClient()
@@ -33,7 +33,8 @@ export async function PATCH(req: NextRequest) {
   let theme: FundTheme | null = null
   if (raw && typeof raw === 'object') {
     const t: FundTheme = {}
-    if (typeof raw.accent === 'string' && ACCENT_PRESETS.some(p => p.hsl === raw.accent)) t.accent = raw.accent
+    // Accept a curated preset or any valid custom "h s% l%" brand color.
+    if (typeof raw.accent === 'string' && (ACCENT_PRESETS.some(p => p.hsl === raw.accent) || isValidHsl(raw.accent))) t.accent = raw.accent
     if (typeof raw.font === 'string' && FONT_OPTIONS.some(o => o.key === raw.font) && raw.font !== 'system') t.font = raw.font
     if (typeof raw.radius === 'number' && raw.radius >= 0 && raw.radius <= 2) t.radius = raw.radius
     const hasAny = !!t.accent || !!t.font || typeof t.radius === 'number'

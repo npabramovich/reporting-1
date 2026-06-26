@@ -724,6 +724,12 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
           />
         </Accordion>
       )}
+
+      <SchemaViewer
+        schemaName="data_room_ingestion"
+        title="Checklist analysis"
+        description="How the analysis reads your documents and checks them against this checklist: the document types, extraction rules, and how findings are tagged to checklist items."
+      />
     </div>
   )
 }
@@ -2302,20 +2308,11 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
         </Disclosure>
       )}
 
-      <Disclosure title="How the agent works" subtitle="schemas & prompts">
-        <div className="space-y-2">
-          <SchemaViewer
-            schemaName="research_dossier"
-            title="Research schema"
-            description="What the external-research stage sources, verifies, and how it rates evidence quality."
-          />
-          <SchemaViewer
-            schemaName="data_room_ingestion"
-            title="Data-room ingestion schema"
-            description="How the agent reads documents, classifies them, and extracts claims from the data room."
-          />
-        </div>
-      </Disclosure>
+      <SchemaViewer
+        schemaName="research_dossier"
+        title="Research schema"
+        description="What the external-research stage sources, verifies, and how it rates evidence quality."
+      />
     </div>
   )
 }
@@ -2962,6 +2959,12 @@ function FoundersTab({ dealId }: { dealId: string }) {
           </div>
         )}
       </Section>
+
+      <SchemaViewer
+        schemaName="research_dossier"
+        title="Research schema"
+        description="How the agent builds founder dossiers — what it sources, and how it rates evidence quality."
+      />
     </div>
   )
 }
@@ -3363,13 +3366,11 @@ function ScoringTab({ dealId }: { dealId: string }) {
         )}
       </Section>
 
-      <Disclosure title="How the agent works" subtitle="scoring rubric">
-        <SchemaViewer
-          schemaName="rubric"
-          title="Scoring rubric"
-          description="The dimensions, 1–5 criteria, and confidence signals the agent scores against."
-        />
-      </Disclosure>
+      <SchemaViewer
+        schemaName="rubric"
+        title="Scoring rubric"
+        description="The dimensions, 1–5 criteria, and confidence signals the agent scores against."
+      />
     </div>
   )
 }
@@ -3567,6 +3568,12 @@ function MemoTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: stri
           embedded
         />
       )}
+
+      <SchemaViewer
+        schemaName="memo_output"
+        title="Base memo schema"
+        description="The section structure, guidance, and sourcing rules the draft is built from. Your memo settings above layer on top of this."
+      />
     </div>
   )
 }

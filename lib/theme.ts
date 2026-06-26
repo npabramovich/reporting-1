@@ -37,9 +37,61 @@ export const RADIUS_OPTIONS: Array<{ key: string; label: string; rem: number }> 
   { key: 'rounded', label: 'Rounded', rem: 0.875 },
 ]
 
-/** Foreground (text-on-accent) for a given accent HSL; falls back to white. */
-function accentForeground(hsl: string): string {
-  return ACCENT_PRESETS.find(p => p.hsl === hsl)?.fg ?? '0 0% 100%'
+const HSL_RE = /^(\d{1,3}(?:\.\d+)?)\s+(\d{1,3}(?:\.\d+)?)%\s+(\d{1,3}(?:\.\d+)?)%$/
+
+/** Is this a syntactically valid "h s% l%" triple? */
+export function isValidHsl(hsl: string): boolean {
+  const m = hsl.match(HSL_RE)
+  if (!m) return false
+  return +m[1] <= 360 && +m[2] <= 100 && +m[3] <= 100
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  s /= 100; l /= 100
+  const k = (n: number) => (n + h / 30) % 12
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))
+  return [f(0) * 255, f(8) * 255, f(4) * 255]
+}
+
+/** Black or white foreground for an accent, picked by WCAG contrast so custom
+ *  brand colors always get readable text. */
+export function foregroundFor(hsl: string): string {
+  const m = hsl.match(HSL_RE)
+  if (!m) return '0 0% 100%'
+  const [r, g, b] = hslToRgb(+m[1], +m[2], +m[3])
+  const lin = (c: number) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4) }
+  const lum = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+  // Contrast vs white (1.0 lum) and vs near-black (0.0 lum); pick the stronger.
+  return (1.05 / (lum + 0.05)) >= ((lum + 0.05) / 0.05) ? '0 0% 100%' : '0 0% 9%'
+}
+
+/** "#rrggbb" → "h s% l%" (or null if not a hex color). */
+export function hexToHsl(hex: string): string | null {
+  let h = hex.replace('#', '').trim()
+  if (!/^([0-9a-f]{3}|[0-9a-f]{6})$/i.test(h)) return null
+  if (h.length === 3) h = h.split('').map(c => c + c).join('')
+  const r = parseInt(h.slice(0, 2), 16) / 255, g = parseInt(h.slice(2, 4), 16) / 255, b = parseInt(h.slice(4, 6), 16) / 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  let hue = 0, sat = 0; const lig = (max + min) / 2
+  if (max !== min) {
+    const d = max - min
+    sat = lig > 0.5 ? d / (2 - max - min) : d / (max + min)
+    if (max === r) hue = (g - b) / d + (g < b ? 6 : 0)
+    else if (max === g) hue = (b - r) / d + 2
+    else hue = (r - g) / d + 4
+    hue /= 6
+  }
+  return `${Math.round(hue * 360)} ${Math.round(sat * 100)}% ${Math.round(lig * 100)}%`
+}
+
+/** "h s% l%" → "#rrggbb" (or null if not a valid triple). */
+export function hslToHex(hsl: string): string | null {
+  const m = hsl.match(HSL_RE)
+  if (!m) return null
+  const [r, g, b] = hslToRgb(+m[1], +m[2], +m[3])
+  const to = (c: number) => Math.round(Math.max(0, Math.min(255, c))).toString(16).padStart(2, '0')
+  return `#${to(r)}${to(g)}${to(b)}`
 }
 
 /**
@@ -50,7 +102,7 @@ export function themeCssVars(theme: FundTheme | null | undefined): string {
   if (!theme) return ''
   const out: string[] = []
   if (theme.accent) {
-    const fg = accentForeground(theme.accent)
+    const fg = foregroundFor(theme.accent)
     out.push(
       `--primary:${theme.accent}`,
       `--primary-foreground:${fg}`,

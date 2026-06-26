@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2, Check, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ACCENT_PRESETS, FONT_OPTIONS, RADIUS_OPTIONS, themeCssVars, type FundTheme } from '@/lib/theme'
+import { ACCENT_PRESETS, FONT_OPTIONS, RADIUS_OPTIONS, themeCssVars, hexToHsl, hslToHex, type FundTheme } from '@/lib/theme'
 
 // Branding / appearance editor. Previews live across the whole app (injects a
 // <style> override into <head>) and saves the fund-wide theme. The default is
@@ -30,6 +30,7 @@ export function AppearanceEditor() {
   }, [])
 
   const draft: FundTheme = { accent, font: font === 'system' ? null : font, radius: radius ?? undefined }
+  const isCustom = !!accent && !ACCENT_PRESETS.some(p => p.hsl === accent)
 
   // Live, app-wide preview while editing.
   useEffect(() => {
@@ -73,7 +74,7 @@ export function AppearanceEditor() {
 
       <div>
         <div className="text-xs font-medium mb-2">Accent color</div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => setAccent(null)} className={`h-8 px-3 rounded-md border text-xs ${accent === null ? 'border-foreground bg-muted font-medium' : 'hover:bg-muted/50'}`}>Default</button>
           {ACCENT_PRESETS.filter(p => p.key !== 'neutral').map(p => (
             <button
@@ -88,7 +89,20 @@ export function AppearanceEditor() {
               {accent === p.hsl && <Check className="h-4 w-4" style={{ color: `hsl(${p.fg})` }} />}
             </button>
           ))}
+          {/* Custom brand color */}
+          <div className={`flex items-center gap-1.5 rounded-md border pl-1.5 pr-2 h-8 ${isCustom ? 'border-foreground bg-muted' : ''}`}>
+            <input
+              type="color"
+              aria-label="Custom accent color"
+              title="Custom brand color"
+              value={accent ? (hslToHex(accent) ?? '#4f46e5') : '#4f46e5'}
+              onChange={e => { const h = hexToHsl(e.target.value); if (h) setAccent(h) }}
+              className="h-5 w-5 rounded cursor-pointer bg-transparent border-0 p-0"
+            />
+            <span className="text-xs text-muted-foreground">Custom</span>
+          </div>
         </div>
+        {isCustom && <p className="text-[10px] text-muted-foreground mt-1.5">Custom <span className="font-mono">{hslToHex(accent!)}</span>. Button-text contrast is set automatically.</p>}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 max-w-xl">

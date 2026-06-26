@@ -5,7 +5,6 @@ import { ChevronDown, Loader2, Save, Trash2, GripVertical, Plus } from 'lucide-r
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useConfirm } from '@/components/confirm-dialog'
-import { SchemaViewer } from '@/components/diligence/schema-viewer'
 
 export type MemoComplexity = 'brief' | 'standard' | 'detailed' | 'comprehensive'
 
@@ -327,13 +326,6 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
       {open && (
         <div className="px-4 pb-4 pt-1 border-t space-y-4">
           {error && <div className="text-xs text-destructive">{error}</div>}
-
-          {/* The base memo schema these settings layer on top of, read-only. */}
-          <SchemaViewer
-            schemaName="memo_output"
-            title="Base memo schema"
-            description="The section structure, guidance, and sourcing rules the draft is built from. The settings below layer on top of this."
-          />
 
           {/* Preset toolbar, load a saved fund preset into the form, or save
               the current form state as a new preset. The form below is still
