@@ -730,6 +730,7 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
         title="How the agent works"
         subtitle="checklist analysis"
         description="How the analysis reads your documents and checks them against this checklist: the document types, extraction rules, and how findings are tagged to checklist items."
+        defaultOpen={!ingestionDraft?.ingestion_output}
       />
     </div>
   )
@@ -2084,7 +2085,7 @@ function InfoHint({ text }: { text: string }) {
   return (
     <span className="relative inline-flex group/hint align-middle">
       <Info className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help" />
-      <span role="tooltip" className="pointer-events-none absolute left-0 top-full z-50 mt-1.5 w-64 rounded-md border bg-popover px-2.5 py-1.5 text-[11px] leading-snug font-normal text-popover-foreground shadow-md opacity-0 group-hover/hint:opacity-100 transition-opacity">
+      <span role="tooltip" className="pointer-events-none absolute left-0 top-full z-50 mt-1.5 w-64 rounded-md border bg-popover px-3 py-2 text-xs leading-snug font-normal text-popover-foreground shadow-md opacity-0 group-hover/hint:opacity-100 transition-opacity">
         {text}
       </span>
     </span>
@@ -2097,13 +2098,15 @@ function Section({ title, count, action, help, children, className }: {
   action?: React.ReactNode
   /** Optional explanation shown behind an info-icon tooltip next to the title. */
   help?: string
-  children: React.ReactNode
+  children?: React.ReactNode
   className?: string
 }) {
+  // space-y-3 (not a header margin) so an empty/condition-only body collapses
+  // and the header stays vertically centred in the card.
   return (
-    <div className={`rounded-lg border bg-card p-5 ${className ?? ''}`}>
+    <div className={`rounded-lg border bg-card p-5 space-y-3 ${className ?? ''}`}>
       {(title || action) && (
-        <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             {title && <span className="text-sm font-medium text-muted-foreground truncate">{title}</span>}
             {help && <InfoHint text={help} />}
@@ -2284,7 +2287,7 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
       >
         {research?.research_mode === 'no_web_search' && <p className="text-[11px] text-amber-700 dark:text-amber-400">Last run: web search was off.</p>}
         {research?.research_mode === 'with_web_search' && <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Last run: web search was on.</p>}
-        <div className="mt-2"><JobStatusLine job={job ?? null} kind="research" error={error} /></div>
+        <JobStatusLine job={job ?? null} kind="research" error={error} />
         {research && !isResearchInFlight && (
           <ExternalResearchView
             research={research}
@@ -2323,6 +2326,7 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
         title="How the agent works"
         subtitle="research"
         description="What the external-research stage sources, verifies, and how it rates evidence quality."
+        defaultOpen={!research}
       />
     </div>
   )
@@ -2372,7 +2376,7 @@ function InternalDiligenceView({ research, crossDocFlags, fileNamesById, editabl
   const internalGaps = (research?.research_gaps ?? []).map((g, i) => ({ g, i })).filter(x => !x.g.dismissed && x.g.criticality !== 'nice_to_have')
   const noInconsistencies = activeContradictions.length === 0 && activeFlags.length === 0
   return (
-    <div className="space-y-4 pt-2">
+    <div className="space-y-4">
       <section>
         <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Inconsistencies &amp; contradictions</h4>
         {noInconsistencies ? (
@@ -2417,7 +2421,7 @@ function ExternalResearchView({ research, editable, onToggleFinding, onToggleGap
   const activeFindings = research.findings.map((f, i) => ({ f, i })).filter(x => !x.f.dismissed).slice(0, 50)
   const followUpGaps = research.research_gaps.map((g, i) => ({ g, i })).filter(x => !x.g.dismissed && x.g.criticality === 'nice_to_have')
   return (
-    <div className="space-y-4 pt-2">
+    <div className="space-y-4">
       {research.research_mode === 'with_web_search' && (
         <div className="rounded-md bg-muted/40 px-3 py-2 text-xs space-y-1">
           <div className="font-medium">Web search diagnostic</div>
@@ -2504,7 +2508,7 @@ function CompetitiveLandscape({ competitiveMap, editable, onToggle }: {
     return <p className="text-xs text-muted-foreground italic py-2">No competitors mapped yet. Run external research to populate.</p>
   }
   return (
-    <div className="divide-y">
+    <div className="divide-y [&>*:first-child]:pt-0 [&>*:last-child]:pb-0">
       {byCompany.map(({ c, i }) => (
         <CompetitorRow key={`co-${i}`} name={c.name} detail={c.note} tag="named by company" editable={editable} onDismiss={() => onToggle('named_by_company', i)} />
       ))}
@@ -2974,6 +2978,7 @@ function FoundersTab({ dealId }: { dealId: string }) {
         title="How the agent works"
         subtitle="founder research"
         description="How the agent builds founder dossiers: what it sources, and how it rates evidence quality."
+        defaultOpen={dossiers.length === 0}
       />
     </div>
   )
@@ -3092,7 +3097,7 @@ function NotesPanel({ dealId, userId, isAdmin }: { dealId: string; userId: strin
   }
 
   return (
-    <div className="space-y-4 pt-2">
+    <div className="space-y-4">
       <div className="flex gap-2">
         <textarea
           value={content}
@@ -3352,7 +3357,7 @@ function ScoringTab({ dealId }: { dealId: string }) {
           </Button>
         ) : undefined}
       >
-        <div className="mt-2"><JobStatusLine job={job ?? null} kind="score" error={error} /></div>
+        <JobStatusLine job={job ?? null} kind="score" error={error} />
 
         {!hasMemo ? (
           <p className="text-sm text-muted-foreground text-center py-8">
@@ -3376,6 +3381,7 @@ function ScoringTab({ dealId }: { dealId: string }) {
         title="How the agent works"
         subtitle="scoring rubric"
         description="The dimensions, 1–5 criteria, and confidence signals the agent scores against."
+        defaultOpen={scores.length === 0}
       />
     </div>
   )
@@ -3535,9 +3541,7 @@ function MemoTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: stri
           </Button>
         }
         help="Assemble a structured memo from ingestion, research, and Q&A. Scoring runs automatically as a follow-up; view it in the Scoring tab."
-      >
-        <span className="sr-only">Memo draft</span>
-      </Section>
+      />
 
       {error && <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
 
@@ -3572,7 +3576,7 @@ function MemoTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: stri
         />
       )}
 
-      <MemoConfigPanel dealId={dealId} />
+      <MemoConfigPanel dealId={dealId} defaultOpen={!hasMemo} />
     </div>
   )
 }

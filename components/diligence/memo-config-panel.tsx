@@ -87,9 +87,9 @@ interface MemoPreset {
   default_for_stage: string | null
 }
 
-export function MemoConfigPanel({ dealId }: { dealId: string }) {
+export function MemoConfigPanel({ dealId, defaultOpen }: { dealId: string; defaultOpen?: boolean }) {
   const confirm = useConfirm()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(!!defaultOpen)
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
