@@ -9,7 +9,7 @@ import { ChevronDown, Loader2 } from 'lucide-react'
 // Settings without being able to change it — editing stays admin-only. Source
 // is the member-open GET /api/firm/schemas (resolved fund override or default).
 // ---------------------------------------------------------------------------
-export function SchemaViewer({ schemaName, title, description }: { schemaName: string; title: string; description?: string }) {
+export function SchemaViewer({ schemaName, title, subtitle, description }: { schemaName: string; title: string; subtitle?: string; description?: string }) {
   const [open, setOpen] = useState(false)
   const [content, setContent] = useState<string | null>(null)
   const [version, setVersion] = useState<string | null>(null)
@@ -35,6 +35,7 @@ export function SchemaViewer({ schemaName, title, description }: { schemaName: s
         <span className="flex items-center gap-2 min-w-0">
           <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
           <span className="font-medium text-sm truncate">{title}</span>
+          {subtitle && <span className="text-xs font-normal text-muted-foreground truncate">· {subtitle}</span>}
           {version && <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">{version}</span>}
         </span>
         <span className="text-xs text-muted-foreground shrink-0">Read-only</span>

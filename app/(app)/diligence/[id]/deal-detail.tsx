@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2, Trash2, Upload, FolderInput, Check, Play, RefreshCw, AlertCircle, Lock, ChevronDown, GripVertical, Pencil, Plus } from 'lucide-react'
+import { ArrowLeft, Loader2, Trash2, Upload, FolderInput, Check, Play, RefreshCw, AlertCircle, Lock, ChevronDown, GripVertical, Pencil, Plus, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -727,7 +727,8 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
 
       <SchemaViewer
         schemaName="data_room_ingestion"
-        title="Checklist analysis"
+        title="How the agent works"
+        subtitle="checklist analysis"
         description="How the analysis reads your documents and checks them against this checklist: the document types, extraction rules, and how findings are tagged to checklist items."
       />
     </div>
@@ -1985,6 +1986,7 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
   return (
     <Section
       title="Data room analysis"
+      help="Reads your documents, checks them against this checklist (marking found / partial / missing), and surfaces gaps and cross-document inconsistencies. Re-analyzing only processes new or unparsed files and re-checks open items."
       action={
         <div className="flex items-center gap-2">
           {status?.latest_draft?.has_ingestion ? (
@@ -2030,12 +2032,6 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
         </div>
       }
     >
-      <p className="text-xs text-muted-foreground max-w-xl">
-        Reads your uploaded documents, checks them against this checklist (marking items found / partial / missing),
-        and surfaces gaps and cross-document inconsistencies. Re-analyzing only processes new or unparsed
-        files and re-checks open checklist items; already-analyzed files and settled items are skipped.
-      </p>
-
       {documentCount === 0 && (
         <p className="text-xs text-muted-foreground italic mt-2">Upload at least one document to enable ingestion.</p>
       )}
@@ -2082,10 +2078,25 @@ function Accordion({ title, subtitle, defaultOpen, children }: { title: string; 
 // border level. Header = muted label (+ optional count) on the left, a single
 // action slot on the right. Content inside is borderless — separated by
 // dividers and whitespace, never another box.
-function Section({ title, count, action, children, className }: {
+// Dependency-free hover tooltip — an info icon that reveals a short note. Used
+// to tuck away action descriptions so they don't take permanent vertical space.
+function InfoHint({ text }: { text: string }) {
+  return (
+    <span className="relative inline-flex group/hint align-middle">
+      <Info className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help" />
+      <span role="tooltip" className="pointer-events-none absolute left-0 top-full z-50 mt-1.5 w-64 rounded-md border bg-popover px-2.5 py-1.5 text-[11px] leading-snug font-normal text-popover-foreground shadow-md opacity-0 group-hover/hint:opacity-100 transition-opacity">
+        {text}
+      </span>
+    </span>
+  )
+}
+
+function Section({ title, count, action, help, children, className }: {
   title?: string
   count?: number
   action?: React.ReactNode
+  /** Optional explanation shown behind an info-icon tooltip next to the title. */
+  help?: string
   children: React.ReactNode
   className?: string
 }) {
@@ -2095,6 +2106,7 @@ function Section({ title, count, action, children, className }: {
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2 min-w-0">
             {title && <span className="text-sm font-medium text-muted-foreground truncate">{title}</span>}
+            {help && <InfoHint text={help} />}
             {typeof count === 'number' && count > 0 && <span className="text-xs bg-muted rounded-full px-1.5 py-0.5 text-muted-foreground">{count}</span>}
           </div>
           {action && <div className="shrink-0 flex items-center gap-2">{action}</div>}
@@ -2236,7 +2248,7 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
       {/* Ask anything, moved here from its own tab so questions sit alongside the evidence. */}
       <QATab dealId={dealId} />
 
-      <Section title="Notes">
+      <Section title="Notes" help="Your own notes and research on this deal, separate from the data-room analysis. Shared with your fund.">
         <NotesPanel dealId={dealId} userId={userId} isAdmin={isAdmin} />
       </Section>
 
@@ -2262,6 +2274,7 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
       <Section
         title="External research"
         count={activeFindings}
+        help="Verifies findings via web search, surfaces competitors, builds founder dossiers, and lists gaps. Web search runs only when it's enabled in Settings → Memo agent and the research stage uses an Anthropic model."
         action={
           <Button variant="outline" size="sm" onClick={runResearch} disabled={submitting || !!isResearchInFlight || !ingestReady}>
             {isResearchInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : research ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
@@ -2269,11 +2282,8 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
           </Button>
         }
       >
-        <p className="text-xs text-muted-foreground max-w-xl">
-          Verifies findings via web search, surfaces competitors, builds founder dossiers, and lists gaps. Web search runs only when enabled in <Link href="/settings" className="underline">Settings → Memo agent</Link> and the research stage uses an Anthropic model.
-          {research?.research_mode === 'no_web_search' && <span className="text-amber-700 dark:text-amber-400"> Last run: web search was off.</span>}
-          {research?.research_mode === 'with_web_search' && <span className="text-emerald-700 dark:text-emerald-400"> Last run: web search was on.</span>}
-        </p>
+        {research?.research_mode === 'no_web_search' && <p className="text-[11px] text-amber-700 dark:text-amber-400">Last run: web search was off.</p>}
+        {research?.research_mode === 'with_web_search' && <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Last run: web search was on.</p>}
         <div className="mt-2"><JobStatusLine job={job ?? null} kind="research" error={error} /></div>
         {research && !isResearchInFlight && (
           <ExternalResearchView
@@ -2310,7 +2320,8 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
 
       <SchemaViewer
         schemaName="research_dossier"
-        title="Research schema"
+        title="How the agent works"
+        subtitle="research"
         description="What the external-research stage sources, verifies, and how it rates evidence quality."
       />
     </div>
@@ -2936,13 +2947,11 @@ function FoundersTab({ dealId }: { dealId: string }) {
       <Section
         title="Founders"
         count={dossiers.length}
+        help="Founder dossiers from external research. Edit any field, add founders, or capture open questions; changes save to the deal."
         action={editable && draftId ? (
           <Button variant="outline" size="sm" onClick={addFounder}><Plus className="h-3.5 w-3.5 mr-1" /> Add founder</Button>
         ) : undefined}
       >
-        <p className="text-xs text-muted-foreground max-w-xl">
-          Founder dossiers from external research. Edit any field, add founders, or capture open questions; changes save to the deal.
-        </p>
         {!draftId ? (
           <p className="text-sm text-muted-foreground text-center py-8">
             No research draft yet. Run external research from the Diligence tab to build founder dossiers.
@@ -2962,8 +2971,9 @@ function FoundersTab({ dealId }: { dealId: string }) {
 
       <SchemaViewer
         schemaName="research_dossier"
-        title="Research schema"
-        description="How the agent builds founder dossiers — what it sources, and how it rates evidence quality."
+        title="How the agent works"
+        subtitle="founder research"
+        description="How the agent builds founder dossiers: what it sources, and how it rates evidence quality."
       />
     </div>
   )
@@ -3083,11 +3093,6 @@ function NotesPanel({ dealId, userId, isAdmin }: { dealId: string; userId: strin
 
   return (
     <div className="space-y-4 pt-2">
-      <div>
-        <p className="text-xs text-muted-foreground max-w-xl">
-          Your own notes and research on this deal, separate from the data-room analysis. Shared with your fund.
-        </p>
-      </div>
       <div className="flex gap-2">
         <textarea
           value={content}
@@ -3202,14 +3207,16 @@ function SettingsTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: 
     <div className="space-y-6">
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-medium text-muted-foreground">AI usage</span>
+          <span className="flex items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground">AI usage</span>
+            <InfoHint text="Processing time, tokens, and estimated cost the memo agent has spent on this deal. Cost is indicative (list pricing)." />
+          </span>
           <div className="flex rounded-md border overflow-hidden shrink-0">
             {RANGES.map(r => (
               <button key={String(r.key)} type="button" onClick={() => setDays(r.key)} className={`px-2.5 py-1 text-xs ${days === r.key ? 'bg-muted font-medium' : 'hover:bg-muted/50'}`}>{r.label}</button>
             ))}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground max-w-xl">Processing time, tokens, and estimated cost the memo agent has spent on this deal. Cost is indicative (list pricing).</p>
 
         {loading ? (
           <div className="text-sm text-muted-foreground"><Loader2 className="h-3.5 w-3.5 inline animate-spin mr-1" /> Loading usage…</div>
@@ -3336,7 +3343,8 @@ function ScoringTab({ dealId }: { dealId: string }) {
   return (
     <div className="space-y-6 max-w-6xl">
       <Section
-        title="Rubric scoring"
+        title="Scoring"
+        help="Scores are derived from the memo draft and evidence. Edit any score, rating, or rationale; changes save to the deal."
         action={hasMemo ? (
           <Button variant="outline" size="sm" onClick={runScore} disabled={submitting || !!isScoreInFlight}>
             {isScoreInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
@@ -3344,9 +3352,6 @@ function ScoringTab({ dealId }: { dealId: string }) {
           </Button>
         ) : undefined}
       >
-        <p className="text-xs text-muted-foreground max-w-xl">
-          Scores are derived from the memo draft and evidence. Edit any score, rating, or rationale below; changes save to the deal.
-        </p>
         <div className="mt-2"><JobStatusLine job={job ?? null} kind="score" error={error} /></div>
 
         {!hasMemo ? (
@@ -3368,7 +3373,8 @@ function ScoringTab({ dealId }: { dealId: string }) {
 
       <SchemaViewer
         schemaName="rubric"
-        title="Scoring rubric"
+        title="How the agent works"
+        subtitle="scoring rubric"
         description="The dimensions, 1–5 criteria, and confidence signals the agent scores against."
       />
     </div>
@@ -3528,13 +3534,10 @@ function MemoTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: stri
             {hasMemo ? 'Re-draft' : 'Run draft'}
           </Button>
         }
+        help="Assemble a structured memo from ingestion, research, and Q&A. Scoring runs automatically as a follow-up; view it in the Scoring tab."
       >
-        <p className="text-xs text-muted-foreground max-w-xl">
-          Assemble a structured memo from ingestion, research, and Q&amp;A. Scoring runs automatically as a follow-up; view it in the Scoring tab.
-        </p>
+        <span className="sr-only">Memo draft</span>
       </Section>
-
-      <MemoConfigPanel dealId={dealId} />
 
       {error && <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
 
@@ -3569,11 +3572,7 @@ function MemoTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: stri
         />
       )}
 
-      <SchemaViewer
-        schemaName="memo_output"
-        title="Base memo schema"
-        description="The section structure, guidance, and sourcing rules the draft is built from. Your memo settings above layer on top of this."
-      />
+      <MemoConfigPanel dealId={dealId} />
     </div>
   )
 }

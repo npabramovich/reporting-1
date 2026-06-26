@@ -5,6 +5,7 @@ import { ChevronDown, Loader2, Save, Trash2, GripVertical, Plus } from 'lucide-r
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useConfirm } from '@/components/confirm-dialog'
+import { SchemaViewer } from '@/components/diligence/schema-viewer'
 
 export type MemoComplexity = 'brief' | 'standard' | 'detailed' | 'comprehensive'
 
@@ -98,8 +99,6 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
   const [styleOverride, setStyleOverride] = useState<'' | NonNullable<MemoTemplateConfig['style_override']>>('')
   const [persona, setPersona] = useState('')
   const [personaCustom, setPersonaCustom] = useState(false)
-  const [emphasis, setEmphasis] = useState<string[]>([])
-  const [emphasisDraft, setEmphasisDraft] = useState('')
   const [sections, setSections] = useState<SectionConfig[]>([])
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
@@ -135,12 +134,13 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
   }, [dealId])
 
   function applyConfigToForm(guidance: string, cfg: MemoTemplateConfig) {
-    setPartnerGuidance(guidance)
+    // Legacy "points to emphasize" are now folded into the single guidance field.
+    const emph = (Array.isArray(cfg.emphasis) ? cfg.emphasis : []).filter(Boolean)
+    setPartnerGuidance(emph.length ? [guidance.trim(), ...emph.map(e => `Emphasize: ${e}`)].filter(Boolean).join('\n') : guidance)
     setStyleOverride((cfg.style_override ?? '') as any)
     const p = cfg.analyst_persona ?? ''
     setPersona(p)
     setPersonaCustom(!!p && !PERSONA_PRESETS.includes(p))
-    setEmphasis(Array.isArray(cfg.emphasis) ? cfg.emphasis : [])
     // Legacy configs carry a single memo-wide complexity; seed each section from
     // it (then 'standard') so older deals/presets migrate cleanly to per-section.
     const defaultComplexity: MemoComplexity = cfg.complexity ?? 'standard'
@@ -168,7 +168,7 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
     return {
       style_override: (styleOverride || null) as MemoTemplateConfig['style_override'],
       analyst_persona: persona,
-      emphasis,
+      emphasis: [],
       sections: sections.map(s => ({
         id: s.id,
         title: s.title,
@@ -289,15 +289,6 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
     setDragId(null)
     setOverId(null)
   }
-  function addEmphasis() {
-    const v = emphasisDraft.trim()
-    if (!v) return
-    setEmphasis(prev => [...prev, v])
-    setEmphasisDraft('')
-  }
-  function removeEmphasis(i: number) {
-    setEmphasis(prev => prev.filter((_, idx) => idx !== i))
-  }
 
   const includedCount = sections.filter(s => s.included).length
   const summary = !loaded
@@ -305,7 +296,6 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
     : [
         styleOverride && STYLE_OPTIONS.find(s => s.value === styleOverride)?.label,
         persona ? `persona: ${persona.length > 30 ? persona.slice(0, 30) + '…' : persona}` : null,
-        emphasis.length > 0 ? `${emphasis.length} emphasis point${emphasis.length === 1 ? '' : 's'}` : null,
         `${includedCount}/${sections.length} sections`,
       ].filter(Boolean).join(' · ')
 
@@ -318,7 +308,7 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
       >
         <span className="flex items-center gap-2">
           <ChevronDown className={`h-4 w-4 transition-transform ${open ? '' : '-rotate-90'}`} />
-          <span className="font-medium text-sm">Memo settings</span>
+          <span className="font-medium text-sm">How the agent works</span>
         </span>
         <span className="text-xs text-muted-foreground truncate ml-4">{summary}</span>
       </button>
@@ -461,27 +451,15 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
           </div>
 
           <div>
-            <label className="block text-xs font-medium mb-1">Points to emphasize</label>
-            <div className="flex gap-2 mb-2">
-              <Input
-                value={emphasisDraft}
-                onChange={e => setEmphasisDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addEmphasis() } }}
-                placeholder="e.g. data privacy posture; founder coachability; CAC trajectory"
-                className="h-8 text-sm"
-              />
-              <Button size="sm" variant="outline" onClick={addEmphasis} disabled={!emphasisDraft.trim()}>Add</Button>
-            </div>
-            {emphasis.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {emphasis.map((e, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border bg-muted/40 text-xs">
-                    {e}
-                    <button onClick={() => removeEmphasis(i)} className="text-muted-foreground hover:text-destructive" aria-label="Remove">×</button>
-                  </span>
-                ))}
-              </div>
-            )}
+            <label className="block text-xs font-medium mb-1">Guidance for this memo</label>
+            <textarea
+              value={partnerGuidance}
+              onChange={e => setPartnerGuidance(e.target.value)}
+              rows={4}
+              placeholder="Deal-specific direction and points to emphasize, e.g. &quot;lead with the wedge; tilt toward technical defensibility; flag the CAC trajectory.&quot;"
+              className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">Adds to the fund&apos;s draft-stage guidance from Settings. Covers both what to emphasize and any deal-specific direction.</p>
           </div>
 
           <div>
@@ -553,16 +531,11 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
             <p className="text-[10px] text-muted-foreground mt-1">Drag to reorder. Unchecked sections are omitted. Each section&apos;s depth dropdown sets its length and level of detail independently. Add custom sections the agent drafts from your &ldquo;what to cover&rdquo; note. Save as a preset to reuse this as a default.</p>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium mb-1">Additional guidance for this memo</label>
-            <textarea
-              value={partnerGuidance}
-              onChange={e => setPartnerGuidance(e.target.value)}
-              rows={4}
-              placeholder="Adds to the fund's draft-stage guidance from settings. Use for deal-specific direction, e.g. &quot;tilt analysis toward technical defensibility, downplay GTM strategy.&quot;"
-              className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-          </div>
+          <SchemaViewer
+            schemaName="memo_output"
+            title="Base memo schema"
+            description="The section structure, guidance, and sourcing rules the draft is built from. The settings above layer on top of this."
+          />
 
           <div className="flex justify-end">
             <Button size="sm" onClick={save} disabled={saving}>
