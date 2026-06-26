@@ -14,6 +14,7 @@ import {
 } from '@/lib/cache/layout'
 import { DEFAULT_FEATURE_VISIBILITY } from '@/lib/types/features'
 import type { FeatureVisibilityMap } from '@/lib/types/features'
+import { themeCssVars, type FundTheme } from '@/lib/theme'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Auth — uncached (uses cookies)
@@ -56,9 +57,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const gaMeasurementId = rawGaId && /^[A-Z0-9-]+$/i.test(rawGaId) ? rawGaId : null
   const fundName = fundData?.name ?? 'Portfolio Reporting'
   const fundLogo = fundData?.logo_url ?? null
+  // Per-fund branding: override CSS variables app-wide. Empty when no theme set.
+  const themeVars = themeCssVars((fundSettings?.theme as FundTheme | null) ?? null)
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      {themeVars && <style dangerouslySetInnerHTML={{ __html: `:root{${themeVars}}` }} />}
       {isViewer && (
         <>
           <DemoSessionGuard />

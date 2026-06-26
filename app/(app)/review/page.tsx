@@ -119,7 +119,7 @@ export default function ReviewPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Review</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Items that need your attention — metrics AI wasn&apos;t sure about, unidentified companies, and more.
+            Items that need your attention, metrics AI wasn&apos;t sure about, unidentified companies, and more.
           </p>
         </div>
         <AnalystToggleButton />
@@ -135,7 +135,7 @@ export default function ReviewPage() {
 
       {!loading && items.length === 0 && (data?.needsReviewEmails ?? []).length === 0 && (
         <div className="rounded-lg border border-dashed p-12 text-center">
-          <p className="text-muted-foreground">All clear — nothing to review.</p>
+          <p className="text-muted-foreground">All clear, nothing to review.</p>
         </div>
       )}
 
@@ -172,7 +172,7 @@ export default function ReviewPage() {
                   )}
                   {item.email && (
                     <span className="ml-auto text-xs text-muted-foreground">
-                      {item.email.subject ?? '(no subject)'} — {new Date(item.email.received_at).toLocaleDateString()}
+                      {item.email.subject ?? '(no subject)'}, {new Date(item.email.received_at).toLocaleDateString()}
                     </span>
                   )}
                 </div>

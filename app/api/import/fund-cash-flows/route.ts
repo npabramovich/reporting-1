@@ -126,7 +126,7 @@ ${funds?.name ? `- The fund is named "${funds.name}". If no group is specified, 
 - If the data mentions "call #1", "call #2" etc., those are called_capital entries
 - If the data mentions "distribution #1" etc., those are distribution entries
 - Capital commitment/subscription amounts are "commitment" type
-- Notes are optional — include if the data has descriptions, memo text, or reference numbers
+- Notes are optional, include if the data has descriptions, memo text, or reference numbers
 - If amounts include thousands separators (commas, periods) or currency symbols, strip them
 - If percentages of commitment are given instead of absolute amounts, and a total commitment is known, calculate the absolute amount
 

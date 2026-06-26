@@ -10,12 +10,12 @@ const SCHEMA_ORDER = [
 
 const SCHEMA_LABELS: Record<string, { label: string; description: string }> = {
   rubric: { label: 'Rubric', description: 'Scoring dimensions, scale, criteria' },
-  qa_library: { label: 'Q&A Library', description: 'Partner Q&A pool — categories, skip logic, references to rubric dimensions' },
+  qa_library: { label: 'Q&A Library', description: 'Partner Q&A pool, categories, skip logic, references to rubric dimensions' },
   data_room_ingestion: { label: 'Data Room Ingestion', description: 'Per-document extraction, claims, gap analysis' },
   research_dossier: { label: 'Research Dossier', description: 'External research, source quality tiers, founder constraints' },
-  memo_output: { label: 'Memo Output', description: 'Memo assembly — sections, paragraph-level provenance, partner-only fields' },
-  style_anchors: { label: 'Style Anchors', description: 'Metadata for uploaded reference memos — voice and structure aggregation rules' },
-  instructions: { label: 'Instructions', description: 'Operating manual — hard rules, six-stage flow, behavioral defaults' },
+  memo_output: { label: 'Memo Output', description: 'Memo assembly, sections, paragraph-level provenance, partner-only fields' },
+  style_anchors: { label: 'Style Anchors', description: 'Metadata for uploaded reference memos, voice and structure aggregation rules' },
+  instructions: { label: 'Instructions', description: 'Operating manual, hard rules, six-stage flow, behavioral defaults' },
 }
 
 /**
@@ -64,7 +64,7 @@ export function SchemasInline() {
                 {row ? (
                   <SchemaEditor schemaName={name} initialContent={row.yaml_content ?? ''} initialVersion={row.schema_version ?? ''} embedded />
                 ) : (
-                  <div className="text-xs text-muted-foreground py-2">This schema hasn&apos;t been seeded yet — run the diligence agent once to initialize it.</div>
+                  <div className="text-xs text-muted-foreground py-2">This schema hasn&apos;t been seeded yet, run the diligence agent once to initialize it.</div>
                 )}
               </div>
             )}

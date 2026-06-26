@@ -148,7 +148,7 @@ export function CompanyInteractions({ companyId, adminOnly }: { companyId: strin
                         <div key={idx} className="text-xs">
                           <span className="font-medium">{contact.name}</span>
                           {contact.context && (
-                            <span className="text-muted-foreground"> — {contact.context}</span>
+                            <span className="text-muted-foreground">, {contact.context}</span>
                           )}
                         </div>
                       ))}

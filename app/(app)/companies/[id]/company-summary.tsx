@@ -29,7 +29,7 @@ interface Props {
 
 const ACCEPTED_TYPES = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.jpg,.jpeg,.png'
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 MB
-const TEXT_ONLY_THRESHOLD = 10 * 1024 * 1024 // 10 MB — files above this get text-only extraction
+const TEXT_ONLY_THRESHOLD = 10 * 1024 * 1024 // 10 MB, files above this get text-only extraction
 
 export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, defaultAIProvider }: Props) {
   const [data, setData] = useState<SummaryData | null>(null)
@@ -131,7 +131,7 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
         const data = await res.json()
         setError(data.error ?? 'Failed to register document')
       } else if (isOversized) {
-        setWarning('File exceeds 10 MB — only extracted text was stored.')
+        setWarning('File exceeds 10 MB, only extracted text was stored.')
       }
     } catch {
       setError('Upload failed')

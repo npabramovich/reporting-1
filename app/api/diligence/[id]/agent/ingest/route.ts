@@ -92,7 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         full: true,
         estimate: enforced.estimate,
         caps: enforced.caps,
-        message: 'Re-analyzing everything — re-ingesting all files and re-checking every checklist item.',
+        message: 'Re-analyzing everything, re-ingesting all files and re-checking every checklist item.',
       })
     }
 
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({
         skipped: true,
         up_to_date: true,
-        message: 'Data room and checklist are already up to date — nothing new to analyze.',
+        message: 'Data room and checklist are already up to date, nothing new to analyze.',
       })
     }
 
@@ -170,7 +170,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       kind: 'checklist_assessment',
       status: (clJob as any).status,
       skipped_ingestion: true,
-      message: 'Data room unchanged — re-checking the checklist against the existing analysis.',
+      message: 'Data room unchanged, re-checking the checklist against the existing analysis.',
     })
   }
 

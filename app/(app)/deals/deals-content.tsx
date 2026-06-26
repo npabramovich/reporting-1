@@ -556,7 +556,7 @@ function NewDealDialog({ open, onOpenChange, onCreated }: {
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>New deal</DialogTitle>
-          <DialogDescription>Enter pitch details directly. The same AI screener runs as on inbound emails — thesis fit, dedupe, prior-deal check.</DialogDescription>
+          <DialogDescription>Enter pitch details directly. The same AI screener runs as on inbound emails: thesis fit, dedupe, prior-deal check.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
           <div className="grid grid-cols-2 gap-3">

@@ -156,7 +156,7 @@ export function AnchorEditor({ anchor: initial }: { anchor: Anchor }) {
           <CardHeader className="pb-3"><CardTitle className="text-base">Deal context</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
             <Field label="Sector">
-              <Input value={a.sector ?? ''} onChange={e => update('sector', e.target.value || null)} placeholder="e.g. B2B SaaS — vertical CRM" />
+              <Input value={a.sector ?? ''} onChange={e => update('sector', e.target.value || null)} placeholder="e.g. B2B SaaS, vertical CRM" />
             </Field>
             <Field label="Stage at writing">
               <select
@@ -213,10 +213,10 @@ export function AnchorEditor({ anchor: initial }: { anchor: Anchor }) {
                 onChange={e => update('voice_representativeness', e.target.value as Anchor['voice_representativeness'])}
                 className="h-9 w-full px-2 rounded-md border border-input bg-background text-sm"
               >
-                <option value="exemplary">Exemplary — gold standard</option>
-                <option value="representative">Representative — typical voice</option>
-                <option value="atypical">Atypical — read with care</option>
-                <option value="do_not_match_voice">Do not match — structure only</option>
+                <option value="exemplary">Exemplary, gold standard</option>
+                <option value="representative">Representative, typical voice</option>
+                <option value="atypical">Atypical, read with care</option>
+                <option value="do_not_match_voice">Do not match, structure only</option>
               </select>
             </Field>
             <Field label="Authorship">
@@ -270,7 +270,7 @@ export function AnchorEditor({ anchor: initial }: { anchor: Anchor }) {
               onChange={e => update('partner_notes', e.target.value || null)}
               rows={4}
               className="w-full resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              placeholder="Free-text guidance for the agent — e.g. 'Gold standard for team sections', 'Structure is right; voice too formal — match content not tone'"
+              placeholder="Free-text guidance for the agent, e.g. 'Gold standard for team sections', 'Structure is right; voice too formal, match content not tone'"
             />
           </CardContent>
         </Card>

@@ -93,7 +93,7 @@ export default function SignUpPage() {
       whitelistData = await whitelistRes.json()
     } catch (err) {
       console.error(`[signup] whitelist response was not JSON (HTTP ${whitelistRes.status}):`, err)
-      setError(`Signup check failed — the server returned an unexpected response (HTTP ${whitelistRes.status}). Please try again in a moment.`)
+      setError(`Signup check failed, the server returned an unexpected response (HTTP ${whitelistRes.status}). Please try again in a moment.`)
       setLoading(false)
       return
     }

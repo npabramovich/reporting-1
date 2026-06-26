@@ -288,7 +288,7 @@ export default function LettersPage() {
 
             <p className="text-xs text-muted-foreground">
               Upload a previous LP letter (.docx or .pdf) and AI will analyze it to match your style.
-              Or use the built-in default template — <a href="/api/lp-letters/example" download className="underline hover:text-foreground">view an example</a>.
+              Or use the built-in default template, <a href="/api/lp-letters/example" download className="underline hover:text-foreground">view an example</a>.
             </p>
           </div>
         </DialogContent>

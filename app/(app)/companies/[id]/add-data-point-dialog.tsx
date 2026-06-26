@@ -94,7 +94,7 @@ export function AddDataPointDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add data point — {metric.name}</DialogTitle>
+          <DialogTitle>Add data point, {metric.name}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

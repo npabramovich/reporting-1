@@ -245,7 +245,7 @@ export default function InvestorReportPage() {
 
   return (
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full print:p-0">
-      {/* Print styles — suppress browser header/footer, hide app chrome */}
+      {/* Print styles, suppress browser header/footer, hide app chrome */}
       <style>{`
         @page {
           margin: 0.5in 0.6in;
@@ -299,7 +299,7 @@ export default function InvestorReportPage() {
       {/* Report Page */}
       <div className="print-page max-w-4xl mx-auto bg-background border rounded-lg p-8 print:border-0 print:rounded-none print:shadow-none">
         <div className="report-content">
-          {/* Fund Header — Logo left, Name + Address right */}
+          {/* Fund Header, Logo left, Name + Address right */}
           <div className="flex items-start justify-between mb-8">
             <div className="shrink-0">
               {fundLogo && (
@@ -320,7 +320,7 @@ export default function InvestorReportPage() {
             </div>
           </div>
 
-          {/* Snapshot Description — full width, no box */}
+          {/* Snapshot Description, full width, no box */}
           {snapshot?.description && (
             <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed mb-10">
               {snapshot.description}
@@ -402,7 +402,7 @@ export default function InvestorReportPage() {
                 </tfoot>
               </table>
 
-              {/* Table 2: Performance Metrics — same column grid as Capital Summary */}
+              {/* Table 2: Performance Metrics, same column grid as Capital Summary */}
               <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Performance Metrics</h3>
               <table className="w-full text-xs mb-5" style={{ tableLayout: 'fixed' }}>
                 <colgroup>
@@ -453,7 +453,7 @@ export default function InvestorReportPage() {
           )}
         </div>
 
-        {/* Page footer — fixed at bottom when printed */}
+        {/* Page footer, fixed at bottom when printed */}
         <div className="report-footer text-[9px] text-muted-foreground mt-8 pt-3 border-t print:mt-0 print:pt-2">
           {snapshot?.footer_note || (
             <>

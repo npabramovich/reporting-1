@@ -54,7 +54,7 @@ interface Company {
 
 const ACCEPTED_DOC_TYPES = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.jpg,.jpeg,.png'
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 MB
-const TEXT_ONLY_THRESHOLD = 10 * 1024 * 1024 // 10 MB — files above this get text-only extraction
+const TEXT_ONLY_THRESHOLD = 10 * 1024 * 1024 // 10 MB, files above this get text-only extraction
 
 export default function ImportPage() {
   const fv = useFeatureVisibility()
@@ -474,7 +474,7 @@ export default function ImportPage() {
                             <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
                           )}
                           {f.status === 'done' && f.textOnly && (
-                            <span className="text-xs text-amber-600" title="File exceeded 10 MB — only extracted text was stored (no native PDF/image)">Text only</span>
+                            <span className="text-xs text-amber-600" title="File exceeded 10 MB, only extracted text was stored (no native PDF/image)">Text only</span>
                           )}
                           {f.status === 'error' && (
                             <span className="text-xs text-destructive" title={f.error}>Failed</span>
@@ -670,7 +670,7 @@ export default function ImportPage() {
 
         <div className="space-y-4">
           <Textarea
-            placeholder={`Paste fund cash flow data here...\n\nExample:\nFund I, Jan 15 2024, commitment, $10,000,000, Initial commitment\nFund I, Mar 1 2024, capital call, 2500000, First call\nFund I, Jun 15 2025, distribution, $500K, Q2 distribution\n\nOr any format — capital call notices, distribution memos, spreadsheet data, etc.`}
+            placeholder={`Paste fund cash flow data here...\n\nExample:\nFund I, Jan 15 2024, commitment, $10,000,000, Initial commitment\nFund I, Mar 1 2024, capital call, 2500000, First call\nFund I, Jun 15 2025, distribution, $500K, Q2 distribution\n\nOr any format, capital call notices, distribution memos, spreadsheet data, etc.`}
             value={cashFlowText}
             onChange={e => setCashFlowText(e.target.value)}
             rows={12}

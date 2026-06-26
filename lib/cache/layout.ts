@@ -66,14 +66,15 @@ export const getFundData = unstable_cache(
 export const getFundSettings = unstable_cache(
   async (fundId: string) => {
     const admin = createAdminClient()
-    const { data } = await admin
+    // Cast: `theme` is a recently-added column not yet in the generated types.
+    const { data } = await (admin as any)
       .from('fund_settings')
       .select(
-        'currency, claude_api_key_encrypted, openai_api_key_encrypted, gemini_api_key_encrypted, ollama_base_url, default_ai_provider, analytics_fathom_site_id, analytics_ga_measurement_id, feature_visibility'
+        'currency, claude_api_key_encrypted, openai_api_key_encrypted, gemini_api_key_encrypted, ollama_base_url, default_ai_provider, analytics_fathom_site_id, analytics_ga_measurement_id, feature_visibility, theme'
       )
       .eq('fund_id', fundId)
       .maybeSingle()
-    return data
+    return data as any
   },
   ['fund-settings'],
   { tags: ['fund-settings'], revalidate: 300 }

@@ -12,27 +12,27 @@ type Stage = typeof STAGES[number]
 
 const STAGE_META: Record<Stage, { label: string; hint: string; placeholder: string }> = {
   ingest: {
-    label: 'Stage 1 — Ingestion',
+    label: 'Stage 1: Ingestion',
     hint: 'How documents are read and findings extracted.',
     placeholder: 'e.g. Treat founder LinkedIn-style bios as team_bio. Pull out every revenue or pipeline number even if stated loosely.',
   },
   research: {
-    label: 'Stage 2 — Research',
+    label: 'Stage 2: Research',
     hint: 'How findings are verified and competitors / founders are researched.',
     placeholder: 'e.g. Prioritise verifying revenue and customer findings. For competitors, focus on the specific wedge, not the broad category.',
   },
   qa: {
-    label: 'Stage 3 — Q&A',
+    label: 'Stage 3: Q&A',
     hint: 'How the partner Q&A flow is framed.',
     placeholder: 'e.g. Keep questions short and specific. Ask about team dynamics and founder motivation.',
   },
   draft: {
-    label: 'Stage 4 — Memo draft',
-    hint: 'How the memo is written — voice, structure, depth, what to emphasise. The highest-leverage guidance.',
+    label: 'Stage 4: Memo draft',
+    hint: 'How the memo is written: voice, structure, depth, what to emphasise. The highest-leverage guidance.',
     placeholder: 'e.g. Write in a punchy, opinionated voice. Open with the bet in two sentences. Keep it under four pages.',
   },
   score: {
-    label: 'Stage 5 — Scoring',
+    label: 'Stage 5: Scoring',
     hint: 'How rubric dimensions are judged.',
     placeholder: 'e.g. Weight team and market more heavily than current traction at the pre-seed stage.',
   },

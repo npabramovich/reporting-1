@@ -66,7 +66,7 @@ const QUESTIONS = [
   {
     key: 'registration_status',
     question: 'How is your firm registered with the SEC?',
-    explainer: 'Most VC firms are ERAs under the Dodd-Frank Act — they file limited sections of Form ADV but aren\'t fully registered. If your firm advises only qualifying VC funds and has filed Form ADV checking the \'exempt reporting adviser\' box, you\'re an ERA.',
+    explainer: 'Most VC firms are ERAs under the Dodd-Frank Act, they file limited sections of Form ADV but aren\'t fully registered. If your firm advises only qualifying VC funds and has filed Form ADV checking the \'exempt reporting adviser\' box, you\'re an ERA.',
     options: [
       { value: 'ria', label: 'SEC-Registered Investment Adviser (RIA)' },
       { value: 'era', label: 'Exempt Reporting Adviser (ERA)' },
@@ -115,8 +115,8 @@ const QUESTIONS = [
     question: 'Did your fund raise capital under Regulation D (Rule 506)?',
     explainer: 'Almost all VC funds raise under Reg D. If your fund has a PPM and subscription agreements, you\'re almost certainly using Reg D.',
     options: [
-      { value: '506b', label: 'Yes — Rule 506(b) (no general solicitation)' },
-      { value: '506c', label: 'Yes — Rule 506(c) (general solicitation permitted)' },
+      { value: '506b', label: 'Yes, Rule 506(b) (no general solicitation)' },
+      { value: '506c', label: 'Yes, Rule 506(c) (general solicitation permitted)' },
       { value: 'no', label: 'No / not applicable' },
       { value: 'unsure', label: 'I\'m not sure' },
     ],
@@ -151,10 +151,10 @@ const QUESTIONS = [
     question: 'Do any of your funds hold publicly traded equity securities?',
     explainer: 'Most VC funds hold only private company equity, which means 13F, 13G, 13H, and N-PX don\'t apply.',
     options: [
-      { value: 'yes_over_100m', label: 'Yes — over $100M in public equities' },
-      { value: 'yes_under_100m', label: 'Yes — under $100M' },
-      { value: 'yes_5pct_single', label: 'Yes — and we hold 5%+ of a single public company' },
-      { value: 'no', label: 'No — private investments only' },
+      { value: 'yes_over_100m', label: 'Yes, over $100M in public equities' },
+      { value: 'yes_under_100m', label: 'Yes, under $100M' },
+      { value: 'yes_5pct_single', label: 'Yes, and we hold 5%+ of a single public company' },
+      { value: 'no', label: 'No, private investments only' },
       { value: 'unsure', label: 'I\'m not sure' },
     ],
   },
@@ -163,8 +163,8 @@ const QUESTIONS = [
     question: 'Does your fund engage in any commodity, futures, or swap trading?',
     explainer: 'If your fund uses any hedging instruments, interest rate swaps, or commodity-linked investments, you may need to file an exemption with the NFA.',
     options: [
-      { value: 'yes_with_exemption', label: 'Yes — and we\'ve filed a CPO exemption (e.g., §4.13(a)(3))' },
-      { value: 'yes_no_exemption', label: 'Yes — but we haven\'t filed an exemption' },
+      { value: 'yes_with_exemption', label: 'Yes, and we\'ve filed a CPO exemption (e.g., §4.13(a)(3))' },
+      { value: 'yes_no_exemption', label: 'Yes, but we haven\'t filed an exemption' },
       { value: 'no', label: 'No commodity/futures/swap activity' },
       { value: 'unsure', label: 'I\'m not sure' },
     ],
@@ -184,8 +184,8 @@ const QUESTIONS = [
     question: 'Are any of your fund entities formed under the laws of a foreign country?',
     explainer: 'As of March 2025, FinCEN exempted all U.S.-formed entities from BOI reporting. Only foreign-formed entities registered to do business in the U.S. still need to file.',
     options: [
-      { value: 'yes', label: 'Yes — we have offshore/foreign fund entities registered in the U.S.' },
-      { value: 'no', label: 'No — all entities are U.S.-formed' },
+      { value: 'yes', label: 'Yes, we have offshore/foreign fund entities registered in the U.S.' },
+      { value: 'no', label: 'No, all entities are U.S.-formed' },
     ],
   },
   {
@@ -193,8 +193,8 @@ const QUESTIONS = [
     question: 'Does your fund have any foreign (non-U.S.) investors?',
     explainer: 'Funds with foreign investors have FATCA withholding and reporting obligations (Form 1042-S, Form 1042) and may have CRS reporting obligations depending on jurisdiction. W-8BEN/W-8BEN-E forms must be collected from foreign investors.',
     options: [
-      { value: 'yes', label: 'Yes — one or more investors are non-U.S. persons or entities' },
-      { value: 'no', label: 'No — all investors are U.S. persons' },
+      { value: 'yes', label: 'Yes, one or more investors are non-U.S. persons or entities' },
+      { value: 'no', label: 'No, all investors are U.S. persons' },
       { value: 'unsure', label: 'Unsure' },
     ],
   },
@@ -603,7 +603,7 @@ function IntakeQuestionnaire({
         <h2 className="text-lg font-medium mb-1">{isEdit ? 'Update Fund Profile' : 'Fund Profile Setup'}</h2>
         <p className="text-sm text-muted-foreground mb-3">
           Answer these questions to determine which compliance obligations apply to your fund.
-          Your answers auto-determine applicability — you can override any result later.
+          Your answers auto-determine applicability, you can override any result later.
         </p>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
@@ -784,7 +784,7 @@ function CalendarView({
 
         </div>
 
-        {/* Detail panel — sticky on the right, desktop only */}
+        {/* Detail panel, sticky on the right, desktop only */}
         <div className="hidden lg:block flex-1 min-w-0">
           {expandedEntry ? (
             <div className="sticky top-8 [&>div]:mt-0">

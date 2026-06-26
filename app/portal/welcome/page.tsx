@@ -169,7 +169,7 @@ export default function PortalWelcomePage() {
             </Button>
 
             <button type="button" onClick={resend} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
-              {resent ? 'New code sent — check your email' : "Didn't get a code? Resend"}
+              {resent ? 'New code sent, check your email' : "Didn't get a code? Resend"}
             </button>
           </CardContent>
         </Card>

@@ -257,7 +257,7 @@ export function MemoEditor({ dealId, dealName, draft: initial, initialAttention,
     const inSection = (memo.paragraphs ?? []).filter(p => p.section_id === sectionId)
     const nextOrder = inSection.reduce((max, p) => Math.max(max, p.order ?? 0), -1) + 1
     const updated = await patchDraft({
-      paragraph_inserts: [{ section_id: sectionId, order: nextOrder, prose: 'New paragraph — write your content here.' }],
+      paragraph_inserts: [{ section_id: sectionId, order: nextOrder, prose: 'New paragraph. Write your content here.' }],
     })
     if (updated) {
       // Select the newest partner-drafted paragraph in this section for editing.
@@ -580,7 +580,7 @@ function ParagraphView({
           <button onClick={e => stop(e, onSelect)} className="text-[11px] text-muted-foreground hover:text-foreground">Edit</button>
         )}
         <Badge tone="muted">{paragraph.origin.replace(/_/g, ' ')}</Badge>
-        {paragraph.hidden && <Badge tone="amber">hidden — excluded from export</Badge>}
+        {paragraph.hidden && <Badge tone="amber">hidden · excluded from export</Badge>}
         {paragraph.contains_projection && <Badge tone="amber">projection</Badge>}
         {paragraph.contains_unverified_claim && <Badge tone="amber">⚠ unverified</Badge>}
         {paragraph.contains_contradiction && <Badge tone="red">contradiction</Badge>}

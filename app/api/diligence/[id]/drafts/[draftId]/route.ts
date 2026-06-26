@@ -45,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .eq('fund_id', fundId)
     .maybeSingle()
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (!(row as any).is_draft) return NextResponse.json({ error: 'Draft is finalized — edits are locked.' }, { status: 409 })
+  if (!(row as any).is_draft) return NextResponse.json({ error: 'Draft is finalized, edits are locked.' }, { status: 409 })
 
   const body = await req.json().catch(() => ({}))
   const memoOutput = ((row as any).memo_draft_output as any) ?? { paragraphs: [], scores: [], partner_attention: [] }

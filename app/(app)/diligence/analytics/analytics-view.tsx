@@ -51,7 +51,7 @@ export function AnalyticsView() {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Summary chips — neutral; the label distinguishes status. */}
+          {/* Summary chips, neutral; the label distinguishes status. */}
           <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
             <Stat label="Total deals" value={data.summary.total} />
             <Stat label="Active" value={data.summary.active} />

@@ -794,7 +794,7 @@ export default function SnapshotDetailPage() {
             onChange={e => setImportData(e.target.value)}
             rows={6}
             className="w-full border border-input rounded p-2 text-sm font-mono bg-transparent text-foreground mb-2"
-            placeholder="Paste any LP data here — columns will be matched automatically"
+            placeholder="Paste any LP data here, columns will be matched automatically"
           />
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={handleImport} disabled={importing || !importData.trim()}>

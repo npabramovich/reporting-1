@@ -208,7 +208,7 @@ export function RelationshipsList({ interactions }: { interactions: Interaction[
                               <span className="text-muted-foreground ml-1">({contact.email})</span>
                             )}
                             {contact.context && (
-                              <span className="text-muted-foreground"> — {contact.context}</span>
+                              <span className="text-muted-foreground">, {contact.context}</span>
                             )}
                           </div>
                         ))}

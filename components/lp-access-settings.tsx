@@ -138,7 +138,7 @@ export function LpAccessSettings() {
         )}
         {result && (
           <div className="mt-3 rounded-md border border-emerald-300/50 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-xs text-emerald-700 dark:text-emerald-300">
-            Done — invited {result.lpInvites} LP(s){result.authorizedInvites > 0 ? ` and ${result.authorizedInvites} authorized user(s)` : ''}
+            Done, invited {result.lpInvites} LP(s){result.authorizedInvites > 0 ? ` and ${result.authorizedInvites} authorized user(s)` : ''}
             {result.toCreate.length > 0 ? `, created ${result.toCreate.length} investor(s)` : ''}.{result.errors.length > 0 ? ` ${result.errors.length} skipped.` : ''}
           </div>
         )}

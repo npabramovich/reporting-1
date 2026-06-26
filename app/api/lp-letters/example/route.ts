@@ -28,7 +28,7 @@ The product team shipped a major update to the recurring billing module, which h
     company_name: 'Terraform Robotics',
     narrative: `Terraform Robotics completed its first three commercial deployments in Q4, generating $420K in revenue for the quarter. Each deployment represents a multi-year contract with average deal size of $1.2M. The company's autonomous warehouse robots are now operating 24/7 at two Fortune 500 logistics companies and one major grocery distributor.
 
-Hardware reliability has been a focus area — uptime improved from 94% to 98.5% over the quarter following a firmware update to the navigation system. The pipeline is encouraging, with 8 qualified opportunities representing $12M in potential contract value. However, the sales cycle remains long (6-9 months) given the capital expenditure nature of the purchase. Cash position is $8.2M with a burn rate of $450K/month, providing approximately 18 months of runway.`,
+Hardware reliability has been a focus area, uptime improved from 94% to 98.5% over the quarter following a firmware update to the navigation system. The pipeline is encouraging, with 8 qualified opportunities representing $12M in potential contract value. However, the sales cycle remains long (6-9 months) given the capital expenditure nature of the purchase. Cash position is $8.2M with a burn rate of $450K/month, providing approximately 18 months of runway.`,
     updated_by: null,
     updated_at: '2026-01-15T00:00:00Z',
   },

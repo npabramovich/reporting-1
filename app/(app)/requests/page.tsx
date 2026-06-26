@@ -506,7 +506,7 @@ export default function RequestsPage() {
               {sending ? (
                 <><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Sending...</>
               ) : (
-                <>Confirm — send {selected.size} email{selected.size !== 1 ? 's' : ''} now</>
+                <>Confirm, send {selected.size} email{selected.size !== 1 ? 's' : ''} now</>
               )}
             </Button>
             <Button

@@ -201,7 +201,7 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, up
           )
         })}
 
-        {/* Update available — admin only */}
+        {/* Update available, admin only */}
         {isAdmin && updateAvailable && (() => {
           const isActive = pathname === '/updates' || pathname.startsWith('/updates/')
           return (
@@ -242,7 +242,7 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, up
           </span>
         </button>
 
-        {/* Hide Sidebar toggle — only shown on desktop */}
+        {/* Hide Sidebar toggle, only shown on desktop */}
         <button
           onClick={toggle}
           title={collapsed ? 'Show Sidebar' : 'Hide Sidebar'}

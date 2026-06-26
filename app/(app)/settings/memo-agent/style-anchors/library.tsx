@@ -93,7 +93,7 @@ export function StyleAnchorsLibrary({ initialAnchors, initialConfidence, embedde
           {!embedded && <h1 className="text-2xl font-semibold tracking-tight">Example memos</h1>}
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Upload past investment memos to teach the agent your firm&rsquo;s voice and structure.
-            Reference memos teach style — they never supply facts to a new memo.
+            Reference memos teach style, they never supply facts to a new memo.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
@@ -132,7 +132,7 @@ export function StyleAnchorsLibrary({ initialAnchors, initialConfidence, embedde
                   {a.extracted_at ? (
                     <span>Text extracted ({(a.extracted_text_length ?? 0).toLocaleString()} chars)</span>
                   ) : (
-                    <span className="text-amber-600">Text extraction failed — open to retry</span>
+                    <span className="text-amber-600">Text extraction failed, open to retry</span>
                   )}
                 </div>
                 {a.partner_notes && (

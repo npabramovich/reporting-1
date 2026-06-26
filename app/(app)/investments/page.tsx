@@ -550,7 +550,7 @@ export default function InvestmentsPage() {
         </Card>
       </div>
 
-      {/* Group summary table — only shown when multiple groups exist */}
+      {/* Group summary table, only shown when multiple groups exist */}
       {sortedGroups.length > 0 && groupTotals && (
         <div className="mb-8">
           <h2 className="text-sm font-medium text-muted-foreground mb-2">Portfolio Groups</h2>

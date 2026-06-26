@@ -344,7 +344,7 @@ export default function BatchPDFPage() {
 
         {generatingIndividual && (
           <p className="text-xs text-muted-foreground mb-3">
-            Generating {selected.size} individual PDF{selected.size !== 1 ? 's' : ''}. This typically takes {selected.size <= 10 ? '5–15' : selected.size <= 50 ? '15–30' : '30–60'} seconds — please keep this tab open.
+            Generating {selected.size} individual PDF{selected.size !== 1 ? 's' : ''}. This typically takes {selected.size <= 10 ? '5–15' : selected.size <= 50 ? '15–30' : '30–60'} seconds, please keep this tab open.
           </p>
         )}
 

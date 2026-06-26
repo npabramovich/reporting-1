@@ -1,11 +1,18 @@
 import type { Metadata } from 'next'
 import Script from 'next/script'
+import { Hanken_Grotesk, Plus_Jakarta_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/toaster'
 import { ConfirmProvider } from '@/components/confirm-dialog'
 import './globals.css'
+
+// Curated UI font options. Loaded as CSS variables so the per-fund theme can
+// opt in via --font-sans; the default (--font-sans unset) falls back to the
+// system stack, so the app looks unchanged out of the box.
+const hankenGrotesk = Hanken_Grotesk({ subsets: ['latin'], variable: '--font-hanken', display: 'swap' })
+const plusJakarta = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-jakarta', display: 'swap' })
 
 const ogImageUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://portfolio.hemrock.com'}/api/og?title=Portfolio+Reporting`
 
@@ -36,8 +43,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body>
+    <html lang="en" suppressHydrationWarning className={`${hankenGrotesk.variable} ${plusJakarta.variable}`}>
+      <body className="font-sans">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

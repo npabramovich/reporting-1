@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     const aiResult = await provider.createMessage({
       model: aiModel,
       maxTokens: 16384,
-      system: 'You are a data parser. You ONLY output valid JSON. No markdown, no code fences, no explanation — just the JSON object.',
+      system: 'You are a data parser. You ONLY output valid JSON. No markdown, no code fences, no explanation, just the JSON object.',
       content: `Parse this fund cash flow data into JSON.
 
 Output format:
@@ -93,8 +93,8 @@ Rules:
 - amount: the monetary amount as a positive number (REQUIRED, must be > 0)
 - notes: optional description or notes
 - All monetary values should be plain numbers (no currency symbols, commas, or formatting)
-- Dates should be YYYY-MM-DD format — convert from any input format
-- Be flexible with column headers — match by meaning, not exact text
+- Dates should be YYYY-MM-DD format, convert from any input format
+- Be flexible with column headers, match by meaning, not exact text
 - If the data includes a "type" or "transaction type" column, map it to the correct flow_type
 - If data has multiple funds/groups, use the group/fund column to set portfolio_group
 - If a row doesn't have enough data to determine the required fields, skip it

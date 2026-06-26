@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     }
 
     const html = renderDigest(archived)
-    const subject = `Out-of-thesis deals (${archived.length}) — last 7 days`
+    const subject = `Out-of-thesis deals (${archived.length}), last 7 days`
 
     let sent = 0
     let lastErr: string | undefined
@@ -109,7 +109,7 @@ function renderDigest(deals: Array<{ id: string; company_name: string | null; fo
   const items = deals.map(d => `
     <li style="margin: 0 0 12px 0;">
       <strong>${escapeHtml(d.company_name ?? 'Unknown company')}</strong>
-      ${d.founder_name ? ` — ${escapeHtml(d.founder_name)}` : ''}
+      ${d.founder_name ? `, ${escapeHtml(d.founder_name)}` : ''}
       ${d.founder_email ? ` &lt;${escapeHtml(d.founder_email)}&gt;` : ''}<br/>
       ${d.thesis_fit_analysis ? `<span style="color:#666; font-size: 13px;">${escapeHtml(truncate(d.thesis_fit_analysis, 240))}</span><br/>` : ''}
       <a href="${baseUrl}/deals/${d.id}" style="font-size: 13px;">View →</a>
@@ -118,7 +118,7 @@ function renderDigest(deals: Array<{ id: string; company_name: string | null; fo
 
   return `
     <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 640px;">
-      <p>The classifier auto-archived ${deals.length} pitch${deals.length === 1 ? '' : 'es'} as out-of-thesis this week. Skim them for any misclassifications — open the deal page and use the status dropdown to recover.</p>
+      <p>The classifier auto-archived ${deals.length} pitch${deals.length === 1 ? '' : 'es'} as out-of-thesis this week. Skim them for any misclassifications, open the deal page and use the status dropdown to recover.</p>
       <ul style="list-style: none; padding: 0;">${items}</ul>
       <p style="font-size: 12px; color: #888;">— Sent automatically by your deal screening pipeline.</p>
     </div>

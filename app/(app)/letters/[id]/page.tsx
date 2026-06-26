@@ -30,9 +30,9 @@ const DEFAULT_PROMPT_PLACEHOLDER = `## LP Letter Style Guide (Default)
 ### Tone
 - Professional but not overly formal
 - First person plural ("We", "Our portfolio")
-- Data-forward — numbers first, narrative supports
-- Balanced — acknowledges both positives and challenges
-- Concise — no filler language`
+- Data-forward, numbers first, narrative supports
+- Balanced, acknowledges both positives and challenges
+- Concise, no filler language`
 
 interface CompanyNarrative {
   company_id: string
@@ -415,7 +415,7 @@ export default function LetterEditorPage() {
         </div>
       </div>
 
-      {/* Analyst prompt editor — only on Edit Company Summaries tab */}
+      {/* Analyst prompt editor, only on Edit Company Summaries tab */}
       {viewMode === 'sections' && <div className="rounded-lg border mb-4">
         <button
           onClick={() => setGlobalPromptOpen(!globalPromptOpen)}

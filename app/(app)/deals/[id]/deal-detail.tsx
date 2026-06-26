@@ -305,7 +305,7 @@ export function DealDetail({ deal: initial, email, priorDeal }: { deal: Deal; em
           )}
           {email?.routing_reasoning && (
             <div className="text-xs text-muted-foreground border-t pt-2">
-              Classifier: {email.routing_label} @ {email.routing_confidence?.toFixed(2)} — {email.routing_reasoning}
+              Classifier: {email.routing_label} @ {email.routing_confidence?.toFixed(2)}, {email.routing_reasoning}
             </div>
           )}
         </CardContent>

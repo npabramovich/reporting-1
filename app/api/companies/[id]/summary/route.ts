@@ -252,13 +252,13 @@ export async function POST(
 
   const DEFAULT_TASK_PROMPT = `Write a concise analyst summary covering:
 
-1. **Current Status** — How is the company performing right now? Reference specific numbers.
-2. **Trends** — What direction are the key metrics heading? Growth rates, acceleration or deceleration.
-3. **Progress & Positives** — What's going well? Milestones, improvements, or strong execution.
-4. **Challenges & Risks** — What concerns you? Declining metrics, missing data, red flags.
-5. **Key Follow-ups** — What should the investment team ask about or monitor next?
+1. **Current Status**, How is the company performing right now? Reference specific numbers.
+2. **Trends**, What direction are the key metrics heading? Growth rates, acceleration or deceleration.
+3. **Progress & Positives**, What's going well? Milestones, improvements, or strong execution.
+4. **Challenges & Risks**, What concerns you? Declining metrics, missing data, red flags.
+5. **Key Follow-ups**, What should the investment team ask about or monitor next?
 
-Keep it to 2-4 short paragraphs. Be direct and analytical, not promotional. Use specific numbers. Do not use markdown formatting — write in plain prose paragraphs.`
+Keep it to 2-4 short paragraphs. Be direct and analytical, not promotional. Use specific numbers. Do not use markdown formatting, write in plain prose paragraphs.`
 
   const taskPrompt = customPrompt ?? DEFAULT_TASK_PROMPT
 
@@ -304,7 +304,7 @@ ${documentsBlock}`
 === YOUR TASK ===
 ${taskPrompt}
 
-${previousSummariesBlock ? 'Build on your previous analysis — note what has changed since your last review. Avoid repeating the same observations unless they remain critical.' : 'This is the first analysis for this company, so base it entirely on the available data and report content.'}
+${previousSummariesBlock ? 'Build on your previous analysis, note what has changed since your last review. Avoid repeating the same observations unless they remain critical.' : 'This is the first analysis for this company, so base it entirely on the available data and report content.'}
 ${documentsBlock ? '\nYou also have access to supplementary documents (strategy decks, board materials, etc.) uploaded by the investment team. Reference these when relevant.' : ''}`
 
   // -----------------------------------------------------------------------

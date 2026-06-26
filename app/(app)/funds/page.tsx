@@ -709,7 +709,7 @@ export default function FundsPage() {
                     onChange={e => setImportData(e.target.value)}
                     rows={6}
                     className="w-full border border-input rounded p-2 text-sm font-mono bg-transparent text-foreground mb-2"
-                    placeholder="Paste any fund cash flow data here — dates, types (commitment / called capital / distribution), amounts, fund names"
+                    placeholder="Paste any fund cash flow data here, dates, types (commitment / called capital / distribution), amounts, fund names"
                   />
                   <div className="flex items-center gap-2">
                     <Button size="sm" onClick={handleImport} disabled={importing || !importData.trim()}>

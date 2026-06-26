@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
     const aiResult = await provider.createMessage({
       model: aiModel,
       maxTokens: 16384,
-      system: 'You are a data parser. You ONLY output valid JSON. No markdown, no code fences, no explanation — just the JSON object.',
+      system: 'You are a data parser. You ONLY output valid JSON. No markdown, no code fences, no explanation, just the JSON object.',
       content: `Parse this LP investment data into JSON.
 
 Output format:
@@ -146,7 +146,7 @@ Rules:
 - For ratios (DPI, RVPI, TVPI), use decimals (1.5x = 1.5)
 - For percentages (IRR), convert to decimal (15% = 0.15)
 - If a value is not present or cannot be determined, omit it or set to null
-- Be flexible with column header names — match by meaning, not exact text
+- Be flexible with column header names, match by meaning, not exact text
 - If the data has percentage signs, "x" suffixes for multiples, or currency symbols, parse them correctly
 - If you can't parse something, skip that field rather than guessing wrong
 
@@ -210,7 +210,7 @@ ${rawData}`,
   }
 
   if (!parsed.investments || !Array.isArray(parsed.investments)) {
-    return NextResponse.json({ error: 'Invalid response structure — expected { investments: [...] }' }, { status: 500 })
+    return NextResponse.json({ error: 'Invalid response structure, expected { investments: [...] }' }, { status: 500 })
   }
 
   if (parsed.investments.length > 5000) {

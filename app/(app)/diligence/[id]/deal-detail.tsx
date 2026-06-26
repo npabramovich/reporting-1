@@ -565,7 +565,7 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
 
   return (
     <div className="space-y-4">
-      {/* Data-room analysis — the primary action sits at the top of the tab;
+      {/* Data-room analysis, the primary action sits at the top of the tab;
           the gaps + inconsistencies it finds render here, above the checklist
           they inform. */}
       <IngestionPanel dealId={deal.id} documentCount={documentCount} />
@@ -613,7 +613,7 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
           <Loader2 className="h-4 w-4 animate-spin text-blue-600 mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-blue-900 dark:text-blue-200 font-medium">
-              {assessmentJob.status === 'pending' ? 'Queued — worker picks up within ~1 minute' : 'AI assessment in progress'}
+              {assessmentJob.status === 'pending' ? 'Queued, worker picks up within ~1 minute' : 'AI assessment in progress'}
             </div>
             <div className="text-xs text-blue-700 dark:text-blue-300 mt-0.5 flex flex-wrap gap-x-3">
               {assessmentJob.progress && <span className="truncate">{assessmentJob.progress}</span>}
@@ -710,7 +710,7 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
 
       {!isEmpty && <AddSectionRow onAdd={addSection} />}
 
-      {/* Data-room findings — gaps + per-document extraction from the latest
+      {/* Data-room findings, gaps + per-document extraction from the latest
           ingestion, tucked into a collapsible below the checklist so the
           checklist itself stays front-and-center. */}
       {ingestionDraft?.ingestion_output && (
@@ -874,7 +874,7 @@ function ChecklistSection({ section, items, findingsByItem, hideCompleted, colla
                 setAdding('')
               }
             }}
-            placeholder="Add item — press Enter"
+            placeholder="Add item (press Enter)"
             className="h-8 text-sm"
           />
           <Button
@@ -905,7 +905,7 @@ function AddSectionRow({ onAdd }: { onAdd: (label: string) => void }) {
             setDraft('')
           }
         }}
-        placeholder="Add a new section — press Enter"
+        placeholder="Add a new section (press Enter)"
         className="h-8 text-sm"
       />
       <Button
@@ -995,7 +995,7 @@ function ChecklistRow({ item, findings, onDelete, onPatch, onJumpToDoc, dragHand
         {item.agent_notes && (
           <div className="text-xs text-muted-foreground mt-1">{item.agent_notes}</div>
         )}
-        {/* Partner data points — manually-entered facts, same format as the
+        {/* Partner data points, manually-entered facts, same format as the
             analysis evidence below. These survive re-analysis. */}
         {(partnerFacts.length > 0 || addingFact) && (
           <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
@@ -1033,7 +1033,7 @@ function ChecklistRow({ item, findings, onDelete, onPatch, onJumpToDoc, dragHand
                   value={factDraft}
                   onChange={e => setFactDraft(e.target.value)}
                   autoFocus
-                  placeholder="A fact or data point you know — e.g. 'Reference call with CTO confirmed 18-mo runway'"
+                  placeholder="A fact or data point you know, e.g. 'Reference call with CTO confirmed 18-mo runway'"
                   onKeyDown={e => {
                     if (e.key === 'Enter') { e.preventDefault(); addFact() }
                     if (e.key === 'Escape') { setAddingFact(false); setFactDraft('') }
@@ -1231,7 +1231,7 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl, focusDoc
           }
           return next
         })
-      } catch { /* transient — try again next tick */ }
+      } catch { /* transient, try again next tick */ }
     }, 5000)
     return () => clearInterval(interval)
   }, [anyProcessing, dealId])
@@ -1458,7 +1458,7 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl, focusDoc
                               className="h-7 text-xs px-2.5 text-muted-foreground hover:text-foreground"
                               onClick={() => transcribe(d.id)}
                               disabled={inFlight}
-                              title="Transcribe this recording via Deepgram — produces a transcript document"
+                              title="Transcribe this recording via Deepgram, produces a transcript document"
                             >
                               {inFlight
                                 ? 'Transcribing…'
@@ -1475,10 +1475,10 @@ function DealRoomTab({ dealId, initialDocuments, initialDriveFolderUrl, focusDoc
                             onClick={() => processDocument(d.id)}
                             disabled={inFlight}
                             title={d.parse_status === 'skipped'
-                              ? 'Un-skip and ingest this document — adds it to the existing ingestion output'
+                              ? 'Un-skip and ingest this document, adds it to the existing ingestion output'
                               : d.parse_status === 'pending'
-                                ? 'Ingest just this document — adds it to the existing ingestion output'
-                                : 'Re-run ingest on just this document — replaces its entry, keeps the rest'}
+                                ? 'Ingest just this document, adds it to the existing ingestion output'
+                                : 'Re-run ingest on just this document, replaces its entry, keeps the rest'}
                           >
                             {inFlight
                               ? 'Processing…'
@@ -1629,7 +1629,7 @@ function DriveFilePicker({ open, onOpenChange, dealId, folderUrl, onImported }: 
       <div className="bg-card rounded-lg border shadow-lg w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="p-4 border-b">
           <h3 className="text-sm font-medium">Add a file from Drive</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Pick specific files to import — the rest of the data room is untouched.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Pick specific files to import; the rest of the data room is untouched.</p>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-1">
@@ -1652,7 +1652,7 @@ function DriveFilePicker({ open, onOpenChange, dealId, folderUrl, onImported }: 
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{f.relative_path ? `${f.relative_path}/${f.name}` : f.name}</span>
                 {f.already_imported && <span className="text-[10px] text-muted-foreground">already imported</span>}
-                {f.google_native && <span className="text-[10px] text-muted-foreground">Google-native file — not importable</span>}
+                {f.google_native && <span className="text-[10px] text-muted-foreground">Google-native file (not importable)</span>}
               </span>
             </label>
           ))}
@@ -1793,8 +1793,8 @@ function DriveImportDialog({ open, onOpenChange, dealId, initialFolderUrl, onImp
         />
         <ul className="mt-3 text-[11px] text-muted-foreground space-y-1 list-disc pl-4">
           <li>Walks subfolders up to <strong>5 levels deep</strong>. The imported filename shows the subfolder path (e.g. <code className="font-mono">Financials/Q1/model.xlsx</code>).</li>
-          <li>Imports up to <strong>500 files</strong> per run — larger data rooms need to be split.</li>
-          <li><strong>Google Docs, Sheets, and Slides are skipped</strong> — they require export rather than raw download. Save them as PDF/Word/Excel in Drive first, or upload them directly via the Upload files button.</li>
+          <li>Imports up to <strong>500 files</strong> per run, larger data rooms need to be split.</li>
+          <li><strong>Google Docs, Sheets, and Slides are skipped</strong>, they require export rather than raw download. Save them as PDF/Word/Excel in Drive first, or upload them directly via the Upload files button.</li>
           <li>Only files the connected Google account can access are visible. Shared folders work if your account has at least view access.</li>
         </ul>
         {error && <p className="text-sm text-destructive mt-2">{error}</p>}
@@ -1817,7 +1817,7 @@ function DriveImportDialog({ open, onOpenChange, dealId, initialFolderUrl, onImp
           </div>
         )}
 
-        {/* Streaming log tail — shows the most recent ~10 lines while importing. */}
+        {/* Streaming log tail, shows the most recent ~10 lines while importing. */}
         {(importing || logLines.length > 0) && (
           <div className="mt-3 rounded-md border bg-muted/30 p-2 max-h-40 overflow-y-auto text-[11px] font-mono space-y-0.5">
             {logLines.length === 0 ? (
@@ -2002,7 +2002,7 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
                     className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted"
                   >
                     <div className="font-medium">Re-analyze new &amp; open</div>
-                    <div className="text-[11px] text-muted-foreground">Default — only new/unparsed files and open checklist items.</div>
+                    <div className="text-[11px] text-muted-foreground">Default: only new/unparsed files and open checklist items.</div>
                   </button>
                   <button
                     type="button"
@@ -2010,7 +2010,7 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
                     className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted"
                   >
                     <div className="font-medium">Re-analyze everything</div>
-                    <div className="text-[11px] text-muted-foreground">Re-ingest all files and re-check every item — slower, costs more.</div>
+                    <div className="text-[11px] text-muted-foreground">Re-ingest all files and re-check every item (slower, costs more).</div>
                   </button>
                 </PopoverContent>
               </Popover>
@@ -2027,7 +2027,7 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
       <p className="text-xs text-muted-foreground max-w-xl">
         Reads your uploaded documents, checks them against this checklist (marking items found / partial / missing),
         and surfaces gaps and cross-document inconsistencies. Re-analyzing only processes new or unparsed
-        files and re-checks open checklist items — already-analyzed files and settled items are skipped.
+        files and re-checks open checklist items; already-analyzed files and settled items are skipped.
       </p>
 
       {documentCount === 0 && (
@@ -2038,7 +2038,7 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
 
       {failedDocIds.length > 0 && !isInFlight && (
         <p className="text-xs text-muted-foreground mt-2">
-          {failedDocIds.length} file{failedDocIds.length === 1 ? '' : 's'} failed to parse in the last run — Re-analyze to retry {failedDocIds.length === 1 ? 'it' : 'them'} (already-analyzed files are skipped).
+          {failedDocIds.length} file{failedDocIds.length === 1 ? '' : 's'} failed to parse in the last run. Re-analyze to retry {failedDocIds.length === 1 ? 'it' : 'them'} (already-analyzed files are skipped).
         </p>
       )}
 
@@ -2227,7 +2227,7 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
 
   return (
     <div className="space-y-6 max-w-6xl">
-      {/* Ask anything — moved here from its own tab so questions sit alongside the evidence. */}
+      {/* Ask anything, moved here from its own tab so questions sit alongside the evidence. */}
       <QATab dealId={dealId} />
 
       <Section title="Notes">
@@ -2237,7 +2237,7 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
       {!ingestReady && (
         <div className="rounded-md border border-amber-500/40 bg-amber-50/50 dark:bg-amber-900/10 p-3 text-sm">
           <AlertCircle className="h-4 w-4 inline mr-1" />
-          Run data-room ingestion first (Checklist tab) — research depends on it.
+          Run data-room ingestion first (Checklist tab). Research depends on it.
         </div>
       )}
 
@@ -2419,7 +2419,7 @@ function ExternalResearchView({ research, editable, onToggleFinding, onToggleGap
             Findings with a URL in sources: <span className="text-foreground font-medium">{sourcedFindings} / {research.findings.length}</span>
           </div>
           {searchCount !== null && searchCount > 0 && webSources.length === 0 && sourcedFindings === 0 && (
-            <div className="text-amber-700 dark:text-amber-400 text-[11px]">Searches ran but no URLs landed in the output. Re-run — the prompt was tightened to require URL echoing into JSON sources.</div>
+            <div className="text-amber-700 dark:text-amber-400 text-[11px]">Searches ran but no URLs landed in the output. Re-run, the prompt was tightened to require URL echoing into JSON sources.</div>
           )}
           {webSources.length > 0 && (
             <details className="mt-1">
@@ -2702,7 +2702,7 @@ function JobStatusLine({ job, kind, error }: { job: AgentStatus['latest_job']; k
     return (
       <div className="mt-3 rounded-md border bg-muted/30 p-2 text-xs flex items-center gap-2">
         <Loader2 className="h-3 w-3 animate-spin" />
-        <span className="flex-1">{job.status === 'pending' ? 'Queued — worker picks up within ~1 minute.' : (pretty(job.progress_message) || 'Running…')}</span>
+        <span className="flex-1">{job.status === 'pending' ? 'Queued, worker picks up within ~1 minute.' : (pretty(job.progress_message) || 'Running…')}</span>
         {elapsedLabel && <span className="text-muted-foreground tabular-nums">{elapsedLabel}</span>}
       </div>
     )
@@ -2857,7 +2857,7 @@ function QATab({ dealId }: { dealId: string }) {
               send()
             }
           }}
-          placeholder="Ask a question — ⏎ to send, ⇧⏎ for newline"
+          placeholder="Ask a question. ⏎ to send, ⇧⏎ for newline"
           rows={2}
           className="flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           disabled={sending}
@@ -2944,7 +2944,7 @@ function FoundersTab({ dealId }: { dealId: string }) {
         ) : undefined}
       >
         <p className="text-xs text-muted-foreground max-w-xl">
-          Founder dossiers from external research. Edit any field, add founders, or capture open questions — changes save to the deal.
+          Founder dossiers from external research. Edit any field, add founders, or capture open questions; changes save to the deal.
         </p>
         {!draftId ? (
           <p className="text-sm text-muted-foreground text-center py-8">
@@ -3082,7 +3082,7 @@ function NotesPanel({ dealId, userId, isAdmin }: { dealId: string; userId: strin
     <div className="space-y-4 pt-2">
       <div>
         <p className="text-xs text-muted-foreground max-w-xl">
-          Your own notes and research on this deal — anything outside the data-room analysis. Shared with your fund.
+          Your own notes and research on this deal, separate from the data-room analysis. Shared with your fund.
         </p>
       </div>
       <div className="flex gap-2">
@@ -3090,7 +3090,7 @@ function NotesPanel({ dealId, userId, isAdmin }: { dealId: string; userId: strin
           value={content}
           onChange={e => setContent(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); post() } }}
-          placeholder="Write a note — ⏎ to save, ⇧⏎ for newline"
+          placeholder="Write a note. ⏎ to save, ⇧⏎ for newline"
           rows={2}
           className="flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
@@ -3176,7 +3176,7 @@ function SettingsTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: 
   async function deleteDeal() {
     const ok = await confirm({
       title: 'Delete deal?',
-      description: `Permanently deletes "${dealName}" and all of its analysis — documents, drafts, checklist, notes, and Q&A. This cannot be undone.`,
+      description: `Permanently deletes "${dealName}" and all of its analysis, documents, drafts, checklist, notes, and Q&A. This cannot be undone.`,
       confirmLabel: 'Delete deal',
       variant: 'destructive',
     })
@@ -3255,7 +3255,7 @@ function SettingsTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: 
           <div className="mt-2 rounded-md border border-destructive/40 p-4 flex items-start justify-between gap-3">
             <div>
               <div className="text-sm font-medium">Delete this deal</div>
-              <p className="text-xs text-muted-foreground mt-1 max-w-md">Permanently removes the deal and all of its analysis — documents, drafts, checklist, notes, and Q&A. This cannot be undone.</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-md">Permanently removes the deal and all of its analysis: documents, drafts, checklist, notes, and Q&A. This cannot be undone.</p>
             </div>
             <Button variant="outline" size="sm" onClick={deleteDeal} disabled={deleting} className="shrink-0 border-destructive/40 text-destructive hover:bg-destructive/10">
               {deleting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 mr-1" />} Delete deal
@@ -3342,13 +3342,13 @@ function ScoringTab({ dealId }: { dealId: string }) {
         ) : undefined}
       >
         <p className="text-xs text-muted-foreground max-w-xl">
-          Scores are derived from the memo draft and evidence. Edit any score, rating, or rationale below — changes save to the deal.
+          Scores are derived from the memo draft and evidence. Edit any score, rating, or rationale below; changes save to the deal.
         </p>
         <div className="mt-2"><JobStatusLine job={job ?? null} kind="score" error={error} /></div>
 
         {!hasMemo ? (
           <p className="text-sm text-muted-foreground text-center py-8">
-            No memo draft yet. Run draft from the Memo tab — scoring runs automatically as part of the draft workflow.
+            No memo draft yet. Run draft from the Memo tab, scoring runs automatically as part of the draft workflow.
           </p>
         ) : scores.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">

@@ -3,7 +3,7 @@ import { Scale } from 'lucide-react'
 
 export const metadata = ogMetadata({
   title: 'License',
-  description: 'The portfolio reporting software is open source under the Apache License 2.0 — free to use, modify, and deploy.',
+  description: 'The portfolio reporting software is open source under the Apache License 2.0, free to use, modify, and deploy.',
 })
 
 export default function LicensePage() {

@@ -328,14 +328,14 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
         <div className="px-4 pb-4 pt-1 border-t space-y-4">
           {error && <div className="text-xs text-destructive">{error}</div>}
 
-          {/* The base memo schema these settings layer on top of — read-only. */}
+          {/* The base memo schema these settings layer on top of, read-only. */}
           <SchemaViewer
             schemaName="memo_output"
             title="Base memo schema"
             description="The section structure, guidance, and sourcing rules the draft is built from. The settings below layer on top of this."
           />
 
-          {/* Preset toolbar — load a saved fund preset into the form, or save
+          {/* Preset toolbar, load a saved fund preset into the form, or save
               the current form state as a new preset. The form below is still
               the source of truth that gets PATCHed to the deal on Save. */}
           <div className="rounded-md border bg-muted/20 px-3 py-2 space-y-2">
@@ -454,7 +454,7 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
           <div>
             <label className="block text-xs font-medium mb-1">Memo first-page template</label>
             {anchors.length === 0 ? (
-              <p className="text-[10px] text-muted-foreground">No example memos uploaded yet — add them in Settings → Memo agent → Style anchors.</p>
+              <p className="text-[10px] text-muted-foreground">No example memos uploaded yet. Add them in Settings → Memo agent → Style anchors.</p>
             ) : (
               <select
                 value={firstPageAnchorId}
@@ -567,7 +567,7 @@ export function MemoConfigPanel({ dealId }: { dealId: string }) {
               value={partnerGuidance}
               onChange={e => setPartnerGuidance(e.target.value)}
               rows={4}
-              placeholder="Adds to the fund's draft-stage guidance from settings. Use for deal-specific direction — e.g. &quot;tilt analysis toward technical defensibility, downplay GTM strategy.&quot;"
+              placeholder="Adds to the fund's draft-stage guidance from settings. Use for deal-specific direction, e.g. &quot;tilt analysis toward technical defensibility, downplay GTM strategy.&quot;"
               className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>

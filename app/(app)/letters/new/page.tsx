@@ -149,7 +149,7 @@ export default function NewLetterPage() {
           {fv.lp_letters === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}New Letter
         </h1>
         <p className="text-sm text-muted-foreground">
-          Step {step} of 2 — {step === 1 ? 'Select period' : 'Review & generate'}
+          Step {step} of 2, {step === 1 ? 'Select period' : 'Review & generate'}
         </p>
       </div>
 
@@ -243,7 +243,7 @@ export default function NewLetterPage() {
       {step === 2 && preview && (
         <div className="space-y-6">
           <div className="rounded-lg border bg-muted/30 p-4">
-            <h2 className="font-medium text-sm mb-2">{preview.fundName} — {preview.periodLabel}</h2>
+            <h2 className="font-medium text-sm mb-2">{preview.fundName}, {preview.periodLabel}</h2>
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
                 <p className="text-muted-foreground text-xs">Capital Deployed</p>

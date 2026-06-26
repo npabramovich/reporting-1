@@ -79,7 +79,7 @@ export function SubmitForm({ token, fundName }: { token: string; fundName: strin
           <CheckCircle2 className="h-10 w-10 text-green-500 mb-4" />
           <h2 className="text-lg font-medium mb-2">Submission received</h2>
           <p className="text-sm text-muted-foreground max-w-md">
-            Thanks — {fundName}'s team will review and reach out if it's a fit. No reply means we're passing for now;
+            Thanks, {fundName}'s team will review and reach out if it's a fit. No reply means we're passing for now;
             you'll typically hear back within a couple of weeks if there's interest.
           </p>
         </CardContent>
@@ -91,7 +91,7 @@ export function SubmitForm({ token, fundName }: { token: string; fundName: strin
     <Card>
       <CardContent className="py-6">
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Honeypot — visually hidden but in the form. Bots fill it; humans skip. */}
+          {/* Honeypot, visually hidden but in the form. Bots fill it; humans skip. */}
           <div aria-hidden="true" className="absolute -left-[10000px] w-[1px] h-[1px] overflow-hidden">
             <Label htmlFor="website">Website (leave empty)</Label>
             <Input

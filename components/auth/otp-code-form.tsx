@@ -38,7 +38,7 @@ export function OtpCodeForm({
 
       <Alert>
         <AlertDescription>
-          We emailed a 6-digit code to <strong>{email}</strong>. Enter it below — it expires in 1 hour.
+          We emailed a 6-digit code to <strong>{email}</strong>. Enter it below, it expires in 1 hour.
         </AlertDescription>
       </Alert>
 
@@ -67,7 +67,7 @@ export function OtpCodeForm({
         onClick={() => { onResend(); setResent(true) }}
         className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
       >
-        {resent ? 'Code resent — check your email' : "Didn't get a code? Resend"}
+        {resent ? 'Code resent, check your email' : "Didn't get a code? Resend"}
       </button>
     </div>
   )

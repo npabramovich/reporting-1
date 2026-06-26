@@ -258,7 +258,7 @@ export default function LPsPage() {
         </div>
       )}
 
-      {/* Entity Ownership Detail (fund-level, optional) — gated by lp_associates feature visibility */}
+      {/* Entity Ownership Detail (fund-level, optional), gated by lp_associates feature visibility */}
       {isAdmin && (fv.lp_associates === 'everyone' || fv.lp_associates === 'admin') && (
       <div className="mt-8">
         <div className="flex items-center gap-2 mb-3">

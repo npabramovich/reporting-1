@@ -75,7 +75,7 @@ export default function SupportPage() {
             </p>
           </div>
 
-          {/* Table of contents — inline on mobile only */}
+          {/* Table of contents, inline on mobile only */}
           <nav className="xl:hidden">
             <h2 className="text-base font-medium mb-2">On this page</h2>
             {tocLinks}
@@ -1082,7 +1082,7 @@ export default function SupportPage() {
         </div>
         </div>
 
-        {/* Sticky sidebar TOC — desktop only */}
+        {/* Sticky sidebar TOC, desktop only */}
         <nav className="hidden xl:block w-44 shrink-0 text-sm">
           <div className="sticky top-8">
             <h2 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider mb-3">On this page</h2>

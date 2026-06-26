@@ -37,7 +37,7 @@ export default async function EmailAuditPage() {
       </Link>
       <h1 className="text-2xl font-semibold tracking-tight mb-1">Email audit</h1>
       <p className="text-sm text-muted-foreground mb-6">
-        Inbound emails the classifier labelled as "other" — newsletters, vendor pitches, auto-replies.
+        Inbound emails the classifier labelled as "other", newsletters, vendor pitches, auto-replies.
         Use Reroute on any row to recover an email that was wrongly dropped.
       </p>
       <EmailAuditList emails={(emails as any) ?? []} />

@@ -11,13 +11,13 @@ const STAGES = ['ingest', 'ingest_synthesis', 'research', 'qa', 'draft', 'draft_
 type Stage = typeof STAGES[number]
 
 const STAGE_LABEL: Record<Stage, string> = {
-  ingest: 'Stage 1 — Ingest (per-doc)',
-  ingest_synthesis: 'Stage 1b — Ingest synthesis',
-  research: 'Stage 2 — Research',
-  qa: 'Stage 3 — Q&A',
-  draft: 'Stage 4 — Draft (outline + fills)',
-  draft_review: 'Stage 4c — Draft review',
-  score: 'Stage 5 — Score',
+  ingest: 'Stage 1, Ingest (per-doc)',
+  ingest_synthesis: 'Stage 1b, Ingest synthesis',
+  research: 'Stage 2, Research',
+  qa: 'Stage 3, Q&A',
+  draft: 'Stage 4, Draft (outline + fills)',
+  draft_review: 'Stage 4c, Draft review',
+  score: 'Stage 5, Score',
 }
 
 // Speed-vs-depth tradeoff hint per stage. Stages with heavy structured I/O
@@ -28,8 +28,8 @@ const STAGE_HINT: Record<Stage, string> = {
   ingest_synthesis: 'Small reasoning over summaries (gap analysis + cross-doc flags). Haiku is fine.',
   research:         'Web-search-heavy verification. Haiku speeds this up dramatically without much quality loss.',
   qa:               'Interactive partner Q&A. Latency-sensitive; Haiku or Sonnet.',
-  draft:            'Memo outline + first-draft prose. A mid model (Sonnet) or even Haiku works — the review pass cleans it up.',
-  draft_review:     'Reads the first draft and edits it. Use the strongest model here (Opus) — this is the quality pass.',
+  draft:            'Memo outline + first-draft prose. A mid model (Sonnet) or even Haiku works, the review pass cleans it up.',
+  draft_review:     'Reads the first draft and edits it. Use the strongest model here (Opus), this is the quality pass.',
   score:            'Rubric scoring with rationale. Sonnet preferred; Haiku acceptable if quality holds.',
 }
 
@@ -250,7 +250,7 @@ export function DefaultsEditor({ embedded }: { embedded?: boolean } = {}) {
 
             <div className="rounded-md border bg-muted/20 p-3">
               <div className="flex items-center justify-between text-xs mb-1">
-                <span className="font-medium">{monthName} — usage</span>
+                <span className="font-medium">{monthName}, usage</span>
                 <span className="font-mono text-muted-foreground">
                   {data.monthly_used.toLocaleString()}{data.monthly_token_cap ? ` / ${data.monthly_token_cap.toLocaleString()}` : ''} tokens
                 </span>
@@ -329,7 +329,7 @@ export function DefaultsEditor({ embedded }: { embedded?: boolean } = {}) {
         </Card>
 
         <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Research stage — web search</CardTitle></CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Research stage, web search</CardTitle></CardHeader>
           <CardContent className="text-sm space-y-3">
             <label className="flex items-start gap-3 cursor-pointer">
               <input

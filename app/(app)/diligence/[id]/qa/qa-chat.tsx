@@ -165,7 +165,7 @@ export function QAChat({ dealId, dealName }: { dealId: string; dealName: string 
 
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Stage 3 — Partner Q&amp;A</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Stage 3, Partner Q&amp;A</h1>
           <p className="text-sm text-muted-foreground mt-1">{dealName}</p>
         </div>
         <div className="text-xs text-muted-foreground text-right shrink-0">
@@ -182,7 +182,7 @@ export function QAChat({ dealId, dealName }: { dealId: string; dealName: string 
 
       {error && <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive mb-4">{error}</div>}
 
-      {/* Partner-authored questions — your own question + your take, fed to the memo. */}
+      {/* Partner-authored questions, your own question + your take, fed to the memo. */}
       {!finished && (
         <details className="rounded-md border bg-card mb-4">
           <summary className="px-4 py-2.5 cursor-pointer text-sm font-medium">
@@ -223,7 +223,7 @@ export function QAChat({ dealId, dealName }: { dealId: string; dealName: string 
 
       {covered.length > 0 && (
         <div className="rounded-md border bg-muted/20 p-3 mb-4 text-xs space-y-1">
-          <div className="font-medium text-muted-foreground">Skipped — already covered</div>
+          <div className="font-medium text-muted-foreground">Skipped, already covered</div>
           {covered.map(c => (
             <div key={c.question_id}>
               <span className="font-mono">{c.question_id}</span> ({c.covered_by}): {c.evidence}

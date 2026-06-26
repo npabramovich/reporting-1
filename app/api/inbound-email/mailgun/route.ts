@@ -90,7 +90,7 @@ async function handleMailgunInbound(req: NextRequest) {
   if (fundSettings.mailgun_signing_key_encrypted && fundSettings.encryption_key_encrypted) {
     const kek = process.env.ENCRYPTION_KEY
     if (!kek) {
-      console.error('[inbound-email/mailgun] ENCRYPTION_KEY not set — rejecting request')
+      console.error('[inbound-email/mailgun] ENCRYPTION_KEY not set, rejecting request')
       return
     }
     const dek = decrypt(fundSettings.encryption_key_encrypted, kek)
@@ -105,7 +105,7 @@ async function handleMailgunInbound(req: NextRequest) {
       return
     }
   } else {
-    console.warn('[inbound-email/mailgun] Rejecting — no signing key configured for this fund')
+    console.warn('[inbound-email/mailgun] Rejecting, no signing key configured for this fund')
     return
   }
 

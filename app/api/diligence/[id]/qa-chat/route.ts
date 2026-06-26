@@ -83,7 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .limit(40)
   const prior = ((history ?? []) as Array<{ role: 'user' | 'assistant'; content: string; created_at: string }>)
     .filter(m => m.content !== question || m.role !== 'user')
-    .slice(-12)  // keep prompt size in check — last ~6 user/assistant pairs
+    .slice(-12)  // keep prompt size in check, last ~6 user/assistant pairs
 
   // Build the evidence context.
   const ctx = await buildQAChatContext({ admin, fundId, dealId: params.id })
@@ -98,7 +98,7 @@ Rules:
 - Never fabricate numbers, names, or sources.
 - When you cite a document, reference it by its file name as listed in DATA-ROOM EVIDENCE.
 - If multiple sources agree, say so. If they contradict, surface the contradiction.
-- Stage-aware: ${ctx.stage ? `this is a ${ctx.stage} company — calibrate expectations accordingly` : 'no stage on record — ask the partner if it matters'}.
+- Stage-aware: ${ctx.stage ? `this is a ${ctx.stage} company, calibrate expectations accordingly` : 'no stage on record, ask the partner if it matters'}.
 
 Output format: return JSON ONLY of the form:
 {

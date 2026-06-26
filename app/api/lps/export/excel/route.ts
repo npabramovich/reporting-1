@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
       const tTvpi = tDpi != null && tRvpi != null ? tDpi + tRvpi : null
 
       rows.push({
-        Investor: `${investor.name} — Total`,
+        Investor: `${investor.name}, Total`,
         Entity: '',
         'Portfolio Group': '',
         Commitment: totalCommitment,

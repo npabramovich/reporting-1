@@ -21,6 +21,7 @@ import { DefaultsEditor } from './memo-agent/defaults/editor'
 import { StyleAnchorsInline } from './memo-agent/style-anchors/style-anchors-inline'
 import { SchemasInline } from './memo-agent/schemas/schemas-inline'
 import { MemoGuidanceEditor } from './memo-agent/guidance/editor'
+import { AppearanceEditor } from './appearance/editor'
 import { LpAccessSettings } from '@/components/lp-access-settings'
 import { LpDocumentsSettings } from '@/components/lp-documents-settings'
 import { AlertCircle, Check, ChevronDown, ChevronRight, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X, Lock, ArrowDownCircle, Eye } from 'lucide-react'
@@ -171,6 +172,9 @@ export default function SettingsPage() {
         <AdminSectionContext.Provider value={true}>
           <VersionSection appVersion={settings.appVersion} updateAvailable={settings.updateAvailable} />
           <FundNameSection name={settings.fundName} logo={settings.fundLogo} address={settings.fundAddress} onSaved={load} />
+          <Section title="Appearance">
+            <AppearanceEditor />
+          </Section>
           <CurrencySection currency={settings.currency} onSaved={load} />
           <FeatureVisibilitySection featureVisibility={settings.featureVisibility} onSaved={load} />
         </AdminSectionContext.Provider>
@@ -248,7 +252,7 @@ export default function SettingsPage() {
           <LpPortalSection enabled={settings.lpPortalEnabled} onSaved={load} />
           <Section title="LP access">
             <p className="text-xs text-muted-foreground mb-4">
-              Invite LPs and their authorized users — in bulk from a pasted sheet, or one at a time. Investors are matched by name; new ones are created.
+              Invite LPs and their authorized users, in bulk from a pasted sheet, or one at a time. Investors are matched by name; new ones are created.
             </p>
             <LpAccessSettings />
           </Section>
@@ -1103,16 +1107,16 @@ function AIProvidersSection({
           disabled={savingDefault}
         >
           <option value="anthropic" disabled={!hasClaudeKey}>
-            Anthropic (Claude){!hasClaudeKey ? ' — no key configured' : ''}
+            Anthropic (Claude){!hasClaudeKey ? ', no key configured' : ''}
           </option>
           <option value="openai" disabled={!hasOpenAIKey}>
-            OpenAI{!hasOpenAIKey ? ' — no key configured' : ''}
+            OpenAI{!hasOpenAIKey ? ', no key configured' : ''}
           </option>
           <option value="gemini" disabled={!hasGeminiKey}>
-            Google Gemini{!hasGeminiKey ? ' — no key configured' : ''}
+            Google Gemini{!hasGeminiKey ? ', no key configured' : ''}
           </option>
           <option value="ollama" disabled={!ollamaBaseUrl}>
-            Ollama (Local){!ollamaBaseUrl ? ' — not configured' : ''}
+            Ollama (Local){!ollamaBaseUrl ? ', not configured' : ''}
           </option>
         </select>
         {savingDefault && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
@@ -1660,7 +1664,7 @@ function OllamaContent({ baseUrl, currentModel, onSaved }: { baseUrl: string; cu
   return (
     <>
       <p className="text-xs text-muted-foreground mb-3">
-        Connect to a local Ollama instance. No API key needed — models run on your machine.
+        Connect to a local Ollama instance. No API key needed, models run on your machine.
       </p>
       <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
         <div className="flex-1">
@@ -1704,13 +1708,13 @@ function OllamaContent({ baseUrl, currentModel, onSaved }: { baseUrl: string; cu
 
 const DEFAULT_AI_SUMMARY_PROMPT = `Write a concise analyst summary covering:
 
-1. **Current Status** — How is the company performing right now? Reference specific numbers.
-2. **Trends** — What direction are the key metrics heading? Growth rates, acceleration or deceleration.
-3. **Progress & Positives** — What's going well? Milestones, improvements, or strong execution.
-4. **Challenges & Risks** — What concerns you? Declining metrics, missing data, red flags.
-5. **Key Follow-ups** — What should the investment team ask about or monitor next?
+1. **Current Status**, How is the company performing right now? Reference specific numbers.
+2. **Trends**, What direction are the key metrics heading? Growth rates, acceleration or deceleration.
+3. **Progress & Positives**, What's going well? Milestones, improvements, or strong execution.
+4. **Challenges & Risks**, What concerns you? Declining metrics, missing data, red flags.
+5. **Key Follow-ups**, What should the investment team ask about or monitor next?
 
-Keep it to 2-4 short paragraphs. Be direct and analytical, not promotional. Use specific numbers. Do not use markdown formatting — write in plain prose paragraphs.`
+Keep it to 2-4 short paragraphs. Be direct and analytical, not promotional. Use specific numbers. Do not use markdown formatting, write in plain prose paragraphs.`
 
 function AiSummaryPromptSection({ currentPrompt, onSaved }: { currentPrompt: string | null; onSaved: () => void }) {
   const [value, setValue] = useState(currentPrompt ?? DEFAULT_AI_SUMMARY_PROMPT)
@@ -1999,7 +2003,7 @@ function GoogleSetupGuide({ show, onToggle }: { show: boolean; onToggle: () => v
           <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer" className="underline">OAuth consent screen</a>
           <ul className="list-disc list-inside ml-3 mt-0.5 space-y-0.5">
             <li>Set User type to <strong>Internal</strong> (avoids 7-day token expiry)</li>
-            <li>App name & support email — fill in anything</li>
+            <li>App name & support email, fill in anything</li>
             <li>Scopes: add <code className="text-[11px] bg-muted px-1 rounded">drive.file</code> and <code className="text-[11px] bg-muted px-1 rounded">gmail.send</code></li>
           </ul>
         </li>
@@ -3371,7 +3375,7 @@ function OutboundEmailSection({
                 <div>
                   <Label>From address</Label>
                   <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
-                    Must be a verified sender address for your email provider.{systemProvider === 'gmail' ? ' Ignored when using Gmail — emails are sent from your connected Google account.' : ''}
+                    Must be a verified sender address for your email provider.{systemProvider === 'gmail' ? ' Ignored when using Gmail, emails are sent from your connected Google account.' : ''}
                   </p>
                   <Input
                     type="email"
@@ -3654,7 +3658,7 @@ function AuthEmailTemplatesSection() {
   return (
     <Section title="Authentication">
       <p className="text-xs text-muted-foreground mb-3">
-        Email/password authentication is handled by Supabase Auth. This install includes preconfigured email templates for all authentication emails — signup confirmation, invitations, password reset, one-time sign-in codes, email change, and security notifications.
+        Email/password authentication is handled by Supabase Auth. This install includes preconfigured email templates for all authentication emails, signup confirmation, invitations, password reset, one-time sign-in codes, email change, and security notifications.
       </p>
 
       {showGuide ? (
@@ -3665,7 +3669,7 @@ function AuthEmailTemplatesSection() {
 
           <div className="text-xs text-muted-foreground space-y-2">
             <p className="font-medium text-foreground">If self-hosting with Supabase CLI:</p>
-            <p>Templates are applied automatically from <code className="text-[11px] bg-muted px-1 rounded font-mono">templates/</code> via <code className="text-[11px] bg-muted px-1 rounded font-mono">config.toml</code> — no action needed.</p>
+            <p>Templates are applied automatically from <code className="text-[11px] bg-muted px-1 rounded font-mono">templates/</code> via <code className="text-[11px] bg-muted px-1 rounded font-mono">config.toml</code>, no action needed.</p>
 
             <p className="font-medium text-foreground pt-2">If using hosted Supabase (dashboard):</p>
             <ol className="list-decimal list-inside space-y-1">

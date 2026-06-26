@@ -38,7 +38,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 
   if (!draft || !(draft as any).ingestion_output) {
     return NextResponse.json({
-      error: 'Run Stage 1 ingest first — research depends on the ingestion output.',
+      error: 'Run Stage 1 ingest first, research depends on the ingestion output.',
     }, { status: 409 })
   }
 

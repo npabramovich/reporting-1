@@ -70,7 +70,7 @@ export default function MagicLinkPage() {
             <CardDescription>
               {sent
                 ? 'Enter the 6-digit code we emailed you.'
-                : "We'll email you a 6-digit code that signs you in — no password needed."}
+                : "We'll email you a 6-digit code that signs you in, no password needed."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

@@ -126,7 +126,7 @@ export function DiligenceIndex({ initialDeals, isAdmin }: { initialDeals: Deal[]
             Diligence
           </h1>
           <p className="text-sm text-muted-foreground">
-            Active deals — track stages, upload documents, draft memos.
+            Active deals. Track stages, upload documents, draft memos.
           </p>
         </div>
         <div className="flex items-center gap-2">

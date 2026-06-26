@@ -76,7 +76,7 @@ export function LpShareControl({ shareEndpoint }: { shareEndpoint: string }) {
           <div className="space-y-3">
             {portalEnabled === false && (
               <div className="text-xs rounded-md border border-amber-300/50 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 px-2.5 py-2">
-                The LP portal is off for this fund — shares won&apos;t reach LPs until you enable it in{' '}
+                The LP portal is off for this fund, shares won&apos;t reach LPs until you enable it in{' '}
                 <a href="/settings" className="underline">Settings → LP Portal</a>.
               </div>
             )}
@@ -84,7 +84,7 @@ export function LpShareControl({ shareEndpoint }: { shareEndpoint: string }) {
             {loading ? (
               <div className="text-xs text-muted-foreground py-4"><Loader2 className="h-3.5 w-3.5 inline animate-spin mr-1" /> Loading…</div>
             ) : investors.length === 0 ? (
-              <div className="text-xs text-muted-foreground py-4">No LP investors yet — add them from Settings → LP access.</div>
+              <div className="text-xs text-muted-foreground py-4">No LP investors yet, add them from Settings → LP access.</div>
             ) : (
               <>
                 <div className="flex items-center justify-between">

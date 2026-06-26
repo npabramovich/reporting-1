@@ -11,12 +11,12 @@ export const metadata: Metadata = { title: 'Diligence Schemas' }
 
 const SCHEMA_LABELS: Record<SchemaName, { label: string; description: string }> = {
   rubric: { label: 'Rubric', description: 'Scoring dimensions, scale, criteria' },
-  qa_library: { label: 'Q&A Library', description: 'Partner Q&A pool — categories, skip logic, references to rubric dimensions' },
+  qa_library: { label: 'Q&A Library', description: 'Partner Q&A pool, categories, skip logic, references to rubric dimensions' },
   data_room_ingestion: { label: 'Data Room Ingestion', description: 'Per-document extraction, claims, gap analysis' },
   research_dossier: { label: 'Research Dossier', description: 'External research, source quality tiers, founder constraints' },
-  memo_output: { label: 'Memo Output', description: 'Memo assembly — sections, paragraph-level provenance, partner-only fields' },
-  style_anchors: { label: 'Style Anchors', description: 'Metadata for uploaded reference memos — voice and structure aggregation rules' },
-  instructions: { label: 'Instructions', description: 'Operating manual — hard rules, six-stage flow, behavioral defaults' },
+  memo_output: { label: 'Memo Output', description: 'Memo assembly, sections, paragraph-level provenance, partner-only fields' },
+  style_anchors: { label: 'Style Anchors', description: 'Metadata for uploaded reference memos, voice and structure aggregation rules' },
+  instructions: { label: 'Instructions', description: 'Operating manual, hard rules, six-stage flow, behavioral defaults' },
 }
 
 export default async function SchemasIndexPage() {
