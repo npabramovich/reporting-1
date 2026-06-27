@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { assertWriteAccess } from '@/lib/api-helpers'
 import { generateInvestorReportPdf } from '@/lib/lp-report-pdf'
 
 export const maxDuration = 120
@@ -17,10 +16,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const writeCheck = await assertWriteAccess(admin, user.id)
-  if (writeCheck instanceof NextResponse) return writeCheck
-  if (writeCheck.role !== 'admin') return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-  const fundId = writeCheck.fundId
+  const { data: membership } = await admin.from('fund_members').select('fund_id').eq('user_id', user.id).maybeSingle()
+  if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+  const fundId = membership.fund_id
 
   const investorId = new URL(req.url).searchParams.get('investor_id') ?? ''
   if (!investorId) return NextResponse.json({ error: 'investor_id is required' }, { status: 400 })

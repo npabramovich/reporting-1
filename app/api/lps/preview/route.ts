@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { assertWriteAccess } from '@/lib/api-helpers'
 
 /**
  * Admin-only "view as LP" preview (read-only). Given an investor in the admin's
@@ -18,10 +17,10 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const writeCheck = await assertWriteAccess(admin, user.id)
-  if (writeCheck instanceof NextResponse) return writeCheck
-  if (writeCheck.role !== 'admin') return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-  const fundId = writeCheck.fundId
+  // Any fund member may preview the LP portal (read-only); the demo viewer uses this.
+  const { data: membership } = await admin.from('fund_members').select('fund_id').eq('user_id', user.id).maybeSingle()
+  if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+  const fundId = membership.fund_id
 
   const investorId = new URL(req.url).searchParams.get('investor_id') ?? ''
   if (!investorId) return NextResponse.json({ error: 'investor_id is required' }, { status: 400 })

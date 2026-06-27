@@ -263,4 +263,19 @@ export async function seedLpSnapshot(admin: Admin, fundId: string): Promise<void
       snapshot_id: snapshotId,
     } as any)
   }
+
+  // LP portal demo (Option A): share the snapshot + the demo letter with every
+  // demo investor so the "view as LP" preview shows real content.
+  const investorIds = Object.values(investorIdMap)
+  if (investorIds.length > 0) {
+    await (admin as any).from('lp_snapshot_shares').insert(
+      investorIds.map(id => ({ snapshot_id: snapshotId, lp_investor_id: id, fund_id: fundId })),
+    )
+    const { data: letters } = await (admin as any).from('lp_letters').select('id').eq('fund_id', fundId)
+    for (const l of (letters ?? [])) {
+      await (admin as any).from('lp_letter_shares').insert(
+        investorIds.map(id => ({ letter_id: l.id, lp_investor_id: id, fund_id: fundId })),
+      )
+    }
+  }
 }

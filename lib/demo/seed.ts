@@ -629,9 +629,11 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
           deals: 'everyone',
           diligence: 'everyone',
           lps: 'everyone',
+          lp_portal_access: 'everyone',
         },
         deal_intake_enabled: true,
         deal_thesis: DEMO_DEAL_THESIS,
+        lp_portal_enabled: true,
       })
       .eq('fund_id', existingFund.id)
 
@@ -766,9 +768,11 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
       deals: 'everyone',
       diligence: 'everyone',
       lps: 'everyone',
+      lp_portal_access: 'everyone',
     },
     deal_intake_enabled: true,
     deal_thesis: DEMO_DEAL_THESIS,
+    lp_portal_enabled: true,
   })
 
   // -------------------------------------------------------------------------

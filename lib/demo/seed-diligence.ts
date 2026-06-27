@@ -134,7 +134,7 @@ const DEALS: DiligenceDealDef[] = [
           inadequate: [],
         },
         cross_doc_flags: [
-          { description: 'Burn rate on deck ($400K/mo) is materially below Year 3 average ($650K/mo) in the model. Implied 60% burn growth — partner should ask about hiring plan.', doc_ids: ['stellate_deck', 'stellate_model'] },
+          { description: 'Burn rate on deck ($400K/mo) is materially below Year 3 average ($650K/mo) in the model. Implied 60% burn growth — partner should ask about hiring plan.', doc_ids: ['stellate_deck', 'stellate_model'], severity: 'high', dismissed: false },
         ],
       },
       research_output: {
@@ -664,6 +664,40 @@ const DEALS: DiligenceDealDef[] = [
   },
 ]
 
+// Demo checklist — exercises the redesigned diligence checklist: statuses,
+// evidence, agent notes, surfaced gaps (missing), and partner notes.
+type ChecklistStatus = 'found' | 'partial' | 'missing' | 'unknown' | 'not_applicable'
+const DEMO_CHECKLISTS: Record<string, Array<{ section: string; items: Array<{ label: string; status: ChecklistStatus; agent_notes?: string; partner_notes?: string; evidence?: Array<{ summary: string }> }> }>> = {
+  Stellate: [
+    { section: 'Team', items: [
+      { label: 'Founder backgrounds verified', status: 'found', agent_notes: 'Alex (CEO) confirmed ex-Vercel and Sam (CTO) ex-Cloudflare via LinkedIn and a reference call.', partner_notes: 'Reference call with Notion VP Eng was strongly positive on Alex specifically — strong founder-market fit.' },
+      { label: 'Org chart & key hires', status: 'partial', agent_notes: '42 FTEs cited in the deck; no org chart or key-hire bios in the data room.' },
+      { label: 'Founder vesting schedule', status: 'missing', agent_notes: 'Cap table shows founder ownership but no vesting schedule was provided.' },
+    ] },
+    { section: 'Market', items: [
+      { label: 'Market sizing (TAM/SAM)', status: 'found', agent_notes: 'Edge data-infrastructure category sized at $5B+; cites PlanetScale and Cloudflare R2 as comparables.' },
+      { label: 'Competitive landscape', status: 'found', agent_notes: 'Three direct competitors identified; differentiation rests on integration ergonomics.' },
+    ] },
+    { section: 'Product & Technology', items: [
+      { label: 'Architecture review', status: 'found', agent_notes: 'Architecturally sound; verified production usage at Notion and Linear.' },
+      { label: 'Security review (SOC 2 / penetration test)', status: 'missing', agent_notes: 'The edge-caching layer sees customer database queries, but no SOC 2 report or pen-test results are in the data room.', partner_notes: 'Gating item for IC — must obtain given the data-sensitivity of the product.' },
+    ] },
+    { section: 'Traction', items: [
+      { label: 'ARR verification', status: 'found', evidence: [{ summary: 'Q4 ARR of $1.2M confirmed in the financial model' }], agent_notes: '$1.2M ARR with 25% MoM growth; named customers are externally verifiable.' },
+      { label: 'Net revenue retention', status: 'partial', agent_notes: '138% NRR claim sits above comparable infra companies (PlanetScale/Upstash at 120–130%); could not externally verify.' },
+      { label: 'Sales pipeline', status: 'missing', agent_notes: 'No pipeline analysis provided to validate the $5M ARR target for next year.' },
+    ] },
+    { section: 'Financials', items: [
+      { label: 'Financial model', status: 'found', agent_notes: 'Model provided; 81% gross-margin assumption is plausible for the category.' },
+      { label: 'Burn rate & runway', status: 'partial', agent_notes: 'Deck burn ($400K/mo) is materially below the model’s Year-3 average ($650K/mo) — implied ~60% burn growth.', partner_notes: 'Ask about the hiring plan driving the burn ramp; tie it to the Series A use of proceeds.' },
+    ] },
+    { section: 'Legal & Compliance', items: [
+      { label: 'Cap table', status: 'found', agent_notes: 'Cap table provided and consistent with the stated post-money.' },
+      { label: 'IP assignment agreements', status: 'unknown', agent_notes: 'Not yet reviewed — request from counsel.' },
+    ] },
+  ],
+}
+
 export async function seedDiligence(
   admin: Admin,
   fundId: string,
@@ -752,6 +786,37 @@ export async function seedDiligence(
           body: note,
           author_id: demoUserId,
         } as any)
+      }
+    }
+
+    // Checklist — showcases the redesigned diligence checklist (statuses,
+    // evidence, agent notes, surfaced gaps, and partner notes).
+    const checklist = DEMO_CHECKLISTS[def.name]
+    if (checklist) {
+      let order = 0
+      for (const sec of checklist) {
+        const { data: section } = await (admin as any)
+          .from('diligence_checklist_items')
+          .insert({ fund_id: fundId, deal_id: dealId, kind: 'section', label: sec.section, status: 'unknown', order_index: order++, source: 'template' })
+          .select('id')
+          .single()
+        if (!section) continue
+        const sectionId = (section as any).id as string
+        for (const item of sec.items) {
+          await (admin as any).from('diligence_checklist_items').insert({
+            fund_id: fundId,
+            deal_id: dealId,
+            parent_id: sectionId,
+            kind: 'item',
+            label: item.label,
+            status: item.status,
+            evidence: (item.evidence ?? []) as any,
+            agent_notes: item.agent_notes ?? null,
+            partner_notes: item.partner_notes ?? null,
+            order_index: order++,
+            source: 'template',
+          } as any)
+        }
       }
     }
   }
