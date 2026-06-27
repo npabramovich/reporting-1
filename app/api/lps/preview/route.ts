@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
 
   const letters = (letterShares ?? [])
     .map((s: any) => s.lp_letters)
-    .filter((l: any) => l && l.status === 'final')
+    .filter((l: any) => l && l.status !== 'generating')
     .sort((a: any, b: any) => b.period_year - a.period_year || b.period_quarter - a.period_quarter)
 
   const documents = [

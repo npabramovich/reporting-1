@@ -37,7 +37,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .select('id, period_label, status, full_draft, portfolio_table_html, company_narratives')
     .eq('id', letterId)
     .maybeSingle()
-  if (!letter || letter.status !== 'final') return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!letter || letter.status === 'generating') return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Defense-in-depth: scrub the GP-authored HTML before it reaches the LP browser.
   letter.portfolio_table_html = sanitizeBasicHtml(letter.portfolio_table_html)

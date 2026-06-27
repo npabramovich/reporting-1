@@ -39,8 +39,8 @@ export async function GET() {
   for (const s of (shares ?? []) as any[]) {
     if (!enabledFunds.has(s.fund_id)) continue
     const l = s.lp_letters
-    // Only finalized letters surface in the portal.
-    if (l && l.status === 'final' && !byId.has(l.id)) {
+    // A shared letter surfaces once it has content (anything past 'generating').
+    if (l && l.status !== 'generating' && !byId.has(l.id)) {
       byId.set(l.id, { id: l.id, period_label: l.period_label, period_year: l.period_year, period_quarter: l.period_quarter, shared_at: s.shared_at })
     }
   }

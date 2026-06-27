@@ -1,0 +1,37 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { assertWriteAccess } from '@/lib/api-helpers'
+import { generateInvestorReportPdf } from '@/lib/lp-report-pdf'
+
+export const maxDuration = 120
+
+/**
+ * Admin-only: download the snapshot report PDF for a chosen investor, for the
+ * "view as LP" preview. Fund-scoped (investor + snapshot must belong to the
+ * admin's fund).
+ */
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const supabase = createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const writeCheck = await assertWriteAccess(admin, user.id)
+  if (writeCheck instanceof NextResponse) return writeCheck
+  if (writeCheck.role !== 'admin') return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+  const fundId = writeCheck.fundId
+
+  const investorId = new URL(req.url).searchParams.get('investor_id') ?? ''
+  if (!investorId) return NextResponse.json({ error: 'investor_id is required' }, { status: 400 })
+
+  const { data: inv } = await (admin as any).from('lp_investors').select('id').eq('id', investorId).eq('fund_id', fundId).maybeSingle()
+  if (!inv) return NextResponse.json({ error: 'Investor not found in your fund' }, { status: 404 })
+
+  const result = await generateInvestorReportPdf(admin, { fundId, snapshotId: params.id, investorIds: [investorId] })
+  if (!result) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  return new NextResponse(new Uint8Array(result.pdf), {
+    headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${result.fileName}"` },
+  })
+}

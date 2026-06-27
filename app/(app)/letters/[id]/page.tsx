@@ -257,6 +257,9 @@ export default function LetterEditorPage() {
 
   const exportLetter = async (format: 'markdown' | 'docx' | 'google-docs') => {
     setExporting(format)
+    // Open the tab synchronously within the click so the browser doesn't block it
+    // as a popup (window.open after an await is commonly blocked).
+    const docWin = format === 'google-docs' ? window.open('about:blank', '_blank') : null
     try {
       const res = await fetch(`/api/lp-letters/${letterId}/export`, {
         method: 'POST',
@@ -265,6 +268,7 @@ export default function LetterEditorPage() {
       })
 
       if (!res.ok) {
+        docWin?.close()
         const err = await res.json().catch(() => ({ error: 'Export failed' }))
         alert(err.error ?? 'Export failed')
         return
@@ -272,7 +276,8 @@ export default function LetterEditorPage() {
 
       if (format === 'google-docs') {
         const { url } = await res.json()
-        window.open(url, '_blank')
+        if (docWin) docWin.location.href = url
+        else window.open(url, '_blank')
       } else {
         const blob = await res.blob()
         const url = URL.createObjectURL(blob)
@@ -284,6 +289,7 @@ export default function LetterEditorPage() {
         URL.revokeObjectURL(url)
       }
     } catch {
+      docWin?.close()
       alert('Export failed')
     } finally {
       setExporting(null)

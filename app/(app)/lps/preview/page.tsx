@@ -60,6 +60,23 @@ export default function LpPortalPreviewPage() {
     } finally { setDownloading(null) }
   }
 
+  async function downloadReport(s: Snapshot) {
+    setDownloading(s.id)
+    try {
+      const res = await fetch(`/api/lps/preview/snapshot/${s.id}/pdf?investor_id=${investorId}`)
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${s.name}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } finally { setDownloading(null) }
+  }
+
   const groupedDocs = useMemo(() => {
     const byScope = new Map<string, Map<string, Doc[]>>()
     for (const d of (data?.documents ?? [])) {
@@ -129,14 +146,14 @@ export default function LpPortalPreviewPage() {
                 data.snapshots.length === 0 ? <Empty label="No reports shared with this LP." /> : (
                   <div className="rounded-md border bg-card divide-y max-w-3xl">
                     {data.snapshots.map(s => (
-                      <Link key={s.id} href={`/lps/${s.id}/${investorId}`} target="_blank" className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors">
+                      <button key={s.id} onClick={() => downloadReport(s)} disabled={downloading === s.id} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors">
                         <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-sm truncate">{s.name}</div>
                           {s.as_of_date && <div className="text-xs text-muted-foreground">As of {s.as_of_date}</div>}
                         </div>
-                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      </Link>
+                        {downloading === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" /> : <Download className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                      </button>
                     ))}
                   </div>
                 )

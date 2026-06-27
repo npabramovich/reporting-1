@@ -20,6 +20,7 @@ export function LpShareControl({ shareEndpoint }: { shareEndpoint: string }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [portalEnabled, setPortalEnabled] = useState<boolean | null>(null)
+  const [groups, setGroups] = useState<{ name: string; investor_ids: string[] }[]>([])
 
   useEffect(() => {
     if (!open || investors.length) return
@@ -28,11 +29,13 @@ export function LpShareControl({ shareEndpoint }: { shareEndpoint: string }) {
       fetch('/api/lps/investors').then(r => (r.ok ? r.json() : [])),
       fetch(shareEndpoint).then(r => (r.ok ? r.json() : { lp_investor_ids: [] })),
       fetch('/api/settings').then(r => (r.ok ? r.json() : null)),
+      fetch('/api/lps/investor-groups').then(r => (r.ok ? r.json() : { groups: [] })),
     ])
-      .then(([invs, sh, settings]) => {
+      .then(([invs, sh, settings, grp]) => {
         setInvestors((Array.isArray(invs) ? invs : []).map((i: any) => ({ id: i.id, name: i.name })))
         setShared(new Set(sh.lp_investor_ids ?? []))
         setPortalEnabled(settings ? !!settings.lpPortalEnabled : null)
+        setGroups(Array.isArray(grp?.groups) ? grp.groups : [])
       })
       .finally(() => setLoading(false))
   }, [open, shareEndpoint, investors.length])
@@ -55,6 +58,15 @@ export function LpShareControl({ shareEndpoint }: { shareEndpoint: string }) {
     persist(next)
   }
 
+  function selectGroup(name: string) {
+    const g = groups.find(x => x.name === name)
+    if (!g) return
+    const valid = new Set(investors.map(i => i.id))
+    const next = new Set(shared)
+    g.investor_ids.forEach(id => { if (valid.has(id)) next.add(id) })
+    persist(next)
+  }
+
   const allShared = investors.length > 0 && investors.every(i => shared.has(i.id))
 
   return (
@@ -73,7 +85,7 @@ export function LpShareControl({ shareEndpoint }: { shareEndpoint: string }) {
             <DialogDescription>Check an investor to make this visible in their portal. Invite LPs from Settings → LP access.</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             {portalEnabled === false && (
               <div className="text-xs rounded-md border border-amber-300/50 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 px-2.5 py-2">
                 The LP portal is off for this fund, shares won&apos;t reach LPs until you enable it in{' '}
@@ -93,10 +105,23 @@ export function LpShareControl({ shareEndpoint }: { shareEndpoint: string }) {
                     {allShared ? 'Deselect all' : 'Select all'}
                   </button>
                 </div>
-                <div className="rounded-md border divide-y max-h-[55vh] overflow-y-auto">
+                {groups.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground shrink-0">Select all in fund/SPV:</span>
+                    <select
+                      defaultValue=""
+                      onChange={e => { if (e.target.value) selectGroup(e.target.value); e.currentTarget.value = '' }}
+                      className="h-7 rounded-md border border-input bg-background px-2 text-xs flex-1 min-w-0"
+                    >
+                      <option value="">Choose…</option>
+                      {groups.map(g => <option key={g.name} value={g.name}>{g.name} ({g.investor_ids.length})</option>)}
+                    </select>
+                  </div>
+                )}
+                <div className="rounded-md border divide-y max-h-[55vh] overflow-y-auto min-w-0">
                   {investors.map(inv => (
-                    <label key={inv.id} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-muted/30">
-                      <input type="checkbox" checked={shared.has(inv.id)} onChange={() => toggle(inv.id)} className="h-3.5 w-3.5" />
+                    <label key={inv.id} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-muted/30 min-w-0">
+                      <input type="checkbox" checked={shared.has(inv.id)} onChange={() => toggle(inv.id)} className="h-3.5 w-3.5 shrink-0" />
                       <span className="flex-1 min-w-0 truncate">{inv.name}</span>
                     </label>
                   ))}

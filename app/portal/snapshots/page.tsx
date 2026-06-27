@@ -1,8 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { Loader2, FileText, ChevronRight } from 'lucide-react'
+import { Loader2, FileText, Download } from 'lucide-react'
 
 interface SharedSnapshot {
   id: string
@@ -15,6 +14,7 @@ export default function PortalSnapshotsPage() {
   const [snapshots, setSnapshots] = useState<SharedSnapshot[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/portal/snapshots')
@@ -24,11 +24,33 @@ export default function PortalSnapshotsPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  async function download(s: SharedSnapshot) {
+    setDownloading(s.id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/portal/snapshots/${s.id}/pdf`)
+      if (!res.ok) { setError('Could not generate that report. Please try again.'); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${s.name}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      setError('Could not generate that report. Please try again.')
+    } finally {
+      setDownloading(null)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Your reports</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Statements your fund has shared with you.</p>
+        <p className="text-sm text-muted-foreground mt-0.5">Statements your fund has shared with you. Select one to download a PDF.</p>
       </div>
 
       {loading ? (
@@ -44,18 +66,19 @@ export default function PortalSnapshotsPage() {
       ) : (
         <div className="rounded-md border bg-card divide-y">
           {snapshots.map(s => (
-            <Link
+            <button
               key={s.id}
-              href={`/portal/snapshots/${s.id}`}
-              className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors"
+              onClick={() => download(s)}
+              disabled={downloading === s.id}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
             >
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-sm truncate">{s.name}</div>
                 {s.as_of_date && <div className="text-xs text-muted-foreground">As of {s.as_of_date}</div>}
               </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-            </Link>
+              {downloading === s.id ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" /> : <Download className="h-4 w-4 text-muted-foreground shrink-0" />}
+            </button>
           ))}
         </div>
       )}
