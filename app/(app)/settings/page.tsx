@@ -20,7 +20,6 @@ import Link from 'next/link'
 import { DefaultsEditor } from './memo-agent/defaults/editor'
 import { StyleAnchorsInline } from './memo-agent/style-anchors/style-anchors-inline'
 import { SchemasInline } from './memo-agent/schemas/schemas-inline'
-import { MemoGuidanceEditor } from './memo-agent/guidance/editor'
 import { AppearanceEditor } from './appearance/editor'
 import { LpAccessSettings } from '@/components/lp-access-settings'
 import { LpDocumentsSettings } from '@/components/lp-documents-settings'
@@ -250,7 +249,12 @@ export default function SettingsPage() {
             model={settings.routingModel}
             onSaved={load}
           />
-          <DefaultsEditor embedded section="features" />
+          <Section title="AI">
+            <p className="text-xs text-muted-foreground mb-3">
+              AI provider and model for the key deal features: the inbound email classifier, deal screening, and inbound portfolio extraction.
+            </p>
+            <DefaultsEditor embedded section="features" />
+          </Section>
 
           <GroupHeader label="Diligence" />
           <MemoAgentSection />
@@ -4587,7 +4591,7 @@ function RoutingSection({ threshold, model, onSaved }: {
   }
 
   return (
-    <Section title="Routing (advanced)">
+    <Section title="Email Routing">
       <p className="text-xs text-muted-foreground mb-3">
         Tune how the inbound classifier routes emails. Leave the threshold blank to accept all classifier
         decisions; set it (e.g. 0.7) once you've observed shadow-mode confidence distributions.
@@ -4680,12 +4684,6 @@ function MemoAgentSection() {
           desc="The AI provider and model each memo-agent stage runs on (ingest, research, draft, score, …)."
         >
           <DefaultsEditor embedded section="stages" />
-        </MemoAgentSubsection>
-        <MemoAgentSubsection
-          title="Per-stage guidance"
-          desc="Voice, depth, and approach the agent applies at each stage (ingest, research, Q&A, draft, score). The highest-leverage place to shape how memos read."
-        >
-          <MemoGuidanceEditor />
         </MemoAgentSubsection>
       </div>
     </Section>

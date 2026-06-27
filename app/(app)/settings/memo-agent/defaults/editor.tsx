@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2, Check, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { recommendedModel } from '@/lib/ai/recommended'
 
 const STAGES = ['ingest', 'ingest_synthesis', 'checklist_assessment', 'research', 'qa', 'draft', 'draft_review', 'score'] as const
@@ -15,8 +14,8 @@ const FEATURES = ['deal_classify', 'deal_analysis', 'portfolio'] as const
 type Feature = typeof FEATURES[number]
 
 const FEATURE_LABEL: Record<Feature, string> = {
-  deal_classify: 'Deals — inbound email classifier',
-  deal_analysis: 'Deals — deal screening / analysis',
+  deal_classify: 'Deals: inbound email classifier',
+  deal_analysis: 'Deals: deal screening / analysis',
   portfolio: 'Inbound analysis / portfolio tracking',
 }
 
@@ -319,9 +318,8 @@ export function DefaultsEditor({ embedded, section }: { embedded?: boolean; sect
 
       <div className="space-y-4">
         {show('caps') && (
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Token caps</CardTitle></CardHeader>
-          <CardContent className="text-sm space-y-3">
+          <div className="space-y-3 text-sm">
+            <div className="text-sm font-medium">Token caps</div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Per-deal cap</label>
@@ -367,71 +365,50 @@ export function DefaultsEditor({ embedded, section }: { embedded?: boolean; sect
                 </div>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
         )}
 
         {show('stages') && (
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Per-stage AI provider &amp; model</CardTitle></CardHeader>
-          <CardContent className="text-sm space-y-4">
-            <p className="text-xs text-muted-foreground max-w-3xl">
-              The provider and model each stage runs on. Prefilled with the recommended choice for your
-              fund&apos;s provider — change any to override.
-            </p>
-
-            <div className="space-y-3">
-              {STAGES.map(stage => (
-                <ModelRow
-                  key={stage}
-                  label={STAGE_LABEL[stage]}
-                  hint={STAGE_HINT[stage]}
-                  recommendedKey={stage}
-                  current={stageModels[stage]}
-                  onChange={(provider, model) => setStage(stage, provider, model)}
-                  defaultProvider={data.default_ai_provider}
-                  defaultModels={data.default_models}
-                  modelsByProvider={modelsByProvider}
-                  loadingProviders={loadingProviders}
-                />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+          <div className="space-y-3">
+            {STAGES.map(stage => (
+              <ModelRow
+                key={stage}
+                label={STAGE_LABEL[stage]}
+                hint={STAGE_HINT[stage]}
+                recommendedKey={stage}
+                current={stageModels[stage]}
+                onChange={(provider, model) => setStage(stage, provider, model)}
+                defaultProvider={data.default_ai_provider}
+                defaultModels={data.default_models}
+                modelsByProvider={modelsByProvider}
+                loadingProviders={loadingProviders}
+              />
+            ))}
+          </div>
         )}
 
         {show('features') && (
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Deals &amp; portfolio AI provider &amp; model</CardTitle></CardHeader>
-          <CardContent className="text-sm space-y-4">
-            <p className="text-xs text-muted-foreground max-w-3xl">
-              These features run outside the memo agent. Prefilled with the recommended choice for your
-              fund&apos;s provider — change any to override.
-            </p>
-            <div className="space-y-3">
-              {FEATURES.map(feature => (
-                <ModelRow
-                  key={feature}
-                  label={FEATURE_LABEL[feature]}
-                  hint={FEATURE_HINT[feature]}
-                  recommendedKey={feature}
-                  current={featureModels[feature]}
-                  onChange={(provider, model) => setFeature(feature, provider, model)}
-                  defaultProvider={data.default_ai_provider}
-                  defaultModels={data.default_models}
-                  modelsByProvider={modelsByProvider}
-                  loadingProviders={loadingProviders}
-                />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+          <div className="space-y-3">
+            {FEATURES.map(feature => (
+              <ModelRow
+                key={feature}
+                label={FEATURE_LABEL[feature]}
+                hint={FEATURE_HINT[feature]}
+                recommendedKey={feature}
+                current={featureModels[feature]}
+                onChange={(provider, model) => setFeature(feature, provider, model)}
+                defaultProvider={data.default_ai_provider}
+                defaultModels={data.default_models}
+                modelsByProvider={modelsByProvider}
+                loadingProviders={loadingProviders}
+              />
+            ))}
+          </div>
         )}
 
         {show('caps') && (
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Research stage, web search</CardTitle></CardHeader>
-          <CardContent className="text-sm space-y-3">
+          <div className="space-y-2 text-sm">
+            <div className="text-sm font-medium">Research web search</div>
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -449,14 +426,12 @@ export function DefaultsEditor({ embedded, section }: { embedded?: boolean; sect
                 </p>
               </div>
             </label>
-          </CardContent>
-        </Card>
+          </div>
         )}
 
         {show('export') && (
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Memo export formatting</CardTitle></CardHeader>
-          <CardContent className="text-sm space-y-3">
+        <div className="space-y-3 text-sm">
+            <div className="text-sm font-medium">Memo export formatting</div>
             <p className="text-xs text-muted-foreground max-w-2xl">
               Base font and size for Word / Google Doc exports. Headings scale from the base size.
               Citations and the appendix are omitted from exported documents.
@@ -493,14 +468,12 @@ export function DefaultsEditor({ embedded, section }: { embedded?: boolean; sect
                 <p className="text-[11px] text-muted-foreground mt-1">Body text size. 6–32pt.</p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+        </div>
         )}
 
-        {show('caps') && (
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Call transcription (Deepgram)</CardTitle></CardHeader>
-          <CardContent className="text-sm space-y-3">
+        {show('stages') && (
+          <div className="space-y-3 text-sm pt-1">
+            <div className="text-sm font-medium">Call transcription (Deepgram)</div>
             <p className="text-xs text-muted-foreground max-w-2xl">
               Audio/video recordings uploaded to a deal&apos;s data room are transcribed via Deepgram.
               Test that the API key and webhook environment are configured correctly.
@@ -527,8 +500,7 @@ export function DefaultsEditor({ embedded, section }: { embedded?: boolean; sect
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
         )}
 
         <div className="flex justify-end">
