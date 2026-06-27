@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useConfirm } from '@/components/confirm-dialog'
 import { SchemaViewer } from '@/components/diligence/schema-viewer'
+import { DefaultsEditor } from '@/app/(app)/settings/memo-agent/defaults/editor'
 
 export type MemoComplexity = 'brief' | 'standard' | 'detailed' | 'comprehensive'
 
@@ -534,6 +535,7 @@ export function MemoConfigPanel({ dealId, defaultOpen }: { dealId: string; defau
           <SchemaViewer
             schemaName="memo_output"
             title="Base memo schema"
+            guidanceStage="draft"
             description="The section structure, guidance, and sourcing rules the draft is built from. The settings above layer on top of this."
           />
 
@@ -543,6 +545,9 @@ export function MemoConfigPanel({ dealId, defaultOpen }: { dealId: string; defau
               {saved ? 'Saved' : 'Save settings'}
             </Button>
           </div>
+
+          {/* Memo export formatting (font + size) — fund-level, editable here. */}
+          <DefaultsEditor embedded section="export" />
         </div>
       )}
     </div>

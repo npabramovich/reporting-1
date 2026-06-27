@@ -39,7 +39,7 @@ export function SchemasInline() {
   if (!schemas) return <div className="text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 inline animate-spin mr-1" /> Loading…</div>
 
   return (
-    <div className="rounded-md border bg-card divide-y">
+    <div className="divide-y border-t">
       {SCHEMA_ORDER.map(name => {
         const meta = SCHEMA_LABELS[name]
         const row = schemas[name]

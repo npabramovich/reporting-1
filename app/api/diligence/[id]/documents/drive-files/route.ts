@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { decrypt } from '@/lib/crypto'
 import { getGoogleCredentials } from '@/lib/google/credentials'
-import { getAccessToken, listFilesRecursive, parseDriveFolderUrl } from '@/lib/google/drive'
+import { getAccessToken, listFilesRecursive, parseDriveFolderUrl, googleExportTarget } from '@/lib/google/drive'
 
 /**
  * List the files in the deal's Google Drive folder, each flagged with whether
@@ -93,7 +93,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       name: f.name,
       relative_path: f.relativePath ?? '',
       mime_type: f.mimeType,
-      google_native: f.mimeType.startsWith('application/vnd.google-apps'),
+      // Only flag Google-native types we can't export (Forms, Drawings) as
+      // non-importable; Docs/Slides/Sheets are imported via export now.
+      google_native: f.mimeType.startsWith('application/vnd.google-apps') && !googleExportTarget(f.mimeType),
       already_imported: imported.has(f.id),
     })),
   })

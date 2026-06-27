@@ -461,7 +461,7 @@ export async function getOpenAIModel(supabase: Supabase, fundId: string): Promis
   return data?.openai_model || 'gpt-4o'
 }
 
-export async function getDefaultAIProvider(supabase: Supabase, fundId: string): Promise<'anthropic' | 'openai' | 'gemini' | 'ollama'> {
+export async function getDefaultAIProvider(supabase: Supabase, fundId: string): Promise<'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openrouter'> {
   const { data } = await supabase
     .from('fund_settings')
     .select('default_ai_provider')
@@ -469,8 +469,35 @@ export async function getDefaultAIProvider(supabase: Supabase, fundId: string): 
     .single()
 
   const provider = data?.default_ai_provider
-  if (provider === 'openai' || provider === 'gemini' || provider === 'ollama') return provider
+  if (provider === 'openai' || provider === 'gemini' || provider === 'ollama' || provider === 'openrouter') return provider
   return 'anthropic'
+}
+
+export async function getOpenRouterApiKey(supabase: Supabase, fundId: string): Promise<string> {
+  const { data, error } = await (supabase as any)
+    .from('fund_settings')
+    .select('openrouter_api_key_encrypted, encryption_key_encrypted')
+    .eq('fund_id', fundId)
+    .single()
+
+  if (error || !data?.openrouter_api_key_encrypted || !data?.encryption_key_encrypted) {
+    throw new Error(`OpenRouter API key not configured for fund ${fundId}`)
+  }
+
+  return decryptApiKey(data.openrouter_api_key_encrypted, data.encryption_key_encrypted)
+}
+
+export async function getOpenRouterConfig(supabase: Supabase, fundId: string): Promise<{ baseUrl: string; model: string }> {
+  const { data } = await (supabase as any)
+    .from('fund_settings')
+    .select('openrouter_base_url, openrouter_model')
+    .eq('fund_id', fundId)
+    .single()
+
+  return {
+    baseUrl: data?.openrouter_base_url || 'https://openrouter.ai/api/v1',
+    model: data?.openrouter_model || 'openai/gpt-4o-mini',
+  }
 }
 
 export async function getGeminiApiKey(supabase: Supabase, fundId: string): Promise<string> {

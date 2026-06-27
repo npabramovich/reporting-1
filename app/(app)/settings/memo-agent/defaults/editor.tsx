@@ -21,9 +21,9 @@ const FEATURE_LABEL: Record<Feature, string> = {
 }
 
 const FEATURE_HINT: Record<Feature, string> = {
-  deal_classify: 'Routes every inbound email (reporting / interactions / deals / other). High volume; a fast model is ideal.',
-  deal_analysis: 'Screens each pitch — thesis fit, extraction, dedupe. Balanced model recommended.',
-  portfolio: 'Extracts company updates and metrics from inbound reporting emails. Balanced model recommended.',
+  deal_classify: 'Routes every inbound email to reporting, interactions, deals, or other.',
+  deal_analysis: 'Screens each pitch: thesis fit, field extraction, and duplicate detection.',
+  portfolio: 'Extracts company updates and metrics from inbound reporting emails.',
 }
 
 const STAGE_LABEL: Record<Stage, string> = {
@@ -41,14 +41,14 @@ const STAGE_LABEL: Record<Stage, string> = {
 // and modest reasoning are good Haiku candidates; stages that produce prose
 // or do deep multi-source reasoning are better on Sonnet/Opus.
 const STAGE_HINT: Record<Stage, string> = {
-  ingest:           'Structured extraction per document. Speed matters; Haiku is a strong fit.',
-  ingest_synthesis: 'Small reasoning over summaries (gap analysis + cross-doc flags). Haiku is fine.',
-  checklist_assessment: 'Matches data-room findings to each checklist item, in batches. Speed-sensitive; Haiku is a strong fit.',
-  research:         'Web-search-heavy verification. Haiku speeds this up dramatically without much quality loss.',
-  qa:               'Interactive partner Q&A. Latency-sensitive; Haiku or Sonnet.',
-  draft:            'Memo outline + first-draft prose. A mid model (Sonnet) or even Haiku works, the review pass cleans it up.',
-  draft_review:     'Reads the first draft and edits it. Use the strongest model here (Opus), this is the quality pass.',
-  score:            'Rubric scoring with rationale. Sonnet preferred; Haiku acceptable if quality holds.',
+  ingest:           'Structured extraction from each document in the data room.',
+  ingest_synthesis: 'Cross-document gap analysis and conflict detection over the per-doc summaries.',
+  checklist_assessment: 'Matches data-room findings to each checklist item.',
+  research:         'Verifies findings via web search, maps competitors, and builds founder dossiers.',
+  qa:               'Interactive partner Q&A about the deal.',
+  draft:            'Writes the memo — outline, then the section prose.',
+  draft_review:     'Edits the first draft: the quality pass over the whole memo.',
+  score:            'Scores the deal against the rubric, with rationale.',
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -57,6 +57,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   openai: 'OpenAI',
   gemini: 'Gemini',
   ollama: 'Ollama (self-hosted)',
+  openrouter: 'OpenRouter',
 }
 
 const PROVIDER_MODELS_ENDPOINT: Record<string, string> = {
@@ -65,6 +66,8 @@ const PROVIDER_MODELS_ENDPOINT: Record<string, string> = {
   gemini: '/api/gemini-models',
   ollama: '/api/ollama-models',
 }
+
+const PROVIDERS = ['anthropic', 'openai', 'gemini', 'ollama', 'openrouter'] as const
 
 interface Defaults {
   per_deal_token_cap: number | null
@@ -89,7 +92,68 @@ const EXPORT_FONT_OPTIONS = [
 
 interface AIModel { id: string; name: string }
 
-export function DefaultsEditor({ embedded }: { embedded?: boolean } = {}) {
+// One provider+model row, prefilled with the recommended choice for the fund's
+// provider. The model dropdown defaults to the recommended model for the tier
+// (Claude/OpenAI have fast/strong models; Gemini/Ollama use the fund default).
+function ModelRow({ label, hint, recommendedKey, current, onChange, defaultProvider, defaultModels, modelsByProvider, loadingProviders }: {
+  label: string
+  hint: string
+  recommendedKey: string
+  current: { provider: string; model?: string } | null | undefined
+  onChange: (provider: string, model?: string) => void
+  defaultProvider: string
+  defaultModels: Record<string, string>
+  modelsByProvider: Record<string, AIModel[]>
+  loadingProviders: Set<string>
+}) {
+  const effProvider = current?.provider || defaultProvider
+  const effModel = current?.model || recommendedModel(recommendedKey, effProvider, defaultModels[effProvider] ?? '')
+  const models = modelsByProvider[effProvider]
+  const loading = loadingProviders.has(effProvider)
+  return (
+    <div className="rounded-md border bg-card p-3">
+      <div className="mb-2">
+        <div className="text-sm font-medium">{label}</div>
+        <p className="text-[11px] text-muted-foreground mt-0.5 max-w-2xl">{hint}</p>
+      </div>
+      <div className="grid grid-cols-[1fr_1fr] gap-2">
+        <select
+          value={effProvider}
+          onChange={e => onChange(e.target.value, undefined)}
+          className="h-9 px-2 rounded-md border border-input bg-background text-sm"
+        >
+          {PROVIDERS.map(v => <option key={v} value={v}>{PROVIDER_LABEL[v]}</option>)}
+        </select>
+        {models && models.length > 0 ? (
+          <select
+            value={effModel}
+            onChange={e => onChange(effProvider, e.target.value || undefined)}
+            className="h-9 px-2 rounded-md border border-input bg-background text-sm font-mono"
+          >
+            {!models.some(m => m.id === effModel) && <option value={effModel}>{effModel}</option>}
+            {models.map(m => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}
+          </select>
+        ) : (
+          <Input
+            value={effModel}
+            onChange={e => onChange(effProvider, e.target.value || undefined)}
+            placeholder={loading ? 'Loading models…' : 'Model id'}
+            className="font-mono text-xs"
+            disabled={loading}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+type EditorSection = 'caps' | 'stages' | 'features' | 'export'
+
+export function DefaultsEditor({ embedded, section }: { embedded?: boolean; section?: EditorSection } = {}) {
+  // When a section is set, render + save only that slice (so the editor can be
+  // split across several settings locations without instances clobbering each
+  // other's fields on save).
+  const show = (s: EditorSection) => !section || section === s
   const [data, setData] = useState<Defaults | null>(null)
   const [perDeal, setPerDeal] = useState<string>('')
   const [monthly, setMonthly] = useState<string>('')
@@ -149,35 +213,41 @@ export function DefaultsEditor({ embedded }: { embedded?: boolean } = {}) {
 
   useEffect(() => { load() }, [])
 
-  // Pre-load models for any providers already configured on save load.
+  // Pre-load models for the fund default provider (used by every prefilled row)
+  // plus any providers explicitly overridden on a stage/feature.
   useEffect(() => {
     const providers = new Set<string>()
+    if (data?.default_ai_provider) providers.add(data.default_ai_provider)
     for (const v of Object.values(stageModels)) if (v?.provider) providers.add(v.provider)
     for (const v of Object.values(featureModels)) if (v?.provider) providers.add(v.provider)
     providers.forEach(loadModelsFor)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stageModels, featureModels])
+  }, [stageModels, featureModels, data])
 
   async function save() {
     setSaving(true)
     setError(null)
     try {
+      const body: Record<string, unknown> = {}
+      if (show('caps')) {
+        body.per_deal_token_cap = perDeal === '' ? null : Number(perDeal)
+        body.monthly_token_cap = monthly === '' ? null : Number(monthly)
+        body.web_search_enabled = webSearch
+      }
+      if (show('stages')) body.stage_models = stageModels
+      if (show('features')) body.feature_models = featureModels
+      if (show('export')) {
+        body.export_font_family = exportFont
+        body.export_font_size = exportFontSize === '' ? 11 : Number(exportFontSize)
+      }
       const res = await fetch('/api/firm/memo-agent-defaults', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          per_deal_token_cap: perDeal === '' ? null : Number(perDeal),
-          monthly_token_cap: monthly === '' ? null : Number(monthly),
-          stage_models: stageModels,
-          feature_models: featureModels,
-          web_search_enabled: webSearch,
-          export_font_family: exportFont,
-          export_font_size: exportFontSize === '' ? 11 : Number(exportFontSize),
-        }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error ?? 'Save failed')
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.error ?? 'Save failed')
       }
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -248,6 +318,7 @@ export function DefaultsEditor({ embedded }: { embedded?: boolean } = {}) {
       {error && <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive mb-4">{error}</div>}
 
       <div className="space-y-4">
+        {show('caps') && (
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Token caps</CardTitle></CardHeader>
           <CardContent className="text-sm space-y-3">
@@ -298,151 +369,66 @@ export function DefaultsEditor({ embedded }: { embedded?: boolean } = {}) {
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {show('stages') && (
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Per-stage AI provider &amp; model</CardTitle></CardHeader>
           <CardContent className="text-sm space-y-4">
             <p className="text-xs text-muted-foreground max-w-3xl">
-              Override the fund&apos;s default on a per-stage basis. Use a fast model (e.g. Haiku) for
-              high-volume structured stages, and a strong model (e.g. Sonnet or Opus) for prose-heavy
-              ones like draft. A stage left on &ldquo;Use fund default&rdquo; runs the fund default:{' '}
-              <span className="font-mono">{data.default_ai_provider} · {data.default_models[data.default_ai_provider] ?? '—'}</span>.
+              The provider and model each stage runs on. Prefilled with the recommended choice for your
+              fund&apos;s provider — change any to override.
             </p>
 
             <div className="space-y-3">
-              {STAGES.map(stage => {
-                const current = stageModels[stage]
-                const provider = current?.provider ?? ''
-                const models = provider ? modelsByProvider[provider] : undefined
-                const loading = provider ? loadingProviders.has(provider) : false
-                // Effective provider + model actually running for this stage.
-                const effProvider = provider || data.default_ai_provider
-                const effModel = current?.model
-                  ? current.model
-                  : provider
-                    ? (data.default_models[effProvider] ?? '—')
-                    : recommendedModel(stage, effProvider, data.default_models[effProvider] ?? '—')
-                const effSource = !provider ? 'recommended default' : (current?.model ? 'override' : 'override · provider default model')
-                return (
-                  <div key={stage} className="rounded-md border bg-card p-3">
-                    <div className="flex items-baseline justify-between gap-3 mb-2">
-                      <div>
-                        <div className="text-sm font-medium">{STAGE_LABEL[stage]}</div>
-                        <p className="text-[11px] text-muted-foreground mt-0.5 max-w-2xl">{STAGE_HINT[stage]}</p>
-                      </div>
-                      <div className="shrink-0 text-right text-[11px] leading-tight">
-                        <div className="font-mono">{effProvider} · {effModel}</div>
-                        <div className="text-muted-foreground">{effSource}</div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-[1fr_1fr] gap-2">
-                      <select
-                        value={provider}
-                        onChange={e => setStage(stage, e.target.value, undefined)}
-                        className="h-9 px-2 rounded-md border border-input bg-background text-sm"
-                      >
-                        {Object.entries(PROVIDER_LABEL).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-                      </select>
-                      {provider ? (
-                        models && models.length > 0 ? (
-                          <select
-                            value={current?.model ?? ''}
-                            onChange={e => setStage(stage, provider, e.target.value || undefined)}
-                            className="h-9 px-2 rounded-md border border-input bg-background text-sm font-mono"
-                          >
-                            <option value="">(provider default)</option>
-                            {models.map(m => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}
-                          </select>
-                        ) : (
-                          <Input
-                            value={current?.model ?? ''}
-                            onChange={e => setStage(stage, provider, e.target.value || undefined)}
-                            placeholder={loading ? 'Loading models…' : `Model id (defaults to fund's ${provider} model)`}
-                            className="font-mono text-xs"
-                            disabled={loading}
-                          />
-                        )
-                      ) : (
-                        <Input value="" disabled placeholder="Set provider first" className="font-mono text-xs" />
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
+              {STAGES.map(stage => (
+                <ModelRow
+                  key={stage}
+                  label={STAGE_LABEL[stage]}
+                  hint={STAGE_HINT[stage]}
+                  recommendedKey={stage}
+                  current={stageModels[stage]}
+                  onChange={(provider, model) => setStage(stage, provider, model)}
+                  defaultProvider={data.default_ai_provider}
+                  defaultModels={data.default_models}
+                  modelsByProvider={modelsByProvider}
+                  loadingProviders={loadingProviders}
+                />
+              ))}
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {show('features') && (
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Deals &amp; portfolio AI provider &amp; model</CardTitle></CardHeader>
           <CardContent className="text-sm space-y-4">
             <p className="text-xs text-muted-foreground max-w-3xl">
-              These features run outside the memo agent. Left on &ldquo;Use fund default&rdquo;, each runs its
-              recommended model tier on the fund default provider.
+              These features run outside the memo agent. Prefilled with the recommended choice for your
+              fund&apos;s provider — change any to override.
             </p>
             <div className="space-y-3">
-              {FEATURES.map(feature => {
-                const current = featureModels[feature]
-                const provider = current?.provider ?? ''
-                const models = provider ? modelsByProvider[provider] : undefined
-                const loading = provider ? loadingProviders.has(provider) : false
-                const effProvider = provider || data.default_ai_provider
-                const effModel = current?.model
-                  ? current.model
-                  : provider
-                    ? (data.default_models[effProvider] ?? '—')
-                    : recommendedModel(feature, effProvider, data.default_models[effProvider] ?? '—')
-                const effSource = !provider ? 'recommended default' : (current?.model ? 'override' : 'override · provider default model')
-                return (
-                  <div key={feature} className="rounded-md border bg-card p-3">
-                    <div className="flex items-baseline justify-between gap-3 mb-2">
-                      <div>
-                        <div className="text-sm font-medium">{FEATURE_LABEL[feature]}</div>
-                        <p className="text-[11px] text-muted-foreground mt-0.5 max-w-2xl">{FEATURE_HINT[feature]}</p>
-                      </div>
-                      <div className="shrink-0 text-right text-[11px] leading-tight">
-                        <div className="font-mono">{effProvider} · {effModel}</div>
-                        <div className="text-muted-foreground">{effSource}</div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-[1fr_1fr] gap-2">
-                      <select
-                        value={provider}
-                        onChange={e => setFeature(feature, e.target.value, undefined)}
-                        className="h-9 px-2 rounded-md border border-input bg-background text-sm"
-                      >
-                        {Object.entries(PROVIDER_LABEL).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-                      </select>
-                      {provider ? (
-                        models && models.length > 0 ? (
-                          <select
-                            value={current?.model ?? ''}
-                            onChange={e => setFeature(feature, provider, e.target.value || undefined)}
-                            className="h-9 px-2 rounded-md border border-input bg-background text-sm font-mono"
-                          >
-                            <option value="">(provider default)</option>
-                            {models.map(m => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}
-                          </select>
-                        ) : (
-                          <Input
-                            value={current?.model ?? ''}
-                            onChange={e => setFeature(feature, provider, e.target.value || undefined)}
-                            placeholder={loading ? 'Loading models…' : `Model id (defaults to fund's ${provider} model)`}
-                            className="font-mono text-xs"
-                            disabled={loading}
-                          />
-                        )
-                      ) : (
-                        <Input value="" disabled placeholder="Set provider first" className="font-mono text-xs" />
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
+              {FEATURES.map(feature => (
+                <ModelRow
+                  key={feature}
+                  label={FEATURE_LABEL[feature]}
+                  hint={FEATURE_HINT[feature]}
+                  recommendedKey={feature}
+                  current={featureModels[feature]}
+                  onChange={(provider, model) => setFeature(feature, provider, model)}
+                  defaultProvider={data.default_ai_provider}
+                  defaultModels={data.default_models}
+                  modelsByProvider={modelsByProvider}
+                  loadingProviders={loadingProviders}
+                />
+              ))}
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {show('caps') && (
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Research stage, web search</CardTitle></CardHeader>
           <CardContent className="text-sm space-y-3">
@@ -465,7 +451,9 @@ export function DefaultsEditor({ embedded }: { embedded?: boolean } = {}) {
             </label>
           </CardContent>
         </Card>
+        )}
 
+        {show('export') && (
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Memo export formatting</CardTitle></CardHeader>
           <CardContent className="text-sm space-y-3">
@@ -507,7 +495,9 @@ export function DefaultsEditor({ embedded }: { embedded?: boolean } = {}) {
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {show('caps') && (
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Call transcription (Deepgram)</CardTitle></CardHeader>
           <CardContent className="text-sm space-y-3">
@@ -539,6 +529,7 @@ export function DefaultsEditor({ embedded }: { embedded?: boolean } = {}) {
             )}
           </CardContent>
         </Card>
+        )}
 
         <div className="flex justify-end">
           <Button onClick={save} disabled={saving}>

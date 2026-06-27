@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { ChevronDown, Loader2 } from 'lucide-react'
+import { StageGuidance } from './stage-guidance'
 
 // ---------------------------------------------------------------------------
 // Read-only viewer for the active memo-agent schemas/prompts (rubric, memo
@@ -9,7 +10,7 @@ import { ChevronDown, Loader2 } from 'lucide-react'
 // Settings without being able to change it — editing stays admin-only. Source
 // is the member-open GET /api/firm/schemas (resolved fund override or default).
 // ---------------------------------------------------------------------------
-export function SchemaViewer({ schemaName, title, subtitle, description, defaultOpen }: { schemaName: string; title: string; subtitle?: string; description?: string; defaultOpen?: boolean }) {
+export function SchemaViewer({ schemaName, title, subtitle, description, defaultOpen, guidanceStage }: { schemaName: string; title: string; subtitle?: string; description?: string; defaultOpen?: boolean; guidanceStage?: string }) {
   const [open, setOpen] = useState(!!defaultOpen)
   const [content, setContent] = useState<string | null>(null)
   const [version, setVersion] = useState<string | null>(null)
@@ -41,14 +42,18 @@ export function SchemaViewer({ schemaName, title, subtitle, description, default
         <span className="text-xs text-muted-foreground shrink-0">Read-only</span>
       </button>
       {open && (
-        <div className="px-4 pb-4 pt-1 border-t">
-          {description && <p className="text-xs text-muted-foreground mb-2">{description}</p>}
-          {loading ? (
-            <div className="text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 inline animate-spin mr-1" /> Loading…</div>
-          ) : (
-            <pre className="text-[11px] leading-relaxed bg-muted/40 rounded-md p-3 overflow-auto whitespace-pre-wrap max-h-[440px]">{content}</pre>
-          )}
-          <p className="text-[10px] text-muted-foreground mt-2">This is the active configuration from Settings → Memo agent. Changing it is admin-only.</p>
+        <div className="px-4 pb-4 pt-3 border-t space-y-4">
+          {guidanceStage && <StageGuidance stage={guidanceStage} />}
+          <div>
+            {guidanceStage && <div className="text-[11px] font-medium text-muted-foreground mb-1">Reference schema (read-only)</div>}
+            {description && <p className="text-xs text-muted-foreground mb-2">{description}</p>}
+            {loading ? (
+              <div className="text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 inline animate-spin mr-1" /> Loading…</div>
+            ) : (
+              <pre className="text-[11px] leading-relaxed bg-muted/40 rounded-md p-3 overflow-auto whitespace-pre-wrap max-h-[440px]">{content}</pre>
+            )}
+            <p className="text-[10px] text-muted-foreground mt-2">The schema is the active configuration from Settings → Memo agent. Editing the schema itself is admin-only.</p>
+          </div>
         </div>
       )}
     </div>

@@ -798,6 +798,7 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
         schemaName="data_room_ingestion"
         title="How the agent works"
         subtitle="checklist analysis"
+        guidanceStage="ingest"
         description="How the analysis reads your documents and checks them against this checklist: the document types, extraction rules, and how findings are tagged to checklist items."
         defaultOpen={!ingestionDraft?.ingestion_output}
       />
@@ -1870,7 +1871,7 @@ function DriveImportDialog({ open, onOpenChange, dealId, initialFolderUrl, onImp
         <ul className="mt-3 text-[11px] text-muted-foreground space-y-1 list-disc pl-4">
           <li>Walks subfolders up to <strong>5 levels deep</strong>. The imported filename shows the subfolder path (e.g. <code className="font-mono">Financials/Q1/model.xlsx</code>).</li>
           <li>Imports up to <strong>500 files</strong> per run, larger data rooms need to be split.</li>
-          <li><strong>Google Docs, Sheets, and Slides are skipped</strong>, they require export rather than raw download. Save them as PDF/Word/Excel in Drive first, or upload them directly via the Upload files button.</li>
+          <li><strong>Google Docs, Sheets, and Slides are imported</strong> by exporting them (Docs &amp; Slides to PDF, Sheets to Excel). Other Google-native types (Forms, Drawings) and files over 100&nbsp;MB are skipped.</li>
           <li>Only files the connected Google account can access are visible. Shared folders work if your account has at least view access.</li>
         </ul>
         {error && <p className="text-sm text-destructive mt-2">{error}</p>}
@@ -2393,6 +2394,7 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
         schemaName="research_dossier"
         title="How the agent works"
         subtitle="research"
+        guidanceStage="research"
         description="What the external-research stage sources, verifies, and how it rates evidence quality."
         defaultOpen={!research}
       />
@@ -3045,6 +3047,7 @@ function FoundersTab({ dealId }: { dealId: string }) {
         schemaName="research_dossier"
         title="How the agent works"
         subtitle="founder research"
+        guidanceStage="research"
         description="How the agent builds founder dossiers: what it sources, and how it rates evidence quality."
         defaultOpen={dossiers.length === 0}
       />
@@ -3448,6 +3451,7 @@ function ScoringTab({ dealId }: { dealId: string }) {
         schemaName="rubric"
         title="How the agent works"
         subtitle="scoring rubric"
+        guidanceStage="score"
         description="The dimensions, 1–5 criteria, and confidence signals the agent scores against."
         defaultOpen={scores.length === 0}
       />

@@ -55,6 +55,9 @@ interface Settings {
   geminiModel: string
   ollamaBaseUrl: string
   ollamaModel: string
+  hasOpenRouterKey: boolean
+  openrouterModel: string
+  openrouterBaseUrl: string
   retainResolvedReviews: boolean
   resolvedReviewsTtlDays: number | null
   senders: Sender[]
@@ -225,6 +228,9 @@ export default function SettingsPage() {
             geminiModel={settings.geminiModel}
             ollamaBaseUrl={settings.ollamaBaseUrl}
             ollamaModel={settings.ollamaModel}
+            hasOpenRouterKey={settings.hasOpenRouterKey}
+            openrouterModel={settings.openrouterModel}
+            openrouterBaseUrl={settings.openrouterBaseUrl}
             defaultAIProvider={settings.defaultAIProvider}
             onSaved={load}
           />
@@ -244,6 +250,7 @@ export default function SettingsPage() {
             model={settings.routingModel}
             onSaved={load}
           />
+          <DefaultsEditor embedded section="features" />
 
           <GroupHeader label="Diligence" />
           <MemoAgentSection />
@@ -1050,7 +1057,7 @@ function FundNameSection({ name, logo, address, onSaved }: { name: string; logo:
 // ──────────────────────────── AI Providers ────────────────────────────
 
 function AIProvidersSection({
-  hasClaudeKey, claudeModel, hasOpenAIKey, openaiModel, hasGeminiKey, geminiModel, ollamaBaseUrl, ollamaModel, defaultAIProvider, onSaved,
+  hasClaudeKey, claudeModel, hasOpenAIKey, openaiModel, hasGeminiKey, geminiModel, ollamaBaseUrl, ollamaModel, hasOpenRouterKey, openrouterModel, openrouterBaseUrl, defaultAIProvider, onSaved,
 }: {
   hasClaudeKey: boolean
   claudeModel: string
@@ -1060,6 +1067,9 @@ function AIProvidersSection({
   geminiModel: string
   ollamaBaseUrl: string
   ollamaModel: string
+  hasOpenRouterKey: boolean
+  openrouterModel: string
+  openrouterBaseUrl: string
   defaultAIProvider: string
   onSaved: () => void
 }) {
@@ -1118,6 +1128,9 @@ function AIProvidersSection({
           <option value="ollama" disabled={!ollamaBaseUrl}>
             Ollama (Local){!ollamaBaseUrl ? ', not configured' : ''}
           </option>
+          <option value="openrouter" disabled={!hasOpenRouterKey}>
+            OpenRouter{!hasOpenRouterKey ? ', no key configured' : ''}
+          </option>
         </select>
         {savingDefault && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
       </div>
@@ -1163,8 +1176,67 @@ function AIProvidersSection({
         >
           <OllamaContent baseUrl={ollamaBaseUrl} currentModel={ollamaModel} onSaved={onSaved} />
         </AIProviderDisclosure>
+        <AIProviderDisclosure
+          label="OpenRouter"
+          providerKey="openrouter"
+          isDefault={defaultProvider === 'openrouter'}
+          isOpen={openSections.has('openrouter')}
+          onToggle={() => toggleSection('openrouter')}
+          hasKey={hasOpenRouterKey}
+        >
+          <OpenRouterContent hasKey={hasOpenRouterKey} currentModel={openrouterModel} currentBaseUrl={openrouterBaseUrl} onSaved={onSaved} />
+        </AIProviderDisclosure>
       </div>
     </Section>
+  )
+}
+
+function OpenRouterContent({ hasKey, currentModel, currentBaseUrl, onSaved }: { hasKey: boolean; currentModel: string; currentBaseUrl: string; onSaved: () => void }) {
+  const [key, setKey] = useState('')
+  const [baseUrl, setBaseUrl] = useState(currentBaseUrl || 'https://openrouter.ai/api/v1')
+  const [model, setModel] = useState(currentModel || '')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function save() {
+    setSaving(true); setError(null)
+    try {
+      const body: Record<string, string> = { openrouterBaseUrl: baseUrl, openrouterModel: model }
+      if (key.trim()) body.openrouterApiKey = key.trim()
+      const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error ?? 'Save failed') }
+      setKey(''); setSaved(true); setTimeout(() => setSaved(false), 2000); onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Connect OpenRouter (or any OpenAI-compatible endpoint) to use inexpensive open models — DeepSeek, GLM, Qwen, Llama. Create a key at openrouter.ai.
+      </p>
+      <div>
+        <Label className="text-xs">API key {hasKey && <span className="text-muted-foreground">(saved — leave blank to keep)</span>}</Label>
+        <Input type="password" value={key} onChange={e => setKey(e.target.value)} placeholder={hasKey ? '••••••••' : 'sk-or-...'} className="h-9" />
+      </div>
+      <div>
+        <Label className="text-xs">Base URL</Label>
+        <Input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="https://openrouter.ai/api/v1" className="h-9 font-mono text-xs" />
+      </div>
+      <div>
+        <Label className="text-xs">Model</Label>
+        <Input value={model} onChange={e => setModel(e.target.value)} placeholder="e.g. deepseek/deepseek-chat or z-ai/glm-4.6" className="h-9 font-mono text-xs" />
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <Button size="sm" onClick={save} disabled={saving}>
+        {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5 mr-1" /> : null}
+        Save
+      </Button>
+    </div>
   )
 }
 
@@ -4562,18 +4634,18 @@ function RoutingSection({ threshold, model, onSaved }: {
 function MemoAgentSubsection({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="rounded-md border bg-background">
+    <div className="py-3">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-start gap-2 px-3 py-3 text-left hover:bg-muted/30 transition-colors"
+        className="w-full flex items-start gap-2 text-left group"
       >
         {open ? <ChevronDown className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />}
         <div className="min-w-0">
-          <div className="text-sm font-medium">{title}</div>
+          <div className="text-sm font-medium group-hover:text-foreground">{title}</div>
           <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
         </div>
       </button>
-      {open && <div className="border-t px-3 py-3">{children}</div>}
+      {open && <div className="mt-3 pl-6">{children}</div>}
     </div>
   )
 }
@@ -4581,10 +4653,10 @@ function MemoAgentSubsection({ title, desc, children }: { title: string; desc: s
 function MemoAgentSection() {
   return (
     <Section title="Diligence">
-      <p className="text-xs text-muted-foreground mb-3">
+      <p className="text-xs text-muted-foreground mb-1">
         Configure how the diligence agent reads data rooms, sources external research, runs partner Q&amp;A, and drafts memos.
       </p>
-      <div className="space-y-2">
+      <div className="divide-y border-t">
         <MemoAgentSubsection
           title="Schemas"
           desc="The seven YAML/MD files that govern the agent: rubric, Q&A library, ingestion shape, research shape, memo output, style anchors, and instructions."
@@ -4599,9 +4671,15 @@ function MemoAgentSection() {
         </MemoAgentSubsection>
         <MemoAgentSubsection
           title="Defaults & caps"
-          desc="Per-stage AI provider overrides, per-deal and monthly token caps, and the web-search toggle for the research stage."
+          desc="Per-deal and monthly token caps, the research web-search toggle, and the Deepgram transcription check."
         >
-          <DefaultsEditor embedded />
+          <DefaultsEditor embedded section="caps" />
+        </MemoAgentSubsection>
+        <MemoAgentSubsection
+          title="Per-stage AI models"
+          desc="The AI provider and model each memo-agent stage runs on (ingest, research, draft, score, …)."
+        >
+          <DefaultsEditor embedded section="stages" />
         </MemoAgentSubsection>
         <MemoAgentSubsection
           title="Per-stage guidance"

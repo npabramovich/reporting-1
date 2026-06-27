@@ -235,8 +235,11 @@ function timingSafeEqual(a: string, b: string): boolean {
   return mismatch === 0
 }
 
+// Storage keys must be ASCII-safe — Supabase rejects spaces, brackets, and
+// other characters common in recording filenames (e.g. "Call [PHI redacted]").
+// Used only for the object key; the human-readable file_name keeps the original.
 function sanitize(name: string): string {
-  return name.replace(/[\/\\:*?"<>|\x00-\x1f\x7f]/g, '_').replace(/\.\./g, '_').slice(0, 200)
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200)
 }
 
 function stripExtension(name: string): string {
