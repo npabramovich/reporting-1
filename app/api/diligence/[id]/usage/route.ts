@@ -44,6 +44,15 @@ function cacheSavedUsd(model: string, cacheRead: number): number {
   return (cacheRead / 1_000_000) * priceFor(model).in * (1 - CACHE_READ_MULT)
 }
 
+// Deepgram transcription is billed per minute of audio, not per token.
+const DEEPGRAM_PER_MINUTE_USD = 0.0043 // indicative (Nova pre-recorded)
+function transcriptionCostUsd(audioSeconds: number): number {
+  return (audioSeconds / 60) * DEEPGRAM_PER_MINUTE_USD
+}
+
+// Anthropic web_search tool: ~$10 per 1,000 searches, on top of tokens.
+const WEB_SEARCH_USD = 0.01
+
 /**
  * Per-deal AI usage report: tokens + estimated cost (from ai_usage_logs) and
  * processing time (from memo_agent_jobs durations). Optional ?days=N window.
@@ -71,7 +80,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // Cast: cache_* are recently-added columns not yet in the generated types.
   let usageQuery = (admin as any)
     .from('ai_usage_logs')
-    .select('feature, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, created_at')
+    .select('feature, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, audio_seconds, web_searches, created_at')
     .eq('deal_id', params.id)
     .eq('fund_id', fundId)
   if (since) usageQuery = usageQuery.gte('created_at', since)
@@ -79,23 +88,27 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (usageErr) return NextResponse.json({ error: usageErr.message }, { status: 500 })
 
   const byFeature = new Map<string, { feature: string; calls: number; input_tokens: number; output_tokens: number; cost_usd: number }>()
-  const byModel = new Map<string, { model: string; calls: number; input_tokens: number; output_tokens: number; cache_read_tokens: number; cost_usd: number }>()
+  const byModel = new Map<string, { model: string; calls: number; input_tokens: number; output_tokens: number; cache_read_tokens: number; audio_seconds: number; cost_usd: number }>()
   let totalInput = 0, totalOutput = 0, totalCost = 0, totalCalls = 0
-  let totalCacheRead = 0, totalCacheCreation = 0, totalCacheSaved = 0
-  for (const r of (usageRows ?? []) as Array<{ feature: string; model: string; input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number }>) {
+  let totalCacheRead = 0, totalCacheCreation = 0, totalCacheSaved = 0, totalAudioSeconds = 0, totalWebSearches = 0
+  for (const r of (usageRows ?? []) as Array<{ feature: string; model: string; input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; audio_seconds: number; web_searches: number }>) {
     const inp = r.input_tokens ?? 0
     const out = r.output_tokens ?? 0
     const cr = r.cache_read_tokens ?? 0
     const cc = r.cache_creation_tokens ?? 0
-    const c = costUsd(r.model, inp, out, cr, cc)
+    const aud = r.audio_seconds ?? 0
+    const ws = r.web_searches ?? 0
+    // Transcription is per-minute; everything else is token-based. Web-search
+    // tool fees are added on top of token cost.
+    const c = (r.feature === 'transcription' ? transcriptionCostUsd(aud) : costUsd(r.model, inp, out, cr, cc)) + ws * WEB_SEARCH_USD
     totalInput += inp; totalOutput += out; totalCost += c; totalCalls += 1
-    totalCacheRead += cr; totalCacheCreation += cc; totalCacheSaved += cacheSavedUsd(r.model, cr)
+    totalCacheRead += cr; totalCacheCreation += cc; totalCacheSaved += cacheSavedUsd(r.model, cr); totalAudioSeconds += aud; totalWebSearches += ws
     const cur = byFeature.get(r.feature) ?? { feature: r.feature, calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0 }
     cur.calls += 1; cur.input_tokens += inp; cur.output_tokens += out; cur.cost_usd += c
     byFeature.set(r.feature, cur)
     const mk = r.model || 'unknown'
-    const cm = byModel.get(mk) ?? { model: mk, calls: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cost_usd: 0 }
-    cm.calls += 1; cm.input_tokens += inp; cm.output_tokens += out; cm.cache_read_tokens += cr; cm.cost_usd += c
+    const cm = byModel.get(mk) ?? { model: mk, calls: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, audio_seconds: 0, cost_usd: 0 }
+    cm.calls += 1; cm.input_tokens += inp; cm.output_tokens += out; cm.cache_read_tokens += cr; cm.audio_seconds += aud; cm.cost_usd += c
     byModel.set(mk, cm)
   }
 
@@ -134,6 +147,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       cache_read_tokens: totalCacheRead,
       cache_creation_tokens: totalCacheCreation,
       cache_saved_usd: totalCacheSaved,
+      audio_seconds: totalAudioSeconds,
+      web_searches: totalWebSearches,
     },
     by_feature: Array.from(byFeature.values()).sort((a, b) => b.cost_usd - a.cost_usd),
     by_model: Array.from(byModel.values()).sort((a, b) => b.cost_usd - a.cost_usd),

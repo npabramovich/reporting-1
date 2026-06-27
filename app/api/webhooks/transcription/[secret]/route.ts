@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { parseCallbackPayload } from '@/lib/transcription/deepgram'
+import { logAIUsage } from '@/lib/ai/usage'
 import { uploadTranscriptToDrive } from '@/lib/memo-agent/render/gdoc'
 import { parseDriveFolderUrl } from '@/lib/google/drive'
 
@@ -212,6 +213,17 @@ export async function POST(req: NextRequest, { params }: { params: { secret: str
       } as any,
     })
     .eq('id', job.id)
+
+  // Record transcription in AI usage (per-minute billed, not token-based) so it
+  // shows up in the per-deal and fund-wide usage reports.
+  await logAIUsage(admin, {
+    fundId: job.fund_id,
+    dealId: job.deal_id,
+    provider: 'deepgram',
+    model: `deepgram/${process.env.DEEPGRAM_MODEL ?? 'nova-3'}`,
+    feature: 'transcription',
+    audioSeconds: Math.round(parsed.duration_seconds ?? 0),
+  })
 
   return NextResponse.json({ ok: true, transcript_document_id: transcriptDocId })
 }

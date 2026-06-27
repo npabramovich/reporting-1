@@ -17,6 +17,10 @@ const PRICING: Record<string, { input: number; output: number }> = {
 }
 const OLLAMA_PRICING = { input: 0, output: 0 }
 const FALLBACK_PRICING = { input: 5.0, output: 15.0 }
+// Deepgram transcription is billed per minute of audio, not per token.
+const DEEPGRAM_PER_MINUTE_USD = 0.0043 // indicative (Nova pre-recorded)
+// Anthropic web_search tool: ~$10 per 1,000 searches, on top of tokens.
+const WEB_SEARCH_USD = 0.01
 
 function getPricing(provider: string, model: string) {
   // Ollama is always free (local)
@@ -35,9 +39,10 @@ function getPricing(provider: string, model: string) {
   return FALLBACK_PRICING
 }
 
-function estimateCost(provider: string, model: string, inputTokens: number, outputTokens: number) {
+function estimateCost(provider: string, model: string, inputTokens: number, outputTokens: number, audioSeconds = 0, webSearches = 0) {
+  if (provider === 'deepgram') return (audioSeconds / 60) * DEEPGRAM_PER_MINUTE_USD
   const pricing = getPricing(provider, model)
-  return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
+  return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000 + webSearches * WEB_SEARCH_USD
 }
 
 export async function GET() {
@@ -67,13 +72,15 @@ export async function GET() {
     feature: string
     input_tokens: number
     output_tokens: number
+    audio_seconds: number
+    web_searches: number
     created_at: string
   }
 
   // Single query: fetch all usage logs (all time) for monthly summary + current month daily
   const { data: allLogs, error } = await admin
     .from('ai_usage_logs' as any)
-    .select('provider, model, feature, input_tokens, output_tokens, created_at')
+    .select('provider, model, feature, input_tokens, output_tokens, audio_seconds, web_searches, created_at')
     .eq('fund_id', fundId)
     .order('created_at', { ascending: false }) as { data: UsageLog[] | null; error: any }
 
@@ -88,6 +95,8 @@ export async function GET() {
     model: string
     input_tokens: number
     output_tokens: number
+    audio_seconds: number
+    web_searches: number
   }>()
   const mtdByProvider: Record<string, { input_tokens: number; output_tokens: number; estimated_cost: number }> = {}
   const monthlyMap = new Map<string, {
@@ -100,7 +109,7 @@ export async function GET() {
   for (const log of allLogs ?? []) {
     const date = log.created_at.slice(0, 10)
     const month = log.created_at.slice(0, 7)
-    const cost = estimateCost(log.provider, log.model, log.input_tokens, log.output_tokens)
+    const cost = estimateCost(log.provider, log.model, log.input_tokens, log.output_tokens, log.audio_seconds, log.web_searches)
     const isCurrentMonth = log.created_at >= monthStart
 
     // Monthly summary (all time)
@@ -120,8 +129,10 @@ export async function GET() {
       if (existing) {
         existing.input_tokens += log.input_tokens
         existing.output_tokens += log.output_tokens
+        existing.audio_seconds += log.audio_seconds
+        existing.web_searches += log.web_searches
       } else {
-        dailyMap.set(key, { date, provider: log.provider, model: log.model, input_tokens: log.input_tokens, output_tokens: log.output_tokens })
+        dailyMap.set(key, { date, provider: log.provider, model: log.model, input_tokens: log.input_tokens, output_tokens: log.output_tokens, audio_seconds: log.audio_seconds, web_searches: log.web_searches })
       }
 
       if (!mtdByProvider[log.provider]) {
@@ -134,7 +145,7 @@ export async function GET() {
   }
 
   const daily = Array.from(dailyMap.values())
-    .map(d => ({ ...d, estimated_cost: estimateCost(d.provider, d.model, d.input_tokens, d.output_tokens) }))
+    .map(d => ({ ...d, estimated_cost: estimateCost(d.provider, d.model, d.input_tokens, d.output_tokens, d.audio_seconds, d.web_searches) }))
     .sort((a, b) => b.date.localeCompare(a.date))
 
   const totalEstimatedCost = Object.values(mtdByProvider).reduce((sum, p) => sum + p.estimated_cost, 0)

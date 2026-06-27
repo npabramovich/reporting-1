@@ -23,7 +23,25 @@ export async function GET(req: NextRequest) {
   const fundId = membership.fund_id
 
   const investorId = new URL(req.url).searchParams.get('investor_id') ?? ''
-  if (!investorId) return NextResponse.json({ error: 'investor_id is required' }, { status: 400 })
+
+  // Sample mode — no real LP needed. Renders a representative portal so admins
+  // can preview the layout before any LPs are added: the fund's most recent
+  // reports + letters and its fund-wide documents, as examples.
+  if (!investorId || investorId === 'sample') {
+    const { data: ef } = await (admin as any).from('fund_settings').select('lp_portal_enabled').eq('fund_id', fundId).maybeSingle()
+    const [{ data: snaps }, { data: lets }, { data: fundDocs }] = await Promise.all([
+      (admin as any).from('lp_snapshots').select('id, name, as_of_date').eq('fund_id', fundId).order('as_of_date', { ascending: false }).limit(10),
+      (admin as any).from('lp_letters').select('id, period_label, period_year, period_quarter, status').eq('fund_id', fundId).order('period_year', { ascending: false }).limit(10),
+      (admin as any).from('lp_documents').select('id, title, file_name, size_bytes, category, doc_date, uploaded_at, scope, storage_path').eq('fund_id', fundId).eq('scope', 'fund'),
+    ])
+    return NextResponse.json({
+      investor: { id: 'sample', name: 'Sample investor' },
+      portal_enabled: !!ef?.lp_portal_enabled,
+      snapshots: snaps ?? [],
+      letters: (lets ?? []).filter((l: any) => l && l.status !== 'generating'),
+      documents: (fundDocs ?? []).map((d: any) => ({ ...d, sample: String(d.storage_path ?? '').startsWith('sample/'), storage_path: undefined })),
+    })
+  }
 
   const { data: investor } = await (admin as any)
     .from('lp_investors').select('id, name').eq('id', investorId).eq('fund_id', fundId).maybeSingle()

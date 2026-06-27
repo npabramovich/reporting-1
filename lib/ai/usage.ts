@@ -11,7 +11,12 @@ export async function logAIUsage(admin: SupabaseAdmin, params: {
   provider: string
   model: string
   feature: string
-  usage: TokenUsage
+  /** Token usage; omit for non-token usage like audio transcription. */
+  usage?: TokenUsage
+  /** Audio duration for per-minute-billed usage (Deepgram transcription). */
+  audioSeconds?: number
+  /** Anthropic web_search tool invocations (~$10 / 1,000), billed on top of tokens. */
+  webSearches?: number
 }) {
   try {
     await admin.from('ai_usage_logs').insert({
@@ -21,10 +26,12 @@ export async function logAIUsage(admin: SupabaseAdmin, params: {
       provider: params.provider,
       model: params.model,
       feature: params.feature,
-      input_tokens: params.usage.inputTokens,
-      output_tokens: params.usage.outputTokens,
-      cache_read_tokens: params.usage.cacheReadTokens ?? 0,
-      cache_creation_tokens: params.usage.cacheCreationTokens ?? 0,
+      input_tokens: params.usage?.inputTokens ?? 0,
+      output_tokens: params.usage?.outputTokens ?? 0,
+      cache_read_tokens: params.usage?.cacheReadTokens ?? 0,
+      cache_creation_tokens: params.usage?.cacheCreationTokens ?? 0,
+      audio_seconds: params.audioSeconds ?? 0,
+      web_searches: params.webSearches ?? 0,
     })
   } catch (err) {
     console.error('[ai-usage] Failed to log usage:', err)

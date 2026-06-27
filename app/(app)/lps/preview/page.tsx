@@ -30,7 +30,7 @@ const effective = (d: Doc) => d.doc_date || d.uploaded_at || ''
 
 export default function LpPortalPreviewPage() {
   const [investors, setInvestors] = useState<Investor[]>([])
-  const [investorId, setInvestorId] = useState('')
+  const [investorId, setInvestorId] = useState('sample')
   const [data, setData] = useState<Preview | null>(null)
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<'snapshots' | 'letters' | 'documents'>('snapshots')
@@ -99,6 +99,9 @@ export default function LpPortalPreviewPage() {
     { key: 'documents' as const, label: 'Documents', count: data?.documents.length ?? 0 },
   ]
 
+  // Sample mode is a layout-only example (used by the demo): nothing downloadable.
+  const isSample = investorId === 'sample'
+
   return (
     <div className="min-h-screen bg-muted/20">
       {/* Admin preview bar — NOT part of the real portal an LP sees */}
@@ -110,7 +113,7 @@ export default function LpPortalPreviewPage() {
             onChange={e => { setInvestorId(e.target.value); setTab('snapshots') }}
             className="h-7 rounded border border-amber-300 dark:border-amber-700 bg-white dark:bg-amber-950 px-2 text-sm text-foreground"
           >
-            <option value="">Select an LP…</option>
+            <option value="sample">Sample investor (example)</option>
             {investors.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
           </select>
           {investorId && data && !data.portal_enabled && <span className="text-xs">Portal is OFF — LPs can’t see this yet</span>}
@@ -156,16 +159,25 @@ export default function LpPortalPreviewPage() {
                 </div>
                 {data.snapshots.length === 0 ? <Empty label="No reports have been shared with you yet." /> : (
                   <div className="rounded-md border bg-card divide-y">
-                    {data.snapshots.map(s => (
-                      <button key={s.id} onClick={() => downloadReport(s)} disabled={downloading === s.id} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors">
-                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate">{s.name}</div>
-                          {s.as_of_date && <div className="text-xs text-muted-foreground">As of {s.as_of_date}</div>}
-                        </div>
-                        {downloading === s.id ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" /> : <Download className="h-4 w-4 text-muted-foreground shrink-0" />}
-                      </button>
-                    ))}
+                    {data.snapshots.map(s => {
+                      const inner = (
+                        <>
+                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm truncate">{s.name}</div>
+                            {s.as_of_date && <div className="text-xs text-muted-foreground">As of {s.as_of_date}</div>}
+                          </div>
+                        </>
+                      )
+                      return isSample ? (
+                        <div key={s.id} className="w-full flex items-center gap-3 px-4 py-3" title="Preview only">{inner}<span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Preview</span></div>
+                      ) : (
+                        <button key={s.id} onClick={() => downloadReport(s)} disabled={downloading === s.id} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors">
+                          {inner}
+                          {downloading === s.id ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" /> : <Download className="h-4 w-4 text-muted-foreground shrink-0" />}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </>
@@ -179,13 +191,22 @@ export default function LpPortalPreviewPage() {
                 </div>
                 {data.letters.length === 0 ? <Empty label="No letters have been shared with you yet." /> : (
                   <div className="rounded-md border bg-card divide-y">
-                    {data.letters.map(l => (
-                      <Link key={l.id} href={`/letters/${l.id}`} target="_blank" className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors">
-                        <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{l.period_label}</div></div>
-                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      </Link>
-                    ))}
+                    {data.letters.map(l => {
+                      const inner = (
+                        <>
+                          <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{l.period_label}</div></div>
+                        </>
+                      )
+                      return isSample ? (
+                        <div key={l.id} className="flex items-center gap-3 px-4 py-3">{inner}<span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Preview</span></div>
+                      ) : (
+                        <Link key={l.id} href={`/letters/${l.id}`} target="_blank" className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors">
+                          {inner}
+                          <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        </Link>
+                      )
+                    })}
                   </div>
                 )}
               </>
@@ -208,12 +229,12 @@ export default function LpPortalPreviewPage() {
                         <section key={scope.key} className="space-y-2">
                           <h2 className="text-sm font-semibold">{scope.label}</h2>
                           {onlyOther ? (
-                            <DocList docs={cm.get('Other')!} downloading={downloading} onDownload={download} />
+                            <DocList docs={cm.get('Other')!} downloading={downloading} onDownload={download} preview={isSample} />
                           ) : (
                             cats.map(cat => (
                               <div key={cat} className="space-y-1.5">
                                 {cat !== 'Other' && <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{cat}</h3>}
-                                <DocList docs={cm.get(cat)!} downloading={downloading} onDownload={download} />
+                                <DocList docs={cm.get(cat)!} downloading={downloading} onDownload={download} preview={isSample} />
                               </div>
                             ))
                           )}
@@ -235,7 +256,7 @@ function Empty({ label }: { label: string }) {
   return <div className="rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">{label}</div>
 }
 
-function DocList({ docs, downloading, onDownload }: { docs: Doc[]; downloading: string | null; onDownload: (id: string) => void }) {
+function DocList({ docs, downloading, onDownload, preview }: { docs: Doc[]; downloading: string | null; onDownload: (id: string) => void; preview?: boolean }) {
   return (
     <div className="rounded-md border bg-card divide-y">
       {docs.map(d => {
@@ -248,10 +269,10 @@ function DocList({ docs, downloading, onDownload }: { docs: Doc[]; downloading: 
             </div>
           </>
         )
-        return d.sample ? (
-          <div key={d.id} className="w-full flex items-center gap-3 px-4 py-3" title="Sample document">
+        return (d.sample || preview) ? (
+          <div key={d.id} className="w-full flex items-center gap-3 px-4 py-3" title="Preview only">
             {inner}
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Sample</span>
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">{d.sample ? 'Sample' : 'Preview'}</span>
           </div>
         ) : (
           <button key={d.id} onClick={() => onDownload(d.id)} disabled={downloading === d.id} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors">

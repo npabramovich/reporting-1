@@ -2419,7 +2419,7 @@ function DiligenceRow({ badge, title, detail, editable, onDismiss }: { badge?: s
     <div className="p-3 text-sm flex items-start gap-2">
       {badge && <SevBadge level={badge} />}
       <div className="flex-1 min-w-0">
-        <div className="font-medium">{title}</div>
+        <div>{title}</div>
         {detail && <div className="text-xs text-muted-foreground mt-0.5">{detail}</div>}
       </div>
       {editable && (
@@ -3217,9 +3217,9 @@ function NotesPanel({ dealId, userId, isAdmin }: { dealId: string; userId: strin
 // delete-deal action (moved here from the header).
 // ---------------------------------------------------------------------------
 interface UsageReport {
-  total: { input_tokens: number; output_tokens: number; total_tokens: number; cost_usd: number; calls: number; processing_ms: number; jobs: number; cache_read_tokens: number; cache_creation_tokens: number; cache_saved_usd: number }
+  total: { input_tokens: number; output_tokens: number; total_tokens: number; cost_usd: number; calls: number; processing_ms: number; jobs: number; cache_read_tokens: number; cache_creation_tokens: number; cache_saved_usd: number; audio_seconds: number }
   by_feature: Array<{ feature: string; calls: number; input_tokens: number; output_tokens: number; cost_usd: number }>
-  by_model: Array<{ model: string; calls: number; input_tokens: number; output_tokens: number; cache_read_tokens: number; cost_usd: number }>
+  by_model: Array<{ model: string; calls: number; input_tokens: number; output_tokens: number; cache_read_tokens: number; audio_seconds: number; cost_usd: number }>
   by_stage: Array<{ kind: string; runs: number; processing_ms: number }>
 }
 
@@ -3349,7 +3349,7 @@ function SettingsTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: 
                       <tr key={m.model} className="border-t">
                         <td className="px-3 py-2 font-mono text-xs">{m.model}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{m.calls}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">{m.input_tokens.toLocaleString()} / {m.output_tokens.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">{m.audio_seconds > 0 ? `${Math.round(m.audio_seconds / 60)}m audio` : `${m.input_tokens.toLocaleString()} / ${m.output_tokens.toLocaleString()}`}</td>
                         <td className="px-3 py-2 text-right tabular-nums">${m.cost_usd.toFixed(2)}</td>
                       </tr>
                     ))}

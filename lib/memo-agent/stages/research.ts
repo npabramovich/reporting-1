@@ -169,6 +169,7 @@ export async function runResearch(params: {
         model,
         feature: `memo_agent_research_${s.name}`,
         usage,
+        webSearches: typeof webSearchCount === 'number' ? webSearchCount : 0,
       })
       const parsed = extractJsonObject(text)
       if (!parsed || typeof parsed !== 'object') {
