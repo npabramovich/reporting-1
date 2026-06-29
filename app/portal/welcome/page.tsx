@@ -10,28 +10,31 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Building2, Loader2 } from 'lucide-react'
 
 /**
- * LP onboarding. The invite email carries a 6-digit code; the LP enters their
- * email + that code, sets a password, and we bind + activate their LP account.
- * Afterwards they sign in like any other user at /auth (email + password) and
- * middleware routes them to the portal.
+ * LP onboarding. The invite email is a durable link here (no expiring code) —
+ * the LP requests a fresh sign-in code on demand, enters it, sets a password,
+ * and we activate their account. Afterwards they sign in like any other user at
+ * /auth and middleware routes them to the portal.
  */
 export default function PortalWelcomePage() {
+  const [step, setStep] = useState<'request' | 'verify'>('request')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
+  const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [resent, setResent] = useState(false)
   const [checking, setChecking] = useState(true)
   const [authedEmail, setAuthedEmail] = useState<string | null>(null)
   const [activating, setActivating] = useState(false)
 
   const supabase = createClient()
 
-  // A user who already has a session (e.g. a GP also invited as an LP, or someone
-  // returning mid-onboarding) skips the code+password step — they just need their
-  // LP account activated.
   useEffect(() => {
+    // Pre-fill the email from the invite link (?email=...).
+    try {
+      const e = new URLSearchParams(window.location.search).get('email')
+      if (e) setEmail(e.trim().toLowerCase())
+    } catch { /* ignore */ }
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) setAuthedEmail(data.user.email ?? '')
       setChecking(false)
@@ -39,8 +42,7 @@ export default function PortalWelcomePage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function directActivate() {
-    setError(null)
-    setActivating(true)
+    setError(null); setActivating(true)
     const res = await fetch('/api/portal/activate', { method: 'POST' })
     if (res.ok) { window.location.href = '/portal/snapshots'; return }
     const b = await res.json().catch(() => ({}))
@@ -48,22 +50,27 @@ export default function PortalWelcomePage() {
     setActivating(false)
   }
 
+  async function sendCode() {
+    setError(null)
+    const normEmail = email.trim().toLowerCase()
+    if (!normEmail || !normEmail.includes('@')) { setError('Enter your email address.'); return }
+    setSending(true)
+    // The account already exists (created when you were invited); send a fresh code.
+    const { error: otpErr } = await supabase.auth.signInWithOtp({ email: normEmail, options: { shouldCreateUser: false } })
+    setSending(false)
+    if (otpErr) { setError(otpErr.message); return }
+    setStep('verify')
+  }
+
   async function complete() {
     setError(null)
-    if (!email.trim() || !code || code.length !== 6) {
-      setError('Enter your email and the 6-digit code from your invitation.')
-      return
-    }
-    if (!password || password.length < 8) {
-      setError('Choose a password of at least 8 characters.')
-      return
-    }
-    setBusy(true)
     const normEmail = email.trim().toLowerCase()
+    if (!code || code.length !== 6) { setError('Enter the 6-digit code we emailed you.'); return }
+    if (!password || password.length < 8) { setError('Choose a password of at least 8 characters.'); return }
+    setBusy(true)
 
-    // The code may be an invite token (first time) or a resent email OTP.
-    let verify = await supabase.auth.verifyOtp({ type: 'invite', email: normEmail, token: code })
-    if (verify.error) verify = await supabase.auth.verifyOtp({ type: 'email', email: normEmail, token: code })
+    let verify = await supabase.auth.verifyOtp({ type: 'email', email: normEmail, token: code })
+    if (verify.error) verify = await supabase.auth.verifyOtp({ type: 'invite', email: normEmail, token: code })
     if (verify.error) { setError(verify.error.message); setBusy(false); return }
 
     const { error: pwErr } = await supabase.auth.updateUser({ password })
@@ -77,13 +84,6 @@ export default function PortalWelcomePage() {
       return
     }
     window.location.href = '/portal/snapshots'
-  }
-
-  async function resend() {
-    setError(null)
-    if (!email.trim()) { setError('Enter your email first.'); return }
-    await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: false } })
-    setResent(true)
   }
 
   if (checking) {
@@ -137,40 +137,47 @@ export default function PortalWelcomePage() {
           <CardHeader className="pb-4">
             <CardTitle className="text-lg">Set up your access</CardTitle>
             <CardDescription>
-              Enter the 6-digit code from your invitation email and choose a password.
+              {step === 'request'
+                ? "Confirm your email and we'll send you a code to finish setting up your account."
+                : `Enter the code we emailed to ${email} and choose a password.`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {error && (
-              <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
+            {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+
+            {step === 'request' ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" type="email" placeholder="you@example.com" value={email}
+                    onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendCode()}
+                    autoComplete="email" autoFocus />
+                </div>
+                <Button className="w-full" onClick={sendCode} disabled={sending}>
+                  {sending ? 'Sending…' : 'Email me a code'}
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="code">Code</Label>
+                  <Input id="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="123456"
+                    value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="text-center text-lg tracking-[0.5em]" autoFocus />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Choose a password</Label>
+                  <Input id="password" type="password" placeholder="At least 8 characters" value={password}
+                    onChange={e => setPassword(e.target.value)} autoComplete="new-password" />
+                </div>
+                <Button className="w-full" onClick={complete} disabled={busy}>
+                  {busy ? 'Setting up…' : 'Complete setup'}
+                </Button>
+                <button type="button" onClick={sendCode} disabled={sending} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
+                  {sending ? 'Sending…' : "Didn't get it? Resend code"}
+                </button>
+              </>
             )}
-
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="you@example.com" value={email}
-                onChange={e => setEmail(e.target.value)} autoComplete="email" autoFocus />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="code">Invitation code</Label>
-              <Input id="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="123456"
-                value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                className="text-center text-lg tracking-[0.5em]" />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">Choose a password</Label>
-              <Input id="password" type="password" placeholder="At least 8 characters" value={password}
-                onChange={e => setPassword(e.target.value)} autoComplete="new-password" />
-            </div>
-
-            <Button className="w-full" onClick={complete} disabled={busy}>
-              {busy ? 'Setting up…' : 'Complete setup'}
-            </Button>
-
-            <button type="button" onClick={resend} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
-              {resent ? 'New code sent, check your email' : "Didn't get a code? Resend"}
-            </button>
           </CardContent>
         </Card>
       </div>
