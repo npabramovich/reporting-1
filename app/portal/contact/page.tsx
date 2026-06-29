@@ -31,7 +31,7 @@ export default function PortalContactPage() {
 
   if (sent) {
     return (
-      <div className="max-w-xl">
+      <div>
         <div className="rounded-md border bg-card p-8 text-center">
           <Check className="h-6 w-6 mx-auto text-green-600 dark:text-green-400 mb-2" />
           <div className="text-sm font-medium">Message sent</div>
@@ -43,7 +43,7 @@ export default function PortalContactPage() {
   }
 
   return (
-    <div className="max-w-xl space-y-4">
+    <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Contact your fund</h1>
         <p className="text-sm text-muted-foreground mt-0.5">

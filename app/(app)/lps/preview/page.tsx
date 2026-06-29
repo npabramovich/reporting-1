@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, FileText, Mail, Download, ArrowLeft, Eye, ExternalLink } from 'lucide-react'
+import { Loader2, FileText, Mail, Download, ArrowLeft, Eye, ChevronRight, ExternalLink, ShieldCheck, MessageSquare } from 'lucide-react'
 
 interface Investor { id: string; name: string }
 interface Snapshot { id: string; name: string; as_of_date: string | null }
@@ -28,12 +28,24 @@ function fmtDate(s: string | null): string {
 }
 const effective = (d: Doc) => d.doc_date || d.uploaded_at || ''
 
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <h2 className="text-sm font-semibold">{title}</h2>
+      {children}
+    </section>
+  )
+}
+function Empty({ label }: { label: string }) {
+  return <div className="rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">{label}</div>
+}
+
 export default function LpPortalPreviewPage() {
   const [investors, setInvestors] = useState<Investor[]>([])
   const [investorId, setInvestorId] = useState('sample')
   const [data, setData] = useState<Preview | null>(null)
   const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState<'snapshots' | 'letters' | 'documents'>('snapshots')
+  const [tab, setTab] = useState<'library' | 'settings' | 'contact'>('library')
   const [downloading, setDownloading] = useState<string | null>(null)
 
   useEffect(() => {
@@ -77,30 +89,51 @@ export default function LpPortalPreviewPage() {
     } finally { setDownloading(null) }
   }
 
+  // scope -> docs (flat, newest first); category shown inline on each row.
   const groupedDocs = useMemo(() => {
-    const byScope = new Map<string, Map<string, Doc[]>>()
+    const byScope = new Map<string, Doc[]>()
     for (const d of (data?.documents ?? [])) {
       const s = d.scope === 'investor' ? 'investor' : 'fund'
-      const cat = d.category?.trim() || 'Other'
-      if (!byScope.has(s)) byScope.set(s, new Map())
-      const cm = byScope.get(s)!
-      if (!cm.has(cat)) cm.set(cat, [])
-      cm.get(cat)!.push(d)
+      if (!byScope.has(s)) byScope.set(s, [])
+      byScope.get(s)!.push(d)
     }
-    for (const cm of Array.from(byScope.values())) for (const arr of Array.from(cm.values())) arr.sort((a, b) => effective(b).localeCompare(effective(a)))
+    for (const arr of Array.from(byScope.values())) arr.sort((a, b) => effective(b).localeCompare(effective(a)))
     return byScope
   }, [data])
 
-  const orderedCats = (cm: Map<string, Doc[]>) => Array.from(cm.keys()).sort((a, b) => (a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)))
+  const isSample = investorId === 'sample'
+
+  const docRow = (d: Doc) => {
+    const meta = [d.category?.trim(), d.file_name, d.size_bytes ? fmtSize(d.size_bytes) : null, effective(d) ? fmtDate(effective(d)) : null].filter(Boolean).join(' · ')
+    const inner = (
+      <>
+        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-sm truncate">{d.title}</div>
+          {meta && <div className="text-xs text-muted-foreground truncate">{meta}</div>}
+        </div>
+      </>
+    )
+    return (d.sample || isSample) ? (
+      <div key={d.id} className="w-full flex items-center gap-3 px-4 py-3" title="Preview only">
+        {inner}
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">{d.sample ? 'Sample' : 'Preview'}</span>
+      </div>
+    ) : (
+      <button key={d.id} onClick={() => download(d.id)} disabled={downloading === d.id} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors">
+        {inner}
+        {downloading === d.id ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" /> : <Download className="h-4 w-4 text-muted-foreground shrink-0" />}
+      </button>
+    )
+  }
 
   const TABS = [
-    { key: 'snapshots' as const, label: 'Reports', count: data?.snapshots.length ?? 0 },
-    { key: 'letters' as const, label: 'Letters', count: data?.letters.length ?? 0 },
-    { key: 'documents' as const, label: 'Documents', count: data?.documents.length ?? 0 },
+    { key: 'library' as const, label: 'Library' },
+    { key: 'settings' as const, label: 'Settings' },
+    { key: 'contact' as const, label: 'Contact' },
   ]
 
-  // Sample mode is a layout-only example (used by the demo): nothing downloadable.
-  const isSample = investorId === 'sample'
+  const isEmpty = !!data && data.snapshots.length === 0 && data.letters.length === 0 && data.documents.length === 0
 
   return (
     <div className="min-h-screen bg-muted/20">
@@ -110,7 +143,7 @@ export default function LpPortalPreviewPage() {
           <span className="inline-flex items-center gap-1.5 font-medium"><Eye className="h-4 w-4" /> LP portal preview — viewing as</span>
           <select
             value={investorId}
-            onChange={e => { setInvestorId(e.target.value); setTab('snapshots') }}
+            onChange={e => { setInvestorId(e.target.value); setTab('library') }}
             className="h-7 rounded border border-amber-300 dark:border-amber-700 bg-white dark:bg-amber-950 px-2 text-sm text-foreground"
           >
             <option value="sample">Sample investor (example)</option>
@@ -126,16 +159,16 @@ export default function LpPortalPreviewPage() {
       {/* Portal chrome — mirrors the real /portal layout */}
       <header className="border-b bg-card">
         <div className="max-w-5xl mx-auto px-4">
-          <div className="py-3 font-semibold text-sm tracking-tight">Investor Portal</div>
-          <nav className="flex items-center gap-4 -mb-px">
+          <div className="pt-3 pb-2 font-medium text-sm text-muted-foreground tracking-tight">Investor Portal</div>
+          <nav className="flex items-center gap-4 -mb-px pt-1">
             {TABS.map(t => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 disabled={!investorId}
-                className={`text-sm py-2 border-b-2 disabled:opacity-40 ${tab === t.key ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+                className={`text-sm py-2 border-b-2 disabled:opacity-40 whitespace-nowrap ${tab === t.key ? 'border-foreground text-foreground font-medium' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
               >
-                {t.label}{t.count > 0 ? <span className="ml-1 text-xs text-muted-foreground">{t.count}</span> : null}
+                {t.label}
               </button>
             ))}
           </nav>
@@ -143,144 +176,115 @@ export default function LpPortalPreviewPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6">
-        {!investorId ? (
+        {tab === 'settings' ? (
+          <div className="space-y-4">
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">Manage your sign-in security and who can access your account.</p>
+            </div>
+            <div className="rounded-md border bg-card p-4 text-sm text-muted-foreground flex items-start gap-2">
+              <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>Each investor manages their own account here — change password, enable two-factor authentication, and review the people they&apos;ve authorized. There&apos;s nothing investor-specific to preview.</span>
+            </div>
+          </div>
+        ) : tab === 'contact' ? (
+          <div className="space-y-4">
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight">Contact your fund</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">Investors send your team a message here; it arrives by email.</p>
+            </div>
+            <div className="rounded-md border bg-card p-4 text-sm text-muted-foreground flex items-start gap-2">
+              <MessageSquare className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>The contact form is the same for every investor — there&apos;s nothing investor-specific to preview.</span>
+            </div>
+          </div>
+        ) : !investorId ? (
           <div className="text-sm text-muted-foreground">Select an LP in the bar above to see their portal exactly as they would.</div>
         ) : loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-8"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>
         ) : !data ? (
           <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">Could not load preview.</div>
         ) : (
-          <div className="space-y-4">
-            {tab === 'snapshots' && (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight">Your documents</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">Reports, letters, and documents your fund has shared with you.</p>
+            </div>
+
+            {isEmpty ? (
+              <Empty label="Nothing has been shared with you yet." />
+            ) : (
               <>
-                <div>
-                  <h1 className="text-xl font-semibold tracking-tight">Your reports</h1>
-                  <p className="text-sm text-muted-foreground mt-0.5">Statements your fund has shared with you. Select one to download a PDF.</p>
-                </div>
-                {data.snapshots.length === 0 ? <Empty label="No reports have been shared with you yet." /> : (
-                  <div className="rounded-md border bg-card divide-y">
-                    {data.snapshots.map(s => {
-                      const inner = (
-                        <>
-                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm truncate">{s.name}</div>
-                            {s.as_of_date && <div className="text-xs text-muted-foreground">As of {s.as_of_date}</div>}
+                {data.snapshots.length > 0 && (
+                  <Section title="Statements">
+                    <div className="rounded-md border bg-card divide-y">
+                      {data.snapshots.map(s => {
+                        const inner = (
+                          <>
+                            <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-sm truncate">{s.name}</div>
+                              {s.as_of_date && <div className="text-xs text-muted-foreground">As of {s.as_of_date}</div>}
+                            </div>
+                          </>
+                        )
+                        return isSample ? (
+                          <div key={s.id} className="w-full flex items-center gap-3 px-4 py-3" title="Preview only">{inner}<span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Preview</span></div>
+                        ) : (
+                          <button key={s.id} onClick={() => downloadReport(s)} disabled={downloading === s.id} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors">
+                            {inner}
+                            {downloading === s.id ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" /> : <Download className="h-4 w-4 text-muted-foreground shrink-0" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </Section>
+                )}
+
+                {data.letters.length > 0 && (
+                  <Section title="Letters">
+                    <div className="rounded-md border bg-card divide-y">
+                      {data.letters.map(l => {
+                        const inner = (
+                          <>
+                            <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{l.period_label}</div></div>
+                          </>
+                        )
+                        return isSample ? (
+                          <div key={l.id} className="flex items-center gap-3 px-4 py-3">{inner}<span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Preview</span></div>
+                        ) : (
+                          <Link key={l.id} href={`/letters/${l.id}`} target="_blank" className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors">
+                            {inner}
+                            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  </Section>
+                )}
+
+                {data.documents.length > 0 && (
+                  <Section title="Documents">
+                    <div className="space-y-4">
+                      {SCOPE_ORDER.map(scope => {
+                        const list = groupedDocs.get(scope.key)
+                        if (!list || list.length === 0) return null
+                        return (
+                          <div key={scope.key} className="space-y-1.5">
+                            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{scope.label}</h3>
+                            <div className="rounded-md border bg-card divide-y">{list.map(docRow)}</div>
                           </div>
-                        </>
-                      )
-                      return isSample ? (
-                        <div key={s.id} className="w-full flex items-center gap-3 px-4 py-3" title="Preview only">{inner}<span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Preview</span></div>
-                      ) : (
-                        <button key={s.id} onClick={() => downloadReport(s)} disabled={downloading === s.id} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors">
-                          {inner}
-                          {downloading === s.id ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" /> : <Download className="h-4 w-4 text-muted-foreground shrink-0" />}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </>
-            )}
-
-            {tab === 'letters' && (
-              <>
-                <div>
-                  <h1 className="text-xl font-semibold tracking-tight">Letters</h1>
-                  <p className="text-sm text-muted-foreground mt-0.5">Quarterly updates your fund has shared with you.</p>
-                </div>
-                {data.letters.length === 0 ? <Empty label="No letters have been shared with you yet." /> : (
-                  <div className="rounded-md border bg-card divide-y">
-                    {data.letters.map(l => {
-                      const inner = (
-                        <>
-                          <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{l.period_label}</div></div>
-                        </>
-                      )
-                      return isSample ? (
-                        <div key={l.id} className="flex items-center gap-3 px-4 py-3">{inner}<span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Preview</span></div>
-                      ) : (
-                        <Link key={l.id} href={`/letters/${l.id}`} target="_blank" className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors">
-                          {inner}
-                          <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        </Link>
-                      )
-                    })}
-                  </div>
-                )}
-              </>
-            )}
-
-            {tab === 'documents' && (
-              <>
-                <div>
-                  <h1 className="text-xl font-semibold tracking-tight">Documents</h1>
-                  <p className="text-sm text-muted-foreground mt-0.5">Files your fund has shared with you.</p>
-                </div>
-                {data.documents.length === 0 ? <Empty label="No documents have been shared with you yet." /> : (
-                  <div className="space-y-5">
-                    {SCOPE_ORDER.map(scope => {
-                      const cm = groupedDocs.get(scope.key)
-                      if (!cm || cm.size === 0) return null
-                      const cats = orderedCats(cm)
-                      const onlyOther = cats.length === 1 && cats[0] === 'Other'
-                      return (
-                        <section key={scope.key} className="space-y-2">
-                          <h2 className="text-sm font-semibold">{scope.label}</h2>
-                          {onlyOther ? (
-                            <DocList docs={cm.get('Other')!} downloading={downloading} onDownload={download} preview={isSample} />
-                          ) : (
-                            cats.map(cat => (
-                              <div key={cat} className="space-y-1.5">
-                                {cat !== 'Other' && <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{cat}</h3>}
-                                <DocList docs={cm.get(cat)!} downloading={downloading} onDownload={download} preview={isSample} />
-                              </div>
-                            ))
-                          )}
-                        </section>
-                      )
-                    })}
-                  </div>
+                        )
+                      })}
+                    </div>
+                  </Section>
                 )}
               </>
             )}
           </div>
         )}
       </main>
-    </div>
-  )
-}
-
-function Empty({ label }: { label: string }) {
-  return <div className="rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">{label}</div>
-}
-
-function DocList({ docs, downloading, onDownload, preview }: { docs: Doc[]; downloading: string | null; onDownload: (id: string) => void; preview?: boolean }) {
-  return (
-    <div className="rounded-md border bg-card divide-y">
-      {docs.map(d => {
-        const inner = (
-          <>
-            <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="font-medium text-sm truncate">{d.title}</div>
-              <div className="text-xs text-muted-foreground truncate">{d.file_name}{d.size_bytes ? ` · ${fmtSize(d.size_bytes)}` : ''}{effective(d) ? ` · ${fmtDate(effective(d))}` : ''}</div>
-            </div>
-          </>
-        )
-        return (d.sample || preview) ? (
-          <div key={d.id} className="w-full flex items-center gap-3 px-4 py-3" title="Preview only">
-            {inner}
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">{d.sample ? 'Sample' : 'Preview'}</span>
-          </div>
-        ) : (
-          <button key={d.id} onClick={() => onDownload(d.id)} disabled={downloading === d.id} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors">
-            {inner}
-            {downloading === d.id ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" /> : <Download className="h-4 w-4 text-muted-foreground shrink-0" />}
-          </button>
-        )
-      })}
     </div>
   )
 }
