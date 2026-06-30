@@ -12,6 +12,8 @@ export default function LpPortalExplainerPage() {
     <ExplainerContent
       title="LP Portal"
       icon={Lock}
+      screenshotSrc="/screenshots/lp-portal.png"
+      screenshotLabel="LP Portal"
     >
       <p className="text-muted-foreground">
         The LP Portal is a private, fund-branded area where your limited partners sign in to see

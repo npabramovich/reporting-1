@@ -17,11 +17,14 @@ Forward investor updates in any format — PDF, Excel, PowerPoint, plain text �
 - **Portfolio dashboard** — Real-time view of company health with key metrics and trend analysis
 - **Review queue** — Flags uncertain extractions for human verification before saving
 - **LP reporting** — Export clean data or use built-in templates for professional presentation
+- **LP portal** — Give your LPs a private, fund-branded login to view and download their capital account statements, quarterly letters, and fund documents — each as a web page or a PDF. Send any item by email to one LP, several, or your whole list as a secure portal link, a PDF attachment, or both. Authorized users (advisors, accountants) are included automatically, and an AI analyst answers LP questions from only their own materials.
 - **Lightweight CRM** - Track intros, strategy, qualitative value-adds to demonstrate how you work with your portfolio
 - **Inbound deal screening** — Cold pitches and partner-forwarded intros sent to your inbound address get classified, fit-scored against your thesis, and queued in a Deals pipeline. Optional public submission form for founders.
 - **Diligence** — Pre-investment record-keeping with a schema-driven AI agent that ingests the data room, runs external research, asks partner Q&A, drafts a structured memo with paragraph-level provenance, and renders to Word or Google Docs. Schemas (rubric, Q&A library, memo structure) are partner-editable per fund.
 
 > Detailed feature descriptions at [FEATURES](./FEATURES.md)
+
+![LP Portal](public/screenshots/lp-portal.png)
 
 ## Why you should use this
 
