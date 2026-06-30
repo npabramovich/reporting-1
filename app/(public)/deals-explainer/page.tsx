@@ -27,22 +27,23 @@ export default function DealsExplainerPage() {
       <p className="text-muted-foreground">
         Sender identity is a strong signal but not a hard rule, so a partner forwarding a cold
         pitch lands in Deals where it belongs, and a portfolio founder pitching a side project gets
-        routed correctly. Below a configurable confidence threshold, items go to a Review queue
-        with the top two predicted destinations for one-click resolution. Items labelled
+        routed correctly. Below a configurable confidence threshold, items go to a Review queue,
+        tagged with the top two predicted destinations, for quick manual resolution. Items labelled
         &ldquo;other&rdquo; go to an Email Audit log instead of being silently dropped.
       </p>
       <p className="text-muted-foreground">
         For each pitch routed to Deals, a single AI call extracts company name, founder, intro
-        source (referral, cold, warm intro, accelerator, demo day), referrer when applicable,
-        stage, industry, raise size, a 100&ndash;150 word company summary, and a thesis-fit analysis
-        with a fit score (strong, moderate, weak, out of thesis). Out-of-thesis pitches auto-archive
-        and surface in a weekly digest email so partners can sanity-check without eyeballing every
-        cold pitch. Founders can also submit pitches directly via a public form at a per-fund URL
-        - admins generate or rotate the URL in Settings.
+        source (referral, cold, warm intro, accelerator, demo day, event, or other), referrer when
+        applicable, stage, industry, raise size, a 100&ndash;150 word company summary, and a
+        thesis-fit analysis with a fit score (strong, moderate, weak, out of thesis, or spam).
+        Out-of-thesis and spam pitches stay in the pipeline tagged by fit and surface in a weekly
+        digest email so partners can sanity-check without eyeballing every cold pitch. Founders can
+        also submit pitches directly via a public form at a per-fund URL - admins generate or rotate
+        the URL in Settings.
       </p>
       <p className="text-muted-foreground">
         The Deals page lists active pitches as a sortable table or a kanban board, with drag-and-drop
-        across status columns: new, reviewing, advancing, met, passed. Click a pitch to see the
+        across status columns: new, reviewing, advancing, met, diligence, invested, passed. Click a pitch to see the
         summary, thesis-fit analysis, source email, attachments, founders, intro source, and a
         deal-scoped Analyst chat that knows the pitch and your thesis. Settings includes a Known
         Referrers list (scouts and friends-of-fund whose intros bias toward Deals), the Email Audit

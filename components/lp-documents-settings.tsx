@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Loader2, Upload, Trash2, FileText } from 'lucide-react'
+import { LpSendControl } from '@/components/lp-send-control'
 
 interface Investor { id: string; name: string }
 interface Doc {
@@ -146,6 +147,9 @@ export function LpDocumentsSettings() {
                   {d.scope === 'fund' ? 'All LPs' : `${d.lp_document_shares?.length ?? 0} investor(s)`} · {d.file_name}
                   {(d.doc_date || d.uploaded_at) && ` · ${fmtDate(d.doc_date) || fmtDate(d.uploaded_at)}`}
                 </div>
+              </div>
+              <div className="shrink-0">
+                <LpSendControl kind="document" id={d.id} itemTitle={d.title} />
               </div>
               <button onClick={() => remove(d.id)} className="text-muted-foreground hover:text-destructive shrink-0" title="Delete">
                 <Trash2 className="h-3.5 w-3.5" />

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, ArrowLeft } from 'lucide-react'
+import { Loader2, ArrowLeft, Download } from 'lucide-react'
 
 interface Investment {
   id: string
@@ -36,6 +36,27 @@ export default function PortalSnapshotDetailPage() {
   const [investments, setInvestments] = useState<Investment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
+
+  async function downloadPdf() {
+    if (!snapshot) return
+    setDownloading(true)
+    try {
+      const res = await fetch(`/api/portal/snapshots/${snapshot.id}/pdf`)
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${snapshot.name}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   useEffect(() => {
     fetch(`/api/portal/snapshots/${snapshotId}`)
@@ -81,12 +102,22 @@ export default function PortalSnapshotDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link href="/portal/snapshots" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" /> Back to reports</Link>
+      <Link href="/portal/snapshots" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" /> Back to documents</Link>
 
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">{snapshot.name}</h1>
-        {snapshot.as_of_date && <p className="text-sm text-muted-foreground mt-0.5">As of {snapshot.as_of_date}</p>}
-        {snapshot.description && <p className="text-sm text-muted-foreground mt-2 max-w-2xl">{snapshot.description}</p>}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">{snapshot.name}</h1>
+          {snapshot.as_of_date && <p className="text-sm text-muted-foreground mt-0.5">As of {snapshot.as_of_date}</p>}
+          {snapshot.description && <p className="text-sm text-muted-foreground mt-2 max-w-2xl">{snapshot.description}</p>}
+        </div>
+        <button
+          onClick={downloadPdf}
+          disabled={downloading}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border bg-card px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-60"
+        >
+          {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Download PDF
+        </button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

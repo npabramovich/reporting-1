@@ -9,6 +9,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useFeatureVisibility, useIsAdmin } from '@/components/feature-visibility-context'
 import { LpShareControl } from '@/components/lp-share-control'
+import { LpSendControl } from '@/components/lp-send-control'
+import { sanitizeBasicHtml } from '@/lib/sanitize'
 
 const DEFAULT_PROMPT_PLACEHOLDER = `## LP Letter Style Guide (Default)
 
@@ -363,7 +365,7 @@ export default function LetterEditorPage() {
 
   const narratives: CompanyNarrative[] = Array.isArray(letter.company_narratives) ? letter.company_narratives : []
   const hasContent = narratives.length > 0 || letter.full_draft
-  const tableHtml = liveTableHtml ?? letter.portfolio_table_html
+  const tableHtml = sanitizeBasicHtml(liveTableHtml ?? letter.portfolio_table_html)
 
   return (
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
@@ -416,7 +418,10 @@ export default function LetterEditorPage() {
             </Button>
           )}
           {isAdmin && (fv.lp_portal_access === 'everyone' || fv.lp_portal_access === 'admin') && (
-            <LpShareControl shareEndpoint={`/api/lp-letters/${letterId}/share`} />
+            <>
+              <LpShareControl shareEndpoint={`/api/lp-letters/${letterId}/share`} />
+              <LpSendControl kind="letter" id={letterId} />
+            </>
           )}
         </div>
       </div>

@@ -135,6 +135,14 @@ export async function POST(
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
+  // Tenant scoping: the client builds the key as `${fundId}/${companyId}/...`.
+  // Without this check a fund member could pass another tenant's storage path
+  // (the bucket is shared and we use the service-role client), reading its text
+  // or deleting it via the remove() calls below.
+  if (!String(storagePath).startsWith(`${company.fund_id}/${params.id}/`)) {
+    return NextResponse.json({ error: 'Invalid storage path' }, { status: 400 })
+  }
+
   // Download file from Storage to extract text
   const { data: fileData, error: downloadError } = await admin
     .storage

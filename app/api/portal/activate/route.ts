@@ -22,7 +22,11 @@ export async function POST() {
     .eq('auth_user_id', user.id)
     .maybeSingle()
 
-  if (!account && user.email) {
+  // Email is only proof of ownership once the address is confirmed. Without this,
+  // a project with email confirmations disabled would let an attacker sign up
+  // under an invited LP's email and bind that account by email match alone.
+  const emailVerified = !!((user as any).email_confirmed_at || (user as any).confirmed_at)
+  if (!account && user.email && emailVerified) {
     const { data: byEmail } = await (admin as any)
       .from('lp_accounts')
       .select('id, status, auth_user_id')

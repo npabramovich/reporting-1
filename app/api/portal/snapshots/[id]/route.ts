@@ -33,11 +33,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   if (sharedInvestorIds.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // The fund's LP portal must be switched on for the snapshot to be visible.
+  // A share row always carries fund_id; treat its absence as "not found" rather
+  // than silently skipping the gate.
   const fundId = (shares ?? [])[0]?.fund_id as string | undefined
-  if (fundId) {
-    const { data: ef } = await (admin as any).from('fund_settings').select('lp_portal_enabled').eq('fund_id', fundId).maybeSingle()
-    if (!ef?.lp_portal_enabled) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
+  if (!fundId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { data: ef } = await (admin as any).from('fund_settings').select('lp_portal_enabled').eq('fund_id', fundId).maybeSingle()
+  if (!ef?.lp_portal_enabled) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { data: snapshot } = await (admin as any)
     .from('lp_snapshots')

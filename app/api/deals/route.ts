@@ -37,7 +37,10 @@ export async function GET(req: NextRequest) {
   if (fitScore) query = query.eq('thesis_fit_score', fitScore)
   if (introSource) query = query.eq('intro_source', introSource)
   if (search) {
-    const escaped = search.replace(/[%_]/g, '\\$&')
+    // Neutralize PostgREST filter-string delimiters first (a `,` `(` `)` `:` or
+    // backslash would otherwise be parsed as extra .or() clauses), then escape
+    // LIKE wildcards in the remaining literal search text.
+    const escaped = search.replace(/[,()*:".\\]/g, ' ').replace(/[%_]/g, '\\$&')
     query = query.or(`company_name.ilike.%${escaped}%,founder_name.ilike.%${escaped}%,founder_email.ilike.%${escaped}%`)
   }
 

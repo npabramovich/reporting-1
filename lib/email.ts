@@ -1,11 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+export interface EmailAttachment {
+  filename: string
+  content: Buffer
+  contentType: string
+}
+
 export interface EmailParams {
   to: string
   from?: string
   subject: string
   html: string
   cc?: string
+  attachments?: EmailAttachment[]
 }
 
 export interface OutboundConfig {
@@ -27,6 +34,7 @@ async function sendViaResend(apiKey: string, params: EmailParams) {
     cc: params.cc || undefined,
     subject: params.subject,
     html: params.html,
+    attachments: params.attachments?.map(a => ({ filename: a.filename, content: a.content })),
   })
   return { id: result.data?.id }
 }
@@ -40,6 +48,12 @@ async function sendViaPostmark(serverToken: string, params: EmailParams) {
     Cc: params.cc || undefined,
     Subject: params.subject,
     HtmlBody: params.html,
+    Attachments: params.attachments?.map(a => ({
+      Name: a.filename,
+      Content: a.content.toString('base64'),
+      ContentType: a.contentType,
+      ContentID: null as unknown as string,
+    })),
   })
   return { id: result.MessageID }
 }
@@ -55,6 +69,7 @@ async function sendViaMailgun(apiKey: string, domain: string, params: EmailParam
     cc: params.cc || undefined,
     subject: params.subject,
     html: params.html,
+    attachment: params.attachments?.map(a => ({ filename: a.filename, data: a.content })),
   })
   return { id: result.id }
 }
@@ -86,7 +101,7 @@ async function sendViaGmail(admin: SupabaseClient, fundId: string, params: Email
   }
   const accessToken = await getAccessToken(refreshToken, creds.clientId, creds.clientSecret)
 
-  const result = await sendEmail(accessToken, params.to, params.subject, params.html, params.cc)
+  const result = await sendEmail(accessToken, params.to, params.subject, params.html, params.cc, params.attachments)
   return { id: result.id }
 }
 

@@ -1,4 +1,5 @@
 import puppeteer from 'puppeteer-core'
+import { sanitizeBasicHtml } from '@/lib/sanitize'
 
 // Shared LP investor-report rendering: HTML template + PDF rendering, used by the
 // GP batch export (zip of PDFs), the LP portal (single download), and the admin
@@ -331,6 +332,10 @@ export async function renderHtmlToPdf(html: string): Promise<Buffer> {
   })
   try {
     const page = await browser.newPage()
+    // These reports are static HTML — no script should ever run. Disabling JS
+    // neutralizes any markup that slips past sanitization from executing inside
+    // the (sandbox-less) render browser.
+    await page.setJavaScriptEnabled(false)
     await page.setContent(html, { waitUntil: 'load' })
     const pdf = await page.pdf({
       format: 'letter',
@@ -406,4 +411,110 @@ export async function generateInvestorReportPdf(
   const safeName = investorName.replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'Report'
   const safeSnap = String(snapshot.name || 'Report').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'Report'
   return { pdf, fileName: `${safeName} - ${safeSnap}.pdf` }
+}
+
+// ---------------------------------------------------------------------------
+// LP letter PDF — shares the same fund header / footer chrome as the investor
+// report above, so the two LP-facing PDFs look like one family. The body is the
+// GP-authored letter (full_draft prose + the portfolio table HTML), matching
+// what the LP sees in the portal web view.
+// ---------------------------------------------------------------------------
+
+export function buildLetterHtml(opts: {
+  periodLabel: string
+  fullDraft: string | null
+  portfolioTableHtml: string | null
+  fundName: string
+  fundLogo: string | null
+  fundAddress: string | null
+  asOfFormatted: string | null
+}): string {
+  const { periodLabel, fullDraft, portfolioTableHtml, fundName, fundLogo, fundAddress, asOfFormatted } = opts
+
+  // Preserve the author's paragraph breaks; escape the prose itself.
+  const draftHtml = fullDraft
+    ? fullDraft
+        .split(/\n{2,}/)
+        .map(p => `<p style="font-size:11px;line-height:1.6;margin-bottom:12px;white-space:pre-wrap;">${esc(p.trim())}</p>`)
+        .join('')
+    : ''
+
+  // GP-authored table HTML — scrub before embedding in the rendered page.
+  const tableHtml = sanitizeBasicHtml(portfolioTableHtml) || ''
+
+  const footer = `${asOfFormatted ? `As of ${esc(asOfFormatted)}. ` : ''}This letter is provided to limited partners for informational purposes. All figures are reported net of expenses, including estimated carried interest.`
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size:12px; color:#111; line-height:1.4; }
+  table { width:100%; border-collapse:collapse; font-size:11px; }
+  th { font-weight:600; text-align:left; padding:5px 8px; border-bottom:2px solid #ccc; }
+  td { padding:5px 8px; border-top:1px solid #e5e5e5; }
+  strong { font-weight:600; }
+</style></head><body>
+  <div style="padding:0;">
+    <!-- Fund Header (identical to the investor report) -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;">
+      <div style="flex-shrink:0;">
+        ${fundLogo ? `<img src="${fundLogo}" style="height:40px;width:auto;object-fit:contain;" />` : ''}
+      </div>
+      <div style="text-align:right;margin-left:40%;">
+        <h2 style="font-size:16px;font-weight:600;letter-spacing:-0.01em;">${esc(fundName)}</h2>
+        ${fundAddress ? `<p style="font-size:11px;color:#888;white-space:pre-line;line-height:1.3;margin-top:2px;">${esc(fundAddress)}</p>` : ''}
+      </div>
+    </div>
+
+    <!-- Letter Header -->
+    <h1 style="font-size:18px;font-weight:700;letter-spacing:-0.01em;margin-bottom:4px;">${esc(periodLabel)}</h1>
+    ${asOfFormatted ? `<p style="font-size:11px;color:#888;margin-bottom:24px;">As of ${esc(asOfFormatted)}</p>` : '<div style="margin-bottom:24px;"></div>'}
+
+    ${draftHtml}
+    ${tableHtml ? `<div style="margin-top:20px;">${tableHtml}</div>` : ''}
+    ${!draftHtml && !tableHtml ? '<p style="font-size:11px;color:#888;">This letter has no content.</p>' : ''}
+  </div>
+
+  <!-- Footer -->
+  <div style="position:fixed;bottom:0;left:0;right:0;padding:8px 0;border-top:1px solid #e5e5e5;background:white;font-size:9px;color:#888;">
+    ${footer}
+  </div>
+</body></html>`
+}
+
+/**
+ * Fetch one shared LP letter and render it to a single PDF, using the same fund
+ * chrome as the investor report. The CALLER is responsible for authorization
+ * (LP via resolveLpAccess, or admin via fund membership).
+ */
+export async function generateLetterPdf(
+  admin: any,
+  opts: { fundId: string; letterId: string },
+): Promise<{ pdf: Buffer; fileName: string } | null> {
+  const { fundId, letterId } = opts
+
+  const [letterRes, fundRes] = await Promise.all([
+    admin.from('lp_letters').select('id, period_label, status, full_draft, portfolio_table_html').eq('id', letterId).eq('fund_id', fundId).maybeSingle(),
+    admin.from('funds').select('name, logo_url, address').eq('id', fundId).maybeSingle(),
+  ])
+
+  const letter = letterRes.data
+  if (!letter || letter.status === 'generating') return null
+
+  const fund = fundRes.data
+  const fundLogo = (fund?.logo_url && typeof fund.logo_url === 'string' && fund.logo_url.startsWith('data:image/')) ? fund.logo_url : null
+
+  const html = buildLetterHtml({
+    periodLabel: letter.period_label || 'Letter',
+    fullDraft: letter.full_draft,
+    portfolioTableHtml: letter.portfolio_table_html,
+    fundName: fund?.name || '',
+    fundLogo,
+    fundAddress: fund?.address || null,
+    asOfFormatted: null,
+  })
+
+  const pdf = await renderHtmlToPdf(html)
+  const safeFund = String(fund?.name || 'Letter').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'Letter'
+  const safePeriod = String(letter.period_label || 'Letter').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'Letter'
+  return { pdf, fileName: `${safeFund} - ${safePeriod}.pdf` }
 }

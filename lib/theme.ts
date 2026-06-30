@@ -101,7 +101,10 @@ export function hslToHex(hsl: string): string | null {
 export function themeCssVars(theme: FundTheme | null | undefined): string {
   if (!theme) return ''
   const out: string[] = []
-  if (theme.accent) {
+  // Validate at render time, not just on write: this string is injected into a
+  // <style> block via dangerouslySetInnerHTML, so an un-validated accent (e.g.
+  // from a direct DB write) could break out of the rule and inject markup.
+  if (theme.accent && isValidHsl(theme.accent)) {
     const fg = foregroundFor(theme.accent)
     out.push(
       `--primary:${theme.accent}`,

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import Link from 'next/link'
-import { Menu, Github, LogIn, Play, Home, Building2, Mail, Upload, BarChart3, Briefcase, Send, StickyNote, Handshake, FileText, Crown, ShieldCheck, Settings, LifeBuoy, Scale, MessageCircle, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, Package, Tag, Star, Lightbulb, Microscope } from 'lucide-react'
+import { Menu, Github, LogIn, Play, Home, Building2, Mail, Upload, BarChart3, Briefcase, Send, StickyNote, Handshake, FileText, Crown, ShieldCheck, Settings, LifeBuoy, Scale, MessageCircle, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, Package, Tag, Star, Lightbulb, Microscope, Lock } from 'lucide-react'
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -50,6 +50,7 @@ const PRODUCT_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/diligence-explainer', label: 'Diligence', icon: Microscope },
   { href: '/letters-explainer', label: 'Letters', icon: FileText },
   { href: '/lps-explainer', label: 'LPs', icon: Crown },
+  { href: '/lp-portal-explainer', label: 'LP Portal', icon: Lock },
   { href: '/compliance-explainer', label: 'Compliance', icon: ShieldCheck },
   { href: '/settings-explainer', label: 'Settings', icon: Settings },
   { href: '/support-explainer', label: 'Support', icon: LifeBuoy },
@@ -322,7 +323,7 @@ function PublicShell({ children }: { children: React.ReactNode }) {
           <PublicSidebar />
         </aside>
 
-        <main className="flex-1 min-w-0 flex flex-col">
+        <main className={`flex-1 min-w-0 flex flex-col ${collapsed ? 'md:pl-4' : ''}`}>
           <div className="flex-1">
             {children}
           </div>

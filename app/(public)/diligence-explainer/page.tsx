@@ -20,8 +20,9 @@ export default function DiligenceExplainerPage() {
         diligence record, upload the data room, and run a schema-driven agent that ingests
         the documents, conducts external research, asks partner Q&amp;A, drafts a structured memo,
         scores it per your rubric, and renders to Word or Google Docs. Each diligence record has
-        tabs for Decision, Data Room (uploaded files), Diligence (external research), Partner
-        Q&amp;A, and Memo (drafts).
+        tabs for Checklist, Data Room (uploaded files), Diligence (external research), Founders,
+        Scoring, Memo (drafts), and Settings. Partner Q&amp;A runs as an agent stage rather than a
+        record tab.
       </p>
       <p className="text-muted-foreground">
         The agent is operated by seven YAML/MD configuration files (&ldquo;schemas&rdquo;) that admins
@@ -50,10 +51,10 @@ export default function DiligenceExplainerPage() {
         background jobs picked up by a worker every minute.
       </p>
       <p className="text-muted-foreground">
-        The memo editor is a two-pane view: rendered memo on the left with inline citation markers
-        and visual treatment for projections, unverified claims, and contradictions; paragraph
-        inspector and partner-attention sidebar on the right. Partners edit any paragraph, update
-        rubric scores by hand, work through the attention queue, and finalize when ready -
+        The memo editor is a single-column view: the rendered memo with inline citation markers
+        and visual treatment for projections, unverified claims, and contradictions, with
+        partner-attention warnings surfaced inline at the top. Partners edit any paragraph in place,
+        update rubric scores by hand, work through the attention items, and finalize when ready -
         finalizing locks the draft. Recommendation and team scoring are partner-only and can never
         be set by the agent.
       </p>

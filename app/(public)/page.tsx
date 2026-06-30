@@ -7,7 +7,7 @@ export const metadata = ogMetadata({
   description: 'Open source portfolio reporting for venture capital firms, accelerators, and angel investors. Forward or upload your investor updates, and Analyst does the rest.',
 })
 import { Button } from '@/components/ui/button'
-import { Github, Play, Mail, Upload, BarChart3, Brain, Handshake, FileText, ChevronRight, Lightbulb, Database, TableProperties, ShieldUser, Users, Calendar, Send, ArrowDown, StickyNote, MessageCircle, FolderOpen, ShieldCheck, LineChart, Briefcase, Microscope } from 'lucide-react'
+import { Github, Play, Mail, Upload, BarChart3, Brain, Handshake, FileText, ChevronRight, Lightbulb, Database, TableProperties, ShieldUser, Users, Calendar, Send, ArrowDown, StickyNote, MessageCircle, FolderOpen, ShieldCheck, LineChart, Briefcase, Microscope, Lock } from 'lucide-react'
 import { CalendlyButton } from '@/components/calendly-button'
 import { SubscriptionInquiryButton } from '@/components/subscription-inquiry-modal'
 import type { LucideIcon } from 'lucide-react'
@@ -31,8 +31,9 @@ const steps: { icon: LucideIcon; step: string; title: string; text: string; href
   { icon: Briefcase, step: '8', title: 'Screen inbound deals', text: 'Cold pitches and partner-forwarded intros sent to your inbound address get classified, fit-scored against your thesis, and queued in a Deals pipeline. An optional public submission form lets founders apply directly.', href: '/deals-explainer', screenshot: '/screenshots/deals.png' },
   { icon: Microscope, step: '9', title: 'Run diligence and draft memos', text: 'A schema-driven AI agent ingests the data room, runs external research, asks partner Q&A, and drafts a structured investment memo with paragraph-level provenance - rendered to Word or Google Docs. Rubric, Q&A library, and memo structure are partner-editable per fund.', href: '/diligence-explainer', screenshot: '/screenshots/diligence.png' },
   { icon: FileText, step: '10', title: 'Generate LP letters', text: 'Draft quarterly update letters for your LPs using AI and your portfolio data - metrics, summaries, performance, and team notes.', href: '/letters-explainer', screenshot: '/screenshots/letters-cropped.png' },
-  { icon: FolderOpen, step: '11', title: 'Consolidate everything in one place', text: 'Manage your portfolio, funds, SPVs, personal investments, and LPs by consolidating data from multiple platforms, spreadsheets, emails, and documents into a single source of truth. Works alongside your fund admin.', href: '/dashboard-explainer', screenshot: '/screenshots/dashboard-cropped.png' },
-  { icon: ShieldCheck, step: '12', title: 'Stay on top of compliance', text: 'Track regulatory filings, tax deadlines, and internal compliance requirements in a calendar tailored to your fund profile. Color-coded by category, with automatic applicability and dismiss tracking.', href: '/compliance-explainer', screenshot: '/screenshots/compliance-cropped.png' },
+  { icon: Lock, step: '11', title: 'Deliver to LPs through a secure portal', text: 'Give your LPs a private login to view and download their capital account statements, quarterly letters, and fund documents - each as a web page or a PDF. Send any item by email to one LP, several, or the whole list, choosing a secure portal link, a PDF attachment, or both. Authorized users on an LP’s account (advisors, accountants) are included automatically.', href: '/lp-portal-explainer', screenshot: '' },
+  { icon: FolderOpen, step: '12', title: 'Consolidate everything in one place', text: 'Manage your portfolio, funds, SPVs, personal investments, and LPs by consolidating data from multiple platforms, spreadsheets, emails, and documents into a single source of truth. Works alongside your fund admin.', href: '/dashboard-explainer', screenshot: '/screenshots/dashboard-cropped.png' },
+  { icon: ShieldCheck, step: '13', title: 'Stay on top of compliance', text: 'Track regulatory filings, tax deadlines, and internal compliance requirements in a calendar tailored to your fund profile. Color-coded by category, with automatic applicability and dismiss tracking.', href: '/compliance-explainer', screenshot: '/screenshots/compliance-cropped.png' },
 ]
 
 const faqs: { q: string; a: React.ReactNode }[] = [
@@ -85,15 +86,17 @@ export default function HomePage() {
                       <h3 className="text-base font-medium group-hover:text-foreground transition-colors">{title}</h3>
                     </div>
                     <p className="text-sm text-muted-foreground mb-3 max-w-xl">{text}</p>
-                    <div className="relative h-[200px] md:h-[280px] rounded-lg border shadow-sm overflow-hidden">
-                      <Image
-                        src={screenshot}
-                        alt={title}
-                        fill
-                        sizes="(max-width: 768px) 100vw, 80vw"
-                        className="object-cover object-left-top"
-                      />
-                    </div>
+                    {screenshot && (
+                      <div className="relative h-[200px] md:h-[280px] rounded-lg border shadow-sm overflow-hidden">
+                        <Image
+                          src={screenshot}
+                          alt={title}
+                          fill
+                          sizes="(max-width: 768px) 100vw, 80vw"
+                          className="object-cover object-left-top"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </Link>

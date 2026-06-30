@@ -22,6 +22,14 @@ async function lpFundId(admin: any, investorIds: string[]): Promise<string | nul
   return data?.fund_id ?? null
 }
 
+// The portal kill-switch: when a fund disables its LP portal, every portal data
+// route goes dark. The analyst must honor it too, or it would still surface the
+// LP's statements/letters/documents while the portal is supposedly off.
+async function portalEnabled(admin: any, fundId: string): Promise<boolean> {
+  const { data } = await admin.from('fund_settings').select('lp_portal_enabled').eq('fund_id', fundId).maybeSingle()
+  return !!data?.lp_portal_enabled
+}
+
 // GET → { available }: whether the LP can use the analyst (their fund has AI configured). Gates the UI.
 export async function GET() {
   const supabase = createClient()
@@ -34,6 +42,7 @@ export async function GET() {
 
   const fundId = await lpFundId(admin, access.investorIds)
   if (!fundId) return NextResponse.json({ available: false })
+  if (!(await portalEnabled(admin, fundId))) return NextResponse.json({ available: false })
 
   try {
     await createFundAIProviderWithOverride(admin, fundId)
@@ -58,6 +67,7 @@ export async function POST(req: NextRequest) {
 
   const fundId = await lpFundId(admin, access.investorIds)
   if (!fundId) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+  if (!(await portalEnabled(admin, fundId))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   let body: { messages?: ChatMessage[] }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }

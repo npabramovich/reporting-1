@@ -17,9 +17,11 @@ export function sanitizeBasicHtml(html: string | null | undefined): string | nul
     // Drop self-closing / unclosed dangerous tags.
     .replace(/<\s*(script|style|iframe|object|embed|link|meta|base|form|svg|math)\b[^>]*\/?>/gi, '')
     // Strip inline event-handler attributes (onclick, onerror, onload, …).
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
-    .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
+    // The leading [\s/] matches both whitespace and the `/` attribute separator
+    // (e.g. `<img src=x/onerror=…>`), which a bare `\s` would miss.
+    .replace(/[\s/]on\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/[\s/]on\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/[\s/]on\w+\s*=\s*[^\s>]+/gi, '')
     // Neutralize javascript:/vbscript:/data: URIs in href/src-style attributes.
     .replace(/(href|src|xlink:href)\s*=\s*"(?:\s*(?:javascript|vbscript|data)\s*:)[^"]*"/gi, '$1="#"')
     .replace(/(href|src|xlink:href)\s*=\s*'(?:\s*(?:javascript|vbscript|data)\s*:)[^']*'/gi, "$1='#'")
