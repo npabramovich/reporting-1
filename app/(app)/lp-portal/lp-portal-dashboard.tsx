@@ -10,7 +10,7 @@ function Section({ title, description, children }: { title: string; description?
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-sm font-medium">{title}</h2>
+        <h2 className="text-base font-semibold">{title}</h2>
         {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
       </div>
       {children}
