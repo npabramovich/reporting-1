@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { assertWriteAccess } from '@/lib/api-helpers'
+import { assertReadAccess } from '@/lib/api-helpers'
 
 /**
  * Admin-only: the distinct investment vehicles (lp_investments.portfolio_group)
@@ -16,14 +16,13 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const writeCheck = await assertWriteAccess(admin, user.id)
-  if (writeCheck instanceof NextResponse) return writeCheck
-  if (writeCheck.role !== 'admin') return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+  const access = await assertReadAccess(admin, user.id)
+  if (access instanceof NextResponse) return access
 
   const { data, error } = await (admin as any)
     .from('lp_investments')
     .select('portfolio_group')
-    .eq('fund_id', writeCheck.fundId)
+    .eq('fund_id', access.fundId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const vehicles = Array.from(

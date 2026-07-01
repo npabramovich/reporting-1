@@ -33,6 +33,34 @@ export async function assertWriteAccess(
 }
 
 /**
+ * Read-access gate for admin-only GP pages that the read-only demo should still
+ * be able to view. Allows `admin` (full access) and `viewer` (the demo role);
+ * blocks plain `member`, matching the prior admin-only posture for real funds
+ * (where these pages default to admin-only visibility anyway). Writes stay
+ * behind {@link assertWriteAccess} + an explicit admin check.
+ */
+export async function assertReadAccess(
+  admin: SupabaseClient,
+  userId: string
+): Promise<{ fundId: string; role: string } | NextResponse> {
+  const { data: membership, error } = await admin
+    .from('fund_members')
+    .select('fund_id, role')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[assertReadAccess] DB error:', error.message)
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+  }
+  if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+  if (membership.role !== 'admin' && membership.role !== 'viewer')
+    return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+
+  return { fundId: membership.fund_id, role: membership.role }
+}
+
+/**
  * LP-side mirror of {@link assertWriteAccess}, for /portal API routes.
  *
  * Resolves the caller's active LP account and the set of lp_investor_ids they

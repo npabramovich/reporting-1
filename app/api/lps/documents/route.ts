@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { assertWriteAccess } from '@/lib/api-helpers'
+import { assertWriteAccess, assertReadAccess } from '@/lib/api-helpers'
 import { extractFromBuffer } from '@/lib/parsing/extractAttachmentText'
 
 /**
@@ -22,14 +22,13 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const writeCheck = await assertWriteAccess(admin, user.id)
-  if (writeCheck instanceof NextResponse) return writeCheck
-  if (writeCheck.role !== 'admin') return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+  const access = await assertReadAccess(admin, user.id)
+  if (access instanceof NextResponse) return access
 
   const { data: docs, error } = await (admin as any)
     .from('lp_documents')
     .select('id, title, file_name, mime_type, size_bytes, scope, vehicle, category, doc_date, uploaded_at, lp_document_shares(lp_investor_id, lp_investors(name))')
-    .eq('fund_id', writeCheck.fundId)
+    .eq('fund_id', access.fundId)
     .order('uploaded_at', { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ documents: docs ?? [] })

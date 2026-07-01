@@ -26,6 +26,10 @@ const SNAPSHOT_NAME = 'Year End 2025'
 const SNAPSHOT_DATE = '2025-12-31'
 const SNAPSHOT_DESCRIPTION = 'Annual LP snapshot reconciled to fund cash flows and portfolio NAV. Multiples reflect Q4 2025 marks.'
 
+// Fake LP portal logins for the demo activity log. Emails use this sentinel
+// domain so re-seeds can find and clear the prior demo accounts.
+const DEMO_LP_DOMAIN = 'lp.hemrock-demo.example.com'
+
 const LP_INVESTMENTS: LpInvestmentDef[] = [
   // --- Fund I LPs (total commit $12M; called $10.3M; FMV $21.4M) ---
   {
@@ -195,6 +199,10 @@ const LP_INVESTMENTS: LpInvestmentDef[] = [
 export async function seedLpSnapshot(admin: Admin, fundId: string): Promise<void> {
   // Clear prior demo LP documents (re-seed idempotency; shares cascade).
   await (admin as any).from('lp_documents').delete().eq('fund_id', fundId)
+  // Clear prior demo portal engagement (activity log, messages, fake accounts).
+  await (admin as any).from('lp_access_events').delete().eq('fund_id', fundId)
+  await (admin as any).from('lp_messages').delete().eq('fund_id', fundId)
+  await (admin as any).from('lp_accounts').delete().ilike('email', `%@${DEMO_LP_DOMAIN}`)
 
   // Snapshot row.
   const { data: snapshot } = await admin
@@ -309,4 +317,128 @@ export async function seedLpSnapshot(admin: Admin, fundId: string): Promise<void
       )
     }
   }
+
+  // -------------------------------------------------------------------------
+  // Portal engagement — fake LP logins + views/downloads for the Activity page,
+  // plus a couple of LP messages. Accounts are display-only (no auth user), so
+  // they can't sign in; they exist to give the activity log real names.
+  // -------------------------------------------------------------------------
+  await seedLpEngagement(admin, fundId, investorIdMap, snapshotId)
+}
+
+// LP accounts to fake activity for (must match investor names seeded above).
+const DEMO_LP_ACCOUNTS = [
+  { investor: 'Northstar Family Office', display: 'Northstar Family Office', slug: 'northstar' },
+  { investor: 'Coastal University Endowment', display: 'Coastal University Endowment', slug: 'coastal' },
+  { investor: 'Greenfield Pension', display: 'Greenfield County Pension', slug: 'greenfield' },
+]
+const DEMO_AUTHORIZED = { display: 'Alex Rivera', slug: 'arivera', principal: 'Northstar Family Office' }
+
+async function seedLpEngagement(
+  admin: Admin,
+  fundId: string,
+  investorIdMap: Record<string, string>,
+  snapshotId: string,
+): Promise<void> {
+  const a = admin as any
+  const now = Date.now()
+  const ts = (daysAgo: number) => new Date(now - daysAgo * 86400000).toISOString()
+
+  // Targets the events point at (the docs + letters we just shared).
+  const { data: docRows } = await a.from('lp_documents').select('id, title').eq('fund_id', fundId)
+  const { data: letterRows } = await a.from('lp_letters').select('id, period_label').eq('fund_id', fundId)
+  const docs = (docRows ?? []) as { id: string; title: string }[]
+  const letters = (letterRows ?? []) as { id: string; period_label: string }[]
+  const docByTitle = (needle: string) => docs.find(d => d.title.toLowerCase().includes(needle.toLowerCase())) ?? null
+
+  // Create the fake LP accounts + their links.
+  const accountByInvestor: Record<string, string> = {}
+  for (const acc of DEMO_LP_ACCOUNTS) {
+    const investorId = investorIdMap[acc.investor]
+    if (!investorId) continue
+    const { data: created } = await a.from('lp_accounts').insert({
+      kind: 'lp', email: `${acc.slug}@${DEMO_LP_DOMAIN}`, display_name: acc.display, status: 'active',
+    }).select('id').single()
+    if (!created) continue
+    accountByInvestor[acc.investor] = created.id
+    await a.from('lp_account_links').insert({ lp_account_id: created.id, fund_id: fundId, lp_investor_id: investorId })
+  }
+
+  // One authorized user delegated on the principal's account (no direct link).
+  let authorizedAccountId: string | null = null
+  const principalId = accountByInvestor[DEMO_AUTHORIZED.principal]
+  const principalInvestorId = investorIdMap[DEMO_AUTHORIZED.principal]
+  if (principalId && principalInvestorId) {
+    const { data: au } = await a.from('lp_accounts').insert({
+      kind: 'authorized_user', email: `${DEMO_AUTHORIZED.slug}@${DEMO_LP_DOMAIN}`, display_name: DEMO_AUTHORIZED.display, status: 'active',
+    }).select('id').single()
+    if (au) {
+      authorizedAccountId = au.id
+      await a.from('lp_authorized_users').insert({
+        authorized_user_account_id: au.id, principal_lp_account_id: principalId, lp_investor_id: principalInvestorId,
+      })
+    }
+  }
+
+  const annual = docByTitle('Annual Report')
+  const cap = docByTitle('Capital Account')
+  const k1 = docByTitle('K-1')
+  const letter = letters[0] ?? null
+
+  const events: any[] = []
+  const add = (accountId: string | null, investor: string, type: 'login' | 'view' | 'download', targetType: 'portal' | 'snapshot' | 'letter' | 'document', targetId: string | null, title: string | null, daysAgo: number) => {
+    if (!accountId) return
+    if (targetType !== 'portal' && !targetId) return
+    events.push({
+      fund_id: fundId, lp_account_id: accountId, auth_user_id: null,
+      lp_investor_id: investorIdMap[investor] ?? null,
+      event_type: type, target_type: targetType, target_id: targetId, target_title: title,
+      metadata: {}, created_at: ts(daysAgo),
+    })
+  }
+
+  const ns = accountByInvestor['Northstar Family Office'] ?? null
+  const co = accountByInvestor['Coastal University Endowment'] ?? null
+  const gf = accountByInvestor['Greenfield Pension'] ?? null
+
+  // Northstar — most active LP.
+  add(ns, 'Northstar Family Office', 'login', 'portal', null, null, 1)
+  add(ns, 'Northstar Family Office', 'view', 'snapshot', snapshotId, SNAPSHOT_NAME, 1)
+  add(ns, 'Northstar Family Office', 'download', 'document', cap?.id ?? null, cap?.title ?? null, 1)
+  add(ns, 'Northstar Family Office', 'download', 'document', annual?.id ?? null, annual?.title ?? null, 6)
+  add(ns, 'Northstar Family Office', 'view', 'letter', letter?.id ?? null, letter?.period_label ?? null, 12)
+
+  // Coastal.
+  add(co, 'Coastal University Endowment', 'login', 'portal', null, null, 3)
+  add(co, 'Coastal University Endowment', 'view', 'snapshot', snapshotId, SNAPSHOT_NAME, 3)
+  add(co, 'Coastal University Endowment', 'download', 'document', annual?.id ?? null, annual?.title ?? null, 3)
+  add(co, 'Coastal University Endowment', 'download', 'document', k1?.id ?? null, k1?.title ?? null, 9)
+
+  // Greenfield.
+  add(gf, 'Greenfield Pension', 'login', 'portal', null, null, 8)
+  add(gf, 'Greenfield Pension', 'view', 'snapshot', snapshotId, SNAPSHOT_NAME, 8)
+  add(gf, 'Greenfield Pension', 'download', 'document', cap?.id ?? null, cap?.title ?? null, 8)
+
+  // Authorized user acting for Northstar.
+  add(authorizedAccountId, 'Northstar Family Office', 'login', 'portal', null, null, 2)
+  add(authorizedAccountId, 'Northstar Family Office', 'view', 'snapshot', snapshotId, SNAPSHOT_NAME, 2)
+  add(authorizedAccountId, 'Northstar Family Office', 'download', 'document', annual?.id ?? null, annual?.title ?? null, 2)
+
+  if (events.length > 0) await a.from('lp_access_events').insert(events)
+
+  // A couple of LP messages for the Messages section.
+  await a.from('lp_messages').insert([
+    {
+      fund_id: fundId, lp_account_id: co, lp_investor_id: investorIdMap['Coastal University Endowment'] ?? null,
+      from_email: `coastal@${DEMO_LP_DOMAIN}`, subject: 'Q4 capital account statement',
+      body: 'Thanks for posting the Q4 statement. Could you confirm the outstanding commitment figure for Fund II? It looks slightly different from our records.',
+      status: 'open', created_at: ts(4),
+    },
+    {
+      fund_id: fundId, lp_account_id: ns, lp_investor_id: investorIdMap['Northstar Family Office'] ?? null,
+      from_email: `northstar@${DEMO_LP_DOMAIN}`, subject: 'K-1 timing',
+      body: 'When do you expect the 2025 K-1 packages to be finalized? Our tax team is asking. Thanks!',
+      status: 'resolved', created_at: ts(20),
+    },
+  ])
 }

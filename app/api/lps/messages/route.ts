@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { assertReadAccess } from '@/lib/api-helpers'
 
 // GP-admin inbox for LP portal "Contact" messages (lib/api: lp_messages).
 async function requireAdmin() {
@@ -15,12 +16,17 @@ async function requireAdmin() {
 }
 
 export async function GET() {
-  const c = await requireAdmin()
-  if ('error' in c) return c.error
-  const { data } = await c.admin
+  // Reads allowed for admins and the read-only demo viewer (writes stay admin-only).
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const admin = createAdminClient() as any
+  const access = await assertReadAccess(admin, user.id)
+  if (access instanceof NextResponse) return access
+  const { data } = await admin
     .from('lp_messages')
     .select('id, from_email, subject, body, status, created_at, lp_investors(name)')
-    .eq('fund_id', c.fundId)
+    .eq('fund_id', access.fundId)
     .order('created_at', { ascending: false })
     .limit(200)
   const messages = ((data ?? []) as any[]).map(r => ({

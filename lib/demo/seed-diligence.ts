@@ -543,8 +543,8 @@ const DEALS: DiligenceDealDef[] = [
     sector: 'Vertical SaaS / Agriculture',
     stage_at_consideration: 'Seed',
     deal_status: 'active',
-    current_memo_stage: 'qa',
-    notes_summary: 'Mid-flow. Strong founder-market fit. LatAm exposure to manage.',
+    current_memo_stage: 'render',
+    notes_summary: 'Draft complete. Strong founder-market fit; concentration and FX exposure to underwrite.',
     documents: [
       { file_name: 'Lattice Seed Deck.pdf',     file_format: 'pdf',  file_size_bytes: 3_200_000, detected_type: 'pitch_deck',      type_confidence: 'high', parse_status: 'parsed' },
       { file_name: 'Co-op customer list.xlsx',  file_format: 'xlsx', file_size_bytes:    62_000, detected_type: 'customer_references', type_confidence: 'high', parse_status: 'parsed' },
@@ -555,7 +555,7 @@ const DEALS: DiligenceDealDef[] = [
       'Need to dig into FX exposure — co-ops pay in COP, Lattice prices in USD.',
     ],
     draft: {
-      draft_version: 'v0.2-post-research',
+      draft_version: 'v0.3-final',
       agent_version: 'memo-agent v0.1',
       is_draft: true,
       ingestion_output: {
@@ -642,11 +642,155 @@ const DEALS: DiligenceDealDef[] = [
         ],
         research_mode: 'no_web_search',
       },
-      // qa_answers populated as Q&A continues. memo_draft_output not yet built.
+      qa_answers: [
+        { question_id: 'bg_001', answer_text: `Verified Marisol's McKinsey tenure (Bogotá office, 2018–2022, agribusiness practice) via the alumni directory and a former engagement manager. She left to build Lattice after repeatedly seeing the same problem across agribusiness clients: co-ops run on spreadsheets and a legacy on-prem tool (Cropsifter) that predates smartphones. Wharton MBA 2020 confirmed.`, partner_id: null, answered_at: new Date(Date.now() - 2 * 86400000).toISOString(), feeds_dimensions: ['team'], category: 'background_track_record' },
+        { question_id: 'fmf_001', answer_text: `Founder-market fit is the strongest signal here. Marisol grew up on a coffee farm in Antioquia that her brother still runs — it was the first pilot co-op. She speaks the customer's language literally and figuratively, which shows up in the deck's retention numbers and in reference calls with two co-op managers who described her as "one of us."`, partner_id: null, answered_at: new Date(Date.now() - 2 * 86400000).toISOString(), feeds_dimensions: ['team'], category: 'founder_market_fit' },
+        { question_id: 'fx_001', answer_text: `On the FX question: co-ops are billed in local currency (MXN/COP) but the deck reports ARR in USD at spot. Marisol confirmed they have not hedged and re-price annually. At seed scale this is tolerable, but a 10–15% currency move would swing reported ARR materially — partner should treat the USD ARR figure as approximate and ask for the local-currency book.`, partner_id: null, answered_at: new Date(Date.now() - 2 * 86400000).toISOString(), feeds_dimensions: ['business_model'], category: 'business_model' },
+      ],
+      memo_draft_output: {
+        header: {
+          company_name: 'Lattice',
+          sector: 'Vertical SaaS / Agriculture',
+          stage: 'Seed',
+          round_size: '$3M @ $12M post',
+          deal_lead: null,
+          memo_date: new Date().toISOString().slice(0, 10),
+          draft_version: 'v0.3-final',
+          agent_version: 'memo-agent v0.1',
+        },
+        paragraphs: [
+          {
+            id: 'p_exec_1', section_id: 'executive_summary', order: 0,
+            prose: `Lattice is a mobile-first management platform for agricultural co-operatives in Latin America, replacing the spreadsheets and legacy on-premise software (Cropsifter) that co-ops use to track members, harvests, payments, and inputs. The company is at $480K ARR across 14 paying co-ops in Mexico and Colombia, growing 18% month-over-month. It was founded by Marisol Vega (CEO, ex-McKinsey agribusiness practice, raised on a Colombian coffee farm) and Tomás Aguirre (CTO, ex-Globant). Lattice is raising a $3M seed at a $12M post-money valuation; Hemrock would take $1M for a target ~8% stake. The thesis is that LatAm agriculture is digitizing a decade behind its US/EU peers, the incumbent is an unmaintained on-prem product, and a founder with genuine domain roots can win the category co-op by co-op.`,
+            sources: [
+              { source_type: 'claim', source_id: 'claim_arr' },
+              { source_type: 'claim', source_id: 'claim_growth' },
+              { source_type: 'finding', source_id: 'finding_competitor' },
+            ],
+            origin: 'agent_drafted', confidence: 'high', contains_projection: false, contains_unverified_claim: true, contains_contradiction: false,
+          },
+          {
+            id: 'p_exec_2', section_id: 'executive_summary', order: 1,
+            prose: `Two issues must be resolved before a commitment. First, customer concentration is high: the top 3 co-ops represent 62% of ARR, so the loss of a single anchor would materially impair the growth story — the partner should understand contract length and switching costs for those three. Second, the data room is incomplete: there is no financial model (so unit economics and runway are unverified) and no cap table (so existing dilution is unknown). A secondary concern is FX — ARR is billed in MXN/COP but reported in USD unhedged, making the headline figure sensitive to currency moves.`,
+            sources: [
+              { source_type: 'claim', source_id: 'claim_concentration' },
+              { source_type: 'gap', source_id: 'financial_model' },
+            ],
+            origin: 'agent_drafted', confidence: 'high', contains_projection: false, contains_unverified_claim: true, contains_contradiction: false,
+          },
+          {
+            id: 'p_recommendation_placeholder', section_id: 'recommendation', order: 0,
+            prose: '[Partner to complete]',
+            sources: [], origin: 'partner_only_placeholder', confidence: 'n/a', contains_projection: false, contains_unverified_claim: false, contains_contradiction: false,
+          },
+          {
+            id: 'p_company_1', section_id: 'company_overview', order: 0,
+            prose: `Lattice sells a smartphone-based SaaS to agricultural co-operatives, which are member-owned organizations that aggregate smallholder farmers to buy inputs and sell crops collectively. The product digitizes member registries, harvest intake and weigh-ins, per-member payment ledgers, and input distribution — workflows that co-ops run today on paper and Excel or on Cropsifter, an on-premise desktop tool from the pre-smartphone era. Current footprint is 14 paying co-ops across Mexico and Colombia, ranging from ~200 to ~4,000 members each.`,
+            sources: [ { source_type: 'claim', source_id: 'claim_coops' } ],
+            origin: 'agent_drafted', confidence: 'high', contains_projection: false, contains_unverified_claim: false, contains_contradiction: false,
+          },
+          {
+            id: 'p_market_1', section_id: 'market', order: 0,
+            prose: `There are tens of thousands of agricultural co-ops across Latin America managing a large share of the region's coffee, cacao, and produce output. The incumbent software (Cropsifter) is on-premise, predates mobile, and has roughly 150 co-op customers — a proof that co-ops will pay for software, and that the incumbent is beatable on form factor. Digitization tailwinds (smartphone penetration, buyer traceability requirements, and government formalization programs) are pulling co-ops toward modern tooling. The near-term obtainable market is smaller than the headline given fragmentation and long, relationship-driven sales cycles, but the category has a defensible wedge for a domain-native founder.`,
+            sources: [ { source_type: 'finding', source_id: 'finding_competitor' } ],
+            origin: 'agent_drafted', confidence: 'medium', contains_projection: false, contains_unverified_claim: false, contains_contradiction: false,
+          },
+          {
+            id: 'p_team_1_factual', section_id: 'team', order: 0,
+            prose: `Two-person founding team. Marisol Vega (CEO) spent four years in McKinsey's Bogotá office in the agribusiness practice (2018–2022, verified via alumni directory and a former manager) and holds a Wharton MBA (2020); she grew up on a coffee farm in Antioquia that her family still operates. Tomás Aguirre (CTO) was an engineer at Globant before co-founding Lattice. The pairing is a domain-and-go-to-market lead with a hands-on technical co-founder.`,
+            sources: [
+              { source_type: 'finding', source_id: 'finding_marisol_mck' },
+              { source_type: 'qa_answer', source_id: 'bg_001' },
+            ],
+            origin: 'agent_drafted', confidence: 'high', contains_projection: false, contains_unverified_claim: false, contains_contradiction: false,
+          },
+          {
+            id: 'p_team_2_prior_work', section_id: 'team', order: 1,
+            prose: `Founder-market fit is unusually direct: Marisol's family co-op was Lattice's first pilot, and reference calls with two co-op managers described her as a genuine insider rather than a software vendor. Her McKinsey agribusiness work gives her a portfolio view of how dozens of co-ops operate, and the domain relationships shorten what is otherwise a trust-heavy, relationship-driven sales cycle. This is the single strongest element of the deal.`,
+            sources: [
+              { source_type: 'qa_answer', source_id: 'fmf_001' },
+              { source_type: 'qa_answer', source_id: 'bg_001' },
+            ],
+            origin: 'agent_drafted', confidence: 'high', contains_projection: false, contains_unverified_claim: false, contains_contradiction: false,
+          },
+          {
+            id: 'p_team_3_partner', section_id: 'team', order: 2,
+            prose: '[Partner to complete — character assessment, founder-market fit judgment, and overall team score]',
+            sources: [], origin: 'partner_only_placeholder', confidence: 'n/a', contains_projection: false, contains_unverified_claim: false, contains_contradiction: false,
+          },
+          {
+            id: 'p_traction_1', section_id: 'traction', order: 0,
+            prose: `Company-stated traction is $480K ARR across 14 co-ops with 18% month-over-month growth. The growth rate is strong for a relationship-driven sales motion, but the base is small and the mix is concentrated — the top 3 co-ops account for 62% of ARR per the customer list. Two co-op managers confirmed live, daily use of the product in reference calls, which is a positive durability signal. The ARR figure is reported in USD but billed in local currency, so treat it as approximate pending the local-currency book.`,
+            sources: [
+              { source_type: 'claim', source_id: 'claim_arr' },
+              { source_type: 'claim', source_id: 'claim_concentration' },
+            ],
+            origin: 'agent_drafted', confidence: 'medium', contains_projection: false, contains_unverified_claim: true, contains_contradiction: false,
+          },
+          {
+            id: 'p_business_model_1', section_id: 'business_model', order: 0,
+            prose: `Lattice charges co-ops a per-member annual subscription with tiered pricing by co-op size. Unit economics cannot be evaluated because no financial model was provided — this is the most important gap in the data room. Additionally, the company bills in MXN/COP but reports ARR in USD without hedging and re-prices only annually, so a 10–15% currency move would swing reported revenue materially. Partner should request the financial model, the local-currency ARR book, and the annual re-pricing history.`,
+            sources: [
+              { source_type: 'qa_answer', source_id: 'fx_001' },
+              { source_type: 'gap', source_id: 'financial_model' },
+            ],
+            origin: 'agent_drafted', confidence: 'medium', contains_projection: false, contains_unverified_claim: true, contains_contradiction: false,
+          },
+          {
+            id: 'p_competition_1', section_id: 'competition_moat', order: 0,
+            prose: `The dominant incumbent is Cropsifter, a legacy on-premise co-op management tool with ~150 customers that predates the smartphone era; Lattice positions as its mobile-first replacement. A smaller adjacent player, AgriTech Pro, focuses on single-farm management rather than co-ops. Lattice's defensibility rests on being embedded in the co-op's daily payment and intake workflows plus the founder's relationship moat, rather than on any structural network effect — a real but not impregnable position at this stage.`,
+            sources: [ { source_type: 'finding', source_id: 'finding_competitor' } ],
+            origin: 'agent_drafted', confidence: 'medium', contains_projection: false, contains_unverified_claim: false, contains_contradiction: false,
+          },
+          {
+            id: 'p_outcomes_1', section_id: 'outcomes_analysis', order: 0,
+            prose: `Base case: Lattice becomes the default co-op operating system in its two beachhead countries, expands across LatAm, and reaches a mid-eight-figure revenue business supporting a strategic acquisition by an agribusiness input supplier or a regional software roll-up. At the $12M entry and a $1M check for ~8%, a credible regional-leader outcome returns several multiples over a 6–8 year horizon. Downside: concentration bites (an anchor co-op churns), FX erodes reported growth, and the company stalls as a sub-scale regional tool — at which point the position is a partial loss or write-off. The partner judgment fields below capture the actual underwriting call.`,
+            sources: [
+              { source_type: 'claim', source_id: 'claim_concentration' },
+              { source_type: 'finding', source_id: 'finding_competitor' },
+            ],
+            origin: 'agent_drafted', confidence: 'medium', contains_projection: true, contains_unverified_claim: false, contains_contradiction: false,
+          },
+          {
+            id: 'p_outcomes_2_partner', section_id: 'outcomes_analysis', order: 1,
+            prose: '[Partner to complete — base-case target multiple, upside thesis, downside floor, target ownership]',
+            sources: [], origin: 'partner_only_placeholder', confidence: 'n/a', contains_projection: false, contains_unverified_claim: false, contains_contradiction: false,
+          },
+          {
+            id: 'p_risks_1', section_id: 'risks_and_open_questions', order: 0,
+            prose: `Three items before commitment. First, concentration: obtain contract terms, tenure, and switching costs for the top-3 co-ops (62% of ARR) and understand what happens to the plan if one leaves. Second, the missing financial model and cap table: request both — the model to underwrite unit economics and runway, the cap table to understand existing dilution before pricing the round. Third, FX: get the local-currency ARR book and understand the re-pricing cadence. Structural risks: a two-person team with no obvious go-to-market hire yet, and a long, relationship-driven sales cycle that is hard to accelerate with capital alone.`,
+            sources: [
+              { source_type: 'gap', source_id: 'financial_model' },
+              { source_type: 'gap', source_id: 'cap_table' },
+              { source_type: 'claim', source_id: 'claim_concentration' },
+            ],
+            origin: 'agent_drafted', confidence: 'high', contains_projection: false, contains_unverified_claim: false, contains_contradiction: false,
+          },
+        ],
+        partner_attention: [
+          { kind: 'data_room_gap', urgency: 'must_address', body: 'No financial model in the data room — cannot underwrite unit economics or runway.', links: [] },
+          { kind: 'unverified_material_claim', urgency: 'should_address', body: 'Top-3 co-op concentration of 62% — confirm contract terms and switching costs for the anchors.', links: [{ source_type: 'claim', source_id: 'claim_concentration' }] },
+          { kind: 'data_room_gap', urgency: 'should_address', body: 'No cap table — existing dilution unknown ahead of pricing the round.', links: [] },
+          { kind: 'partner_only_blank', urgency: 'must_address', body: 'Recommendation section is empty.', links: [] },
+          { kind: 'partner_only_blank', urgency: 'must_address', body: 'Team character assessment is empty.', links: [] },
+        ],
+        scores: [
+          { dimension_id: 'market',             mode: 'machine',      score: 4,    confidence: 'medium', rationale: 'Large, fragmented LatAm co-op base with a beatable on-premise incumbent (Cropsifter) and digitization tailwinds.', supporting_evidence: [{ source_type: 'finding', source_id: 'finding_competitor' }] },
+          { dimension_id: 'product_technology', mode: 'machine',      score: 3,    confidence: 'medium', rationale: 'Mobile-first workflow product with confirmed daily use at reference co-ops. Solid but not yet technically differentiated.', supporting_evidence: [{ source_type: 'qa_answer', source_id: 'fmf_001' }] },
+          { dimension_id: 'traction',           mode: 'machine',      score: 3,    confidence: 'medium', rationale: '$480K ARR at 18% MoM is strong for the motion, but the base is small and 62% concentrated in three co-ops.', supporting_evidence: [{ source_type: 'claim', source_id: 'claim_arr' }] },
+          { dimension_id: 'business_model',     mode: 'machine',      score: 2,    confidence: 'low',    rationale: 'Per-member subscription is sensible, but no financial model was provided and unhedged FX makes reported ARR approximate.', supporting_evidence: [{ source_type: 'gap', source_id: 'financial_model' }] },
+          { dimension_id: 'competition_moat',   mode: 'machine',      score: 3,    confidence: 'medium', rationale: 'Incumbent is weak; defensibility rests on workflow embedding and founder relationships rather than a structural moat.', supporting_evidence: [{ source_type: 'finding', source_id: 'finding_competitor' }] },
+          { dimension_id: 'deal_terms',         mode: 'hybrid',       score: 3,    confidence: 'medium', rationale: '$12M post on ~$480K ARR is a typical seed multiple for a domain-native team with real traction.', supporting_evidence: [] },
+          { dimension_id: 'team',               mode: 'partner_only', score: null, confidence: null,     rationale: 'Exceptional founder-market fit: Marisol is ex-McKinsey agribusiness, raised on a co-op coffee farm that became the first pilot. Partner to assign the team score.', supporting_evidence: [{ source_type: 'qa_answer', source_id: 'fmf_001' }, { source_type: 'qa_answer', source_id: 'bg_001' }] },
+        ],
+      },
     },
     attention: [
-      { kind: 'data_room_gap', urgency: 'must_address',   body: 'No financial model uploaded. Required for unit-economics evaluation.', status: 'open' },
+      { kind: 'data_room_gap',             urgency: 'must_address',   body: 'No financial model uploaded. Required for unit-economics evaluation.', status: 'open' },
       { kind: 'unverified_material_claim', urgency: 'should_address', body: 'Top-3 concentration of 62% is high — material risk if any single co-op churns.', status: 'open' },
+      { kind: 'data_room_gap',             urgency: 'should_address', body: 'No cap table provided — existing dilution unknown ahead of pricing the round.', status: 'open' },
+      { kind: 'partner_only_blank',        urgency: 'must_address',   body: 'Recommendation section is empty.', status: 'open' },
+      { kind: 'partner_only_blank',        urgency: 'must_address',   body: 'Team character assessment is empty.', status: 'open' },
     ],
   },
 
@@ -694,6 +838,32 @@ const DEMO_CHECKLISTS: Record<string, Array<{ section: string; items: Array<{ la
     { section: 'Legal & Compliance', items: [
       { label: 'Cap table', status: 'found', agent_notes: 'Cap table provided and consistent with the stated post-money.' },
       { label: 'IP assignment agreements', status: 'unknown', agent_notes: 'Not yet reviewed — request from counsel.' },
+    ] },
+  ],
+  Lattice: [
+    { section: 'Team', items: [
+      { label: 'Founder backgrounds verified', status: 'found', agent_notes: 'Marisol Vega (CEO) confirmed ex-McKinsey Bogotá agribusiness (2018–2022) via alumni directory and a former manager; Wharton MBA 2020. Tomás Aguirre (CTO) ex-Globant.', partner_notes: 'Exceptional founder-market fit — raised on a Colombian coffee co-op that became the first pilot customer.' },
+      { label: 'Key hires / GTM plan', status: 'missing', agent_notes: 'Two-person team; no go-to-market or sales hire identified yet for a relationship-driven sales motion.' },
+    ] },
+    { section: 'Market', items: [
+      { label: 'Market sizing (TAM/SAM)', status: 'partial', agent_notes: 'Tens of thousands of LatAm co-ops, but no bottoms-up SAM for the two beachhead countries provided.' },
+      { label: 'Competitive landscape', status: 'found', agent_notes: 'Incumbent Cropsifter (~150 co-ops, on-premise, pre-mobile) is the primary competitor; AgriTech Pro is adjacent (single-farm).' },
+    ] },
+    { section: 'Product & Technology', items: [
+      { label: 'Product usage verified', status: 'found', evidence: [{ summary: 'Two co-op managers confirmed daily production use in reference calls' }], agent_notes: 'Mobile-first workflow tool covering member registry, harvest intake, and payments.' },
+      { label: 'Architecture / security review', status: 'unknown', agent_notes: 'Not yet reviewed — request architecture overview from the CTO.' },
+    ] },
+    { section: 'Traction', items: [
+      { label: 'ARR verification', status: 'partial', agent_notes: '$480K ARR at 18% MoM, but reported in USD while billed in MXN/COP — treat as approximate pending the local-currency book.' },
+      { label: 'Customer concentration', status: 'partial', agent_notes: 'Top-3 co-ops are 62% of ARR.', partner_notes: 'Confirm contract length and switching costs for the three anchors before committing.' },
+    ] },
+    { section: 'Financials', items: [
+      { label: 'Financial model', status: 'missing', agent_notes: 'No financial model in the data room — unit economics and runway cannot be assessed.', partner_notes: 'Gating item — request before IC.' },
+      { label: 'FX / currency exposure', status: 'partial', agent_notes: 'Bills in local currency, reports USD, unhedged, re-prices annually. Material sensitivity to currency moves.' },
+    ] },
+    { section: 'Legal & Compliance', items: [
+      { label: 'Cap table', status: 'missing', agent_notes: 'No cap table provided — existing dilution unknown ahead of pricing the round.' },
+      { label: 'Entity structure (LatAm)', status: 'unknown', agent_notes: 'Cross-border structure (Mexico/Colombia operating entities) not yet reviewed with counsel.' },
     ] },
   ],
 }
