@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveLpAccess } from '@/lib/api-helpers'
+import { getSelfReadState } from '@/lib/lp-access-log'
 
 /**
  * LP portal — list the snapshots shared with the signed-in LP. Scoped strictly
@@ -15,7 +16,7 @@ export async function GET() {
 
   const access = await resolveLpAccess(admin, user.id)
   if (access instanceof NextResponse) return access
-  const { investorIds } = access
+  const { investorIds, lpAccountId } = access
   if (investorIds.length === 0) return NextResponse.json({ snapshots: [] })
 
   const { data: shares, error } = await (admin as any)
@@ -45,6 +46,8 @@ export async function GET() {
       byId.set(snap.id, { id: snap.id, name: snap.name, as_of_date: snap.as_of_date, shared_at: s.shared_at })
     }
   }
-  const snapshots = Array.from(byId.values()).sort((a, b) => (b.as_of_date ?? '').localeCompare(a.as_of_date ?? ''))
+  const sorted = Array.from(byId.values()).sort((a, b) => (b.as_of_date ?? '').localeCompare(a.as_of_date ?? ''))
+  const readState = await getSelfReadState(admin, { lpAccountId, targetType: 'snapshot', targetIds: sorted.map(s => s.id) })
+  const snapshots = sorted.map(s => ({ ...s, last_viewed_at: readState[s.id] ?? null }))
   return NextResponse.json({ snapshots })
 }

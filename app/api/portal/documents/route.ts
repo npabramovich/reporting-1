@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveLpAccess } from '@/lib/api-helpers'
+import { getSelfReadState } from '@/lib/lp-access-log'
 
 /**
  * LP portal — documents visible to the signed-in LP: fund-wide docs for funds
@@ -16,7 +17,7 @@ export async function GET() {
 
   const access = await resolveLpAccess(admin, user.id)
   if (access instanceof NextResponse) return access
-  const { investorIds } = access
+  const { investorIds, lpAccountId } = access
   if (investorIds.length === 0) return NextResponse.json({ documents: [] })
 
   // The LP's funds, then which of those have the portal switched on.
@@ -49,6 +50,9 @@ export async function GET() {
     if (d && d.scope === 'investor' && enabledFunds.has(d.fund_id)) add(d, 'investor')
   }
 
-  const documents = Array.from(byId.values()).sort((a, b) => (b.uploaded_at ?? '').localeCompare(a.uploaded_at ?? ''))
+  const sorted = Array.from(byId.values()).sort((a, b) => (b.uploaded_at ?? '').localeCompare(a.uploaded_at ?? ''))
+  // Sample docs are never really "downloaded"; leave their read-state null.
+  const readState = await getSelfReadState(admin, { lpAccountId, targetType: 'document', targetIds: sorted.filter(d => !d.sample).map(d => d.id) })
+  const documents = sorted.map(d => ({ ...d, last_viewed_at: d.sample ? null : (readState[d.id] ?? null) }))
   return NextResponse.json({ documents })
 }

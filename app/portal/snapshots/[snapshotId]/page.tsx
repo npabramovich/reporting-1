@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, ArrowLeft, Download } from 'lucide-react'
+import { AccessHistory } from '@/components/portal/access-history'
 
 interface Investment {
   id: string
@@ -174,6 +175,10 @@ export default function PortalSnapshotDetailPage() {
       ))}
 
       {snapshot.footer_note && <p className="text-xs text-muted-foreground max-w-2xl">{snapshot.footer_note}</p>}
+
+      <div className="pt-2 border-t">
+        <AccessHistory type="snapshot" id={snapshot.id} />
+      </div>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-export type FeatureKey = 'interactions' | 'investments' | 'funds' | 'notes' | 'lp_letters' | 'imports' | 'asks' | 'lps' | 'lp_associates' | 'lp_portal_access' | 'compliance' | 'deals' | 'diligence'
+export type FeatureKey = 'interactions' | 'investments' | 'funds' | 'notes' | 'lp_letters' | 'imports' | 'asks' | 'lps' | 'lp_associates' | 'lp_portal_access' | 'lp_activity' | 'compliance' | 'deals' | 'diligence'
 
 export type FeatureVisibility = 'everyone' | 'admin' | 'hidden' | 'off'
 
@@ -15,6 +15,7 @@ export const DEFAULT_FEATURE_VISIBILITY: FeatureVisibilityMap = {
   lps: 'admin',
   lp_associates: 'admin',
   lp_portal_access: 'admin',
+  lp_activity: 'admin',
   compliance: 'admin',
   deals: 'admin',
   diligence: 'off',

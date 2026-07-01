@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, FileText, Download, Mail, ChevronRight } from 'lucide-react'
 import { LpAnalyst } from '@/components/portal/lp-analyst'
+import { DocumentViewer, isPreviewable, type ViewerDoc } from '@/components/portal/document-viewer'
 
-interface Snapshot { id: string; name: string; as_of_date: string | null }
-interface Letter { id: string; period_label: string }
+interface Snapshot { id: string; name: string; as_of_date: string | null; last_viewed_at: string | null }
+interface Letter { id: string; period_label: string; last_viewed_at: string | null }
 interface Doc {
   id: string; title: string; file_name: string; mime_type: string | null; size_bytes: number | null
   uploaded_at: string; doc_date: string | null; category: string | null; scope: string; sample: boolean
+  last_viewed_at: string | null
 }
 
 const SCOPE_ORDER: { key: string; label: string }[] = [
@@ -57,6 +59,8 @@ export default function PortalLibraryPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [unreadOnly, setUnreadOnly] = useState(false)
+  const [viewerDoc, setViewerDoc] = useState<ViewerDoc | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -106,32 +110,47 @@ export default function PortalLibraryPage() {
     }
   }
 
+  const isDocUnread = (d: Doc) => !d.sample && !d.last_viewed_at
+  const unreadCount =
+    snapshots.filter(s => !s.last_viewed_at).length +
+    letters.filter(l => !l.last_viewed_at).length +
+    docs.filter(isDocUnread).length
+
+  const visSnapshots = unreadOnly ? snapshots.filter(s => !s.last_viewed_at) : snapshots
+  const visLetters = unreadOnly ? letters.filter(l => !l.last_viewed_at) : letters
+
   // scope -> docs (flat, newest first); metadata is shown on each row.
   const groupedDocs = useMemo(() => {
+    const source = unreadOnly ? docs.filter(d => !d.sample && !d.last_viewed_at) : docs
     const byScope = new Map<string, Doc[]>()
-    for (const d of docs) {
+    for (const d of source) {
       const s = d.scope === 'investor' ? 'investor' : 'fund'
       if (!byScope.has(s)) byScope.set(s, [])
       byScope.get(s)!.push(d)
     }
     for (const arr of Array.from(byScope.values())) arr.sort((a, b) => effective(b).localeCompare(effective(a)))
     return byScope
-  }, [docs])
+  }, [docs, unreadOnly])
 
   // A library row that opens a web view (the whole row) plus a separate
   // "Download PDF" action. Used identically for statements and letters so the
   // two behave the same.
-  function ViewableRow({ href, icon, title, subtitle, dlKey, dlUrl, dlName }: {
+  function ViewableRow({ href, icon, title, subtitle, dlKey, dlUrl, dlName, unread, viewedAt }: {
     href: string; icon: React.ReactNode; title: string; subtitle?: string | null
-    dlKey: string; dlUrl: string; dlName: string
+    dlKey: string; dlUrl: string; dlName: string; unread?: boolean; viewedAt?: string | null
   }) {
     return (
       <div className="flex items-center hover:bg-muted/40 transition-colors">
         <Link href={href} className="flex flex-1 min-w-0 items-center gap-3 px-4 py-3">
+          {unread && <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" title="Not viewed yet" />}
           {icon}
           <div className="flex-1 min-w-0">
-            <div className="font-medium text-sm truncate">{title}</div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-sm truncate">{title}</span>
+              {unread && <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400">New</span>}
+            </div>
             {subtitle && <div className="text-xs text-muted-foreground">{subtitle}</div>}
+            {viewedAt && <div className="text-xs text-muted-foreground/80">Viewed {fmtDate(viewedAt)}</div>}
           </div>
           <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
         </Link>
@@ -148,18 +167,33 @@ export default function PortalLibraryPage() {
     )
   }
 
+  // Open a document in the in-portal viewer. Previewable types log a `view`
+  // server-side, so optimistically clear the unread flag for them.
+  function openDoc(d: Doc) {
+    const vd: ViewerDoc = { id: d.id, title: d.title, file_name: d.file_name, mime_type: d.mime_type }
+    setViewerDoc(vd)
+    if (!d.last_viewed_at && isPreviewable(vd)) {
+      const now = new Date().toISOString()
+      setDocs(prev => prev.map(x => (x.id === d.id ? { ...x, last_viewed_at: now } : x)))
+    }
+  }
+
   const docRow = (d: Doc) => {
+    const unread = isDocUnread(d)
     const meta: string[] = [fileType(d)]
     if (d.size_bytes) meta.push(fmtSize(d.size_bytes))
     if (d.uploaded_at) meta.push(`Uploaded ${fmtDate(d.uploaded_at)}`)
     if (d.doc_date && fmtDate(d.doc_date) !== fmtDate(d.uploaded_at)) meta.push(`Dated ${fmtDate(d.doc_date)}`)
+    if (d.last_viewed_at) meta.push(`Viewed ${fmtDate(d.last_viewed_at)}`)
 
     const inner = (
       <>
-        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+        {unread && <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0 mt-1.5" title="Not opened yet" />}
+        <FileText className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-medium text-sm truncate">{d.title}</span>
+            {unread && <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400">New</span>}
             {d.category?.trim() && (
               <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{d.category.trim()}</span>
             )}
@@ -175,10 +209,20 @@ export default function PortalLibraryPage() {
         <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0 mt-0.5">Sample</span>
       </div>
     ) : (
-      <button key={d.id} onClick={() => downloadDoc(d.id)} disabled={downloading === d.id} className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors">
-        {inner}
-        {downloading === d.id ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0 mt-0.5" /> : <Download className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />}
-      </button>
+      <div key={d.id} className="flex items-stretch hover:bg-muted/40 transition-colors">
+        <button onClick={() => openDoc(d)} className="flex flex-1 min-w-0 items-start gap-3 px-4 py-3 text-left">
+          {inner}
+        </button>
+        <button
+          onClick={() => downloadDoc(d.id)}
+          disabled={downloading === d.id}
+          title="Download"
+          className="flex shrink-0 items-center gap-1.5 border-l px-3 py-3 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+        >
+          {downloading === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          <span className="hidden sm:inline">Download</span>
+        </button>
+      </div>
     )
   }
 
@@ -202,10 +246,22 @@ export default function PortalLibraryPage() {
         <div className="rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">Nothing has been shared with you yet.</div>
       ) : (
         <>
-          {snapshots.length > 0 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setUnreadOnly(v => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                unreadOnly ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+              }`}
+            >
+              <span className={`h-2 w-2 rounded-full ${unreadCount > 0 ? 'bg-amber-500' : 'bg-muted-foreground/40'}`} />
+              Unread only{unreadCount > 0 ? ` (${unreadCount})` : ''}
+            </button>
+          </div>
+
+          {visSnapshots.length > 0 && (
             <Section title="Statements">
               <div className="rounded-md border bg-card divide-y">
-                {snapshots.map(s => (
+                {visSnapshots.map(s => (
                   <ViewableRow
                     key={s.id}
                     href={`/portal/snapshots/${s.id}`}
@@ -215,16 +271,18 @@ export default function PortalLibraryPage() {
                     dlKey={`snap-${s.id}`}
                     dlUrl={`/api/portal/snapshots/${s.id}/pdf`}
                     dlName={`${s.name}.pdf`}
+                    unread={!s.last_viewed_at}
+                    viewedAt={s.last_viewed_at}
                   />
                 ))}
               </div>
             </Section>
           )}
 
-          {letters.length > 0 && (
+          {visLetters.length > 0 && (
             <Section title="Letters">
               <div className="rounded-md border bg-card divide-y">
-                {letters.map(l => (
+                {visLetters.map(l => (
                   <ViewableRow
                     key={l.id}
                     href={`/portal/letters/${l.id}`}
@@ -233,13 +291,15 @@ export default function PortalLibraryPage() {
                     dlKey={`letter-${l.id}`}
                     dlUrl={`/api/portal/letters/${l.id}/pdf`}
                     dlName={`${l.period_label}.pdf`}
+                    unread={!l.last_viewed_at}
+                    viewedAt={l.last_viewed_at}
                   />
                 ))}
               </div>
             </Section>
           )}
 
-          {docs.length > 0 && (
+          {groupedDocs.size > 0 && (
             <Section title="Documents">
               <div className="space-y-4">
                 {SCOPE_ORDER.map(scope => {
@@ -255,8 +315,14 @@ export default function PortalLibraryPage() {
               </div>
             </Section>
           )}
+
+          {unreadOnly && visSnapshots.length === 0 && visLetters.length === 0 && groupedDocs.size === 0 && (
+            <div className="rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">You&apos;re all caught up — nothing unread.</div>
+          )}
         </>
       )}
+
+      {viewerDoc && <DocumentViewer doc={viewerDoc} onClose={() => setViewerDoc(null)} />}
     </div>
   )
 }

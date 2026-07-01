@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveLpAccess } from '@/lib/api-helpers'
+import { logLpAccessEvent } from '@/lib/lp-access-log'
 
 /**
  * LP portal — one shared snapshot, returning ONLY the signed-in LP's own
@@ -18,7 +19,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const access = await resolveLpAccess(admin, user.id)
   if (access instanceof NextResponse) return access
-  const { investorIds } = access
+  const { investorIds, lpAccountId } = access
   const snapshotId = params.id
   if (investorIds.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -61,6 +62,18 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .in('entity_id', entityIds.length ? entityIds : ['00000000-0000-0000-0000-000000000000'])
 
   const enriched = (investments ?? []).map((inv: any) => ({ ...inv, lp_entities: entityById.get(inv.entity_id) ?? null }))
+
+  await logLpAccessEvent(admin, {
+    fundId,
+    lpAccountId,
+    authUserId: user.id,
+    lpInvestorId: (sharedInvestorIds[0] as string | undefined) ?? null,
+    eventType: 'view',
+    targetType: 'snapshot',
+    targetId: snapshotId,
+    targetTitle: snapshot.name,
+    metadata: { investor_ids: sharedInvestorIds },
+  })
 
   return NextResponse.json({ snapshot, investments: enriched })
 }

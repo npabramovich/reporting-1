@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, ArrowLeft, Download } from 'lucide-react'
+import { AccessHistory } from '@/components/portal/access-history'
 
 interface Letter {
   id: string
@@ -86,6 +87,10 @@ export default function PortalLetterDetailPage() {
         {!letter.full_draft && !letter.portfolio_table_html && (
           <p className="text-sm text-muted-foreground italic">This letter has no content.</p>
         )}
+      </div>
+
+      <div className="pt-2 border-t">
+        <AccessHistory type="letter" id={letter.id} />
       </div>
     </div>
   )

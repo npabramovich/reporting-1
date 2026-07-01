@@ -679,6 +679,7 @@ const FEATURE_META: Record<FeatureKey, { label: string; description: string; hre
   lps: { label: 'LPs', description: 'Investor-level report cards with consolidated performance across fund vehicles', href: '/support#lps' },
   lp_associates: { label: 'GP Entities', description: 'Entity ownership mappings and pro-rata associates calculations for LP reporting', href: '/support#lps' },
   lp_portal_access: { label: 'LP portal controls', description: 'Admin controls for the LP portal: the "Share with LPs" panels on snapshots and letters, and managing authorized users', href: '/support#lps' },
+  lp_activity: { label: 'LP Activity', description: 'Access log showing which LPs and authorized users logged in, viewed, or downloaded documents in the portal', href: '/support#lps' },
   compliance: { label: 'Compliance', description: 'Track regulatory deadlines, filings, and compliance workflows', href: '/support#compliance' },
   deals: { label: 'Deals', description: 'Inbound deal pitches screened against your fund thesis', href: '/support#deals' },
   diligence: { label: 'Diligence', description: 'Pre-investment record-keeping and AI-assisted memo drafting', href: '/support#diligence' },

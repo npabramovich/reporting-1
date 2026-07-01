@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveLpAccess } from '@/lib/api-helpers'
+import { getSelfReadState } from '@/lib/lp-access-log'
 
 /**
  * LP portal — list the letters shared with the signed-in LP. Scoped to their
@@ -15,7 +16,7 @@ export async function GET() {
 
   const access = await resolveLpAccess(admin, user.id)
   if (access instanceof NextResponse) return access
-  const { investorIds } = access
+  const { investorIds, lpAccountId } = access
   if (investorIds.length === 0) return NextResponse.json({ letters: [] })
 
   const { data: shares, error } = await (admin as any)
@@ -44,8 +45,10 @@ export async function GET() {
       byId.set(l.id, { id: l.id, period_label: l.period_label, period_year: l.period_year, period_quarter: l.period_quarter, shared_at: s.shared_at })
     }
   }
-  const letters = Array.from(byId.values()).sort(
+  const sorted = Array.from(byId.values()).sort(
     (a, b) => b.period_year - a.period_year || b.period_quarter - a.period_quarter,
   )
+  const readState = await getSelfReadState(admin, { lpAccountId, targetType: 'letter', targetIds: sorted.map(l => l.id) })
+  const letters = sorted.map(l => ({ ...l, last_viewed_at: readState[l.id] ?? null }))
   return NextResponse.json({ letters })
 }
