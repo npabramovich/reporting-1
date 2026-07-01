@@ -30,10 +30,10 @@ export function LpPortalDashboard() {
       </p>
 
       <div className="space-y-10">
-        <Section title="LP access" description="Invite LPs and their authorized users, in bulk from a pasted sheet, or one at a time. Investors are matched by name; new ones are created.">
+        <Section title="Access" description="Invite LPs and their authorized users, in bulk from a pasted sheet, or one at a time. Investors are matched by name; new ones are created.">
           <LpAccessSettings />
         </Section>
-        <Section title="LP documents">
+        <Section title="Documents">
           <LpDocumentsSettings />
         </Section>
         <LpMessagesSection />

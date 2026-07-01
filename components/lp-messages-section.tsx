@@ -52,7 +52,7 @@ export function LpMessagesSection() {
   return (
     <div>
       <h4 className="text-base font-semibold mb-1 flex items-center gap-2">
-        LP messages
+        Messages
         {open.length > 0 && <span className="text-xs font-normal bg-muted rounded-full px-1.5 py-0.5 text-muted-foreground">{open.length}</span>}
       </h4>
       <p className="text-xs text-muted-foreground mb-2">Questions LPs sent from their portal&apos;s Contact form. Admins are emailed too.</p>
