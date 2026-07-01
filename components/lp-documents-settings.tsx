@@ -9,7 +9,7 @@ import { LpSendControl } from '@/components/lp-send-control'
 
 interface Investor { id: string; name: string }
 interface Doc {
-  id: string; title: string; file_name: string; scope: string; size_bytes: number | null
+  id: string; title: string; file_name: string; scope: string; vehicle: string | null; size_bytes: number | null
   category: string | null; doc_date: string | null; uploaded_at: string
   lp_document_shares?: { lp_investor_id: string }[]
 }
@@ -23,12 +23,14 @@ function fmtDate(d: string | null): string {
 export function LpDocumentsSettings() {
   const [docs, setDocs] = useState<Doc[]>([])
   const [investors, setInvestors] = useState<Investor[]>([])
+  const [vehicles, setVehicles] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState('')
   const [docDate, setDocDate] = useState('')
   const [file, setFile] = useState<File | null>(null)
-  const [scope, setScope] = useState<'fund' | 'investor'>('fund')
+  const [scope, setScope] = useState<'fund' | 'investor' | 'vehicle'>('fund')
+  const [vehicle, setVehicle] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,10 +46,12 @@ export function LpDocumentsSettings() {
     Promise.all([
       fetch('/api/lps/documents').then(r => (r.ok ? r.json() : { documents: [] })),
       fetch('/api/lps/investors').then(r => (r.ok ? r.json() : [])),
+      fetch('/api/lps/vehicles').then(r => (r.ok ? r.json() : { vehicles: [] })),
     ])
-      .then(([d, inv]) => {
+      .then(([d, inv, veh]) => {
         setDocs(d.documents ?? [])
         setInvestors((Array.isArray(inv) ? inv : []).map((i: any) => ({ id: i.id, name: i.name })))
+        setVehicles(veh.vehicles ?? [])
       })
       .finally(() => setLoading(false))
   }
@@ -56,6 +60,7 @@ export function LpDocumentsSettings() {
   async function upload() {
     if (!file || !title.trim()) return
     if (scope === 'investor' && selected.size === 0) { setError('Pick at least one investor.'); return }
+    if (scope === 'vehicle' && !vehicle) { setError('Pick an investment vehicle.'); return }
     setUploading(true); setError(null)
     try {
       const u = await fetch('/api/lps/documents/upload-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_name: file.name }) })
@@ -70,10 +75,11 @@ export function LpDocumentsSettings() {
           mime_type: file.type || null, size_bytes: file.size, scope,
           category: category.trim() || null, doc_date: docDate || null,
           lp_investor_ids: scope === 'investor' ? Array.from(selected) : [],
+          vehicle: scope === 'vehicle' ? vehicle : null,
         }),
       })
       if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error ?? 'Save failed') }
-      setTitle(''); setCategory(''); setDocDate(''); setFile(null); setSelected(new Set()); setScope('fund')
+      setTitle(''); setCategory(''); setDocDate(''); setFile(null); setSelected(new Set()); setVehicle(''); setScope('fund')
       const input = document.getElementById('lp-doc-file') as HTMLInputElement | null
       if (input) input.value = ''
       load()
@@ -92,7 +98,7 @@ export function LpDocumentsSettings() {
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Upload files for your LPs (fund financials, statements, …). Fund-wide files are visible to all your LPs; investor-scoped files only to the investors you choose. They appear in the LP portal&apos;s Documents tab, grouped by category.
+        Upload files for your LPs (fund financials, statements, …). Choose who sees each file: every LP in this fund, all investors in a specific investment vehicle, or hand-picked investors. They appear in the LP portal&apos;s Documents tab, grouped by category.
       </p>
 
       <div className="rounded-md border p-3 space-y-3">
@@ -106,10 +112,17 @@ export function LpDocumentsSettings() {
             {knownCategories.map(c => <option key={c} value={c} />)}
           </datalist>
           <Input type="date" value={docDate} onChange={e => setDocDate(e.target.value)} className="h-8 text-sm w-40" title="Effective document date (optional)" />
-          <select value={scope} onChange={e => setScope(e.target.value as 'fund' | 'investor')} className="h-8 rounded-md border border-input bg-background px-2 text-sm">
-            <option value="fund">All LPs (fund-wide)</option>
+          <select value={scope} onChange={e => setScope(e.target.value as 'fund' | 'investor' | 'vehicle')} className="h-8 rounded-md border border-input bg-background px-2 text-sm">
+            <option value="fund">All LPs in this fund</option>
+            <option value="vehicle">All investors in a vehicle</option>
             <option value="investor">Specific investors</option>
           </select>
+          {scope === 'vehicle' && (
+            <select value={vehicle} onChange={e => setVehicle(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-sm max-w-[220px]">
+              <option value="">{vehicles.length ? 'Select a vehicle…' : 'No vehicles found'}</option>
+              {vehicles.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+          )}
           <Button size="sm" onClick={upload} disabled={uploading || !file || !title.trim()}>
             {uploading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Upload className="h-3.5 w-3.5 mr-1" />}Upload
           </Button>
@@ -144,7 +157,11 @@ export function LpDocumentsSettings() {
                   {d.category && <span className="ml-2 text-[10px] uppercase tracking-wide text-muted-foreground">{d.category}</span>}
                 </div>
                 <div className="text-xs text-muted-foreground truncate">
-                  {d.scope === 'fund' ? 'All LPs' : `${d.lp_document_shares?.length ?? 0} investor(s)`} · {d.file_name}
+                  {d.scope === 'fund'
+                    ? 'All LPs in fund'
+                    : d.vehicle
+                      ? `${d.vehicle} · ${d.lp_document_shares?.length ?? 0} investor(s)`
+                      : `${d.lp_document_shares?.length ?? 0} investor(s)`} · {d.file_name}
                   {(d.doc_date || d.uploaded_at) && ` · ${fmtDate(d.doc_date) || fmtDate(d.uploaded_at)}`}
                 </div>
               </div>
