@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, TrendingUp, StickyNote, Lock, Users, Handshake, ArrowDownCircle, FileText, Briefcase, Crown, ShieldCheck, Lightbulb, Microscope, Landmark } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, TrendingUp, StickyNote, Lock, Users, Handshake, ArrowDownCircle, FileText, Briefcase, Crown, ShieldCheck, Lightbulb, Microscope } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -62,7 +62,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   { href: '/notes', label: 'Notes', icon: StickyNote, badgeKey: 'notes', featureKey: 'notes' },
   {
-    href: '/lps', label: 'LPs', icon: Landmark, featureKey: 'lps',
+    href: '/lps', label: 'LPs', icon: Crown, featureKey: 'lps',
     children: [
       { href: '/lp-portal',  label: 'Documents', featureKey: 'lp_portal' },
       { href: '/lp-activity', label: 'Activity',  featureKey: 'lp_activity' },

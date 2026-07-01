@@ -2,9 +2,8 @@
 
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Plus, ChevronRight, Trash2, Lock, X, Check, Pencil, Eye } from 'lucide-react'
+import { Loader2, Plus, ChevronRight, Trash2, Lock, X, Check, Pencil } from 'lucide-react'
 import { useFeatureVisibility } from '@/components/feature-visibility-context'
-import { isFeatureVisible } from '@/lib/types/features'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { AnalystToggleButton } from '@/components/analyst-button'
@@ -182,12 +181,6 @@ export default function LPsPage() {
             <Plus className="h-4 w-4 mr-1" />
             New Snapshot
           </Button>
-          {isFeatureVisible(fv, 'lp_portal_access', isAdmin) && (
-            <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => router.push('/lps/preview')}>
-              <Eye className="h-4 w-4 mr-1" />
-              Preview portal
-            </Button>
-          )}
         </div>
       </div>
 
