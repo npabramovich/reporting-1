@@ -47,9 +47,15 @@ export async function GET(req: NextRequest) {
 
   const { data: fundSettings } = await (admin as any)
     .from('fund_settings')
-    .select('feature_visibility')
+    .select('lp_portal_enabled, feature_visibility')
     .eq('fund_id', fundId)
     .maybeSingle()
+
+  // Master switch off → no LP activity available.
+  if (!fundSettings?.lp_portal_enabled) {
+    return NextResponse.json({ error: 'Not available' }, { status: 403 })
+  }
+
   const featureVisibility: FeatureVisibilityMap = {
     ...DEFAULT_FEATURE_VISIBILITY,
     ...(fundSettings?.feature_visibility ?? {}),

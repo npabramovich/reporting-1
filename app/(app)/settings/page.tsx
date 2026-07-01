@@ -21,9 +21,6 @@ import { DefaultsEditor } from './memo-agent/defaults/editor'
 import { StyleAnchorsInline } from './memo-agent/style-anchors/style-anchors-inline'
 import { SchemasInline } from './memo-agent/schemas/schemas-inline'
 import { AppearanceEditor } from './appearance/editor'
-import { LpAccessSettings } from '@/components/lp-access-settings'
-import { LpMessagesSection } from '@/components/lp-messages-section'
-import { LpDocumentsSettings } from '@/components/lp-documents-settings'
 import { AlertCircle, Check, ChevronDown, ChevronRight, Loader2, Plus, Trash2, Copy, FolderOpen, Unlink, Shield, ImagePlus, X, Lock, ArrowDownCircle, Eye } from 'lucide-react'
 import { DEFAULT_FEATURE_VISIBILITY, FEATURES_WITH_OFF } from '@/lib/types/features'
 import type { FeatureKey, FeatureVisibility } from '@/lib/types/features'
@@ -262,18 +259,6 @@ export default function SettingsPage() {
 
           <GroupHeader label="LP Portal" />
           <LpPortalSection enabled={settings.lpPortalEnabled} onSaved={load} />
-          <Section title="LP access">
-            <p className="text-xs text-muted-foreground mb-4">
-              Invite LPs and their authorized users, in bulk from a pasted sheet, or one at a time. Investors are matched by name; new ones are created.
-            </p>
-            <LpAccessSettings />
-          </Section>
-          <Section title="LP documents">
-            <LpDocumentsSettings />
-          </Section>
-          <Section title="LP messages">
-            <LpMessagesSection />
-          </Section>
 
           <GroupHeader label="Storage" />
           <StorageSection
@@ -679,7 +664,8 @@ const FEATURE_META: Record<FeatureKey, { label: string; description: string; hre
   lps: { label: 'LPs', description: 'Investor-level report cards with consolidated performance across fund vehicles', href: '/support#lps' },
   lp_associates: { label: 'GP Entities', description: 'Entity ownership mappings and pro-rata associates calculations for LP reporting', href: '/support#lps' },
   lp_portal_access: { label: 'LP portal controls', description: 'Admin controls for the LP portal: the "Share with LPs" panels on snapshots and letters, and managing authorized users', href: '/support#lps' },
-  lp_activity: { label: 'LP Activity', description: 'Access log showing which LPs and authorized users logged in, viewed, or downloaded documents in the portal', href: '/support#lps' },
+  lp_portal: { label: 'LPs · Documents', description: 'Who can see the LPs → Documents page (invite LPs, upload documents, read LP messages). Only takes effect while the LP portal is enabled below.', href: '/support#lps' },
+  lp_activity: { label: 'LPs · Activity', description: 'Who can see the LPs → Activity page — the access log of which LPs and authorized users logged in, viewed, or downloaded documents. Only takes effect while the LP portal is enabled below.', href: '/support#lps' },
   compliance: { label: 'Compliance', description: 'Track regulatory deadlines, filings, and compliance workflows', href: '/support#compliance' },
   deals: { label: 'Deals', description: 'Inbound deal pitches screened against your fund thesis', href: '/support#deals' },
   diligence: { label: 'Diligence', description: 'Pre-investment record-keeping and AI-assisted memo drafting', href: '/support#diligence' },
@@ -4274,7 +4260,7 @@ function LpPortalSection({ enabled, onSaved }: { enabled: boolean; onSaved: () =
   return (
     <Section title="LP Portal">
       <p className="text-xs text-muted-foreground mb-4">
-        When on, snapshots you share with an investor become visible to them in their own LP portal. When off, the portal is disabled for this fund, and nothing reaches LPs even if individual snapshots are marked as shared. Invite investors and choose what to share from each snapshot&apos;s &ldquo;Share with LPs&rdquo; panel.
+        When on, snapshots you share with an investor become visible to them in their own LP portal, and the <strong>LPs → Documents</strong> and <strong>Activity</strong> pages become available (invite LPs, upload documents, read LP messages, and view LP activity). When off, the portal is disabled for this fund — nothing reaches LPs and those pages are hidden for everyone. Control who on your team can see them under &ldquo;Feature visibility&rdquo; above.
       </p>
       <div className="flex items-center gap-3">
         <Switch checked={on} onCheckedChange={handleToggle} disabled={saving} />

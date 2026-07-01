@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, TrendingUp, StickyNote, Lock, Users, Handshake, ArrowDownCircle, FileText, Briefcase, Crown, ShieldCheck, Lightbulb, Microscope, Eye } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, LifeBuoy, PanelLeftClose, PanelLeftOpen, Monitor, Sun, Moon, BarChart3, TrendingUp, StickyNote, Lock, Users, Handshake, ArrowDownCircle, FileText, Briefcase, Crown, ShieldCheck, Lightbulb, Microscope, Landmark } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -56,13 +56,18 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/requests',     label: 'Asks',         featureKey: 'asks' },
       { href: '/interactions', label: 'Interactions', featureKey: 'interactions' },
       { href: '/letters',      label: 'Letters',      featureKey: 'lp_letters' },
-      { href: '/lps',          label: 'LPs',          featureKey: 'lps' },
       { href: '/compliance',   label: 'Compliance',   featureKey: 'compliance' },
       { href: '/funds',        label: 'Funds',        featureKey: 'funds' },
     ],
   },
   { href: '/notes', label: 'Notes', icon: StickyNote, badgeKey: 'notes', featureKey: 'notes' },
-  { href: '/lp-activity', label: 'LP Activity', icon: Eye, featureKey: 'lp_activity' },
+  {
+    href: '/lps', label: 'LPs', icon: Landmark, featureKey: 'lps',
+    children: [
+      { href: '/lp-portal',  label: 'Documents', featureKey: 'lp_portal' },
+      { href: '/lp-activity', label: 'Activity',  featureKey: 'lp_activity' },
+    ],
+  },
   { href: '/usage', label: 'Usage', icon: Users, adminOnly: true },
   { href: '/settings', label: 'Settings', icon: Settings, badgeKey: 'settings' },
   { href: '/support', label: 'Support', icon: LifeBuoy },

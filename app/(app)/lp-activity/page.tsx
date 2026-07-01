@@ -23,9 +23,13 @@ export default async function LpActivityPage() {
 
   const { data: fundSettings } = await (admin as any)
     .from('fund_settings')
-    .select('feature_visibility')
+    .select('lp_portal_enabled, feature_visibility')
     .eq('fund_id', membership.fund_id)
     .maybeSingle()
+
+  // Master switch off → the LP portal (and its activity log) is unavailable.
+  if (!fundSettings?.lp_portal_enabled) redirect('/dashboard')
+
   const featureVisibility: FeatureVisibilityMap = {
     ...DEFAULT_FEATURE_VISIBILITY,
     ...(fundSettings?.feature_visibility ?? {}),

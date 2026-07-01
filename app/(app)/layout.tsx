@@ -43,6 +43,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ])
 
   const featureVisibility = { ...DEFAULT_FEATURE_VISIBILITY, ...(fundSettings?.feature_visibility as Partial<FeatureVisibilityMap> | null) }
+  // The LP portal is a master switch: when off, the LP Portal management page and
+  // the nested LP Activity page are unavailable for everyone (the pages also gate
+  // themselves server-side). Hiding the nav keys here keeps the sidebar in sync.
+  if (!fundSettings?.lp_portal_enabled) {
+    featureVisibility.lp_portal = 'hidden'
+    featureVisibility.lp_activity = 'hidden'
+  }
   const fundCurrency = fundSettings?.currency ?? 'USD'
   const configuredProviders = [
     fundSettings?.claude_api_key_encrypted ? 'anthropic' : null,
