@@ -1,0 +1,111 @@
+// Pure metadata for the agent tools — name, description, scope, and JSON-Schema
+// input contract. NO server imports, so this is safe to import into client
+// components (e.g. the Settings key-management UI). The handlers live in
+// agent-tools.ts, which merges these with server-side implementations.
+
+export interface AgentToolMeta {
+  name: string
+  description: string
+  scope: 'read' | 'write'
+  inputSchema: Record<string, any>
+}
+
+const EMPTY_SCHEMA = { type: 'object', properties: {}, additionalProperties: false }
+const ALLOCATION_ACTIONS = ['management_fee', 'expense', 'gain', 'distribution', 'carry', 'close_period']
+
+export const AGENT_TOOL_MANIFEST: AgentToolMeta[] = [
+  { name: 'list_accounts', description: "List the fund's chart of accounts (code, name, type).", scope: 'read', inputSchema: EMPTY_SCHEMA },
+  { name: 'seed_chart', description: 'Seed the default venture-fund chart of accounts (no-op if any account exists).', scope: 'write', inputSchema: EMPTY_SCHEMA },
+  { name: 'list_entities', description: 'List LP entities with committed capital.', scope: 'read', inputSchema: EMPTY_SCHEMA },
+  { name: 'capital_accounts', description: 'Per-LP capital-account roll-forward (beginning, contributions, distributions, fees, gains, ending) plus fund NAV.', scope: 'read', inputSchema: EMPTY_SCHEMA },
+  { name: 'financial_statements', description: 'Trial balance, balance sheet, and income statement derived from posted entries.', scope: 'read', inputSchema: EMPTY_SCHEMA },
+  {
+    name: 'list_journal',
+    description: 'List recent journal entries with their postings.',
+    scope: 'read',
+    inputSchema: { type: 'object', properties: { limit: { type: 'number', description: 'Max entries (default 100)' } } },
+  },
+  {
+    name: 'post_entry',
+    description: 'Post a balanced double-entry journal entry. Postings use account codes; amounts are signed (debits positive, credits negative) and MUST sum to zero.',
+    scope: 'write',
+    inputSchema: {
+      type: 'object',
+      required: ['entryDate', 'postings'],
+      properties: {
+        entryDate: { type: 'string', description: 'ISO date YYYY-MM-DD' },
+        memo: { type: 'string' },
+        sourceType: { type: 'string' },
+        status: { type: 'string', enum: ['draft', 'posted'], description: 'default posted' },
+        postings: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['accountCode', 'amount'],
+            properties: {
+              accountCode: { type: 'string' },
+              amount: { type: 'number', description: 'signed: debit positive, credit negative' },
+              currency: { type: 'string', description: 'default USD' },
+              lpEntityId: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    name: 'allocation',
+    description: 'Compute and post a period allocation or period close: management_fee, expense, gain, distribution, carry, or close_period.',
+    scope: 'write',
+    inputSchema: {
+      type: 'object',
+      required: ['action', 'entryDate'],
+      properties: {
+        action: { type: 'string', enum: ALLOCATION_ACTIONS },
+        entryDate: { type: 'string' },
+        memo: { type: 'string' },
+        annualRate: { type: 'number', description: 'management_fee: decimal, e.g. 0.02' },
+        periodFraction: { type: 'number', description: 'management_fee: e.g. 0.25 for a quarter' },
+        amount: { type: 'number', description: 'expense / gain total' },
+        overrides: { type: 'object', description: 'management_fee: per-LP { rateOverride, exempt }' },
+        perLp: { type: 'object', description: 'distribution / carry: { lpEntityId: amount }' },
+        post: { type: 'boolean', description: 'default true; false returns a preview' },
+      },
+    },
+  },
+  {
+    name: 'reconcile',
+    description: "Reconcile the ledger's capital accounts against admin figures. `admin` is { lpEntityId: { ending, ... } }.",
+    scope: 'read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        admin: { type: 'object', description: 'per-LP admin capital figures' },
+        tolerance: { type: 'number', description: 'default 0.01' },
+      },
+    },
+  },
+  {
+    name: 'run_waterfall',
+    description: 'Compute a European carried-interest waterfall for a distribution (pure calc; does not post).',
+    scope: 'read',
+    inputSchema: {
+      type: 'object',
+      required: ['distributable', 'terms', 'state'],
+      properties: {
+        distributable: { type: 'number' },
+        terms: { type: 'object', properties: { carryRate: { type: 'number' }, catchUpRate: { type: 'number' } } },
+        state: {
+          type: 'object',
+          properties: {
+            contributedCapital: { type: 'number' },
+            returnedCapital: { type: 'number' },
+            preferredPaid: { type: 'number' },
+            preferredTarget: { type: 'number' },
+            gpCarryPaid: { type: 'number' },
+          },
+        },
+      },
+    },
+  },
+]

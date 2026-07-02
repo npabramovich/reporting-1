@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import Link from 'next/link'
 import { DefaultsEditor } from './memo-agent/defaults/editor'
+import { LedgerAgentAccess } from '@/components/ledger-agent-access'
 import { StyleAnchorsInline } from './memo-agent/style-anchors/style-anchors-inline'
 import { SchemasInline } from './memo-agent/schemas/schemas-inline'
 import { AppearanceEditor } from './appearance/editor'
@@ -256,6 +257,15 @@ export default function SettingsPage() {
 
           <GroupHeader label="Diligence" />
           <MemoAgentSection />
+
+          {settings.featureVisibility?.accounting !== 'off' && (
+            <>
+              <GroupHeader label="Ledger" />
+              <Section title="Agent access (API keys)">
+                <LedgerAgentAccess />
+              </Section>
+            </>
+          )}
 
           <GroupHeader label="LP Portal" />
           <LpPortalSection enabled={settings.lpPortalEnabled} onSaved={load} />

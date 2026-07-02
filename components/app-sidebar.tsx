@@ -76,7 +76,6 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/accounting/reconciliation',   label: 'Reconciliation' },
       { href: '/accounting/journal',          label: 'Journal' },
       { href: '/accounting/draft',            label: 'Draft from doc' },
-      { href: '/accounting/agent',            label: 'Agent access' },
     ],
   },
   { href: '/usage', label: 'Usage', icon: Users, adminOnly: true },
