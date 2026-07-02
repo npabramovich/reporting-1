@@ -26,6 +26,10 @@ export const DEFAULT_CHART: ChartAccountSeed[] = [
   // Equity — the GP account; per-LP capital accounts are added with lp_entity_id.
   { code: '3000', name: "Partners' capital — GP", type: 'equity', subtype: 'gp_capital' },
   { code: '3100', name: "Partners' capital — LP (unallocated)", type: 'equity', subtype: 'lp_capital' },
+  // Bridge between the P&L (income statement) and partners' capital. Compound
+  // fee/expense/income entries park the allocation offset here; the period close
+  // zeroes it against the P&L accounts. See lib/accounting/entries.ts.
+  { code: '3200', name: 'Undistributed earnings (bridge)', type: 'equity', subtype: 'undistributed_earnings' },
 
   // Income
   { code: '4000', name: 'Realized gains', type: 'income', subtype: 'realized_gain' },

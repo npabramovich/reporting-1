@@ -5,7 +5,14 @@ import { Loader2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
 
-type Action = 'management_fee' | 'expense'
+type Action = 'management_fee' | 'expense' | 'gain' | 'close_period'
+
+const ACTION_LABELS: Record<Action, string> = {
+  management_fee: 'Management fee',
+  expense: 'Partnership expense',
+  gain: 'Realized gain',
+  close_period: 'Close period',
+}
 
 interface PreviewPosting { accountId: string; amount: number; lpEntityId: string | null }
 interface Preview { entryDate: string; sourceType: string; postings: PreviewPosting[] }
@@ -28,7 +35,7 @@ export function AllocationsView() {
     if (action === 'management_fee') {
       b.annualRate = parseFloat(annualRate) / 100
       b.periodFraction = parseFloat(periodFraction)
-    } else {
+    } else if (action === 'expense' || action === 'gain') {
       b.amount = parseFloat(amount)
     }
     return b
@@ -53,10 +60,10 @@ export function AllocationsView() {
   return (
     <div className="space-y-4 max-w-2xl">
       <div className="flex flex-wrap gap-1.5">
-        {(['management_fee', 'expense'] as Action[]).map(a => (
+        {(Object.keys(ACTION_LABELS) as Action[]).map(a => (
           <button key={a} onClick={() => { setAction(a); setPreview(null) }}
             className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${action === a ? 'border-foreground/30 bg-accent font-medium' : 'border-border text-muted-foreground hover:text-foreground'}`}>
-            {a === 'management_fee' ? 'Management fee' : 'Partnership expense'}
+            {ACTION_LABELS[a]}
           </button>
         ))}
       </div>
@@ -66,7 +73,7 @@ export function AllocationsView() {
           <label className="text-xs text-muted-foreground mb-1 block">Entry date</label>
           <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="border rounded px-2 py-1.5 text-sm w-full" />
         </div>
-        {action === 'management_fee' ? (
+        {action === 'management_fee' && (
           <>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Annual rate (%)</label>
@@ -77,7 +84,8 @@ export function AllocationsView() {
               <input type="number" step="0.01" value={periodFraction} onChange={e => setPeriodFraction(e.target.value)} className="border rounded px-2 py-1.5 text-sm w-full font-mono" />
             </div>
           </>
-        ) : (
+        )}
+        {(action === 'expense' || action === 'gain') && (
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Amount</label>
             <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} className="border rounded px-2 py-1.5 text-sm w-full font-mono" />
@@ -85,9 +93,10 @@ export function AllocationsView() {
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        {action === 'management_fee'
-          ? 'Charged on committed capital, allocated per LP (side letters/exemptions supported via the API).'
-          : 'Allocated pro-rata by commitment across all LPs.'}
+        {action === 'management_fee' && 'Charged on committed capital, allocated per LP (side letters/exemptions supported via the API). Booked to the expense account and each LP’s capital via the undistributed-earnings bridge.'}
+        {action === 'expense' && 'Allocated pro-rata by commitment; booked to the expense account and each LP’s capital via the bridge.'}
+        {action === 'gain' && 'Allocated pro-rata by commitment; increases each LP’s capital and books income via the bridge.'}
+        {action === 'close_period' && 'Zeroes every income/expense account into the undistributed-earnings bridge, closing the period. Capital accounts are already current.'}
       </p>
 
       <div className="flex items-center gap-2">

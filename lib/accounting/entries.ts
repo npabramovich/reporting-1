@@ -66,39 +66,119 @@ export function buildDistributionEntry(
   return finalize(base, 'distribution', postings)
 }
 
-/** Management fee: debit each LP's capital by their fee, credit the offset (Due to GP / cash). */
+/**
+ * Accounts a compound P&L-and-capital entry touches. The P&L account keeps the
+ * income statement correct; the bridge (undistributed earnings) offsets the
+ * per-LP capital allocation so both statements are right at once, and the period
+ * close later zeroes the bridge against the P&L.
+ */
+export interface BridgeAccounts {
+  /** The income/expense account for the income statement. */
+  pnlAccountId: string
+  /** Undistributed-earnings bridge (equity). */
+  bridgeAccountId: string
+  /** Cash or Due-to-GP — the real asset/liability side. */
+  offsetAccountId: string
+}
+
+/**
+ * Management fee (compound, via the bridge):
+ *   Dr Management fee expense (P&L, total)     Cr Due to GP / Cash (total)
+ *   Dr each LP capital (their fee)             Cr Undistributed earnings (total)
+ * The income statement shows the expense; each LP's capital is reduced now; the
+ * period close later nets the bridge against the expense.
+ */
 export function buildManagementFeeEntry(
   base: Base,
   fee: FeeResult,
   capMap: CapitalAccountMap,
-  offsetAccountId: string,
+  accts: BridgeAccounts,
   currency = 'USD'
 ): JournalEntry {
-  const postings: Posting[] = []
+  const postings: Posting[] = [
+    { accountId: accts.pnlAccountId, amount: roundCents(fee.total), currency, lpEntityId: null },
+    { accountId: accts.offsetAccountId, amount: roundCents(-fee.total), currency, lpEntityId: null },
+    { accountId: accts.bridgeAccountId, amount: roundCents(-fee.total), currency, lpEntityId: null },
+  ]
   for (const line of fee.lines) {
     if (line.fee === 0) continue
-    postings.push(lpDebit(capMap, line.lpEntityId, line.fee, currency))
+    postings.push(lpDebit(capMap, line.lpEntityId, line.fee, currency)) // reduce LP capital
   }
-  postings.push({ accountId: offsetAccountId, amount: roundCents(-fee.total), currency, lpEntityId: null })
   return finalize(base, 'management_fee', postings)
 }
 
-/** Partnership expense: allocate pro-rata, debit each LP's capital, credit cash. */
+/**
+ * Partnership expense (compound, via the bridge): pro-rata by commitment.
+ *   Dr Partnership expense (P&L, total)   Cr Cash (total)
+ *   Dr each LP capital (share)            Cr Undistributed earnings (total)
+ */
 export function buildExpenseEntry(
   base: Base,
   total: number,
   owners: LpOwnership[],
   capMap: CapitalAccountMap,
-  cashAccountId: string,
+  accts: BridgeAccounts,
   currency = 'USD'
 ): JournalEntry {
   const alloc = allocateAmount(total, owners)
-  const postings: Posting[] = []
+  const postings: Posting[] = [
+    { accountId: accts.pnlAccountId, amount: roundCents(total), currency, lpEntityId: null },
+    { accountId: accts.offsetAccountId, amount: roundCents(-total), currency, lpEntityId: null },
+    { accountId: accts.bridgeAccountId, amount: roundCents(-total), currency, lpEntityId: null },
+  ]
   for (const [lpEntityId, share] of Array.from(alloc.entries())) {
     postings.push(lpDebit(capMap, lpEntityId, share, currency))
   }
-  postings.push({ accountId: cashAccountId, amount: roundCents(-total), currency, lpEntityId: null })
   return finalize(base, 'partnership_expense', postings)
+}
+
+/**
+ * Realized gain / income (compound, via the bridge): increases capital.
+ *   Dr Cash / Investment (total)          Cr Realized gains income (P&L, total)
+ *   Dr Undistributed earnings (total)     Cr each LP capital (share)
+ */
+export function buildGainEntry(
+  base: Base,
+  total: number,
+  owners: LpOwnership[],
+  capMap: CapitalAccountMap,
+  accts: BridgeAccounts,
+  currency = 'USD'
+): JournalEntry {
+  const alloc = allocateAmount(total, owners)
+  const postings: Posting[] = [
+    { accountId: accts.offsetAccountId, amount: roundCents(total), currency, lpEntityId: null },  // Dr asset
+    { accountId: accts.pnlAccountId, amount: roundCents(-total), currency, lpEntityId: null },     // Cr income
+    { accountId: accts.bridgeAccountId, amount: roundCents(total), currency, lpEntityId: null },    // Dr bridge
+  ]
+  for (const [lpEntityId, share] of Array.from(alloc.entries())) {
+    postings.push(lpDebit(capMap, lpEntityId, -share, currency)) // credit LP capital (increase)
+  }
+  return finalize(base, 'realized_gain', postings)
+}
+
+/**
+ * Period close: zero every P&L account into the bridge. Given each P&L account's
+ * debit-side balance, post the negation to flatten it and offset the sum to the
+ * bridge — which, because the compound entries already parked the allocation
+ * there, nets the bridge back to zero. Capital was updated by those entries, so
+ * this touches no LP accounts.
+ */
+export function buildPeriodCloseEntry(
+  base: Base,
+  pnlBalances: { accountId: string; balance: number }[],
+  bridgeAccountId: string,
+  currency = 'USD'
+): JournalEntry {
+  const nonzero = pnlBalances.filter(b => roundCents(b.balance) !== 0)
+  if (nonzero.length === 0) throw new Error('Nothing to close — no P&L balances')
+  let sum = 0
+  const postings: Posting[] = nonzero.map(b => {
+    sum = roundCents(sum + b.balance)
+    return { accountId: b.accountId, amount: roundCents(-b.balance), currency, lpEntityId: null }
+  })
+  postings.push({ accountId: bridgeAccountId, amount: roundCents(sum), currency, lpEntityId: null })
+  return finalize(base, 'period_close', postings)
 }
 
 /** Carried interest: debit each LP's capital by their carry share, credit GP capital. */
