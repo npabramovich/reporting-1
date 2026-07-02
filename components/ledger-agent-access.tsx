@@ -8,10 +8,11 @@ import { AGENT_TOOL_MANIFEST } from '@/lib/accounting/agent-tools-manifest'
 interface Key { id: string; name: string; key_prefix: string; scopes: string; last_used_at: string | null; revoked_at: string | null; created_at: string }
 
 /**
- * Ledger agent access: fund-scoped API keys plus the MCP/REST endpoints an agent
- * connects to. Lives in Settings alongside the other fund credentials.
+ * Ledger agent access: the caller's own API keys plus the MCP/REST endpoints an
+ * agent connects to. Keys act as their owner — any member's key can read the
+ * ledger; only an admin's key can write. Non-admins can mint read-only keys only.
  */
-export function LedgerAgentAccess() {
+export function LedgerAgentAccess({ isAdmin }: { isAdmin: boolean }) {
   const [keys, setKeys] = useState<Key[]>([])
   const [loading, setLoading] = useState(true)
   const [name, setName] = useState('')
@@ -52,9 +53,10 @@ export function LedgerAgentAccess() {
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Let AI agents operate the ledger over MCP or REST — post entries, run allocations, reconcile,
-        and read statements — authenticated with a fund API key as a Bearer token. Keys are
-        fund-scoped and managed by admins.
+        Let AI agents operate the ledger over MCP or REST — authenticated with an API key as a Bearer
+        token. Your keys act as you: {isAdmin
+          ? 'as an admin, your keys can read and write the ledger (post entries, run allocations, reconcile).'
+          : 'your keys can read the ledger (capital accounts, statements, reconcile); writing requires an admin.'}
       </p>
 
       {/* Endpoints */}
@@ -83,9 +85,12 @@ export function LedgerAgentAccess() {
 
       <div className="flex items-center gap-2">
         <input value={name} onChange={e => setName(e.target.value)} placeholder="Key name (e.g. Claude agent)" className="border rounded px-2 py-1.5 text-sm flex-1 bg-transparent" />
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" checked={readOnly} onChange={e => setReadOnly(e.target.checked)} />read-only</label>
+        {isAdmin && (
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" checked={readOnly} onChange={e => setReadOnly(e.target.checked)} />read-only</label>
+        )}
         <Button size="sm" onClick={create} disabled={creating || !name.trim()}>{creating && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Create key</Button>
       </div>
+      <p className="text-[11px] text-muted-foreground">You can create as many keys as you need — one per agent or integration.</p>
 
       {loading ? (
         <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>

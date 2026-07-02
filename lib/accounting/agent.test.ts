@@ -1,6 +1,29 @@
 import { describe, it, expect } from 'vitest'
-import { generateApiKey, hashApiKey, bearerToken } from './api-keys'
+import { generateApiKey, hashApiKey, bearerToken, authorizeToolUse, type ResolvedKey } from './api-keys'
 import { AGENT_TOOLS, getTool } from './agent-tools'
+
+const key = (role: string, scopes: string[]): ResolvedKey => ({ fundId: 'f', keyId: 'k', userId: 'u', role, scopes })
+
+describe('authorizeToolUse (members read, admins write)', () => {
+  it('allows any member to use read tools', () => {
+    expect(authorizeToolUse('read', key('viewer', ['read']))).toBeNull()
+    expect(authorizeToolUse('read', key('member', ['read']))).toBeNull()
+    expect(authorizeToolUse('read', key('admin', ['read', 'write']))).toBeNull()
+  })
+
+  it('allows admins with write scope to use write tools', () => {
+    expect(authorizeToolUse('write', key('admin', ['read', 'write']))).toBeNull()
+  })
+
+  it('blocks non-admins from write tools', () => {
+    expect(authorizeToolUse('write', key('member', ['read', 'write']))).toMatch(/admin/i)
+    expect(authorizeToolUse('write', key('writer', ['read', 'write']))).toMatch(/admin/i)
+  })
+
+  it('blocks an admin whose key is read-only from write tools', () => {
+    expect(authorizeToolUse('write', key('admin', ['read']))).toMatch(/read-only/i)
+  })
+})
 
 describe('api-keys', () => {
   it('generates a prefixed token whose hash is stable and matches', () => {

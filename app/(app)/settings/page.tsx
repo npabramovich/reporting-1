@@ -182,6 +182,14 @@ export default function SettingsPage() {
       )}
       <GroupHeader label="Notes" />
       <NotificationPreferencesSection />
+      {settings.featureVisibility?.accounting !== 'off' && (
+        <>
+          <GroupHeader label="Ledger" />
+          <Section title="Agent access (API keys)">
+            <LedgerAgentAccess isAdmin={settings.isAdmin} />
+          </Section>
+        </>
+      )}
       {!settings.isAdmin && (
         <AiSummaryPromptReadOnly prompt={settings.aiSummaryPrompt} />
       )}
@@ -257,15 +265,6 @@ export default function SettingsPage() {
 
           <GroupHeader label="Diligence" />
           <MemoAgentSection />
-
-          {settings.featureVisibility?.accounting !== 'off' && (
-            <>
-              <GroupHeader label="Ledger" />
-              <Section title="Agent access (API keys)">
-                <LedgerAgentAccess />
-              </Section>
-            </>
-          )}
 
           <GroupHeader label="LP Portal" />
           <LpPortalSection enabled={settings.lpPortalEnabled} onSaved={load} />

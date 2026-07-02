@@ -34,12 +34,17 @@ export function bearerToken(req: Request): string | null {
 export interface ResolvedKey {
   fundId: string
   keyId: string
+  userId: string
+  /** The owning member's CURRENT role in the fund (re-checked each call). */
+  role: string
   scopes: string[]
 }
 
 /**
- * Resolve a fund from a Bearer API key. Verifies the hash against a non-revoked
- * key, stamps last_used_at, and returns the fund + scopes — or null if invalid.
+ * Resolve a fund + owner from a Bearer API key. Verifies the hash against a
+ * non-revoked key, re-checks the owner is still a fund member (so a removed or
+ * demoted user's key loses access immediately), stamps last_used_at, and returns
+ * the fund, owner, current role, and scopes — or null if invalid.
  */
 export async function resolveFundFromApiKey(admin: SupabaseClient, req: Request): Promise<ResolvedKey | null> {
   const token = bearerToken(req)
@@ -48,15 +53,44 @@ export async function resolveFundFromApiKey(admin: SupabaseClient, req: Request)
 
   const { data } = await admin
     .from('fund_api_keys' as any)
-    .select('id, fund_id, scopes, revoked_at')
+    .select('id, fund_id, user_id, scopes, revoked_at')
     .eq('key_hash', hash)
     .maybeSingle()
 
   const row = data as any
   if (!row || row.revoked_at) return null
 
+  // The key acts as its owner: resolve the owner's CURRENT role (membership may
+  // have changed since the key was minted). No membership → no access.
+  const { data: membership } = await admin
+    .from('fund_members')
+    .select('role')
+    .eq('fund_id', row.fund_id)
+    .eq('user_id', row.user_id)
+    .maybeSingle()
+  if (!membership) return null
+
   // Best-effort usage stamp; ignore failures.
   await admin.from('fund_api_keys' as any).update({ last_used_at: new Date().toISOString() }).eq('id', row.id)
 
-  return { fundId: row.fund_id, keyId: row.id, scopes: String(row.scopes ?? 'read').split(',').map(s => s.trim()) }
+  return {
+    fundId: row.fund_id,
+    keyId: row.id,
+    userId: row.user_id,
+    role: (membership as { role: string }).role,
+    scopes: String(row.scopes ?? 'read').split(',').map(s => s.trim()),
+  }
+}
+
+/**
+ * Authorization for a tool given a resolved key: reads for any member, writes
+ * for admins only (and the key must carry the write scope). Returns null if
+ * allowed, or an error message.
+ */
+export function authorizeToolUse(scope: 'read' | 'write', auth: ResolvedKey): string | null {
+  if (scope === 'write') {
+    if (auth.role !== 'admin') return 'This key belongs to a non-admin; writing to the ledger requires an admin.'
+    if (!auth.scopes.includes('write')) return 'This key is read-only.'
+  }
+  return null
 }

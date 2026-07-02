@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { resolveFundFromApiKey } from '@/lib/accounting/api-keys'
+import { resolveFundFromApiKey, authorizeToolUse } from '@/lib/accounting/api-keys'
 import { AGENT_TOOLS, getTool, type AgentToolContext } from '@/lib/accounting/agent-tools'
 
 export const runtime = 'nodejs'
@@ -28,11 +28,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const tool = getTool(body?.tool)
   if (!tool) return NextResponse.json({ error: `Unknown tool: ${body?.tool}` }, { status: 400 })
-  if (tool.scope === 'write' && !auth.scopes.includes('write')) {
-    return NextResponse.json({ error: `This API key lacks write scope for ${tool.name}` }, { status: 403 })
-  }
+  const denied = authorizeToolUse(tool.scope, auth)
+  if (denied) return NextResponse.json({ error: denied }, { status: 403 })
 
-  const ctx: AgentToolContext = { admin, fundId: auth.fundId, userId: null }
+  const ctx: AgentToolContext = { admin, fundId: auth.fundId, userId: auth.userId }
   try {
     const result = await tool.handler(ctx, body?.input ?? {})
     return NextResponse.json({ ok: true, result })
