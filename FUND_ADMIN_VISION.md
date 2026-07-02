@@ -325,31 +325,40 @@ The open-source platform, the content, and the fractional-CFO practice are the s
 The foundation and a working vertical slice are built, all behind the `accounting` feature flag
 (default `off`, admin-only). Typecheck clean, production build compiles, 41 unit tests pass.
 
-**Done — steps 1 & 2 (the wedge):**
+**Done — steps 1–4:**
 
 - **Ledger schema** — `chart_of_accounts`, `fiscal_periods`, `journal_entries`, `journal_postings`,
   `allocation_runs`, `allocation_results`, with grants/RLS/policies per `CLAUDE.md`
   (`supabase/migrations/20260702000000_fund_accounting_ledger.sql` — created locally, not applied).
-- **Engine** (`lib/accounting/`, fully unit-tested): double-entry balance invariant; largest-remainder
-  pro-rata allocation (sums exactly to the fund total); per-LP capital-account roll-forward;
-  ledger-vs-admin reconciliation; trial balance / balance sheet / income statement; default chart.
-- **API** (`/api/accounting/*`, admin-gated via `assertAdminAccess`): chart (list + seed), journal
-  (list + create balanced entry), capital-accounts (derived), reconciliation (compute diff),
-  statements (derived), opening-balances (cutover import), entities (LP list).
+- **Engine** (`lib/accounting/`, fully unit-tested — 56 tests): double-entry balance invariant;
+  largest-remainder pro-rata allocation (sums exactly to the fund total); per-LP capital-account
+  roll-forward; ledger-vs-admin reconciliation; trial balance / balance sheet / income statement;
+  default chart.
+- **Step 3 engines** — management fee (per-LP side-letter overrides + exemptions); European
+  carried-interest waterfall (return of capital → preferred → GP catch-up → carry split);
+  balanced entry builders (capital call, distribution, fee, expense, carry) posting to per-LP
+  capital accounts; persistence helpers.
+- **Step 4 — AI entry-drafting** — prompt builder + tolerant JSON parser + code→account resolver;
+  `/api/accounting/draft-entry` calls the fund's configured AI provider, validates the balance
+  invariant, and saves a draft for review.
+- **API** (`/api/accounting/*`, admin-gated via `assertAdminAccess`): chart, journal, capital-accounts,
+  reconciliation, statements, opening-balances, entities, allocations (preview/post), draft-entry.
 - **UI** (top-level admin-only Accounting section): home + first-run setup, opening-balances import,
-  capital accounts, the reconciliation hero page, journal, and financial statements.
+  capital accounts, allocations, the reconciliation hero page, journal, financial statements, and
+  draft-from-document.
 
 **Not yet built (the remaining plan):**
 
-- Step 3 — management-fee, carried-interest, and expense-allocation engines (the allocation
-  primitives exist; the fee/carry/waterfall rules on top don't). Where Hemrock plugs in.
-- Step 4 — AI entry-drafting from source docs + agentic reconciliation.
+- Period-close / statement-of-operations integration: Step 3 allocations post directly to LP capital
+  (so capital accounts + reconciliation are exact); routing fees/expenses through P&L accounts with a
+  year-end close to capital (undistributed-earnings bridge) is a documented refinement.
 - Re-sourcing the existing pages (funds, LP report cards, letters) from the ledger via the
   shadow → internal-reconcile → cut-over strategy; LP-portal roll-forward drilldown.
 - Schedule of investments (page stubbed); statement of changes in partners' capital and cash flows.
 - A DB trigger enforcing `SUM(postings)=0` per entry (currently enforced in `lib/accounting`).
-- The real-world allocation complications (side letters, blended fees, mid-period closes, GP/employee
-  vehicles, excused investors) — to be discovered and prioritized by reconciling a real fund
+- Hemrock modeling → actuals (the waterfall engine is the natural seam); closing/subscription workflow.
+- The real-world allocation complications (blended fees, mid-period closes/equalization, excused
+  investors) — to be discovered and prioritized by reconciling a real fund
   (see `FUND_ACCOUNTING_TEST_PLAN.md`).
 
 **To try it:** flip `accounting` from `off` → `admin` in Settings → Feature visibility, seed the
