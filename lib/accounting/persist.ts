@@ -48,7 +48,7 @@ export async function ensureCapitalAccounts(
 export async function persistEntry(
   admin: SupabaseClient,
   fundId: string,
-  userId: string,
+  userId: string | null,
   entry: JournalEntry,
   status: 'draft' | 'posted' = 'posted'
 ): Promise<{ entryId: string } | { error: string }> {

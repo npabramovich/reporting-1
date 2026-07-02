@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { BookOpen, Users, GitCompareArrows, ScrollText, Layers, FileText, Calculator, Sparkles } from 'lucide-react'
+import { BookOpen, Users, GitCompareArrows, ScrollText, Layers, FileText, Calculator, Sparkles, Bot } from 'lucide-react'
 import { requireAccountingAdmin } from './guard'
 import { AccountingSetup } from './setup'
 
@@ -30,6 +30,12 @@ const SECTIONS = [
     label: 'Draft from document',
     icon: Sparkles,
     desc: 'Paste a capital-call notice or invoice; AI proposes a balanced entry for you to review and post.',
+  },
+  {
+    href: '/accounting/agent',
+    label: 'Agent access',
+    icon: Bot,
+    desc: 'Let AI agents drive the ledger over MCP or REST with a fund API key — the AI-native surface.',
   },
   {
     href: '/accounting/journal',
