@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { BookOpen, Users, GitCompareArrows, ScrollText, Layers, FileText } from 'lucide-react'
+import { BookOpen, Users, GitCompareArrows, ScrollText, Layers, FileText, Calculator, Sparkles } from 'lucide-react'
 import { requireAccountingAdmin } from './guard'
 import { AccountingSetup } from './setup'
 
@@ -14,10 +14,22 @@ const SECTIONS = [
     desc: 'Per-LP roll-forward: beginning → contributions → distributions → fees → gains → ending.',
   },
   {
+    href: '/accounting/allocations',
+    label: 'Allocations',
+    icon: Calculator,
+    desc: 'Compute and post a management fee or partnership expense, split per LP to each capital account.',
+  },
+  {
     href: '/accounting/reconciliation',
     label: 'Reconciliation',
     icon: GitCompareArrows,
     desc: "Shadow-reconcile the ledger's capital accounts against the existing admin statement, per LP.",
+  },
+  {
+    href: '/accounting/draft',
+    label: 'Draft from document',
+    icon: Sparkles,
+    desc: 'Paste a capital-call notice or invoice; AI proposes a balanced entry for you to review and post.',
   },
   {
     href: '/accounting/journal',

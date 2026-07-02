@@ -43,6 +43,11 @@ export function bucketForSourceType(sourceType: string | null | undefined): Roll
     case 'valuation':
     case 'gain':
       return 'gains'
+    case 'carried_interest':
+    case 'carry':
+      // Carry is a reallocation of profit from LPs to the GP; it lands in
+      // `other` on the LP roll-forward (a dedicated carry line can be added later).
+      return 'other'
     default:
       return 'other'
   }

@@ -72,8 +72,10 @@ const NAV_ITEMS: NavItem[] = [
     href: '/accounting', label: 'Accounting', icon: BookOpen, featureKey: 'accounting', adminOnly: true,
     children: [
       { href: '/accounting/capital-accounts', label: 'Capital accounts' },
+      { href: '/accounting/allocations',      label: 'Allocations' },
       { href: '/accounting/reconciliation',   label: 'Reconciliation' },
       { href: '/accounting/journal',          label: 'Journal' },
+      { href: '/accounting/draft',            label: 'Draft from doc' },
     ],
   },
   { href: '/usage', label: 'Usage', icon: Users, adminOnly: true },
