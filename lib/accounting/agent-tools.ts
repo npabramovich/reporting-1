@@ -13,6 +13,9 @@ import { trialBalance, balanceSheet, incomeStatement } from './statements'
 import { reconcileCapital, type AdminCapitalAccount } from './reconcile'
 import { runWaterfall } from './waterfall'
 import { buildAllocationEntry, type AllocationBody } from './allocation-actions'
+import { importBankTransactions } from './bank-import'
+import { summarizeBankRec, type BankTxnState } from './bank'
+import { accountBalances } from './ledger'
 import type { JournalEntry, Posting } from './types'
 
 export interface AgentToolContext {
@@ -99,6 +102,31 @@ const HANDLERS: Record<string, AgentToolHandler> = {
   },
 
   run_waterfall: async (_ctx, input) => runWaterfall(Number(input.distributable), input.terms, input.state),
+
+  import_bank_transactions: async ({ admin, fundId, userId }, input) => {
+    const result = await importBankTransactions(admin, fundId, userId, String(input.csv ?? ''), String(input.source ?? 'csv'))
+    if ('error' in result) throw new Error(result.error)
+    return result
+  },
+
+  list_bank_transactions: async ({ admin, fundId }) => {
+    const { data } = await admin
+      .from('bank_transactions' as any)
+      .select('id, txn_date, amount, description, counterparty, status, suggested_account_code, journal_entry_id')
+      .eq('fund_id', fundId)
+      .order('txn_date', { ascending: false })
+      .limit(1000)
+    return data ?? []
+  },
+
+  bank_reconciliation: async ({ admin, fundId }) => {
+    const { accounts, postings } = await loadPostedLedger(admin, fundId)
+    const cash = accounts.find(a => a.code === '1000')
+    const ledgerCashBalance = cash ? (accountBalances(postings).get(cash.id) ?? 0) : 0
+    const { data } = await admin.from('bank_transactions' as any).select('amount, status').eq('fund_id', fundId).neq('status', 'ignored')
+    const txns: BankTxnState[] = ((data as any[]) ?? []).map(t => ({ amount: Number(t.amount), matched: t.status === 'reconciled' }))
+    return summarizeBankRec(txns, ledgerCashBalance)
+  },
 }
 
 export const AGENT_TOOLS: AgentTool[] = AGENT_TOOL_MANIFEST.map(meta => {

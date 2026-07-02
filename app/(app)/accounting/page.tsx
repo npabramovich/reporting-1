@@ -1,12 +1,18 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { BookOpen, Users, GitCompareArrows, ScrollText, Layers, FileText, Calculator, Sparkles } from 'lucide-react'
+import { BookOpen, Users, GitCompareArrows, ScrollText, Layers, FileText, Calculator, Sparkles, Landmark } from 'lucide-react'
 import { requireAccountingAdmin } from './guard'
 import { AccountingSetup } from './setup'
 
 export const metadata: Metadata = { title: 'Accounting' }
 
 const SECTIONS = [
+  {
+    href: '/accounting/bank',
+    label: 'Bank transactions',
+    icon: Landmark,
+    desc: 'Import a transaction feed (CSV, Ramp, QuickBooks), auto-draft entries, and reconcile ledger cash against the bank.',
+  },
   {
     href: '/accounting/capital-accounts',
     label: 'Capital accounts',

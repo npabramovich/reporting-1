@@ -356,8 +356,17 @@ The foundation and a working vertical slice are built, all behind the `accountin
   capital accounts, allocations (incl. gain + period close), the reconciliation hero page, journal,
   financial statements, draft-from-document, and agent access.
 
+- **Data ingestion (staging → categorize → review → post)** — a source-agnostic `bank_transactions`
+  staging table; a CSV/TSV importer that parses (headers auto-matched, debit/credit or signed amount),
+  dedups, keyword-categorizes, and drafts a balanced entry per row for review; post/ignore actions; and
+  a **bank reconciliation** (ledger cash vs the bank feed, difference + unmatched). Exposed to agents too
+  (`import_bank_transactions`, `list_bank_transactions`, `bank_reconciliation`). Plaid/Ramp/QuickBooks
+  connectors normalize into the same staging shape.
+
 **Not yet built (the remaining plan):**
 
+- Live connectors (Plaid bank feed, Ramp API + webhooks, QuickBooks/Intuit) on top of the staging layer;
+  AI-batch categorization and agent-orchestrated pull-and-post.
 - Re-sourcing the existing pages (funds, LP report cards, letters) from the ledger via the
   shadow → internal-reconcile → cut-over strategy; LP-portal roll-forward drilldown.
 - Schedule of investments (page stubbed); statement of changes in partners' capital and cash flows.

@@ -86,6 +86,31 @@ export const AGENT_TOOL_MANIFEST: AgentToolMeta[] = [
     },
   },
   {
+    name: 'import_bank_transactions',
+    description: 'Import a CSV/TSV transaction feed (bank, Ramp, QuickBooks export): parse, dedup, stage, and draft a balanced entry per row for review.',
+    scope: 'write',
+    inputSchema: {
+      type: 'object',
+      required: ['csv'],
+      properties: {
+        csv: { type: 'string', description: 'CSV/TSV with date, description, and amount (or debit/credit) columns' },
+        source: { type: 'string', description: 'csv | plaid | ramp | quickbooks (default csv)' },
+      },
+    },
+  },
+  {
+    name: 'list_bank_transactions',
+    description: 'List staged bank transactions and their status (drafted / reconciled / ignored).',
+    scope: 'read',
+    inputSchema: EMPTY_SCHEMA,
+  },
+  {
+    name: 'bank_reconciliation',
+    description: 'Bank reconciliation summary: ledger cash vs the bank feed, with the difference and unmatched count.',
+    scope: 'read',
+    inputSchema: EMPTY_SCHEMA,
+  },
+  {
     name: 'run_waterfall',
     description: 'Compute a European carried-interest waterfall for a distribution (pure calc; does not post).',
     scope: 'read',
