@@ -174,6 +174,11 @@ reads from the derived balances. Invariant to enforce in code and as a check:
 
 ## Sequencing
 
+> First concrete step is scoped in **`FUND_ACCOUNTING_TEST_PLAN.md`** — a shadow-reconcile test
+> against a real fund that validates the allocation engine and doubles as a fund-accounting
+> learning scaffold.
+
+
 1. **Ledger core** — `chart_of_accounts`, `journal_entries`, `journal_postings`, `fiscal_periods`;
    `lib/accounting/` with the double-entry invariant enforced. The spine.
 2. **Capital-account / allocation engine** — allocate calls, distributions, fees, expenses,
