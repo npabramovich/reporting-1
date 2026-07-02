@@ -61,6 +61,32 @@ export async function assertReadAccess(
 }
 
 /**
+ * Admin-only gate for API routes (writes and sensitive reads). Resolves the
+ * caller's fund and requires the `admin` role, returning a 403 otherwise. Used
+ * by the Accounting routes, whose section is admin-only while in development.
+ */
+export async function assertAdminAccess(
+  admin: SupabaseClient,
+  userId: string
+): Promise<{ fundId: string; role: string } | NextResponse> {
+  const { data: membership, error } = await admin
+    .from('fund_members')
+    .select('fund_id, role')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[assertAdminAccess] DB error:', error.message)
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+  }
+  if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+  if (membership.role !== 'admin')
+    return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+
+  return { fundId: membership.fund_id, role: membership.role }
+}
+
+/**
  * LP-side mirror of {@link assertWriteAccess}, for /portal API routes.
  *
  * Resolves the caller's active LP account and the set of lp_investor_ids they
