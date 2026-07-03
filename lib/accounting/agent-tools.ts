@@ -16,6 +16,7 @@ import { buildAllocationEntry, type AllocationBody } from './allocation-actions'
 import { importBankTransactions } from './bank-import'
 import { runCategorization } from './categorize-run'
 import { bookCapitalCallFromInflow } from './bank-match'
+import { exportLedgerText, postLedgerText } from './text-ledger-run'
 import { summarizeBankRec, type BankTxnState } from './bank'
 import { accountBalances } from './ledger'
 import { listVehicles } from './load'
@@ -108,6 +109,12 @@ const HANDLERS: Record<string, AgentToolHandler> = {
   },
 
   run_waterfall: async (_ctx, input) => runWaterfall(Number(input.distributable), input.terms, input.state),
+
+  export_ledger_text: async ({ admin, fundId, portfolioGroup }) => ({ text: await exportLedgerText(admin, fundId, portfolioGroup) }),
+
+  post_ledger_text: async ({ admin, fundId, portfolioGroup, userId }, input) => {
+    return postLedgerText(admin, fundId, portfolioGroup, userId, String(input.text ?? ''), input.status)
+  },
 
   import_bank_transactions: async ({ admin, fundId, portfolioGroup, userId }, input) => {
     const result = await importBankTransactions(admin, fundId, portfolioGroup, userId, String(input.csv ?? ''), String(input.source ?? 'csv'))

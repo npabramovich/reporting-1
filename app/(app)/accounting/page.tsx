@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { BookOpen, Users, GitCompareArrows, ScrollText, Layers, FileText, Calculator, Sparkles, Landmark } from 'lucide-react'
+import { BookOpen, Users, GitCompareArrows, ScrollText, Layers, FileText, Calculator, Sparkles, Landmark, FileCode } from 'lucide-react'
 import { requireAccountingAdmin } from './guard'
 import { AccountingSetup } from './setup'
 
@@ -42,6 +42,12 @@ const SECTIONS = [
     label: 'Journal',
     icon: ScrollText,
     desc: 'Double-entry journal entries and postings — the book of record everything derives from.',
+  },
+  {
+    href: '/accounting/ledger-text',
+    label: 'Ledger text',
+    icon: FileCode,
+    desc: 'Author entries as plain-text double-entry (beancount syntax) and post them back — the DB is just the store.',
   },
   {
     href: '/accounting/schedule-of-investments',

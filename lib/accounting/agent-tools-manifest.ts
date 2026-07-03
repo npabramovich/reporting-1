@@ -75,6 +75,25 @@ export const AGENT_TOOL_MANIFEST: AgentToolMeta[] = [
     },
   },
   {
+    name: 'export_ledger_text',
+    description: "Export the vehicle's ledger as beancount-style plain-text double-entry.",
+    scope: 'read',
+    inputSchema: EMPTY_SCHEMA,
+  },
+  {
+    name: 'post_ledger_text',
+    description: 'Author entries as beancount-style text: parse and persist each balanced entry. Accounts are referenced by name (Root:Slug:Code) or by chart code.',
+    scope: 'write',
+    inputSchema: {
+      type: 'object',
+      required: ['text'],
+      properties: {
+        text: { type: 'string', description: 'beancount-style transactions' },
+        status: { type: 'string', enum: ['draft', 'posted'], description: 'override the per-entry flag' },
+      },
+    },
+  },
+  {
     name: 'reconcile',
     description: "Reconcile the ledger's capital accounts against admin figures. `admin` is { lpEntityId: { ending, ... } }.",
     scope: 'read',
