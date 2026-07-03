@@ -75,6 +75,26 @@ export const AGENT_TOOL_MANIFEST: AgentToolMeta[] = [
     },
   },
   {
+    name: 'list_periods',
+    description: 'List the vehicle\'s fiscal periods and whether each is open or closed (locked).',
+    scope: 'read',
+    inputSchema: EMPTY_SCHEMA,
+  },
+  {
+    name: 'close_period',
+    description: 'Close and lock a fiscal period: snapshot the ledger text and block new postings dated in the range. Body: periodStart, periodEnd, label?.',
+    scope: 'write',
+    inputSchema: {
+      type: 'object',
+      required: ['periodStart', 'periodEnd'],
+      properties: {
+        periodStart: { type: 'string' },
+        periodEnd: { type: 'string' },
+        label: { type: 'string' },
+      },
+    },
+  },
+  {
     name: 'export_ledger_text',
     description: "Export the vehicle's ledger as beancount-style plain-text double-entry.",
     scope: 'read',

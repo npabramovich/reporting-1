@@ -6,6 +6,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { lpCapitalCode } from './chart'
 import { assertBalanced } from './ledger'
+import { closedPeriodRanges, dateInAnyClosedPeriod } from './periods'
 import type { JournalEntry } from './types'
 
 /** code → account_id for the vehicle's chart. */
@@ -61,6 +62,12 @@ export async function persistEntry(
     assertBalanced(entry)
   } catch (e) {
     return { error: (e as Error).message }
+  }
+
+  // Locking: refuse to post into a closed period (reopen it to amend).
+  const closed = await closedPeriodRanges(admin, fundId, group)
+  if (dateInAnyClosedPeriod(closed, entry.entryDate)) {
+    return { error: `The period covering ${entry.entryDate} is closed — reopen it to post here` }
   }
 
   const { data: created, error: entryErr } = await admin

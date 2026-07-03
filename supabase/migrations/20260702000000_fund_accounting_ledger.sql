@@ -71,6 +71,8 @@ create table public.fiscal_periods (
   label           text,
   status          text not null default 'open' check (status in ('open', 'closed')),
   closed_at       timestamptz,
+  closed_by       uuid,
+  snapshot_text   text,   -- beancount serialization of the ledger at close (audit snapshot)
   created_at      timestamptz not null default now(),
   unique (fund_id, portfolio_group, period_start, period_end)
 );

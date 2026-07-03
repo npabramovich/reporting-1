@@ -17,6 +17,7 @@ import { importBankTransactions } from './bank-import'
 import { runCategorization } from './categorize-run'
 import { bookCapitalCallFromInflow } from './bank-match'
 import { exportLedgerText, postLedgerText } from './text-ledger-run'
+import { listPeriods, closePeriod } from './periods'
 import { summarizeBankRec, type BankTxnState } from './bank'
 import { accountBalances } from './ledger'
 import { listVehicles } from './load'
@@ -109,6 +110,14 @@ const HANDLERS: Record<string, AgentToolHandler> = {
   },
 
   run_waterfall: async (_ctx, input) => runWaterfall(Number(input.distributable), input.terms, input.state),
+
+  list_periods: async ({ admin, fundId, portfolioGroup }) => listPeriods(admin, fundId, portfolioGroup),
+
+  close_period: async ({ admin, fundId, portfolioGroup, userId }, input) => {
+    const result = await closePeriod(admin, fundId, portfolioGroup, userId, String(input.periodStart), String(input.periodEnd), input.label)
+    if ('error' in result) throw new Error(result.error)
+    return result
+  },
 
   export_ledger_text: async ({ admin, fundId, portfolioGroup }) => ({ text: await exportLedgerText(admin, fundId, portfolioGroup) }),
 

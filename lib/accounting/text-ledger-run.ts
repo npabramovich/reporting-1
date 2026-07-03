@@ -14,17 +14,18 @@ async function loadAccounts(admin: SupabaseClient, fundId: string, group: string
   return ((data as any[]) ?? []).map(a => ({ id: a.id, fundId, code: a.code, name: a.name, type: a.type as AccountType, subtype: a.subtype ?? null, lpEntityId: a.lp_entity_id ?? null }))
 }
 
-/** Serialize a vehicle's ledger (excluding void entries) to beancount text. */
-export async function exportLedgerText(admin: SupabaseClient, fundId: string, group: string): Promise<string> {
+/** Serialize a vehicle's ledger (excluding void entries) to beancount text. Pass
+ *  `asOf` to snapshot only entries on or before that date. */
+export async function exportLedgerText(admin: SupabaseClient, fundId: string, group: string, asOf?: string): Promise<string> {
   const accounts = await loadAccounts(admin, fundId, group)
-  const { data } = await admin
+  let q = admin
     .from('journal_entries' as any)
     .select('id, entry_date, memo, source_type, status, journal_postings(account_id, amount, currency)')
     .eq('fund_id', fundId)
     .eq('portfolio_group', group)
     .neq('status', 'void')
-    .order('entry_date', { ascending: true })
-    .limit(2000)
+  if (asOf) q = q.lte('entry_date', asOf)
+  const { data } = await q.order('entry_date', { ascending: true }).limit(2000)
 
   const entries: TextEntryInput[] = ((data as any[]) ?? []).map(e => ({
     entryDate: e.entry_date,
