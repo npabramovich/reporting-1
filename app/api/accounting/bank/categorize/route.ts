@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertAdminAccess } from '@/lib/api-helpers'
+import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { runCategorization } from '@/lib/accounting/categorize-run'
 
 export const runtime = 'nodejs'
@@ -17,7 +18,9 @@ export async function POST(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const result = await runCategorization(admin, gate.fundId, Array.isArray(body?.ids) ? body.ids : undefined)
+  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  if (group instanceof NextResponse) return group
+  const result = await runCategorization(admin, gate.fundId, group, Array.isArray(body?.ids) ? body.ids : undefined)
   if ('error' in result) return NextResponse.json(result, { status: 400 })
   return NextResponse.json(result)
 }

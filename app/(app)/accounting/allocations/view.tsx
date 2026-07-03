@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Loader2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
+import { useLedgerFetch } from '@/components/accounting-vehicle'
 
 type Action = 'management_fee' | 'expense' | 'gain' | 'close_period'
 
@@ -29,6 +30,7 @@ export function AllocationsView() {
   const [busy, setBusy] = useState(false)
   const [posted, setPosted] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const lf = useLedgerFetch()
 
   function payload(post: boolean) {
     const b: any = { action, entryDate, post }
@@ -43,7 +45,7 @@ export function AllocationsView() {
 
   async function run(post: boolean) {
     setBusy(true); setError(null); setPosted(null)
-    const res = await fetch('/api/accounting/allocations', {
+    const res = await lf('/api/accounting/allocations', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload(post)),
     })

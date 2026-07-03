@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Loader2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
+import { useLedgerFetch } from '@/components/accounting-vehicle'
 
 interface Entity { lpEntityId: string; name: string; commitment: number }
 
@@ -17,13 +18,15 @@ export function OpeningBalancesView() {
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState<{ lpCount: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const lf = useLedgerFetch()
 
   useEffect(() => {
-    fetch('/api/accounting/entities')
+    setLoading(true)
+    lf('/api/accounting/entities')
       .then(r => (r.ok ? r.json() : []))
       .then(d => setEntities(Array.isArray(d) ? d : []))
       .finally(() => setLoading(false))
-  }, [])
+  }, [lf])
 
   const total = Object.values(amounts).reduce((s, v) => s + (parseFloat(v) || 0), 0)
 
@@ -33,7 +36,7 @@ export function OpeningBalancesView() {
     const balances = entities
       .map(e => ({ lpEntityId: e.lpEntityId, amount: parseFloat(amounts[e.lpEntityId] ?? '') }))
       .filter(b => !isNaN(b.amount) && b.amount !== 0)
-    const res = await fetch('/api/accounting/opening-balances', {
+    const res = await lf('/api/accounting/opening-balances', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entryDate, balances }),

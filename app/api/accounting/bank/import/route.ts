@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertAdminAccess } from '@/lib/api-helpers'
+import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { importBankTransactions } from '@/lib/accounting/bank-import'
 
-// POST — import a CSV/TSV transaction feed. Parses, dedups against prior imports,
-// stages each new row, and drafts a balanced entry per row for review.
-// Body: { csv: string, source?: string }
+// POST — import a CSV/TSV transaction feed for a vehicle.
+// Body: { csv, source?, group? }
 export async function POST(req: NextRequest) {
   const supabase = createClient()
   const admin = createAdminClient()
@@ -16,7 +16,10 @@ export async function POST(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const result = await importBankTransactions(admin, gate.fundId, user.id, (body?.csv ?? '').toString(), (body?.source ?? 'csv').toString())
+  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  if (group instanceof NextResponse) return group
+
+  const result = await importBankTransactions(admin, gate.fundId, group, user.id, (body?.csv ?? '').toString(), (body?.source ?? 'csv').toString())
   if ('error' in result) return NextResponse.json(result, { status: 400 })
   return NextResponse.json(result)
 }

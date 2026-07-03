@@ -9,6 +9,7 @@
 create table public.bank_transactions (
   id                    uuid primary key default gen_random_uuid(),
   fund_id               uuid not null references funds(id) on delete cascade,
+  portfolio_group       text not null,                   -- the vehicle these transactions belong to
   source                text not null default 'csv',   -- csv | plaid | ramp | quickbooks | manual
   external_id           text,                            -- provider id, for connector dedup
   dedup_hash            text not null,                   -- stable hash for import idempotency
@@ -24,7 +25,7 @@ create table public.bank_transactions (
   raw                   jsonb,
   imported_by           uuid,
   created_at            timestamptz not null default now(),
-  unique (fund_id, dedup_hash)
+  unique (fund_id, portfolio_group, dedup_hash)
 );
 
 -- Grants — anon SELECT only (no unauthenticated writes); authenticated +
@@ -53,5 +54,5 @@ create policy "Fund admins write their fund's bank transactions"
     where fm.fund_id = bank_transactions.fund_id and fm.user_id = auth.uid() and fm.role = 'admin'
   ));
 
-create index bank_transactions_fund_idx on public.bank_transactions (fund_id, txn_date desc);
-create index bank_transactions_status_idx on public.bank_transactions (fund_id, status);
+create index bank_transactions_fund_idx on public.bank_transactions (fund_id, portfolio_group, txn_date desc);
+create index bank_transactions_status_idx on public.bank_transactions (fund_id, portfolio_group, status);

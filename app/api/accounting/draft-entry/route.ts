@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertAdminAccess } from '@/lib/api-helpers'
+import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { createFundAIProviderWithOverride } from '@/lib/ai'
 import { loadPostedLedger, loadEntityNames } from '@/lib/accounting/load'
 import { accountIdByCode, persistEntry } from '@/lib/accounting/persist'
@@ -21,12 +22,15 @@ export async function POST(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
+  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  if (group instanceof NextResponse) return group
+
   const text: string = (body?.text ?? '').toString()
   if (text.trim().length < 10) {
     return NextResponse.json({ error: 'Paste a source document to draft from' }, { status: 400 })
   }
 
-  const { accounts } = await loadPostedLedger(admin, gate.fundId)
+  const { accounts } = await loadPostedLedger(admin, gate.fundId, group)
   if (accounts.length === 0) {
     return NextResponse.json({ error: 'Seed the chart of accounts first' }, { status: 400 })
   }
@@ -60,8 +64,8 @@ export async function POST(req: NextRequest) {
   }
 
   const [codes, names] = await Promise.all([
-    accountIdByCode(admin, gate.fundId),
-    loadEntityNames(admin, gate.fundId),
+    accountIdByCode(admin, gate.fundId, group),
+    loadEntityNames(admin, gate.fundId, group),
   ])
   const entityByName = new Map(Array.from(names.entries()).map(([id, name]) => [name.toLowerCase(), id]))
 
@@ -70,7 +74,7 @@ export async function POST(req: NextRequest) {
 
   let savedEntryId: string | null = null
   if (body?.post && balanced) {
-    const result = await persistEntry(admin, gate.fundId, user.id, entry, 'draft')
+    const result = await persistEntry(admin, gate.fundId, group, user.id, entry, 'draft')
     if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 })
     savedEntryId = result.entryId
   }

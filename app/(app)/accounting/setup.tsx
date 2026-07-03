@@ -1,25 +1,27 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useLedgerFetch } from '@/components/accounting-vehicle'
 
 /** First-run setup: seed the default chart of accounts, then link to opening balances. */
 export function AccountingSetup() {
   const [accountCount, setAccountCount] = useState<number | null>(null)
   const [seeding, setSeeding] = useState(false)
+  const lf = useLedgerFetch()
 
-  const refresh = () =>
-    fetch('/api/accounting/chart')
+  const refresh = useCallback(() =>
+    lf('/api/accounting/chart')
       .then(r => (r.ok ? r.json() : []))
-      .then(d => setAccountCount(Array.isArray(d) ? d.length : 0))
+      .then(d => setAccountCount(Array.isArray(d) ? d.length : 0)), [lf])
 
-  useEffect(() => { refresh() }, [])
+  useEffect(() => { refresh() }, [refresh])
 
   async function seed() {
     setSeeding(true)
-    await fetch('/api/accounting/chart', { method: 'POST' })
+    await lf('/api/accounting/chart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     await refresh()
     setSeeding(false)
   }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveFundFromApiKey, authorizeToolUse } from '@/lib/accounting/api-keys'
-import { AGENT_TOOLS, getTool, type AgentToolContext } from '@/lib/accounting/agent-tools'
+import { AGENT_TOOLS, getTool, resolveVehicle } from '@/lib/accounting/agent-tools'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,9 +31,10 @@ export async function POST(req: NextRequest) {
   const denied = authorizeToolUse(tool.scope, auth)
   if (denied) return NextResponse.json({ error: denied }, { status: 403 })
 
-  const ctx: AgentToolContext = { admin, fundId: auth.fundId, userId: auth.userId }
   try {
-    const result = await tool.handler(ctx, body?.input ?? {})
+    const input = body?.input ?? {}
+    const portfolioGroup = await resolveVehicle(admin, auth.fundId, input.vehicle)
+    const result = await tool.handler({ admin, fundId: auth.fundId, portfolioGroup, userId: auth.userId }, input)
     return NextResponse.json({ ok: true, result })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 })

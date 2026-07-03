@@ -1,6 +1,7 @@
 // Server-side loaders that adapt DB rows into the pure-logic inputs. Kept out of
 // the route files so capital-accounts, reconciliation, and statements all derive
-// from the same posted-ledger snapshot.
+// from the same posted-ledger snapshot. Everything is scoped to one vehicle
+// (fund_id + portfolio_group).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Account, AccountType, Posting } from './types'
@@ -8,24 +9,23 @@ import type { CapitalPosting } from './capital-account'
 
 export interface LoadedLedger {
   accounts: Account[]
-  /** All postings on posted entries, as pure-logic Postings. */
   postings: Posting[]
-  /** Postings carrying an lp_entity_id, tagged with their entry source_type. */
   capitalPostings: CapitalPosting[]
 }
 
 /**
- * Load the fund's chart of accounts and every posting on a POSTED journal entry
+ * Load a vehicle's chart of accounts and every posting on a POSTED journal entry
  * (drafts and voids excluded — they never affect derived statements).
  */
 export async function loadPostedLedger(
   admin: SupabaseClient,
-  fundId: string
+  fundId: string,
+  group: string
 ): Promise<LoadedLedger> {
   const [{ data: acctRows }, { data: entryRows }, { data: postingRows }] = await Promise.all([
-    admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id').eq('fund_id', fundId),
-    admin.from('journal_entries' as any).select('id, source_type, status').eq('fund_id', fundId).eq('status', 'posted'),
-    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, currency, lp_entity_id').eq('fund_id', fundId),
+    admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id').eq('fund_id', fundId).eq('portfolio_group', group),
+    admin.from('journal_entries' as any).select('id, source_type, status').eq('fund_id', fundId).eq('portfolio_group', group).eq('status', 'posted'),
+    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, currency, lp_entity_id').eq('fund_id', fundId).eq('portfolio_group', group),
   ])
 
   const accounts: Account[] = ((acctRows as any[]) ?? []).map(a => ({
@@ -45,56 +45,70 @@ export async function loadPostedLedger(
   const postings: Posting[] = []
   const capitalPostings: CapitalPosting[] = []
   for (const p of ((postingRows as any[]) ?? [])) {
-    // Only postings whose entry is posted (source map only holds posted entries).
     if (!sourceByEntry.has(p.journal_entry_id)) continue
     const amount = Number(p.amount)
-    postings.push({
-      accountId: p.account_id,
-      amount,
-      currency: p.currency ?? 'USD',
-      lpEntityId: p.lp_entity_id ?? null,
-    })
+    postings.push({ accountId: p.account_id, amount, currency: p.currency ?? 'USD', lpEntityId: p.lp_entity_id ?? null })
     if (p.lp_entity_id) {
-      capitalPostings.push({
-        lpEntityId: p.lp_entity_id,
-        amount,
-        sourceType: sourceByEntry.get(p.journal_entry_id) ?? null,
-      })
+      capitalPostings.push({ lpEntityId: p.lp_entity_id, amount, sourceType: sourceByEntry.get(p.journal_entry_id) ?? null })
     }
   }
 
   return { accounts, postings, capitalPostings }
 }
 
-/** Names for LP entities, for display in capital accounts / reconciliation. */
+/** Names for the vehicle's LP entities (those with a commitment in this group). */
 export async function loadEntityNames(
   admin: SupabaseClient,
-  fundId: string
+  fundId: string,
+  group: string
 ): Promise<Map<string, string>> {
-  const { data } = await admin
-    .from('lp_entities' as any)
-    .select('id, entity_name')
+  const { data: inv } = await admin
+    .from('lp_investments' as any)
+    .select('entity_id')
     .eq('fund_id', fundId)
+    .eq('portfolio_group', group)
+  const entityIds = Array.from(new Set(((inv as any[]) ?? []).map(r => r.entity_id)))
   const out = new Map<string, string>()
+  if (entityIds.length === 0) return out
+
+  const { data } = await admin.from('lp_entities' as any).select('id, entity_name').in('id', entityIds)
   for (const e of ((data as any[]) ?? [])) out.set(e.id, e.entity_name ?? e.id)
   return out
 }
 
 /**
- * Committed capital per LP entity (summed across portfolio groups) — the
- * pro-rata basis for the allocation engine and opening balances.
+ * Committed capital per LP entity in this vehicle — the pro-rata basis for the
+ * allocation engine and opening balances.
  */
 export async function loadOwnership(
   admin: SupabaseClient,
-  fundId: string
-): Promise<{ lpEntityId: string; commitment: number }[]> {
+  fundId: string,
+  group: string
+): Promise<{ lpEntityId: string; commitment: number; paidIn: number; distributions: number }[]> {
   const { data } = await admin
     .from('lp_investments' as any)
-    .select('entity_id, commitment')
+    .select('entity_id, commitment, paid_in_capital, distributions')
     .eq('fund_id', fundId)
-  const byEntity = new Map<string, number>()
+    .eq('portfolio_group', group)
+  const byEntity = new Map<string, { commitment: number; paidIn: number; distributions: number }>()
   for (const row of ((data as any[]) ?? [])) {
-    byEntity.set(row.entity_id, (byEntity.get(row.entity_id) ?? 0) + Number(row.commitment ?? 0))
+    const cur = byEntity.get(row.entity_id) ?? { commitment: 0, paidIn: 0, distributions: 0 }
+    cur.commitment += Number(row.commitment ?? 0)
+    cur.paidIn += Number(row.paid_in_capital ?? 0)
+    cur.distributions += Number(row.distributions ?? 0)
+    byEntity.set(row.entity_id, cur)
   }
-  return Array.from(byEntity.entries()).map(([lpEntityId, commitment]) => ({ lpEntityId, commitment }))
+  return Array.from(byEntity.entries()).map(([lpEntityId, v]) => ({ lpEntityId, ...v }))
+}
+
+/** Distinct vehicles (portfolio_groups) for a fund, from LP + cash-flow data. */
+export async function listVehicles(admin: SupabaseClient, fundId: string): Promise<string[]> {
+  const [{ data: inv }, { data: cfg }, { data: cf }] = await Promise.all([
+    admin.from('lp_investments' as any).select('portfolio_group').eq('fund_id', fundId),
+    admin.from('fund_group_config' as any).select('portfolio_group').eq('fund_id', fundId),
+    admin.from('fund_cash_flows' as any).select('portfolio_group').eq('fund_id', fundId),
+  ])
+  const set = new Set<string>()
+  for (const rows of [inv, cfg, cf]) for (const r of ((rows as any[]) ?? [])) if (r.portfolio_group) set.add(r.portfolio_group)
+  return Array.from(set).sort()
 }

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Loader2, Check, AlertTriangle, Upload, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
+import { useLedgerFetch } from '@/components/accounting-vehicle'
 
 interface Txn { id: string; txn_date: string; amount: number; description: string; counterparty: string | null; status: string; suggested_account_code: string | null }
 interface Rec { bankEndingBalance: number; ledgerCashBalance: number; difference: number; matchedCount: number; unmatchedCount: number; unmatchedTotal: number; tiesOut: boolean }
@@ -27,27 +28,28 @@ export function BankView() {
   const [importing, setImporting] = useState(false)
   const [categorizing, setCategorizing] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
+  const lf = useLedgerFetch()
 
   const load = useCallback(() => {
     setLoading(true)
     Promise.all([
-      fetch('/api/accounting/bank').then(r => (r.ok ? r.json() : [])),
-      fetch('/api/accounting/bank/reconcile').then(r => (r.ok ? r.json() : null)),
-      fetch('/api/accounting/bank/match').then(r => (r.ok ? r.json() : [])),
+      lf('/api/accounting/bank').then(r => (r.ok ? r.json() : [])),
+      lf('/api/accounting/bank/reconcile').then(r => (r.ok ? r.json() : null)),
+      lf('/api/accounting/bank/match').then(r => (r.ok ? r.json() : [])),
     ]).then(([t, r, c]) => { setTxns(Array.isArray(t) ? t : []); setRec(r); setCandidates(Array.isArray(c) ? c : []) }).finally(() => setLoading(false))
-  }, [])
+  }, [lf])
 
   useEffect(() => { load() }, [load])
 
   async function categorize() {
     setCategorizing(true)
-    await fetch('/api/accounting/bank/categorize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+    await lf('/api/accounting/bank/categorize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     setCategorizing(false)
     load()
   }
 
   async function match(id: string, mode: 'allocate' | 'link', entryId?: string) {
-    await fetch('/api/accounting/bank/match', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, mode, entryId }) })
+    await lf('/api/accounting/bank/match', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, mode, entryId }) })
     load()
   }
 
@@ -55,7 +57,7 @@ export function BankView() {
 
   async function doImport() {
     setImporting(true); setResult(null)
-    const res = await fetch('/api/accounting/bank/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv }) })
+    const res = await lf('/api/accounting/bank/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv }) })
     const data = await res.json()
     if (res.ok) { setResult(data); setCsv(''); load() }
     else setResult({ imported: 0, skipped: 0, errors: [data.error ?? 'Import failed'] })
@@ -63,7 +65,7 @@ export function BankView() {
   }
 
   async function act(id: string, action: 'post' | 'ignore') {
-    await fetch('/api/accounting/bank', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, id }) })
+    await lf('/api/accounting/bank', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, id }) })
     load()
   }
 

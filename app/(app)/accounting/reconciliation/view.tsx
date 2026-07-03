@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2, Check, AlertTriangle } from 'lucide-react'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
+import { useLedgerFetch } from '@/components/accounting-vehicle'
 import { Button } from '@/components/ui/button'
 
 interface LedgerRow { lpEntityId: string; name: string; ending: number }
@@ -25,13 +26,29 @@ export function ReconciliationView() {
   const [result, setResult] = useState<ReconResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
+  const lf = useLedgerFetch()
 
   useEffect(() => {
-    fetch('/api/accounting/capital-accounts')
+    setLoading(true)
+    lf('/api/accounting/capital-accounts')
       .then(r => (r.ok ? r.json() : { rows: [] }))
       .then(d => setRows(d.rows ?? []))
       .finally(() => setLoading(false))
-  }, [])
+  }, [lf])
+
+  async function loadSnapshot() {
+    // Prefill the admin figures from the LP snapshot already in the platform.
+    const res = await lf('/api/accounting/reconciliation')
+    if (!res.ok) return
+    const { snapshot } = await res.json()
+    const next: Record<string, string> = {}
+    for (const [id, fig] of Object.entries(snapshot ?? {})) {
+      const f = fig as { contributions?: number; distributions?: number }
+      const ending = (f.contributions ?? 0) + (f.distributions ?? 0)
+      next[id] = String(ending)
+    }
+    setAdminInput(next)
+  }
 
   async function runReconcile() {
     setRunning(true)
@@ -40,7 +57,7 @@ export function ReconciliationView() {
       const n = parseFloat(val)
       if (!isNaN(n)) admin[id] = { ending: n }
     }
-    const res = await fetch('/api/accounting/reconciliation', {
+    const res = await lf('/api/accounting/reconciliation', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ admin }),
@@ -124,10 +141,13 @@ export function ReconciliationView() {
         </table>
       </div>
 
-      <Button onClick={runReconcile} disabled={running}>
-        {running && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-        Reconcile
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button onClick={runReconcile} disabled={running}>
+          {running && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          Reconcile
+        </Button>
+        <Button variant="outline" onClick={loadSnapshot}>Load from LP snapshot</Button>
+      </div>
     </div>
   )
 }

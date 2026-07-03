@@ -18,21 +18,23 @@ export interface CategorizeResult {
 export async function runCategorization(
   admin: SupabaseClient,
   fundId: string,
+  group: string,
   ids?: string[]
 ): Promise<CategorizeResult | { error: string }> {
   let q = admin
     .from('bank_transactions' as any)
     .select('id, journal_entry_id, txn_date, amount, description')
     .eq('fund_id', fundId)
+    .eq('portfolio_group', group)
     .eq('status', 'drafted')
   if (ids && ids.length) q = q.in('id', ids)
   const { data: rows } = await q
   const txns = (rows as any[]) ?? []
   if (txns.length === 0) return { considered: 0, updated: 0, errors: [] }
 
-  const { accounts } = await loadPostedLedger(admin, fundId)
+  const { accounts } = await loadPostedLedger(admin, fundId, group)
   if (accounts.length === 0) return { error: 'Seed the chart of accounts first' }
-  const codes = await accountIdByCode(admin, fundId)
+  const codes = await accountIdByCode(admin, fundId, group)
   const cashId = codes.get('1000')
 
   const toCategorize: TxnToCategorize[] = txns.map(t => ({ id: t.id, date: t.txn_date, amount: Number(t.amount), description: t.description ?? '' }))

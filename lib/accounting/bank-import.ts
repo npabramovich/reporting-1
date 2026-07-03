@@ -15,6 +15,7 @@ export interface ImportResult {
 export async function importBankTransactions(
   admin: SupabaseClient,
   fundId: string,
+  group: string,
   userId: string | null,
   csv: string,
   source = 'csv'
@@ -22,11 +23,11 @@ export async function importBankTransactions(
   const { rows, errors } = parseTransactionsCsv((csv ?? '').toString())
   if (rows.length === 0) return { error: errors[0] ?? 'No transactions found', errors }
 
-  const codes = await accountIdByCode(admin, fundId)
+  const codes = await accountIdByCode(admin, fundId, group)
   const cashId = codes.get('1000')
   if (!cashId) return { error: 'Seed the chart of accounts first' }
 
-  const { data: existing } = await admin.from('bank_transactions' as any).select('dedup_hash').eq('fund_id', fundId)
+  const { data: existing } = await admin.from('bank_transactions' as any).select('dedup_hash').eq('fund_id', fundId).eq('portfolio_group', group)
   const seen = new Set(((existing as any[]) ?? []).map(r => r.dedup_hash))
 
   let imported = 0
@@ -46,11 +47,12 @@ export async function importBankTransactions(
       sourceType: cat.sourceType,
       postings: bankEntryPostings(row.amount, cashId, otherId),
     }
-    const result = await persistEntry(admin, fundId, userId, entry, 'draft')
+    const result = await persistEntry(admin, fundId, group, userId, entry, 'draft')
     if ('error' in result) { errors.push(`${row.date} ${row.description}: ${result.error}`); continue }
 
     const { error: insErr } = await admin.from('bank_transactions' as any).insert({
       fund_id: fundId,
+      portfolio_group: group,
       source,
       dedup_hash: hash,
       txn_date: row.date,

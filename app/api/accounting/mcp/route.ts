@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveFundFromApiKey, authorizeToolUse, type ResolvedKey } from '@/lib/accounting/api-keys'
-import { AGENT_TOOLS, getTool, type AgentToolContext } from '@/lib/accounting/agent-tools'
+import { AGENT_TOOLS, getTool, resolveVehicle, type AgentToolContext } from '@/lib/accounting/agent-tools'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -22,7 +22,9 @@ function err(id: any, code: number, message: string) {
   return { jsonrpc: '2.0', id, error: { code, message } }
 }
 
-async function handle(rpc: RpcRequest, ctx: AgentToolContext, auth: ResolvedKey): Promise<any | null> {
+type BaseCtx = Omit<AgentToolContext, 'portfolioGroup'>
+
+async function handle(rpc: RpcRequest, ctx: BaseCtx, auth: ResolvedKey): Promise<any | null> {
   switch (rpc.method) {
     case 'initialize':
       return ok(rpc.id, { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: SERVER_INFO })
@@ -40,7 +42,9 @@ async function handle(rpc: RpcRequest, ctx: AgentToolContext, auth: ResolvedKey)
       const denied = authorizeToolUse(tool.scope, auth)
       if (denied) return ok(rpc.id, { content: [{ type: 'text', text: denied }], isError: true })
       try {
-        const result = await tool.handler(ctx, rpc.params?.arguments ?? {})
+        const args = rpc.params?.arguments ?? {}
+        const portfolioGroup = await resolveVehicle(ctx.admin, ctx.fundId, args.vehicle)
+        const result = await tool.handler({ ...ctx, portfolioGroup }, args)
         return ok(rpc.id, { content: [{ type: 'text', text: JSON.stringify(result) }] })
       } catch (e) {
         return ok(rpc.id, { content: [{ type: 'text', text: (e as Error).message }], isError: true })
@@ -56,7 +60,7 @@ export async function POST(req: NextRequest) {
   const auth = await resolveFundFromApiKey(admin, req)
   if (!auth) return NextResponse.json(err(null, -32001, 'Unauthorized — provide a valid fund API key as a Bearer token'), { status: 401 })
 
-  const ctx: AgentToolContext = { admin, fundId: auth.fundId, userId: auth.userId }
+  const ctx: BaseCtx = { admin, fundId: auth.fundId, userId: auth.userId }
   const body = await req.json().catch(() => null)
   if (!body) return NextResponse.json(err(null, -32700, 'Parse error'), { status: 400 })
 

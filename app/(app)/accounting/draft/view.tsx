@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Loader2, Check, AlertTriangle, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
+import { useLedgerFetch } from '@/components/accounting-vehicle'
 
 interface DraftPosting { accountId: string; amount: number; currency: string; lpEntityId: string | null }
 interface Draft { entryDate: string; memo: string | null; sourceType: string; postings: DraftPosting[] }
@@ -17,10 +18,11 @@ export function DraftEntryView() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const lf = useLedgerFetch()
 
   async function draft(post: boolean) {
     setBusy(true); setError(null); if (!post) setSaved(false)
-    const res = await fetch('/api/accounting/draft-entry', {
+    const res = await lf('/api/accounting/draft-entry', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, post }),
     })

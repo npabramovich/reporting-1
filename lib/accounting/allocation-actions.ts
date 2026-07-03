@@ -43,12 +43,13 @@ export interface AllocationBody {
 export async function buildAllocationEntry(
   admin: SupabaseClient,
   fundId: string,
+  group: string,
   body: AllocationBody
 ): Promise<{ entry: JournalEntry } | { error: string }> {
   const { action, entryDate } = body
   if (!action || !entryDate) return { error: 'action and entryDate are required' }
 
-  const codes = await accountIdByCode(admin, fundId)
+  const codes = await accountIdByCode(admin, fundId, group)
   const need = (code: string): string => {
     const id = codes.get(code)
     if (!id) throw new Error(`Missing account ${code} — seed the chart of accounts first`)
@@ -58,7 +59,7 @@ export async function buildAllocationEntry(
 
   try {
     if (action === 'close_period') {
-      const { accounts, postings } = await loadPostedLedger(admin, fundId)
+      const { accounts, postings } = await loadPostedLedger(admin, fundId, group)
       const balances = accountBalances(postings)
       const pnl = accounts
         .filter(a => a.type === 'income' || a.type === 'expense')
@@ -68,12 +69,12 @@ export async function buildAllocationEntry(
       return { entry: buildPeriodCloseEntry(base, pnl, need(CODE.bridge)) }
     }
 
-    const owners = await loadOwnership(admin, fundId)
+    const owners = await loadOwnership(admin, fundId, group)
     const entityIds =
       action === 'distribution' || action === 'carry'
         ? Object.keys(body.perLp ?? {})
         : owners.map(o => o.lpEntityId)
-    const capMap: CapitalAccountMap = await ensureCapitalAccounts(admin, fundId, entityIds)
+    const capMap: CapitalAccountMap = await ensureCapitalAccounts(admin, fundId, group, entityIds)
 
     if (action === 'management_fee') {
       const overrides = body.overrides ?? {}

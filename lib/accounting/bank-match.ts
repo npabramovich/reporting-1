@@ -10,12 +10,13 @@ import { loadOwnership } from './load'
 import { accountIdByCode, ensureCapitalAccounts, persistEntry } from './persist'
 import { buildCapitalCallEntry } from './entries'
 
-async function getTxn(admin: SupabaseClient, fundId: string, txnId: string) {
+async function getTxn(admin: SupabaseClient, fundId: string, group: string, txnId: string) {
   const { data } = await admin
     .from('bank_transactions' as any)
     .select('id, journal_entry_id, amount, txn_date, description, status')
     .eq('id', txnId)
     .eq('fund_id', fundId)
+    .eq('portfolio_group', group)
     .maybeSingle()
   return data as any
 }
@@ -24,22 +25,23 @@ async function getTxn(admin: SupabaseClient, fundId: string, txnId: string) {
 export async function bookCapitalCallFromInflow(
   admin: SupabaseClient,
   fundId: string,
+  group: string,
   userId: string | null,
   txnId: string
 ): Promise<{ entryId: string } | { error: string }> {
-  const txn = await getTxn(admin, fundId, txnId)
+  const txn = await getTxn(admin, fundId, group, txnId)
   if (!txn) return { error: 'Transaction not found' }
   const total = Number(txn.amount)
   if (total <= 0) return { error: 'Only an inflow (deposit) can be booked as a capital call' }
 
-  const owners = await loadOwnership(admin, fundId)
+  const owners = await loadOwnership(admin, fundId, group)
   if (owners.length === 0 || owners.every(o => o.commitment <= 0)) {
     return { error: 'No LP commitments found — add investors/commitments before allocating a call' }
   }
-  const codes = await accountIdByCode(admin, fundId)
+  const codes = await accountIdByCode(admin, fundId, group)
   const cashId = codes.get('1000')
   if (!cashId) return { error: 'Seed the chart of accounts first' }
-  const capMap = await ensureCapitalAccounts(admin, fundId, owners.map(o => o.lpEntityId))
+  const capMap = await ensureCapitalAccounts(admin, fundId, group, owners.map(o => o.lpEntityId))
 
   const entry = buildCapitalCallEntry(
     { fundId, entryDate: txn.txn_date, memo: `Capital call — ${txn.description || ''}`.trim() },
@@ -48,7 +50,7 @@ export async function bookCapitalCallFromInflow(
     capMap,
     cashId
   )
-  const result = await persistEntry(admin, fundId, userId, entry, 'draft')
+  const result = await persistEntry(admin, fundId, group, userId, entry, 'draft')
   if ('error' in result) return { error: result.error }
 
   // Point the transaction at the new entry, then drop the old two-line draft.
@@ -64,13 +66,14 @@ export async function bookCapitalCallFromInflow(
 export async function linkInflowToEntry(
   admin: SupabaseClient,
   fundId: string,
+  group: string,
   txnId: string,
   entryId: string
 ): Promise<{ ok: true } | { error: string }> {
-  const txn = await getTxn(admin, fundId, txnId)
+  const txn = await getTxn(admin, fundId, group, txnId)
   if (!txn) return { error: 'Transaction not found' }
 
-  const { data: target } = await admin.from('journal_entries' as any).select('id').eq('id', entryId).eq('fund_id', fundId).maybeSingle()
+  const { data: target } = await admin.from('journal_entries' as any).select('id').eq('id', entryId).eq('fund_id', fundId).eq('portfolio_group', group).maybeSingle()
   if (!target) return { error: 'Entry not found' }
 
   // Drop the auto-drafted entry (if any), then link + post the target.
@@ -95,8 +98,8 @@ export interface CallCandidate {
  * Recorded capital-call entries not yet linked to a bank transaction, with the
  * cash amount of each — the candidates an inflow can be matched to.
  */
-export async function capitalCallCandidates(admin: SupabaseClient, fundId: string): Promise<CallCandidate[]> {
-  const codes = await accountIdByCode(admin, fundId)
+export async function capitalCallCandidates(admin: SupabaseClient, fundId: string, group: string): Promise<CallCandidate[]> {
+  const codes = await accountIdByCode(admin, fundId, group)
   const cashId = codes.get('1000')
   if (!cashId) return []
 
@@ -104,6 +107,7 @@ export async function capitalCallCandidates(admin: SupabaseClient, fundId: strin
     .from('journal_entries' as any)
     .select('id, entry_date, memo, status, journal_postings(account_id, amount)')
     .eq('fund_id', fundId)
+    .eq('portfolio_group', group)
     .eq('source_type', 'capital_call')
     .neq('status', 'void')
     .order('entry_date', { ascending: false })
@@ -113,6 +117,7 @@ export async function capitalCallCandidates(admin: SupabaseClient, fundId: strin
     .from('bank_transactions' as any)
     .select('journal_entry_id')
     .eq('fund_id', fundId)
+    .eq('portfolio_group', group)
     .not('journal_entry_id', 'is', null)
   const linked = new Set(((linkedRows as any[]) ?? []).map(r => r.journal_entry_id))
 

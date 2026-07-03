@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
+import { useLedgerFetch } from '@/components/accounting-vehicle'
 
 interface Posting { id: string; account_id: string; amount: number; currency: string; lp_entity_id: string | null }
 interface Entry {
@@ -19,13 +20,15 @@ export function JournalView() {
   const fmt = (v: number) => formatCurrencyFull(v, currency)
   const [entries, setEntries] = useState<Entry[]>([])
   const [loading, setLoading] = useState(true)
+  const lf = useLedgerFetch()
 
   useEffect(() => {
-    fetch('/api/accounting/journal')
+    setLoading(true)
+    lf('/api/accounting/journal')
       .then(r => (r.ok ? r.json() : []))
       .then(d => setEntries(Array.isArray(d) ? d : []))
       .finally(() => setLoading(false))
-  }, [])
+  }, [lf])
 
   if (loading) {
     return <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>

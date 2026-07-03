@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
+import { useLedgerFetch } from '@/components/accounting-vehicle'
 
 interface Row {
   lpEntityId: string
@@ -33,13 +34,15 @@ export function CapitalAccountsView() {
   const [rows, setRows] = useState<Row[]>([])
   const [nav, setNav] = useState(0)
   const [loading, setLoading] = useState(true)
+  const lf = useLedgerFetch()
 
   useEffect(() => {
-    fetch('/api/accounting/capital-accounts')
+    setLoading(true)
+    lf('/api/accounting/capital-accounts')
       .then(r => (r.ok ? r.json() : { rows: [], nav: 0 }))
       .then(d => { setRows(d.rows ?? []); setNav(d.nav ?? 0) })
       .finally(() => setLoading(false))
-  }, [])
+  }, [lf])
 
   if (loading) {
     return <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>

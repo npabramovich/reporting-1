@@ -1,12 +1,12 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertAdminAccess } from '@/lib/api-helpers'
+import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { loadEntityNames, loadOwnership } from '@/lib/accounting/load'
 
-// GET — LP entities with committed capital, for opening-balance entry and
-// reconciliation (the LP list is known before any postings exist).
-export async function GET() {
+// GET — a vehicle's LP entities with committed capital.
+export async function GET(req: NextRequest) {
   const supabase = createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -14,15 +14,16 @@ export async function GET() {
 
   const gate = await assertAdminAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
+  const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
+  if (group instanceof NextResponse) return group
 
   const [names, ownership] = await Promise.all([
-    loadEntityNames(admin, gate.fundId),
-    loadOwnership(admin, gate.fundId),
+    loadEntityNames(admin, gate.fundId, group),
+    loadOwnership(admin, gate.fundId, group),
   ])
-
-  const commitment = new Map(ownership.map(o => [o.lpEntityId, o.commitment]))
+  const own = new Map(ownership.map(o => [o.lpEntityId, o]))
   const rows = Array.from(names.entries())
-    .map(([lpEntityId, name]) => ({ lpEntityId, name, commitment: commitment.get(lpEntityId) ?? 0 }))
+    .map(([lpEntityId, name]) => ({ lpEntityId, name, commitment: own.get(lpEntityId)?.commitment ?? 0 }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
   return NextResponse.json(rows)

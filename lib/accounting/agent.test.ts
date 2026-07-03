@@ -69,7 +69,7 @@ describe('agent tool registry', () => {
   it('run_waterfall is a pure tool that needs no DB', async () => {
     const tool = getTool('run_waterfall')!
     const res = await tool.handler(
-      { admin: null as any, fundId: 'f', userId: null },
+      { admin: null as any, fundId: 'f', portfolioGroup: 'v', userId: null },
       { distributable: 12_000_000, terms: { carryRate: 0.2 }, state: { contributedCapital: 10_000_000, returnedCapital: 0, preferredPaid: 0, preferredTarget: 800_000, gpCarryPaid: 0 } }
     )
     expect(res.toGP).toBe(400_000)
