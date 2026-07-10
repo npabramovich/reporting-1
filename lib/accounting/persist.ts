@@ -7,11 +7,13 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { lpCapitalCode } from './chart'
 import { assertBalanced } from './ledger'
 import { closedPeriodRanges, dateInAnyClosedPeriod } from './periods'
+import { vehicleIdByName } from './vehicle-id'
 import type { JournalEntry } from './types'
 
 /** code → account_id for the vehicle's chart. */
 export async function accountIdByCode(admin: SupabaseClient, fundId: string, group: string): Promise<Map<string, string>> {
-  const { data } = await admin.from('chart_of_accounts' as any).select('id, code').eq('fund_id', fundId).eq('portfolio_group', group)
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  const { data } = await admin.from('chart_of_accounts' as any).select('id, code').eq('fund_id', fundId).eq('vehicle_id', vehicleId)
   return new Map(((data as any[]) ?? []).map(a => [a.code as string, a.id as string]))
 }
 
@@ -22,11 +24,12 @@ export async function ensureCapitalAccounts(
   group: string,
   entityIds: string[]
 ): Promise<Map<string, string>> {
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
   const { data: existing } = await admin
     .from('chart_of_accounts' as any)
     .select('id, lp_entity_id')
     .eq('fund_id', fundId)
-    .eq('portfolio_group', group)
+    .eq('vehicle_id', vehicleId)
     .not('lp_entity_id', 'is', null)
   const map = new Map<string, string>(((existing as any[]) ?? []).map(a => [a.lp_entity_id as string, a.id as string]))
 
@@ -37,6 +40,7 @@ export async function ensureCapitalAccounts(
     const rows = missing.map(id => ({
       fund_id: fundId,
       portfolio_group: group,
+      vehicle_id: vehicleId,
       code: lpCapitalCode(id),
       name: `Partners' capital — ${name.get(id) ?? id}`,
       type: 'equity',
@@ -70,11 +74,13 @@ export async function persistEntry(
     return { error: `The period covering ${entry.entryDate} is closed — reopen it to post here` }
   }
 
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
   const { data: created, error: entryErr } = await admin
     .from('journal_entries' as any)
     .insert({
       fund_id: fundId,
       portfolio_group: group,
+      vehicle_id: vehicleId,
       entry_date: entry.entryDate,
       memo: entry.memo ?? null,
       source_type: entry.sourceType ?? 'manual',
@@ -91,6 +97,7 @@ export async function persistEntry(
     entry.postings.map(p => ({
       fund_id: fundId,
       portfolio_group: group,
+      vehicle_id: vehicleId,
       journal_entry_id: entryId,
       account_id: p.accountId,
       amount: p.amount,

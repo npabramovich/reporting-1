@@ -8,15 +8,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadOwnership } from './load'
 import { accountIdByCode, ensureCapitalAccounts, persistEntry } from './persist'
+import { vehicleIdByName } from './vehicle-id'
 import { buildCapitalCallEntry } from './entries'
 
 async function getTxn(admin: SupabaseClient, fundId: string, group: string, txnId: string) {
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
   const { data } = await admin
     .from('bank_transactions' as any)
     .select('id, journal_entry_id, amount, txn_date, description, status')
     .eq('id', txnId)
     .eq('fund_id', fundId)
-    .eq('portfolio_group', group)
+    .eq('vehicle_id', vehicleId)
     .maybeSingle()
   return data as any
 }
@@ -73,7 +75,8 @@ export async function linkInflowToEntry(
   const txn = await getTxn(admin, fundId, group, txnId)
   if (!txn) return { error: 'Transaction not found' }
 
-  const { data: target } = await admin.from('journal_entries' as any).select('id').eq('id', entryId).eq('fund_id', fundId).eq('portfolio_group', group).maybeSingle()
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  const { data: target } = await admin.from('journal_entries' as any).select('id').eq('id', entryId).eq('fund_id', fundId).eq('vehicle_id', vehicleId).maybeSingle()
   if (!target) return { error: 'Entry not found' }
 
   // Drop the auto-drafted entry (if any), then link + post the target.
@@ -103,11 +106,12 @@ export async function capitalCallCandidates(admin: SupabaseClient, fundId: strin
   const cashId = codes.get('1000')
   if (!cashId) return []
 
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
   const { data: entries } = await admin
     .from('journal_entries' as any)
     .select('id, entry_date, memo, status, journal_postings(account_id, amount)')
     .eq('fund_id', fundId)
-    .eq('portfolio_group', group)
+    .eq('vehicle_id', vehicleId)
     .eq('source_type', 'capital_call')
     .neq('status', 'void')
     .order('entry_date', { ascending: false })
@@ -117,7 +121,7 @@ export async function capitalCallCandidates(admin: SupabaseClient, fundId: strin
     .from('bank_transactions' as any)
     .select('journal_entry_id')
     .eq('fund_id', fundId)
-    .eq('portfolio_group', group)
+    .eq('vehicle_id', vehicleId)
     .not('journal_entry_id', 'is', null)
   const linked = new Set(((linkedRows as any[]) ?? []).map(r => r.journal_entry_id))
 

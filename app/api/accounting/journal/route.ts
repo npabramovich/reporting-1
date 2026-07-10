@@ -3,11 +3,14 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertAdminAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
+import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
 import { dbError } from '@/lib/api-error'
 import { persistEntry } from '@/lib/accounting/persist'
+import { assertBalanced } from '@/lib/accounting/ledger'
+import { closedPeriodRanges, dateInAnyClosedPeriod } from '@/lib/accounting/periods'
 import type { JournalEntry, Posting } from '@/lib/accounting/types'
 
-// GET — list the vehicle's journal entries with their postings.
+// GET — the vehicle's journal entries with postings, or a single entry via ?id=.
 export async function GET(req: NextRequest) {
   const supabase = createClient()
   const admin = createAdminClient()
@@ -17,16 +20,80 @@ export async function GET(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
   const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
+  const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
 
-  const { data, error } = await admin
+  const base = admin
     .from('journal_entries' as any)
     .select('*, journal_postings(*)')
     .eq('fund_id', gate.fundId)
-    .eq('portfolio_group', group)
-    .order('entry_date', { ascending: false })
-    .limit(500)
+    .eq('vehicle_id', vehicleId)
+
+  const id = req.nextUrl.searchParams.get('id')
+  if (id) {
+    const { data, error } = await base.eq('id', id).maybeSingle()
+    if (error) return dbError(error, 'accounting-journal')
+    return NextResponse.json(data ?? null)
+  }
+
+  const { data, error } = await base.order('entry_date', { ascending: false }).limit(500)
   if (error) return dbError(error, 'accounting-journal')
   return NextResponse.json(data ?? [])
+}
+
+// PUT — replace a DRAFT entry's postings (and date/memo). Posted entries are
+// immutable; reverse or void them instead.
+export async function PUT(req: NextRequest) {
+  const supabase = createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const gate = await assertAdminAccess(admin, user.id)
+  if (gate instanceof NextResponse) return gate
+
+  const body = await req.json().catch(() => ({}))
+  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  if (group instanceof NextResponse) return group
+  const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
+
+  const { id, entryDate, memo, postings } = body
+  if (!id || !Array.isArray(postings) || postings.length === 0) {
+    return NextResponse.json({ error: 'id and at least one posting are required' }, { status: 400 })
+  }
+
+  const { data: existing } = await admin
+    .from('journal_entries' as any)
+    .select('id, status, entry_date')
+    .eq('id', id).eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId)
+    .maybeSingle()
+  if (!existing) return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
+  if ((existing as any).status !== 'draft') return NextResponse.json({ error: 'Only draft entries can be edited — reverse or void a posted entry.' }, { status: 400 })
+
+  const normalized: Posting[] = postings.map((p: any) => ({ accountId: p.accountId, amount: Number(p.amount), currency: p.currency ?? 'USD', lpEntityId: p.lpEntityId ?? null }))
+  if (normalized.some(p => !p.accountId || !Number.isFinite(p.amount))) {
+    return NextResponse.json({ error: 'Each posting needs an accountId and a numeric amount' }, { status: 400 })
+  }
+  const newDate = entryDate || (existing as any).entry_date
+  const entry: JournalEntry = { fundId: gate.fundId, entryDate: newDate, memo: memo ?? null, sourceType: 'manual', postings: normalized }
+  try { assertBalanced(entry) } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }) }
+
+  const closed = await closedPeriodRanges(admin, gate.fundId, group)
+  if (dateInAnyClosedPeriod(closed, newDate) || dateInAnyClosedPeriod(closed, (existing as any).entry_date)) {
+    return NextResponse.json({ error: 'That date falls in a closed period — reopen it to edit.' }, { status: 400 })
+  }
+
+  // Insert the new postings first, then drop the old ones — so a failure never
+  // leaves the entry without lines.
+  const { data: oldRows } = await admin.from('journal_postings' as any).select('id').eq('journal_entry_id', id)
+  const oldIds = ((oldRows as any[]) ?? []).map(r => r.id)
+  const { error: insErr } = await admin.from('journal_postings' as any).insert(
+    normalized.map(p => ({ fund_id: gate.fundId, portfolio_group: group, vehicle_id: vehicleId, journal_entry_id: id, account_id: p.accountId, amount: p.amount, currency: p.currency, lp_entity_id: p.lpEntityId ?? null }))
+  )
+  if (insErr) return dbError(insErr, 'accounting-journal-update')
+  if (oldIds.length) await admin.from('journal_postings' as any).delete().in('id', oldIds)
+  await admin.from('journal_entries' as any).update({ entry_date: newDate, memo: memo ?? null }).eq('id', id).eq('fund_id', gate.fundId)
+
+  const { data: full } = await admin.from('journal_entries' as any).select('*, journal_postings(*)').eq('id', id).single()
+  return NextResponse.json(full ?? { id })
 }
 
 // POST — create a balanced journal entry with its postings.

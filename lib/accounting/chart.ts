@@ -40,6 +40,7 @@ export const DEFAULT_CHART: ChartAccountSeed[] = [
   { code: '5000', name: 'Management fee', type: 'expense', subtype: 'management_fee' },
   { code: '5100', name: 'Partnership expenses', type: 'expense', subtype: 'partnership_expense' },
   { code: '5200', name: 'Organizational expenses', type: 'expense', subtype: 'organizational_expense' },
+  { code: '5300', name: 'Interest expense', type: 'expense', subtype: 'interest_expense' },
 ]
 
 /** The per-LP capital account code for an entity, e.g. 3100-<entity>. */

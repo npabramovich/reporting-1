@@ -562,6 +562,16 @@ const EMAIL_REQUEST = {
   quarter_label: 'Q4 2025',
 }
 
+/** Register the demo fund's vehicles in the canonical fund_vehicles table. */
+async function seedDemoVehicles(admin: ReturnType<typeof createAdminClient>, fundId: string): Promise<void> {
+  for (const name of ['Fund I', 'Fund II']) {
+    await (admin as any).from('fund_vehicles').upsert(
+      { fund_id: fundId, name, kind: 'fund', aliases: [], active: true, updated_at: new Date().toISOString() },
+      { onConflict: 'fund_id,name' },
+    )
+  }
+}
+
 /** Seeds a complete demo fund. Returns true if data was newly seeded. */
 export async function seedDemoData(adminUserId: string): Promise<boolean> {
   const admin = createAdminClient()
@@ -668,6 +678,7 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
     await seedInboundDeals(admin, existingFund.id, adminUserId)
     await seedDiligence(admin, existingFund.id, adminUserId)
     await seedLpSnapshot(admin, existingFund.id)
+    await seedDemoVehicles(admin, existingFund.id)
 
     // Clear and re-seed interactions
     await admin
@@ -1176,6 +1187,7 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
   // LP snapshot (Year End 2025)
   // -------------------------------------------------------------------------
   await seedLpSnapshot(admin, fundId)
+  await seedDemoVehicles(admin, fundId)
 
   console.log('[demo] Demo data seeded successfully')
   return true

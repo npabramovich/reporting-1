@@ -48,7 +48,8 @@ export function AccountingSetup() {
       {/* Step 1 — chart */}
       <div className="flex items-center gap-2 text-sm">
         {accountCount > 0
-          ? <><Check className="h-4 w-4 text-green-600" /> <span className="text-muted-foreground">Chart of accounts seeded ({accountCount} accounts).</span></>
+          ? <><Check className="h-4 w-4 text-green-600" /> <span className="text-muted-foreground">Chart of accounts seeded ({accountCount} accounts).</span>
+              <button onClick={seed} disabled={seeding} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">{seeding ? 'Syncing…' : 'Sync accounts'}</button></>
           : <><span className="text-muted-foreground">1. Seed the chart of accounts.</span><Button size="sm" variant="outline" onClick={seed} disabled={seeding}>{seeding && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Seed chart</Button></>}
       </div>
 

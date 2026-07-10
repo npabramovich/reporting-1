@@ -7,10 +7,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Account, AccountType, JournalEntry, Posting } from './types'
 import { serializeLedger, parseLedgerText, beancountAccount, codeFromAccountName, type TextEntryInput } from './text-ledger'
 import { persistEntry } from './persist'
+import { vehicleIdByName } from './vehicle-id'
 import { isBalanced } from './ledger'
 
 async function loadAccounts(admin: SupabaseClient, fundId: string, group: string): Promise<Account[]> {
-  const { data } = await admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id').eq('fund_id', fundId).eq('portfolio_group', group)
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  const { data } = await admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId)
   return ((data as any[]) ?? []).map(a => ({ id: a.id, fundId, code: a.code, name: a.name, type: a.type as AccountType, subtype: a.subtype ?? null, lpEntityId: a.lp_entity_id ?? null }))
 }
 
@@ -18,11 +20,12 @@ async function loadAccounts(admin: SupabaseClient, fundId: string, group: string
  *  `asOf` to snapshot only entries on or before that date. */
 export async function exportLedgerText(admin: SupabaseClient, fundId: string, group: string, asOf?: string): Promise<string> {
   const accounts = await loadAccounts(admin, fundId, group)
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
   let q = admin
     .from('journal_entries' as any)
     .select('id, entry_date, memo, source_type, status, journal_postings(account_id, amount, currency)')
     .eq('fund_id', fundId)
-    .eq('portfolio_group', group)
+    .eq('vehicle_id', vehicleId)
     .neq('status', 'void')
   if (asOf) q = q.lte('entry_date', asOf)
   const { data } = await q.order('entry_date', { ascending: true }).limit(2000)

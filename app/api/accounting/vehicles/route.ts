@@ -4,7 +4,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { assertAdminAccess } from '@/lib/api-helpers'
 import { listVehicles } from '@/lib/accounting/load'
 
-// GET — the company's vehicles (portfolio_groups), for the Accounting selector.
+// GET — the fund's active vehicle names, for the Accounting picker. Vehicle
+// creation/management lives at the fund level (/api/vehicles), since vehicles
+// aren't accounting-specific.
 export async function GET() {
   const supabase = createClient()
   const admin = createAdminClient()

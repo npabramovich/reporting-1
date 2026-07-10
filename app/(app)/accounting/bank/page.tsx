@@ -17,8 +17,7 @@ export default async function BankPage() {
         <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2"><Landmark className="h-6 w-6" />Bank transactions</h1>
         <p className="text-sm text-muted-foreground">
           Import a transaction feed from any source, review the drafted entries, and reconcile the
-          ledger&rsquo;s cash against the bank. The staging layer every connector (Plaid, Ramp,
-          QuickBooks) will feed.
+          ledger&rsquo;s cash against the bank.
         </p>
       </div>
       <BankView />

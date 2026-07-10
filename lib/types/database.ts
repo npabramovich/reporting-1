@@ -1838,6 +1838,8 @@ export type Database = {
           current_share_price: number | null
           exit_valuation: number | null
           fund_id: string
+          fx_rate: number | null
+          fx_value_change: number | null
           id: string
           interest_converted: number | null
           investment_cost: number | null
@@ -1848,6 +1850,7 @@ export type Database = {
           original_exit_valuation: number | null
           original_investment_cost: number | null
           original_latest_postmoney_valuation: number | null
+          original_position_value: number | null
           original_postmoney_valuation: number | null
           original_proceeds_per_share: number | null
           original_proceeds_received: number | null
@@ -1856,6 +1859,7 @@ export type Database = {
           ownership_pct: number | null
           portfolio_group: string | null
           postmoney_valuation: number | null
+          prior_fx_rate: number | null
           proceeds_escrow: number | null
           proceeds_per_share: number | null
           proceeds_received: number | null
@@ -1867,6 +1871,7 @@ export type Database = {
           transaction_type: string
           unrealized_value_change: number | null
           updated_at: string | null
+          valuation_change_source: string | null
         }
         Insert: {
           company_id: string
@@ -1875,6 +1880,8 @@ export type Database = {
           current_share_price?: number | null
           exit_valuation?: number | null
           fund_id: string
+          fx_rate?: number | null
+          fx_value_change?: number | null
           id?: string
           interest_converted?: number | null
           investment_cost?: number | null
@@ -1885,6 +1892,7 @@ export type Database = {
           original_exit_valuation?: number | null
           original_investment_cost?: number | null
           original_latest_postmoney_valuation?: number | null
+          original_position_value?: number | null
           original_postmoney_valuation?: number | null
           original_proceeds_per_share?: number | null
           original_proceeds_received?: number | null
@@ -1893,6 +1901,7 @@ export type Database = {
           ownership_pct?: number | null
           portfolio_group?: string | null
           postmoney_valuation?: number | null
+          prior_fx_rate?: number | null
           proceeds_escrow?: number | null
           proceeds_per_share?: number | null
           proceeds_received?: number | null
@@ -1904,6 +1913,7 @@ export type Database = {
           transaction_type: string
           unrealized_value_change?: number | null
           updated_at?: string | null
+          valuation_change_source?: string | null
         }
         Update: {
           company_id?: string
@@ -1912,6 +1922,8 @@ export type Database = {
           current_share_price?: number | null
           exit_valuation?: number | null
           fund_id?: string
+          fx_rate?: number | null
+          fx_value_change?: number | null
           id?: string
           interest_converted?: number | null
           investment_cost?: number | null
@@ -1922,6 +1934,7 @@ export type Database = {
           original_exit_valuation?: number | null
           original_investment_cost?: number | null
           original_latest_postmoney_valuation?: number | null
+          original_position_value?: number | null
           original_postmoney_valuation?: number | null
           original_proceeds_per_share?: number | null
           original_proceeds_received?: number | null
@@ -1930,6 +1943,7 @@ export type Database = {
           ownership_pct?: number | null
           portfolio_group?: string | null
           postmoney_valuation?: number | null
+          prior_fx_rate?: number | null
           proceeds_escrow?: number | null
           proceeds_per_share?: number | null
           proceeds_received?: number | null
@@ -1941,6 +1955,7 @@ export type Database = {
           transaction_type?: string
           unrealized_value_change?: number | null
           updated_at?: string | null
+          valuation_change_source?: string | null
         }
         Relationships: [
           {

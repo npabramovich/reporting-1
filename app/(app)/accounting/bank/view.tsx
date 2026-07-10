@@ -5,8 +5,9 @@ import { Loader2, Check, AlertTriangle, Upload, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
+import { EntryModal } from './entry-modal'
 
-interface Txn { id: string; txn_date: string; amount: number; description: string; counterparty: string | null; status: string; suggested_account_code: string | null }
+interface Txn { id: string; txn_date: string; amount: number; description: string; counterparty: string | null; status: string; suggested_account_code: string | null; journal_entry_id: string | null }
 interface Rec { bankEndingBalance: number; ledgerCashBalance: number; difference: number; matchedCount: number; unmatchedCount: number; unmatchedTotal: number; tiesOut: boolean }
 interface Candidate { entryId: string; amount: number; entryDate: string; memo: string | null }
 
@@ -24,10 +25,13 @@ export function BankView() {
   const [txns, setTxns] = useState<Txn[]>([])
   const [rec, setRec] = useState<Rec | null>(null)
   const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [acctNames, setAcctNames] = useState<Record<string, string>>({})
+  const [accounts, setAccounts] = useState<{ code: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [categorizing, setCategorizing] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
+  const [editing, setEditing] = useState<{ txnId: string; entryId: string } | null>(null)
   const lf = useLedgerFetch()
 
   const load = useCallback(() => {
@@ -36,7 +40,15 @@ export function BankView() {
       lf('/api/accounting/bank').then(r => (r.ok ? r.json() : [])),
       lf('/api/accounting/bank/reconcile').then(r => (r.ok ? r.json() : null)),
       lf('/api/accounting/bank/match').then(r => (r.ok ? r.json() : [])),
-    ]).then(([t, r, c]) => { setTxns(Array.isArray(t) ? t : []); setRec(r); setCandidates(Array.isArray(c) ? c : []) }).finally(() => setLoading(false))
+      lf('/api/accounting/chart').then(r => (r.ok ? r.json() : [])),
+    ]).then(([t, r, c, ch]) => {
+      setTxns(Array.isArray(t) ? t : [])
+      setRec(r)
+      setCandidates(Array.isArray(c) ? c : [])
+      const chart = (Array.isArray(ch) ? ch : []).map((a: any) => ({ code: a.code, name: a.name }))
+      setAccounts(chart)
+      setAcctNames(Object.fromEntries(chart.map(a => [a.code, a.name])))
+    }).finally(() => setLoading(false))
   }, [lf])
 
   useEffect(() => { load() }, [load])
@@ -67,6 +79,12 @@ export function BankView() {
   async function act(id: string, action: 'post' | 'ignore') {
     await lf('/api/accounting/bank', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, id }) })
     load()
+  }
+
+  async function setAccount(id: string, code: string) {
+    setTxns(prev => prev.map(t => (t.id === id ? { ...t, suggested_account_code: code } : t))) // optimistic
+    const res = await lf('/api/accounting/bank', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'setAccount', id, accountCode: code }) })
+    if (!res.ok) load() // revert on failure (e.g. custom allocation)
   }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -153,18 +171,37 @@ export function BankView() {
                   <td className="px-3 py-2 font-mono text-xs">{t.txn_date}</td>
                   <td className="px-3 py-2">{t.description}</td>
                   <td className={`px-3 py-2 text-right font-mono ${t.amount < 0 ? 'text-muted-foreground' : ''}`}>{fmt(t.amount)}</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{t.suggested_account_code ?? '—'}</td>
+                  <td className="px-3 py-2 text-xs">
+                    {t.status === 'drafted' ? (
+                      <select
+                        value={t.suggested_account_code ?? ''}
+                        onChange={e => setAccount(t.id, e.target.value)}
+                        className="border border-input rounded bg-transparent px-1.5 py-1 text-xs max-w-[220px] hover:bg-accent/50"
+                      >
+                        {!t.suggested_account_code && <option value="">—</option>}
+                        {accounts.map(a => <option key={a.code} value={a.code}>{a.name} ({a.code})</option>)}
+                      </select>
+                    ) : t.suggested_account_code ? (
+                      <span>
+                        <span className="text-foreground">{acctNames[t.suggested_account_code] ?? t.suggested_account_code}</span>
+                        {acctNames[t.suggested_account_code] && <span className="ml-1.5 text-muted-foreground/70 font-mono">{t.suggested_account_code}</span>}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2"><span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${STATUS_STYLE[t.status] ?? ''}`}>{t.status}</span></td>
                   <td className="px-3 py-2 text-right">
                     {t.status === 'drafted' && (
                       <span className="flex items-center gap-1 justify-end">
                         {t.amount > 0 && (candidateFor(t.amount)
-                          ? <><button onClick={() => match(t.id, 'link', candidateFor(t.amount)!.entryId)} className="text-xs text-blue-600 hover:underline" title="Link to the capital call you already recorded">Match call</button><span className="text-muted-foreground">·</span></>
-                          : <><button onClick={() => match(t.id, 'allocate')} className="text-xs text-blue-600 hover:underline" title="Allocate this inflow across LPs as a capital call">Book as call</button><span className="text-muted-foreground">·</span></>
+                          ? <><button onClick={() => match(t.id, 'link', candidateFor(t.amount)!.entryId)} className="text-xs text-muted-foreground hover:text-foreground transition-colors" title="Link to the capital call you already recorded">Match call</button><span className="text-muted-foreground/50">·</span></>
+                          : <><button onClick={() => match(t.id, 'allocate')} className="text-xs text-muted-foreground hover:text-foreground transition-colors" title="Allocate this inflow across LPs as a capital call">Book as call</button><span className="text-muted-foreground/50">·</span></>
                         )}
-                        <button onClick={() => act(t.id, 'post')} className="text-xs text-green-600 hover:underline">Post</button>
-                        <span className="text-muted-foreground">·</span>
-                        <button onClick={() => act(t.id, 'ignore')} className="text-xs text-muted-foreground hover:underline">Ignore</button>
+                        {t.journal_entry_id && <><button onClick={() => setEditing({ txnId: t.id, entryId: t.journal_entry_id! })} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Edit</button><span className="text-muted-foreground/50">·</span></>}
+                        <button onClick={() => act(t.id, 'post')} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Post</button>
+                        <span className="text-muted-foreground/50">·</span>
+                        <button onClick={() => act(t.id, 'ignore')} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Ignore</button>
                       </span>
                     )}
                   </td>
@@ -174,6 +211,8 @@ export function BankView() {
           </table>
         </div>
       )}
+
+      {editing && <EntryModal txnId={editing.txnId} entryId={editing.entryId} onClose={() => setEditing(null)} onSaved={load} />}
     </div>
   )
 }

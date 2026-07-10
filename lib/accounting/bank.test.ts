@@ -53,6 +53,23 @@ describe('parseTransactionsCsv', () => {
     const { errors } = parseTransactionsCsv('Foo,Bar\n1,2')
     expect(errors.length).toBe(1)
   })
+
+  it('matches header variants and skips metadata rows above the header', () => {
+    const csv = 'Acme Bank Statement\nAccount ****1234\n\nPosting Date,Description,Transaction Amount\n07/01/2026,Wire in,5000000'
+    const { rows, errors } = parseTransactionsCsv(csv)
+    expect(errors).toEqual([])
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ date: '2026-07-01', amount: 5000000 })
+  })
+
+  it('handles a newline embedded in a quoted field (brokerage export)', () => {
+    const csv = 'Date,Description,Amount($),Running Balance\n06/30/2026,"MORGAN STANLEY BANK N.A.\n(Period 06/01-06/30)",0.50,"60,000.00"'
+    const { rows, errors } = parseTransactionsCsv(csv)
+    expect(errors).toEqual([])
+    expect(rows).toHaveLength(1)
+    expect(rows[0].amount).toBe(0.5)
+    expect(rows[0].description).toBe('MORGAN STANLEY BANK N.A. (Period 06/01-06/30)')
+  })
 })
 
 describe('dedupHash', () => {
@@ -68,6 +85,21 @@ describe('suggestCategory', () => {
     expect(suggestCategory({ date: 'd', amount: 5e6, description: 'Capital call' }).sourceType).toBe('capital_call')
     expect(suggestCategory({ date: 'd', amount: -12000, description: 'Annual audit' }).sourceType).toBe('partnership_expense')
     expect(suggestCategory({ date: 'd', amount: -50000, description: 'Management fee Q2' }).sourceType).toBe('management_fee')
+  })
+
+  it('reads the activity/type column when the description lacks a keyword', () => {
+    // Brokerage feed: keyword is in Activity, description is just the bank name.
+    const cat = suggestCategory({ date: 'd', amount: 0.5, description: 'MORGAN STANLEY BANK N.A.', activity: 'Interest Income' })
+    expect(cat.sourceType).toBe('income')
+    expect(cat.accountCode).toBe('4100')
+    expect(cat.confidence).toBe('high')
+  })
+
+  it('treats interest as income on inflow and expense on outflow', () => {
+    expect(suggestCategory({ date: 'd', amount: 0.5, description: 'x', activity: 'Interest Income' }).accountCode).toBe('4100')
+    const exp = suggestCategory({ date: 'd', amount: -420, description: 'Margin interest charged' })
+    expect(exp.accountCode).toBe('5300')
+    expect(exp.label).toBe('Interest expense')
   })
 
   it('falls back by direction with low confidence', () => {

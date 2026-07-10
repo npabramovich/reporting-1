@@ -52,6 +52,8 @@ export async function PATCH(
     'original_proceeds_received', 'original_proceeds_per_share', 'original_exit_valuation',
     'original_unrealized_value_change', 'original_current_share_price',
     'original_latest_postmoney_valuation',
+    'valuation_change_source', 'fx_rate', 'prior_fx_rate', 'fx_value_change',
+    'original_position_value',
     'portfolio_group',
   ]
 

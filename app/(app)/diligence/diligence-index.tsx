@@ -3,9 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Lock, Plus, Search, Loader2, Inbox, Crown } from 'lucide-react'
+import { Lock, Plus, Search, Loader2, Inbox } from 'lucide-react'
 import { useFeatureVisibility } from '@/components/feature-visibility-context'
-import { useConfirm } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
@@ -51,33 +50,7 @@ const STAGE_LABEL: Record<Deal['current_memo_stage'], string> = {
 export function DiligenceIndex({ initialDeals, isAdmin }: { initialDeals: Deal[]; isAdmin: boolean }) {
   const router = useRouter()
   const fv = useFeatureVisibility()
-  const confirm = useConfirm()
   const [deals, setDeals] = useState<Deal[]>(initialDeals)
-  const [promotingId, setPromotingId] = useState<string | null>(null)
-
-  async function promoteDeal(e: React.MouseEvent, deal: Deal) {
-    // The card is a Link — keep the click from navigating into the deal.
-    e.preventDefault()
-    e.stopPropagation()
-    const ok = await confirm({
-      title: 'Promote to portfolio',
-      description: `Create a portfolio company from "${deal.name}" and link them. Status flips to "Won".`,
-      confirmLabel: 'Promote',
-    })
-    if (!ok) return
-    setPromotingId(deal.id)
-    const res = await fetch(`/api/diligence/${deal.id}/promote`, { method: 'POST' })
-    setPromotingId(null)
-    if (res.ok) {
-      const body = await res.json().catch(() => ({}))
-      setDeals(prev => prev.map(x => x.id === deal.id
-        ? { ...x, deal_status: 'invested', promoted_company_id: body.company_id ?? 'promoted' }
-        : x))
-    } else {
-      const body = await res.json().catch(() => ({}))
-      alert(body.error ?? 'Promote failed')
-    }
-  }
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('active')
   const [createOpen, setCreateOpen] = useState(false)
@@ -201,20 +174,6 @@ export function DiligenceIndex({ initialDeals, isAdmin }: { initialDeals: Deal[]
                 <div>Stage: <span className="font-medium">{STAGE_LABEL[d.current_memo_stage]}</span></div>
                 <div>Updated {new Date(d.updated_at).toLocaleDateString()}</div>
               </div>
-              {isAdmin && d.deal_status !== 'invested' && d.deal_status !== 'won' && !d.promoted_company_id && (
-                <div className="mt-3 pt-2 border-t flex justify-end">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={(e) => promoteDeal(e, d)}
-                    disabled={promotingId === d.id}
-                  >
-                    {promotingId === d.id ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Crown className="h-3 w-3 mr-1" />}
-                    Promote
-                  </Button>
-                </div>
-              )}
             </Link>
           ))}
         </div>

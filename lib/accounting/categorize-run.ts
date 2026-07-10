@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createFundAIProviderWithOverride } from '@/lib/ai'
 import { loadPostedLedger } from './load'
 import { accountIdByCode } from './persist'
+import { vehicleIdByName } from './vehicle-id'
 import { buildCategorizePrompt, parseCategorizations, type TxnToCategorize } from './categorize-ai'
 
 export interface CategorizeResult {
@@ -21,11 +22,12 @@ export async function runCategorization(
   group: string,
   ids?: string[]
 ): Promise<CategorizeResult | { error: string }> {
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
   let q = admin
     .from('bank_transactions' as any)
     .select('id, journal_entry_id, txn_date, amount, description')
     .eq('fund_id', fundId)
-    .eq('portfolio_group', group)
+    .eq('vehicle_id', vehicleId)
     .eq('status', 'drafted')
   if (ids && ids.length) q = q.in('id', ids)
   const { data: rows } = await q

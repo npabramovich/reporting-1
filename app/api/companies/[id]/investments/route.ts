@@ -153,6 +153,11 @@ export async function POST(
       original_unrealized_value_change: body.original_unrealized_value_change ?? null,
       original_current_share_price: body.original_current_share_price ?? null,
       original_latest_postmoney_valuation: body.original_latest_postmoney_valuation ?? null,
+      valuation_change_source: body.valuation_change_source ?? null,
+      fx_rate: body.fx_rate ?? null,
+      prior_fx_rate: body.prior_fx_rate ?? null,
+      fx_value_change: body.fx_value_change ?? null,
+      original_position_value: body.original_position_value ?? null,
       portfolio_group: body.portfolio_group ?? null,
     })
     .select('*')

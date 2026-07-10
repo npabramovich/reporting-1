@@ -4,6 +4,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { exportLedgerText } from './text-ledger-run'
+import { vehicleIdByName } from './vehicle-id'
 
 export interface PeriodRange {
   period_start: string
@@ -17,21 +18,23 @@ export function dateInAnyClosedPeriod(periods: PeriodRange[], date: string): boo
 
 /** The closed periods for a vehicle (for the persistEntry lock check). */
 export async function closedPeriodRanges(admin: SupabaseClient, fundId: string, group: string): Promise<PeriodRange[]> {
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
   const { data } = await admin
     .from('fiscal_periods' as any)
     .select('period_start, period_end')
     .eq('fund_id', fundId)
-    .eq('portfolio_group', group)
+    .eq('vehicle_id', vehicleId)
     .eq('status', 'closed')
   return ((data as any[]) ?? []).map(p => ({ period_start: p.period_start, period_end: p.period_end }))
 }
 
 export async function listPeriods(admin: SupabaseClient, fundId: string, group: string) {
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
   const { data } = await admin
     .from('fiscal_periods' as any)
     .select('id, period_start, period_end, label, status, closed_at')
     .eq('fund_id', fundId)
-    .eq('portfolio_group', group)
+    .eq('vehicle_id', vehicleId)
     .order('period_end', { ascending: false })
   return data ?? []
 }
@@ -57,11 +60,13 @@ export async function closePeriod(
   }
 
   const snapshot = await exportLedgerText(admin, fundId, group, periodEnd)
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
   const { data, error } = await admin
     .from('fiscal_periods' as any)
     .insert({
       fund_id: fundId,
       portfolio_group: group,
+      vehicle_id: vehicleId,
       period_start: periodStart,
       period_end: periodEnd,
       label: label ?? null,
@@ -77,12 +82,13 @@ export async function closePeriod(
 }
 
 export async function reopenPeriod(admin: SupabaseClient, fundId: string, group: string, id: string): Promise<{ ok: true } | { error: string }> {
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
   const { error } = await admin
     .from('fiscal_periods' as any)
     .update({ status: 'open', closed_at: null })
     .eq('id', id)
     .eq('fund_id', fundId)
-    .eq('portfolio_group', group)
+    .eq('vehicle_id', vehicleId)
   if (error) return { error: error.message }
   return { ok: true }
 }

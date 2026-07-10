@@ -8,6 +8,7 @@ import { AGENT_TOOL_MANIFEST, type AgentToolMeta } from './agent-tools-manifest'
 import { DEFAULT_CHART } from './chart'
 import { loadPostedLedger, loadEntityNames, loadOwnership } from './load'
 import { accountIdByCode, persistEntry } from './persist'
+import { vehicleIdByName } from './vehicle-id'
 import { computeCapitalAccounts, totalNav } from './capital-account'
 import { trialBalance, balanceSheet, incomeStatement } from './statements'
 import { reconcileCapital, type AdminCapitalAccount } from './reconcile'
@@ -44,9 +45,10 @@ const HANDLERS: Record<string, AgentToolHandler> = {
   },
 
   seed_chart: async ({ admin, fundId, portfolioGroup }) => {
-    const { count } = await admin.from('chart_of_accounts' as any).select('id', { count: 'exact', head: true }).eq('fund_id', fundId).eq('portfolio_group', portfolioGroup)
+    const vehicleId = await vehicleIdByName(admin, fundId, portfolioGroup)
+    const { count } = await admin.from('chart_of_accounts' as any).select('id', { count: 'exact', head: true }).eq('fund_id', fundId).eq('vehicle_id', vehicleId)
     if ((count ?? 0) > 0) return { seeded: 0, message: 'Chart already exists' }
-    const rows = DEFAULT_CHART.map(a => ({ fund_id: fundId, portfolio_group: portfolioGroup, code: a.code, name: a.name, type: a.type, subtype: a.subtype ?? null }))
+    const rows = DEFAULT_CHART.map(a => ({ fund_id: fundId, portfolio_group: portfolioGroup, vehicle_id: vehicleId, code: a.code, name: a.name, type: a.type, subtype: a.subtype ?? null }))
     const { data, error } = await admin.from('chart_of_accounts' as any).insert(rows).select('code')
     if (error) throw new Error(error.message)
     return { seeded: (data as any[])?.length ?? 0 }
@@ -76,7 +78,8 @@ const HANDLERS: Record<string, AgentToolHandler> = {
 
   list_journal: async ({ admin, fundId, portfolioGroup }, input) => {
     const limit = Math.min(Number(input?.limit ?? 100), 500)
-    const { data } = await admin.from('journal_entries' as any).select('*, journal_postings(*)').eq('fund_id', fundId).eq('portfolio_group', portfolioGroup).order('entry_date', { ascending: false }).limit(limit)
+    const vehicleId = await vehicleIdByName(admin, fundId, portfolioGroup)
+    const { data } = await admin.from('journal_entries' as any).select('*, journal_postings(*)').eq('fund_id', fundId).eq('vehicle_id', vehicleId).order('entry_date', { ascending: false }).limit(limit)
     return data ?? []
   },
 
@@ -144,11 +147,12 @@ const HANDLERS: Record<string, AgentToolHandler> = {
   },
 
   list_bank_transactions: async ({ admin, fundId, portfolioGroup }) => {
+    const vehicleId = await vehicleIdByName(admin, fundId, portfolioGroup)
     const { data } = await admin
       .from('bank_transactions' as any)
       .select('id, txn_date, amount, description, counterparty, status, suggested_account_code, journal_entry_id')
       .eq('fund_id', fundId)
-      .eq('portfolio_group', portfolioGroup)
+      .eq('vehicle_id', vehicleId)
       .order('txn_date', { ascending: false })
       .limit(1000)
     return data ?? []
@@ -158,7 +162,8 @@ const HANDLERS: Record<string, AgentToolHandler> = {
     const { accounts, postings } = await loadPostedLedger(admin, fundId, portfolioGroup)
     const cash = accounts.find(a => a.code === '1000')
     const ledgerCashBalance = cash ? (accountBalances(postings).get(cash.id) ?? 0) : 0
-    const { data } = await admin.from('bank_transactions' as any).select('amount, status').eq('fund_id', fundId).eq('portfolio_group', portfolioGroup).neq('status', 'ignored')
+    const vehicleId = await vehicleIdByName(admin, fundId, portfolioGroup)
+    const { data } = await admin.from('bank_transactions' as any).select('amount, status').eq('fund_id', fundId).eq('vehicle_id', vehicleId).neq('status', 'ignored')
     const txns: BankTxnState[] = ((data as any[]) ?? []).map(t => ({ amount: Number(t.amount), matched: t.status === 'reconciled' }))
     return summarizeBankRec(txns, ledgerCashBalance)
   },

@@ -11,6 +11,7 @@ export interface ParsedTxn {
   amount: number      // signed: + inflow, - outflow
   description: string
   counterparty?: string
+  activity?: string   // transaction type/activity column (e.g. brokerage "Interest Income")
 }
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,33 @@ function splitLine(line: string, delim: string): string[] {
   return out.map(s => s.trim())
 }
 
+/**
+ * Split text into logical CSV records, honoring newlines embedded inside quoted
+ * fields (common in brokerage exports, e.g. a multi-line Description). A newline
+ * only ends a record when it's outside quotes.
+ */
+function splitRecords(text: string): string[] {
+  const records: string[] = []
+  let cur = ''
+  let inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (c === '"') {
+      if (inQuotes && text[i + 1] === '"') { cur += '""'; i++; continue } // escaped quote
+      inQuotes = !inQuotes
+      cur += c
+    } else if ((c === '\n' || c === '\r') && !inQuotes) {
+      if (c === '\r' && text[i + 1] === '\n') i++ // CRLF
+      records.push(cur)
+      cur = ''
+    } else {
+      cur += c
+    }
+  }
+  records.push(cur)
+  return records.map(r => r.trim()).filter(Boolean)
+}
+
 /** Normalize a date string to ISO (YYYY-MM-DD). Accepts ISO and M/D/Y. */
 export function normalizeDate(s: string): string | null {
   const t = s.trim()
@@ -58,21 +86,36 @@ function parseAmount(s: string): number | null {
   return neg ? -Math.abs(n) : n
 }
 
-const HEADER_ALIASES: Record<string, string[]> = {
-  date: ['date', 'posted', 'transaction date', 'post date'],
-  description: ['description', 'memo', 'name', 'details', 'narrative'],
-  amount: ['amount', 'value'],
-  debit: ['debit', 'withdrawal', 'withdrawals', 'money out', 'outflow'],
-  credit: ['credit', 'deposit', 'deposits', 'money in', 'inflow'],
-  counterparty: ['counterparty', 'payee', 'merchant', 'vendor'],
-}
+// Word-boundary "contains" matching, ordered so the more specific columns win:
+// debit/credit before a bare "amount" (so "Debit Amount" is a debit, not an
+// amount), and date before amount (so "Value Date" is a date). This resolves the
+// common real-world variants — "Posting Date", "Transaction Amount", "Withdrawal
+// Amount", "Deposit Amount", "Amount (USD)", etc. — that an exact-match list misses.
+const HEADER_RULES: { key: string; re: RegExp }[] = [
+  { key: 'debit',        re: /\b(debit|withdrawal|withdrawals|money out|outflow)\b/ },
+  { key: 'credit',       re: /\b(credit|deposit|deposits|money in|inflow)\b/ },
+  { key: 'date',         re: /\b(date|posted)\b/ },
+  { key: 'amount',       re: /\b(amount|value)\b/ },
+  { key: 'counterparty', re: /\b(counterparty|payee|merchant|vendor)\b/ },
+  { key: 'activity',     re: /\b(activity|transaction type|txn type|type)\b/ },
+  { key: 'description',  re: /\b(description|memo|name|details|narrative)\b/ },
+]
 
 function matchHeader(cell: string): string | null {
   const c = cell.toLowerCase().trim()
-  for (const [key, aliases] of Object.entries(HEADER_ALIASES)) {
-    if (aliases.includes(c)) return key
-  }
+  for (const rule of HEADER_RULES) if (rule.re.test(c)) return rule.key
   return null
+}
+
+/** Most likely delimiter for a line: tab, comma, or semicolon (EU exports). */
+function pickDelim(line: string): string {
+  const candidates: [string, number][] = [
+    ['\t', (line.match(/\t/g) ?? []).length],
+    [',', (line.match(/,/g) ?? []).length],
+    [';', (line.match(/;/g) ?? []).length],
+  ]
+  candidates.sort((a, b) => b[1] - a[1])
+  return candidates[0][1] > 0 ? candidates[0][0] : ','
 }
 
 export interface ParseResult {
@@ -86,22 +129,32 @@ export interface ParseResult {
  * can't be parsed are reported, not silently dropped.
  */
 export function parseTransactionsCsv(text: string): ParseResult {
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  const lines = splitRecords(text)
   if (lines.length === 0) return { rows: [], errors: ['No rows found'] }
 
-  const delim = (lines[0].match(/\t/g)?.length ?? 0) > (lines[0].match(/,/g)?.length ?? 0) ? '\t' : ','
-  const header = splitLine(lines[0], delim)
-  const cols = header.map(matchHeader)
-  const has = (k: string) => cols.includes(k)
-  if (!has('date') || (!has('amount') && !has('credit') && !has('debit'))) {
+  // Bank/broker exports often prepend title or account-metadata rows before the
+  // real header, so scan the first several lines for the row that carries a date
+  // column plus an amount (or debit/credit) column, rather than assuming row 1.
+  let headerIdx = -1
+  let delim = ','
+  let cols: (string | null)[] = []
+  for (let i = 0; i < Math.min(lines.length, 15); i++) {
+    const d = pickDelim(lines[i])
+    const c = splitLine(lines[i], d).map(matchHeader)
+    if (c.includes('date') && (c.includes('amount') || c.includes('credit') || c.includes('debit'))) {
+      headerIdx = i; delim = d; cols = c; break
+    }
+  }
+  if (headerIdx === -1) {
     return { rows: [], errors: ['Could not find a date column and an amount (or debit/credit) column in the header'] }
   }
 
+  const has = (k: string) => cols.includes(k)
   const idx = (k: string) => cols.indexOf(k)
   const rows: ParsedTxn[] = []
   const errors: string[] = []
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = headerIdx + 1; i < lines.length; i++) {
     const cells = splitLine(lines[i], delim)
     const rawDate = cells[idx('date')] ?? ''
     const date = normalizeDate(rawDate)
@@ -119,8 +172,9 @@ export function parseTransactionsCsv(text: string): ParseResult {
     rows.push({
       date,
       amount: roundCents(amount),
-      description: (has('description') ? cells[idx('description')] : '') ?? '',
+      description: ((has('description') ? cells[idx('description')] : '') ?? '').replace(/\s+/g, ' ').trim(),
       counterparty: has('counterparty') ? cells[idx('counterparty')] : undefined,
+      activity: has('activity') ? (cells[idx('activity')] ?? '').trim() : undefined,
     })
   }
 
@@ -159,7 +213,8 @@ const RULES: { re: RegExp; accountCode: string; sourceType: string; label: strin
   { re: /distribution|redemption/i, accountCode: '3100', sourceType: 'distribution', label: 'Distribution' },
   { re: /management fee|mgmt fee/i, accountCode: '5000', sourceType: 'management_fee', label: 'Management fee' },
   { re: /audit|legal|tax|accounting|admin|filing|fund expense|organization/i, accountCode: '5100', sourceType: 'partnership_expense', label: 'Partnership expense' },
-  { re: /interest|dividend/i, accountCode: '4100', sourceType: 'income', label: 'Interest / dividend income' },
+  // Interest/dividend is handled before this list (direction-aware: income on an
+  // inflow, expense on an outflow).
 ]
 
 /**
@@ -168,8 +223,19 @@ const RULES: { re: RegExp; accountCode: string; sourceType: string; label: strin
  * likely call; outflow → partnership expense), flagged low-confidence for review.
  */
 export function suggestCategory(t: ParsedTxn): Category {
+  // Match against the description AND the activity/type column — brokerage feeds
+  // put the meaningful keyword (e.g. "Interest Income") in a separate Activity
+  // column while the description is just the counterparty name.
+  const text = `${t.description || ''} ${t.activity || ''}`
+  // Interest/dividend: income when received (inflow), expense when paid (outflow,
+  // e.g. brokerage margin interest → the dedicated 5300 Interest expense account).
+  if (/interest|dividend/i.test(text)) {
+    return t.amount >= 0
+      ? { accountCode: '4100', sourceType: 'income', label: 'Interest / dividend income', confidence: 'high' }
+      : { accountCode: '5300', sourceType: 'partnership_expense', label: 'Interest expense', confidence: 'high' }
+  }
   for (const r of RULES) {
-    if (r.re.test(t.description || '')) {
+    if (r.re.test(text)) {
       return { accountCode: r.accountCode, sourceType: r.sourceType, label: r.label, confidence: 'high' }
     }
   }

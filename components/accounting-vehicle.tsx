@@ -52,32 +52,80 @@ export function useLedgerFetch() {
   )
 }
 
-/** Vehicle selector shown across the Accounting section. */
+/** Vehicle selector (+ quick create) shown across the Accounting section. */
 export function VehicleBar() {
   const { group, setGroup } = useVehicle()
   const [vehicles, setVehicles] = useState<string[]>([])
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newKind, setNewKind] = useState('fund')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     fetch('/api/accounting/vehicles').then(r => (r.ok ? r.json() : [])).then(v => setVehicles(Array.isArray(v) ? v : []))
   }, [])
+  useEffect(() => { load() }, [load])
 
   // Default to the first vehicle once loaded if none is selected.
   useEffect(() => {
     if (!group && vehicles.length > 0) setGroup(vehicles[0])
   }, [vehicles, group, setGroup])
 
-  if (vehicles.length === 0) return null
-  const current = group ?? vehicles[0]
+  async function create() {
+    const name = newName.trim()
+    if (!name) return
+    setBusy(true); setError(null)
+    const res = await fetch('/api/vehicles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, kind: newKind }) })
+    setBusy(false)
+    if (res.ok) {
+      setCreating(false); setNewName(''); setNewKind('fund')
+      load()
+      setGroup(name) // select the new vehicle
+    } else {
+      setError((await res.json().catch(() => ({}))).error ?? 'Could not create vehicle')
+    }
+  }
+
+  const current = group ?? (vehicles[0] ?? '')
 
   return (
-    <div className="flex items-center gap-2 mb-4 text-sm">
-      <span className="text-muted-foreground">Vehicle</span>
-      {vehicles.length === 1 ? (
-        <span className="font-medium">{current}</span>
-      ) : (
-        <select value={current} onChange={e => setGroup(e.target.value)} className="border rounded px-2 py-1 text-sm bg-transparent">
-          {vehicles.map(v => <option key={v} value={v}>{v}</option>)}
-        </select>
+    <div className="mb-4 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-muted-foreground">Vehicle</span>
+        {vehicles.length === 0 ? (
+          <span className="italic text-muted-foreground">none yet</span>
+        ) : vehicles.length === 1 ? (
+          <span className="font-medium">{current}</span>
+        ) : (
+          <select value={current} onChange={e => setGroup(e.target.value)} className="rounded border bg-transparent px-2 py-1 text-sm">
+            {vehicles.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+        )}
+        {!creating && (
+          <button onClick={() => setCreating(true)} className="text-xs text-muted-foreground transition-colors hover:text-foreground">+ New vehicle</button>
+        )}
+      </div>
+
+      {creating && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            autoFocus value={newName} onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') create(); if (e.key === 'Escape') { setCreating(false); setError(null) } }}
+            placeholder="Vehicle name (e.g. Fund IV, LP)"
+            className="min-w-[220px] rounded border border-input bg-transparent px-2 py-1 text-sm"
+          />
+          <select value={newKind} onChange={e => setNewKind(e.target.value)} className="rounded border border-input bg-transparent px-2 py-1 text-sm">
+            <option value="fund">Fund</option>
+            <option value="spv">SPV</option>
+            <option value="direct">Direct</option>
+            <option value="associate">Associate</option>
+            <option value="other">Other</option>
+          </select>
+          <button onClick={create} disabled={busy || !newName.trim()} className="rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50">{busy ? 'Adding…' : 'Add'}</button>
+          <button onClick={() => { setCreating(false); setError(null) }} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+          {error && <span className="text-xs text-destructive">{error}</span>}
+        </div>
       )}
     </div>
   )

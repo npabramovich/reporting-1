@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertAdminAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
+import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
 import { dbError } from '@/lib/api-error'
 import { DEFAULT_CHART } from '@/lib/accounting/chart'
 
@@ -16,12 +17,13 @@ export async function GET(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
   const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
+  const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
 
   const { data, error } = await admin
     .from('chart_of_accounts' as any)
     .select('*')
     .eq('fund_id', gate.fundId)
-    .eq('portfolio_group', group)
+    .eq('vehicle_id', vehicleId)
     .order('code', { ascending: true })
   if (error) return dbError(error, 'accounting-chart')
   return NextResponse.json(data ?? [])
@@ -38,15 +40,21 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
+  const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
 
-  const { count } = await admin
+  // Additive/idempotent: seed the full default chart on first run, and on later
+  // runs backfill any default accounts the vehicle is missing (e.g. a newly-added
+  // standard account). Never touches existing rows or custom accounts.
+  const { data: existing } = await admin
     .from('chart_of_accounts' as any)
-    .select('id', { count: 'exact', head: true })
+    .select('code')
     .eq('fund_id', gate.fundId)
-    .eq('portfolio_group', group)
-  if ((count ?? 0) > 0) return NextResponse.json({ seeded: 0, message: 'Chart already exists' })
+    .eq('vehicle_id', vehicleId)
+  const have = new Set(((existing as any[]) ?? []).map(r => r.code as string))
+  const missing = DEFAULT_CHART.filter(a => !have.has(a.code))
+  if (missing.length === 0) return NextResponse.json({ seeded: 0, message: 'Chart already up to date' })
 
-  const rows = DEFAULT_CHART.map(a => ({ fund_id: gate.fundId, portfolio_group: group, code: a.code, name: a.name, type: a.type, subtype: a.subtype ?? null }))
+  const rows = missing.map(a => ({ fund_id: gate.fundId, portfolio_group: group, vehicle_id: vehicleId, code: a.code, name: a.name, type: a.type, subtype: a.subtype ?? null }))
   const { data, error } = await admin.from('chart_of_accounts' as any).insert(rows).select('*')
   if (error) return dbError(error, 'accounting-chart-seed')
   return NextResponse.json({ seeded: (data as any[])?.length ?? 0, accounts: data ?? [] })

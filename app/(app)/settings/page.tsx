@@ -19,6 +19,7 @@ import {
 import Link from 'next/link'
 import { DefaultsEditor } from './memo-agent/defaults/editor'
 import { LedgerAgentAccess } from '@/components/ledger-agent-access'
+import { VehiclesSettings } from '@/components/vehicles-settings'
 import { StyleAnchorsInline } from './memo-agent/style-anchors/style-anchors-inline'
 import { SchemasInline } from './memo-agent/schemas/schemas-inline'
 import { AppearanceEditor } from './appearance/editor'
@@ -178,6 +179,9 @@ export default function SettingsPage() {
           </Section>
           <CurrencySection currency={settings.currency} onSaved={load} />
           <FeatureVisibilitySection featureVisibility={settings.featureVisibility} onSaved={load} />
+          <Section title="Investment vehicles">
+            <VehiclesSettings />
+          </Section>
         </AdminSectionContext.Provider>
       )}
       <GroupHeader label="Notes" />

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo, Fragment } from 'react'
 import { DollarSign, Plus, Trash2, Pencil, Loader2, ChevronDown, ChevronRight, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { useCurrency, formatCurrencyFull, formatCurrencyPrice, getCurrencySymbol } from '@/components/currency-context'
+import {
+  computeFxRevaluation, buildFxRevaluationPayload, derivePriorFxRate, deriveLocalSharePrice,
+  deriveOriginalCurrency, deriveOriginalPositionValue, formatFxRate,
+} from '@/lib/fx'
+import type { FxRevaluationResult } from '@/lib/fx'
 import type { InvestmentTransaction, CompanyStatus } from '@/lib/types/database'
 import type { CompanyInvestmentSummary } from '@/lib/types/investments'
 
@@ -74,6 +79,10 @@ const EMPTY_FORM: Record<string, string> = {
   original_unrealized_value_change: '',
   original_current_share_price: '',
   original_latest_postmoney_valuation: '',
+  valuation_change_source: 'mark',
+  fx_rate: '',
+  prior_fx_rate: '',
+  original_position_value: '',
   portfolio_group: '',
 }
 
@@ -154,14 +163,108 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
       original_unrealized_value_change: txn.original_unrealized_value_change?.toString() ?? '',
       original_current_share_price: txn.original_current_share_price?.toString() ?? '',
       original_latest_postmoney_valuation: txn.original_latest_postmoney_valuation?.toString() ?? '',
+      valuation_change_source: txn.valuation_change_source ?? 'mark',
+      fx_rate: txn.fx_rate?.toString() ?? '',
+      prior_fx_rate: txn.prior_fx_rate?.toString() ?? '',
+      original_position_value: txn.original_position_value?.toString() ?? '',
       portfolio_group: txn.portfolio_group ?? '',
     })
     setError(null)
-    setShowOrigCurrency(!!txn.original_currency)
+    // An FX revaluation owns its own currency selector, so the generic
+    // original-amounts block stays collapsed for those rows.
+    setShowOrigCurrency(!!txn.original_currency && txn.valuation_change_source !== 'fx')
     setDialogOpen(true)
   }
 
+  const isFxReval =
+    form.transaction_type === 'unrealized_gain_change' && form.valuation_change_source === 'fx'
+
+  /** The round an FX reval is being booked against, if one is selected. */
+  const fxRound = useMemo(
+    () => summary?.rounds.find(r => r.roundName === form.round_name) ?? null,
+    [summary, form.round_name]
+  )
+
+  /**
+   * FMV only tracks share price for priced-equity rounds (see computeSummary),
+   * so those need a local share price or the revalued mark won't flow through.
+   */
+  const fxNeedsSharePrice = fxRound
+    ? fxRound.sharesAcquired > 0
+    : (summary?.totalShares ?? 0) > 0
+
+  /** Seed the rate and position value from the position's existing history. */
+  function seedFxFields(next: Record<string, string>): Record<string, string> {
+    const ccy = next.original_currency || deriveOriginalCurrency(transactions, editingId) || ''
+    if (!ccy) return { ...next, original_currency: '' }
+
+    const priorRate = derivePriorFxRate(transactions, ccy, editingId)
+    const localPrice = deriveLocalSharePrice(transactions, ccy, editingId)
+    const round = summary?.rounds.find(r => r.roundName === next.round_name) ?? null
+    const carrying = round ? round.currentValue : summary?.unrealizedValue ?? 0
+    const posValue = priorRate != null ? deriveOriginalPositionValue(carrying, priorRate) : null
+
+    return {
+      ...next,
+      original_currency: ccy,
+      prior_fx_rate: next.prior_fx_rate || (priorRate != null ? String(Number(priorRate.toFixed(6))) : ''),
+      original_current_share_price:
+        next.original_current_share_price || (localPrice != null ? String(localPrice) : ''),
+      original_position_value:
+        next.original_position_value || (posValue != null ? String(Number(posValue.toFixed(2))) : ''),
+    }
+  }
+
+  function setValuationSource(source: string) {
+    if (source !== 'fx') {
+      setForm(f => ({ ...f, valuation_change_source: source }))
+      return
+    }
+    setShowOrigCurrency(false)
+    setForm(f => seedFxFields({ ...f, valuation_change_source: 'fx' }))
+  }
+
+  function setFxCurrency(ccy: string) {
+    // Re-derive against the newly chosen currency rather than keeping stale rates.
+    setForm(f => seedFxFields({
+      ...f,
+      original_currency: ccy,
+      prior_fx_rate: '',
+      original_current_share_price: '',
+      original_position_value: '',
+    }))
+  }
+
+  const fxPreview = useMemo(() => {
+    if (!isFxReval) return null
+    const positionValueOriginal = parseFloat(form.original_position_value)
+    const priorRate = parseFloat(form.prior_fx_rate)
+    const newRate = parseFloat(form.fx_rate)
+    if (
+      !Number.isFinite(positionValueOriginal) ||
+      !Number.isFinite(priorRate) || priorRate <= 0 ||
+      !Number.isFinite(newRate) || newRate <= 0
+    ) return null
+
+    const localSharePrice = parseFloat(form.original_current_share_price)
+    return computeFxRevaluation({
+      positionValueOriginal,
+      priorRate,
+      newRate,
+      localSharePrice: Number.isFinite(localSharePrice) ? localSharePrice : null,
+    })
+  }, [isFxReval, form.original_position_value, form.prior_fx_rate, form.fx_rate, form.original_current_share_price])
+
   async function handleSave() {
+    if (isFxReval && !form.original_currency) {
+      setError('Select the currency this position is denominated in.')
+      return
+    }
+    if (isFxReval && !fxPreview) {
+      setError('Enter a position value, a prior rate, and a new rate to compute the change.')
+      return
+    }
+
     setSaving(true)
     setError(null)
 
@@ -197,7 +300,24 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
       original_unrealized_value_change: showOrigCurrency ? numOrNull(form.original_unrealized_value_change) : null,
       original_current_share_price: showOrigCurrency ? numOrNull(form.original_current_share_price) : null,
       original_latest_postmoney_valuation: showOrigCurrency ? numOrNull(form.original_latest_postmoney_valuation) : null,
+      valuation_change_source: form.transaction_type === 'unrealized_gain_change'
+        ? form.valuation_change_source
+        : null,
+      fx_rate: null,
+      prior_fx_rate: null,
+      fx_value_change: null,
+      original_position_value: null,
       portfolio_group: form.portfolio_group || null,
+    }
+
+    if (isFxReval) {
+      Object.assign(payload, buildFxRevaluationPayload({
+        currency: form.original_currency,
+        positionValueOriginal: parseFloat(form.original_position_value),
+        priorRate: parseFloat(form.prior_fx_rate),
+        newRate: parseFloat(form.fx_rate),
+        localSharePrice: numOrNull(form.original_current_share_price),
+      }))
     }
 
     try {
@@ -295,6 +415,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
                 summary={gs}
                 companyStatus={companyStatus}
                 showGroup={false}
+                fundCurrency={currency}
                 fmt={fmt}
                 fmtPrice={fmtPrice}
                 openEdit={openEdit}
@@ -321,6 +442,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
           summary={summary}
           companyStatus={companyStatus}
           showGroup={portfolioGroups.length > 0}
+          fundCurrency={currency}
           fmt={fmt}
           fmtPrice={fmtPrice}
           openEdit={openEdit}
@@ -597,43 +719,71 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
             )}
 
             {txnType === 'unrealized_gain_change' && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-4">
                 <div>
-                  <Label>Unrealized Value Change ({symbol.trim()})</Label>
-                  <Input
-                    className="mt-1"
-                    type="number"
-                    step="any"
-                    value={form.unrealized_value_change}
-                    onChange={e => setForm(f => ({ ...f, unrealized_value_change: e.target.value }))}
-                  />
+                  <Label>Change Driven By</Label>
+                  <Select value={form.valuation_change_source} onValueChange={setValuationSource}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mark">New mark / revaluation</SelectItem>
+                      <SelectItem value="fx">Foreign exchange rate change</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div>
-                  <Label>Current Share Price ({symbol.trim()})</Label>
-                  <Input
-                    className="mt-1"
-                    type="number"
-                    step="any"
-                    value={form.current_share_price}
-                    onChange={e => setForm(f => ({ ...f, current_share_price: e.target.value }))}
+
+                {form.valuation_change_source === 'mark' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Unrealized Value Change ({symbol.trim()})</Label>
+                      <Input
+                        className="mt-1"
+                        type="number"
+                        step="any"
+                        value={form.unrealized_value_change}
+                        onChange={e => setForm(f => ({ ...f, unrealized_value_change: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label>Current Share Price ({symbol.trim()})</Label>
+                      <Input
+                        className="mt-1"
+                        type="number"
+                        step="any"
+                        value={form.current_share_price}
+                        onChange={e => setForm(f => ({ ...f, current_share_price: e.target.value }))}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Latest Post-Money Valuation ({symbol.trim()})</Label>
+                      <Input
+                        className="mt-1"
+                        type="number"
+                        step="any"
+                        value={form.latest_postmoney_valuation}
+                        onChange={e => setForm(f => ({ ...f, latest_postmoney_valuation: e.target.value }))}
+                        placeholder="Latest post-money valuation"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {isFxReval && (
+                  <FxRevaluationFields
+                    form={form}
+                    setForm={setForm}
+                    setFxCurrency={setFxCurrency}
+                    fundCurrency={currency}
+                    preview={fxPreview}
+                    needsSharePrice={fxNeedsSharePrice}
+                    fmt={fmt}
+                    fmtPrice={fmtPrice}
                   />
-                </div>
-                <div className="col-span-2">
-                  <Label>Latest Post-Money Valuation ({symbol.trim()})</Label>
-                  <Input
-                    className="mt-1"
-                    type="number"
-                    step="any"
-                    value={form.latest_postmoney_valuation}
-                    onChange={e => setForm(f => ({ ...f, latest_postmoney_valuation: e.target.value }))}
-                    placeholder="Latest post-money valuation"
-                  />
-                </div>
+                )}
               </div>
             )}
 
-            {/* Multi-currency section */}
-            {!showOrigCurrency ? (
+            {/* Multi-currency section — an FX revaluation carries its own currency selector */}
+            {isFxReval ? null : !showOrigCurrency ? (
               <button
                 type="button"
                 onClick={() => setShowOrigCurrency(true)}
@@ -749,6 +899,216 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
 }
 
 // ---------------------------------------------------------------------------
+// FX revaluation entry
+// ---------------------------------------------------------------------------
+
+function signedFmt(val: number, fmt: (v: number) => string): string {
+  return `${val >= 0 ? '+' : '-'}${fmt(Math.abs(val))}`
+}
+
+function PreviewLine({
+  label,
+  value,
+  emphasis,
+}: {
+  label: string
+  value: string
+  emphasis?: 'positive' | 'negative'
+}) {
+  const tone =
+    emphasis === 'positive' ? 'font-medium text-green-600 dark:text-green-400'
+    : emphasis === 'negative' ? 'font-medium text-red-600 dark:text-red-400'
+    : ''
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`font-mono ${tone}`}>{value}</span>
+    </div>
+  )
+}
+
+function FxRevaluationFields({
+  form,
+  setForm,
+  setFxCurrency,
+  fundCurrency,
+  preview,
+  needsSharePrice,
+  fmt,
+  fmtPrice,
+}: {
+  form: Record<string, string>
+  setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  setFxCurrency: (ccy: string) => void
+  fundCurrency: string
+  preview: FxRevaluationResult | null
+  needsSharePrice: boolean
+  fmt: (v: number | null | undefined) => string
+  fmtPrice: (v: number | null | undefined) => string
+}) {
+  const ccy = form.original_currency
+  const origSymbol = ccy ? getCurrencySymbol(ccy).trim() : ''
+  const missingSharePrice = needsSharePrice && !(parseFloat(form.original_current_share_price) > 0)
+
+  return (
+    <div className="border rounded-lg p-3 space-y-3">
+      <div>
+        <Label>Deal Currency</Label>
+        <Select value={ccy || undefined} onValueChange={setFxCurrency}>
+          <SelectTrigger className="mt-1"><SelectValue placeholder="Select currency" /></SelectTrigger>
+          <SelectContent>
+            {CURRENCY_OPTIONS.filter(c => c !== fundCurrency).map(c => (
+              <SelectItem key={c} value={c}>{c} ({getCurrencySymbol(c).trim()})</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {ccy && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Prior FX Rate</Label>
+              <Input
+                className="mt-1"
+                type="number"
+                step="any"
+                min="0"
+                value={form.prior_fx_rate}
+                onChange={e => setForm(f => ({ ...f, prior_fx_rate: e.target.value }))}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">Rate the position is carried at</p>
+            </div>
+            <div>
+              <Label>New FX Rate</Label>
+              <Input
+                className="mt-1"
+                type="number"
+                step="any"
+                min="0"
+                value={form.fx_rate}
+                onChange={e => setForm(f => ({ ...f, fx_rate: e.target.value }))}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                1 {ccy} = {form.fx_rate || '…'} {fundCurrency}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Position Value ({origSymbol})</Label>
+              <Input
+                className="mt-1"
+                type="number"
+                step="any"
+                value={form.original_position_value}
+                onChange={e => setForm(f => ({ ...f, original_position_value: e.target.value }))}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">Held constant — only the rate moves</p>
+            </div>
+            <div>
+              <Label>Share Price ({origSymbol})</Label>
+              <Input
+                className="mt-1"
+                type="number"
+                step="any"
+                value={form.original_current_share_price}
+                onChange={e => setForm(f => ({ ...f, original_current_share_price: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          {missingSharePrice && (
+            <p className="text-xs text-amber-600 dark:text-amber-500">
+              This position is priced equity, so its FMV tracks share price. Enter the share price
+              in {ccy} or the revalued mark won&apos;t reach FMV.
+            </p>
+          )}
+
+          {preview && (
+            <div className="rounded-md bg-muted/50 p-3 space-y-1 text-sm">
+              <PreviewLine
+                label={`Local value held at`}
+                value={formatCurrencyFull(parseFloat(form.original_position_value), ccy)}
+              />
+              <PreviewLine label="Prior carrying value" value={fmt(preview.priorFundValue)} />
+              <PreviewLine label="New carrying value" value={fmt(preview.newFundValue)} />
+              {preview.newFundSharePrice != null && (
+                <PreviewLine label="New share price" value={fmtPrice(preview.newFundSharePrice)} />
+              )}
+              <div className="border-t pt-1 mt-1">
+                <PreviewLine
+                  label="FX change"
+                  value={signedFmt(preview.fxValueChange, v => fmt(v))}
+                  emphasis={preview.fxValueChange >= 0 ? 'positive' : 'negative'}
+                />
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function FxDetailPanel({
+  txn,
+  fundCurrency,
+  fmt,
+  fmtPrice,
+}: {
+  txn: InvestmentTransaction
+  fundCurrency: string
+  fmt: (v: number | null | undefined) => string
+  fmtPrice: (v: number | null | undefined) => string
+}) {
+  const ccy = txn.original_currency ?? ''
+  const positionValue = txn.original_position_value
+  const priorRate = txn.prior_fx_rate
+  const newRate = txn.fx_rate
+  const change = txn.fx_value_change ?? txn.unrealized_value_change
+
+  const priorFundValue = positionValue != null && priorRate != null ? positionValue * priorRate : null
+  const newFundValue = positionValue != null && newRate != null ? positionValue * newRate : null
+  const localSharePrice = txn.original_current_share_price
+
+  return (
+    <div className="max-w-md space-y-1 text-sm">
+      <PreviewLine label="Deal currency" value={ccy || '-'} />
+      <PreviewLine
+        label="Position value (held)"
+        value={positionValue != null && ccy ? formatCurrencyFull(positionValue, ccy) : '-'}
+      />
+      <PreviewLine
+        label="Prior FX rate"
+        value={priorRate != null ? `${formatFxRate(priorRate)}  (1 ${ccy} = ${formatFxRate(priorRate)} ${fundCurrency})` : '-'}
+      />
+      <PreviewLine
+        label="New FX rate"
+        value={newRate != null ? `${formatFxRate(newRate)}  (1 ${ccy} = ${formatFxRate(newRate)} ${fundCurrency})` : '-'}
+      />
+      {localSharePrice != null && (
+        <PreviewLine
+          label="Share price"
+          value={`${formatCurrencyPrice(localSharePrice, ccy)} → ${fmtPrice(txn.current_share_price)}`}
+        />
+      )}
+      <div className="border-t pt-1 mt-1 space-y-1">
+        <PreviewLine label="Prior carrying value" value={fmt(priorFundValue)} />
+        <PreviewLine label="New carrying value" value={fmt(newFundValue)} />
+        <PreviewLine
+          label="FX change"
+          value={change != null ? signedFmt(change, v => fmt(v)) : '-'}
+          emphasis={change == null ? undefined : change >= 0 ? 'positive' : 'negative'}
+        />
+      </div>
+      {txn.notes && <p className="pt-2 text-xs text-muted-foreground">{txn.notes}</p>}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Extracted sub-components for per-group rendering
 // ---------------------------------------------------------------------------
 
@@ -829,6 +1189,7 @@ function TransactionTable({
   summary,
   companyStatus,
   showGroup,
+  fundCurrency,
   fmt,
   fmtPrice,
   openEdit,
@@ -839,14 +1200,30 @@ function TransactionTable({
   summary: CompanyInvestmentSummary | null
   companyStatus: CompanyStatus
   showGroup: boolean
+  fundCurrency: string
   fmt: (v: number | null | undefined) => string
   fmtPrice: (v: number | null | undefined) => string
   openEdit: (txn: InvestmentTransaction) => void
   handleDelete: (id: string) => void
   deletingId: string | null
 }) {
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set())
+
+  function toggleRow(id: string) {
+    setOpenRows(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   if (transactions.length === 0) return null
   const hasPostmoney = transactions.some(t => t.postmoney_valuation != null)
+  const hasFxRows = transactions.some(t => t.valuation_change_source === 'fx')
+  const colCount =
+    (showGroup ? 1 : 0) +
+    (companyStatus === 'exited' ? 6 : 8 + (hasPostmoney ? 1 : 0))
   return (
     <div className="border rounded-lg overflow-hidden">
       <table className="w-full text-sm">
@@ -876,13 +1253,38 @@ function TransactionTable({
         <tbody>
           {transactions.map(txn => {
             const round = summary?.rounds.find(r => r.roundName === txn.round_name)
+            const isFx = txn.valuation_change_source === 'fx'
+            const isOpen = openRows.has(txn.id)
             return (
-              <tr key={txn.id} className="border-b last:border-b-0">
+              <Fragment key={txn.id}>
+              <tr className="border-b last:border-b-0">
                 {showGroup && <td className="px-3 py-2 text-xs">{txn.portfolio_group ?? '-'}</td>}
                 <td className="px-3 py-2">
-                  <span className="text-xs text-muted-foreground">
-                    {TYPE_LABELS[txn.transaction_type as TransactionType] ?? txn.transaction_type}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {isFx ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleRow(txn.id)}
+                        aria-expanded={isOpen}
+                        aria-label={isOpen ? 'Hide FX detail' : 'Show FX detail'}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        {isOpen
+                          ? <ChevronDown className="h-3.5 w-3.5" />
+                          : <ChevronRight className="h-3.5 w-3.5" />}
+                      </button>
+                    ) : hasFxRows ? (
+                      <span className="w-3.5" aria-hidden="true" />
+                    ) : null}
+                    <span className="text-xs text-muted-foreground">
+                      {TYPE_LABELS[txn.transaction_type as TransactionType] ?? txn.transaction_type}
+                    </span>
+                    {isFx && (
+                      <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        FX
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-3 py-2">{txn.round_name ?? '-'}</td>
                 <td className="px-3 py-2 text-muted-foreground">
@@ -966,6 +1368,19 @@ function TransactionTable({
                   </div>
                 </td>
               </tr>
+              {isFx && isOpen && (
+                <tr className="border-b last:border-b-0 bg-muted/20">
+                  <td colSpan={colCount} className="px-3 py-3">
+                    <FxDetailPanel
+                      txn={txn}
+                      fundCurrency={fundCurrency}
+                      fmt={fmt}
+                      fmtPrice={fmtPrice}
+                    />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             )
           })}
         </tbody>

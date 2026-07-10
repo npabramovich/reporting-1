@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertAdminAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
+import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
 import { loadOwnership } from '@/lib/accounting/load'
 import { accountIdByCode, ensureCapitalAccounts, persistEntry } from '@/lib/accounting/persist'
 import { DEFAULT_CHART } from '@/lib/accounting/chart'
@@ -27,9 +28,10 @@ export async function POST(req: NextRequest) {
   if (!entryDate) return NextResponse.json({ error: 'entryDate is required' }, { status: 400 })
 
   // Seed the default chart for this vehicle if it has none.
+  const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
   let codes = await accountIdByCode(admin, gate.fundId, group)
   if (codes.size === 0) {
-    const rows = DEFAULT_CHART.map(a => ({ fund_id: gate.fundId, portfolio_group: group, code: a.code, name: a.name, type: a.type, subtype: a.subtype ?? null }))
+    const rows = DEFAULT_CHART.map(a => ({ fund_id: gate.fundId, portfolio_group: group, vehicle_id: vehicleId, code: a.code, name: a.name, type: a.type, subtype: a.subtype ?? null }))
     await admin.from('chart_of_accounts' as any).insert(rows)
     codes = await accountIdByCode(admin, gate.fundId, group)
   }

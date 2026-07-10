@@ -6,6 +6,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Account, AccountType, Posting } from './types'
 import type { CapitalPosting } from './capital-account'
+import { vehicleIdByName } from './vehicle-id'
 
 export type SourcedPosting = Posting & { sourceType: string | null }
 
@@ -28,13 +29,14 @@ export async function loadPostedLedger(
   group: string,
   asOf?: string
 ): Promise<LoadedLedger> {
-  let entriesQ = admin.from('journal_entries' as any).select('id, source_type, status').eq('fund_id', fundId).eq('portfolio_group', group).eq('status', 'posted')
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  let entriesQ = admin.from('journal_entries' as any).select('id, source_type, status').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'posted')
   if (asOf) entriesQ = entriesQ.lte('entry_date', asOf)
 
   const [{ data: acctRows }, { data: entryRows }, { data: postingRows }] = await Promise.all([
-    admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id').eq('fund_id', fundId).eq('portfolio_group', group),
+    admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
     entriesQ,
-    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, currency, lp_entity_id').eq('fund_id', fundId).eq('portfolio_group', group),
+    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, currency, lp_entity_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
   ])
 
   const accounts: Account[] = ((acctRows as any[]) ?? []).map(a => ({
@@ -115,6 +117,18 @@ export async function loadOwnership(
 
 /** Distinct vehicles (portfolio_groups) for a fund, from LP + cash-flow data. */
 export async function listVehicles(admin: SupabaseClient, fundId: string): Promise<string[]> {
+  // Source of truth: the fund_vehicles registry (active vehicles).
+  const { data: vrows } = await admin
+    .from('fund_vehicles' as any)
+    .select('name')
+    .eq('fund_id', fundId)
+    .eq('active', true)
+    .order('name')
+  const names = ((vrows as any[]) ?? []).map(r => r.name as string).filter(Boolean)
+  if (names.length > 0) return names
+
+  // Fallback for funds not yet migrated into the registry: the legacy union of
+  // distinct portfolio_group strings across the vehicle-scoped tables.
   const [{ data: inv }, { data: cfg }, { data: cf }] = await Promise.all([
     admin.from('lp_investments' as any).select('portfolio_group').eq('fund_id', fundId),
     admin.from('fund_group_config' as any).select('portfolio_group').eq('fund_id', fundId),

@@ -81,8 +81,7 @@ export default async function AccountingPage() {
         </h1>
         <p className="text-sm text-muted-foreground">
           Double-entry ledger and the capital accounts, schedule of investments, and financial
-          statements derived from it. In development &mdash; admin-only while it&rsquo;s validated by
-          reconciling against a real fund&rsquo;s existing admin statements.
+          statements derived from it.
         </p>
       </div>
 

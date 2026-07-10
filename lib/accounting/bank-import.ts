@@ -3,6 +3,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { accountIdByCode, persistEntry } from './persist'
+import { vehicleIdByName } from './vehicle-id'
 import { parseTransactionsCsv, dedupHash, suggestCategory, bankEntryPostings } from './bank'
 import type { JournalEntry } from './types'
 
@@ -27,7 +28,8 @@ export async function importBankTransactions(
   const cashId = codes.get('1000')
   if (!cashId) return { error: 'Seed the chart of accounts first' }
 
-  const { data: existing } = await admin.from('bank_transactions' as any).select('dedup_hash').eq('fund_id', fundId).eq('portfolio_group', group)
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  const { data: existing } = await admin.from('bank_transactions' as any).select('dedup_hash').eq('fund_id', fundId).eq('vehicle_id', vehicleId)
   const seen = new Set(((existing as any[]) ?? []).map(r => r.dedup_hash))
 
   let imported = 0
@@ -53,6 +55,7 @@ export async function importBankTransactions(
     const { error: insErr } = await admin.from('bank_transactions' as any).insert({
       fund_id: fundId,
       portfolio_group: group,
+      vehicle_id: vehicleId,
       source,
       dedup_hash: hash,
       txn_date: row.date,
