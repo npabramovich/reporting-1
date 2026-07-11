@@ -77,6 +77,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/accounting/reconciliation',   label: 'Reconciliation' },
       { href: '/accounting/journal',          label: 'Journal' },
       { href: '/accounting/capital-calls',    label: 'Capital calls' },
+      { href: '/accounting/assistant',        label: 'Assistant' },
       { href: '/accounting/ledger-text',      label: 'Plain text' },
       { href: '/accounting/periods',          label: 'Periods' },
       { href: '/accounting/draft',            label: 'Draft from doc' },
