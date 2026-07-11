@@ -9,6 +9,7 @@ import { useLedgerFetch } from '@/components/accounting-vehicle'
 interface LpRow {
   lpEntityId: string
   name: string
+  partnerClass: string
   commitment: number
   called: number
   funded: number
@@ -108,7 +109,7 @@ export function CapitalCallsView() {
               <tbody>
                 {summary.map(r => (
                   <tr key={r.lpEntityId} className="border-b last:border-b-0 hover:bg-muted/30">
-                    <td className="px-3 py-2">{r.name}</td>
+                    <td className="px-3 py-2">{r.name}{r.partnerClass === 'gp' && <span className="ml-1.5 text-[10px] uppercase tracking-wider px-1 py-0.5 rounded bg-muted text-muted-foreground">GP</span>}</td>
                     <td className="px-3 py-2 text-right font-mono">{fmt(r.commitment)}</td>
                     <td className="px-3 py-2 text-right font-mono">{fmt(r.called)}</td>
                     <td className="px-3 py-2 text-right font-mono">{fmt(r.funded)}</td>

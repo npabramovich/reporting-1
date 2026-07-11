@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Loader2, Check, AlertTriangle, Upload, Sparkles } from 'lucide-react'
+import { Loader2, Check, AlertTriangle, Upload, Sparkles, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 import { EntryModal } from './entry-modal'
@@ -12,12 +13,7 @@ interface Rec { bankEndingBalance: number; ledgerCashBalance: number; difference
 interface Candidate { entryId: string; amount: number; entryDate: string; memo: string | null }
 interface Lp { lpEntityId: string; name: string; commitment: number }
 
-const STATUS_STYLE: Record<string, string> = {
-  drafted: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  reconciled: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  ignored: 'bg-muted text-muted-foreground',
-  unmatched: 'bg-muted text-muted-foreground',
-}
+const actionBtn = 'text-xs border border-input rounded px-2 py-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors'
 
 export function BankView() {
   const currency = useCurrency()
@@ -35,6 +31,10 @@ export function BankView() {
   const [result, setResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
   const [editing, setEditing] = useState<{ txnId: string; entryId: string } | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bookedLp, setBookedLp] = useState<Record<string, string>>({})
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [sortBy, setSortBy] = useState('date-desc')
   const lf = useLedgerFetch()
 
   const load = useCallback(() => {
@@ -82,12 +82,28 @@ export function BankView() {
     setImporting(false)
   }
 
-  async function act(id: string, action: 'post' | 'ignore' | 'unpost') {
+  async function act(id: string, action: 'post' | 'ignore' | 'unpost' | 'restore') {
     await lf('/api/accounting/bank', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, id }) })
     load()
   }
 
-  const draftedIds = txns.filter(t => t.status === 'drafted').map(t => t.id)
+  const visibleTxns = txns
+    .filter(t => (statusFilter ? t.status === statusFilter : true))
+    .filter(t => {
+      const q = search.trim().toLowerCase()
+      if (!q) return true
+      return (t.description ?? '').toLowerCase().includes(q) || (t.counterparty ?? '').toLowerCase().includes(q)
+    })
+    .slice()
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'date-asc': return a.txn_date.localeCompare(b.txn_date)
+        case 'amount-desc': return Math.abs(b.amount) - Math.abs(a.amount)
+        case 'amount-asc': return Math.abs(a.amount) - Math.abs(b.amount)
+        default: return b.txn_date.localeCompare(a.txn_date)
+      }
+    })
+  const draftedIds = visibleTxns.filter(t => t.status === 'drafted').map(t => t.id)
   const allDraftedSelected = draftedIds.length > 0 && draftedIds.every(id => selected.has(id))
   const selectedCount = draftedIds.filter(id => selected.has(id)).length
   function toggleRow(id: string) {
@@ -170,28 +186,49 @@ export function BankView() {
           {selectedCount > 0 && <Button size="sm" onClick={bulkPost}>Post {selectedCount} selected</Button>}
         </div>
       )}
-      {loading ? (
+      {loading && txns.length === 0 ? (
         <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>
       ) : txns.length === 0 ? (
         <div className="border border-dashed rounded-lg p-8 text-center text-sm text-muted-foreground">No transactions yet. Import a feed above.</div>
       ) : (
-        <div className="border rounded-lg overflow-x-auto">
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search description or counterparty" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-9 w-64" />
+            </div>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-9 px-3 rounded-md border border-input bg-background text-sm">
+              <option value="">All statuses</option>
+              <option value="drafted">Not posted</option>
+              <option value="reconciled">Posted</option>
+              <option value="ignored">Ignored</option>
+            </select>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="h-9 px-3 rounded-md border border-input bg-background text-sm">
+              <option value="date-desc">Date (newest)</option>
+              <option value="date-asc">Date (oldest)</option>
+              <option value="amount-desc">Amount (largest)</option>
+              <option value="amount-asc">Amount (smallest)</option>
+            </select>
+            <span className="text-xs text-muted-foreground">{visibleTxns.length} of {txns.length}</span>
+          </div>
+          {visibleTxns.length === 0 ? (
+            <div className="border border-dashed rounded-lg p-8 text-center text-sm text-muted-foreground">No transactions match your filters.</div>
+          ) : (
+          <div className="border rounded-lg overflow-x-auto">
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="px-2 py-2 w-8"><input type="checkbox" aria-label="Select all drafted" checked={allDraftedSelected} onChange={toggleAll} disabled={draftedIds.length === 0} /></th>
                 <th className="text-left px-3 py-2 font-medium">Date</th>
                 <th className="text-left px-3 py-2 font-medium">Description</th>
                 <th className="text-right px-3 py-2 font-medium">Amount</th>
                 <th className="text-left px-3 py-2 font-medium">Suggested</th>
-                <th className="text-left px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2 font-medium" />
+                <th className="px-2 py-2 w-8 text-center">{draftedIds.length > 0 && <input type="checkbox" aria-label="Select all drafted" checked={allDraftedSelected} onChange={toggleAll} />}</th>
               </tr>
             </thead>
             <tbody>
-              {txns.map(t => (
+              {visibleTxns.map(t => (
                 <tr key={t.id} className="border-b last:border-b-0 hover:bg-muted/30">
-                  <td className="px-2 py-2">{t.status === 'drafted' && <input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleRow(t.id)} aria-label="Select transaction" />}</td>
                   <td className="px-3 py-2 font-mono text-xs">{t.txn_date}</td>
                   <td className="px-3 py-2">{t.description}</td>
                   <td className={`px-3 py-2 text-right font-mono ${t.amount < 0 ? 'text-muted-foreground' : ''}`}>{fmt(t.amount)}</td>
@@ -214,40 +251,47 @@ export function BankView() {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2"><span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${STATUS_STYLE[t.status] ?? ''}`}>{t.status}</span></td>
                   <td className="px-3 py-2 text-right">
                     {t.status === 'drafted' && (
-                      <span className="flex items-center gap-1 justify-end">
+                      <span className="flex items-center gap-1.5 justify-end">
                         {t.amount > 0 && (candidateFor(t.amount)
-                          ? <><button onClick={() => match(t.id, 'link', candidateFor(t.amount)!.entryId)} className="text-xs text-muted-foreground hover:text-foreground transition-colors" title="Link to the capital call you already recorded">Match call</button><span className="text-muted-foreground/50">·</span></>
+                          ? <button onClick={() => match(t.id, 'link', candidateFor(t.amount)!.entryId)} className={actionBtn} title="Link to the capital call you already recorded">Match call</button>
                           : lps.length > 0
-                            ? <><select
-                                  value=""
-                                  onChange={e => { const v = e.target.value; if (v === '__prorata__') match(t.id, 'allocate'); else if (v) match(t.id, 'allocate', undefined, v) }}
-                                  title="Book this inflow as a capital call — pick the LP who funded it"
-                                  className="border border-input rounded bg-transparent px-1.5 py-1 text-xs max-w-[170px] text-muted-foreground hover:bg-accent/50"
-                                >
-                                  <option value="">Book as call…</option>
-                                  {lps.map(l => <option key={l.lpEntityId} value={l.lpEntityId}>{l.name}</option>)}
-                                  <option value="__prorata__">All LPs (pro-rata)</option>
-                                </select><span className="text-muted-foreground/50">·</span></>
-                            : <><button onClick={() => match(t.id, 'allocate')} className="text-xs text-muted-foreground hover:text-foreground transition-colors" title="Allocate this inflow across LPs as a capital call">Book as call</button><span className="text-muted-foreground/50">·</span></>
+                            ? <select
+                                value={bookedLp[t.id] ?? ''}
+                                onChange={e => { const v = e.target.value; if (!v) return; setBookedLp(m => ({ ...m, [t.id]: v })); if (v === '__prorata__') match(t.id, 'allocate'); else match(t.id, 'allocate', undefined, v) }}
+                                title="Book this inflow as a capital call — pick the LP who funded it"
+                                className="text-xs border border-input rounded bg-transparent px-2 py-1 max-w-[170px] text-muted-foreground hover:bg-accent"
+                              >
+                                <option value="">Book as call…</option>
+                                {lps.map(l => <option key={l.lpEntityId} value={l.lpEntityId}>{l.name}</option>)}
+                                <option value="__prorata__">All LPs (pro-rata)</option>
+                              </select>
+                            : <button onClick={() => match(t.id, 'allocate')} className={actionBtn} title="Allocate this inflow across LPs as a capital call">Book as call</button>
                         )}
-                        {t.journal_entry_id && <><button onClick={() => setEditing({ txnId: t.id, entryId: t.journal_entry_id! })} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Edit</button><span className="text-muted-foreground/50">·</span></>}
-                        <button onClick={() => act(t.id, 'post')} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Post</button>
-                        <span className="text-muted-foreground/50">·</span>
-                        <button onClick={() => act(t.id, 'ignore')} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Ignore</button>
+                        {t.journal_entry_id && <button onClick={() => setEditing({ txnId: t.id, entryId: t.journal_entry_id! })} className={actionBtn}>Edit</button>}
+                        <button onClick={() => act(t.id, 'post')} className={actionBtn}>Post</button>
+                        <button onClick={() => act(t.id, 'ignore')} className={actionBtn}>Ignore</button>
                       </span>
                     )}
                     {t.status === 'reconciled' && (
-                      <button onClick={() => act(t.id, 'unpost')} title="Revert to draft so you can edit it" className="text-xs text-muted-foreground hover:text-foreground transition-colors">Unpost</button>
+                      <span className="flex justify-end"><button onClick={() => act(t.id, 'unpost')} title="Revert to draft so you can edit it" className={actionBtn}>Unpost</button></span>
+                    )}
+                    {t.status === 'ignored' && (
+                      <span className="flex items-center gap-1.5 justify-end">
+                        <span className="text-xs text-muted-foreground italic">Ignored</span>
+                        <button onClick={() => act(t.id, 'restore')} title="Restore to draft so you can edit it" className={actionBtn}>Restore</button>
+                      </span>
                     )}
                   </td>
+                  <td className="px-2 py-2 text-center">{t.status === 'drafted' && <input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleRow(t.id)} aria-label="Select transaction" />}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+          )}
+        </>
       )}
 
       {editing && <EntryModal txnId={editing.txnId} entryId={editing.entryId} onClose={() => setEditing(null)} onSaved={load} />}

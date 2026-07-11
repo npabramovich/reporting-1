@@ -5,7 +5,7 @@ import { assertAdminAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
 import { dbError } from '@/lib/api-error'
-import { DEFAULT_CHART } from '@/lib/accounting/chart'
+import { DEFAULT_CHART, GP_ENTITY_CHART } from '@/lib/accounting/chart'
 
 // GET — list the vehicle's chart of accounts.
 export async function GET(req: NextRequest) {
@@ -42,16 +42,22 @@ export async function POST(req: NextRequest) {
   if (group instanceof NextResponse) return group
   const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
 
-  // Additive/idempotent: seed the full default chart on first run, and on later
-  // runs backfill any default accounts the vehicle is missing (e.g. a newly-added
-  // standard account). Never touches existing rows or custom accounts.
+  // GP / associate entities keep their own books (Investment in Fund, members'
+  // capital, carry) — seed the GP chart for them; every other vehicle gets the
+  // standard fund chart.
+  const { data: veh } = await admin.from('fund_vehicles' as any).select('kind').eq('fund_id', gate.fundId).eq('id', vehicleId).maybeSingle()
+  const chart = (veh as any)?.kind === 'associate' ? GP_ENTITY_CHART : DEFAULT_CHART
+
+  // Additive/idempotent: seed the full chart on first run, and on later runs
+  // backfill any accounts the vehicle is missing (e.g. a newly-added standard
+  // account). Never touches existing rows or custom accounts.
   const { data: existing } = await admin
     .from('chart_of_accounts' as any)
     .select('code')
     .eq('fund_id', gate.fundId)
     .eq('vehicle_id', vehicleId)
   const have = new Set(((existing as any[]) ?? []).map(r => r.code as string))
-  const missing = DEFAULT_CHART.filter(a => !have.has(a.code))
+  const missing = chart.filter(a => !have.has(a.code))
   if (missing.length === 0) return NextResponse.json({ seeded: 0, message: 'Chart already up to date' })
 
   const rows = missing.map(a => ({ fund_id: gate.fundId, portfolio_group: group, vehicle_id: vehicleId, code: a.code, name: a.name, type: a.type, subtype: a.subtype ?? null }))

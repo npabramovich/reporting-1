@@ -69,8 +69,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, posted: txnIds.length })
   }
 
-  if (!id || !['post', 'ignore', 'setAccount', 'unpost'].includes(action)) {
-    return NextResponse.json({ error: 'action (post|ignore|setAccount|unpost) and id are required' }, { status: 400 })
+  if (!id || !['post', 'ignore', 'setAccount', 'unpost', 'restore'].includes(action)) {
+    return NextResponse.json({ error: 'action (post|ignore|setAccount|unpost|restore) and id are required' }, { status: 400 })
   }
 
   const { data: txn } = await admin
@@ -129,6 +129,24 @@ export async function POST(req: NextRequest) {
       }
       const { error } = await admin.from('journal_entries' as any).update({ status: 'draft', posted_at: null }).eq('id', entryId).eq('fund_id', gate.fundId)
       if (error) return dbError(error, 'bank-unpost-entry')
+    }
+    await admin.from('bank_transactions' as any).update({ status: 'drafted' }).eq('id', id).eq('fund_id', gate.fundId)
+    return NextResponse.json({ ok: true, status: 'drafted' })
+  }
+
+  // Restore: bring an ignored transaction back to draft (un-void its entry) so it
+  // can be edited/posted again. Refused if the entry is in a closed period.
+  if (action === 'restore') {
+    if ((txn as any).status !== 'ignored') return NextResponse.json({ error: 'Only an ignored transaction can be restored' }, { status: 400 })
+    if (entryId) {
+      const { data: entry } = await admin.from('journal_entries' as any).select('entry_date').eq('id', entryId).eq('fund_id', gate.fundId).maybeSingle()
+      const date = (entry as any)?.entry_date
+      if (date) {
+        const closed = await closedPeriodRanges(admin, gate.fundId, group)
+        if (dateInAnyClosedPeriod(closed, date)) return NextResponse.json({ error: 'That entry is in a closed period — reopen it to edit.' }, { status: 400 })
+      }
+      const { error } = await admin.from('journal_entries' as any).update({ status: 'draft', posted_at: null }).eq('id', entryId).eq('fund_id', gate.fundId)
+      if (error) return dbError(error, 'bank-restore-entry')
     }
     await admin.from('bank_transactions' as any).update({ status: 'drafted' }).eq('id', id).eq('fund_id', gate.fundId)
     return NextResponse.json({ ok: true, status: 'drafted' })

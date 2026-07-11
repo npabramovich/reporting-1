@@ -8,7 +8,7 @@
 //   outstanding = commitment − funded   (commitment still to be paid in)
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { loadPostedLedger, loadOwnership, loadEntityNames } from './load'
+import { loadPostedLedger, loadOwnership, loadEntityNames, loadEntityClasses } from './load'
 import { accountIdByCode, ensureCapitalAccounts, persistEntry } from './persist'
 import { computeCapitalAccounts, type CapitalAccount } from './capital-account'
 import { buildCapitalCallIssuanceEntry } from './entries'
@@ -190,6 +190,7 @@ export async function listCapitalCalls(
 export interface LpCapitalRow {
   lpEntityId: string
   name: string
+  partnerClass: string
   commitment: number
   called: number
   funded: number
@@ -204,10 +205,11 @@ export async function lpCapitalSummary(
   fundId: string,
   group: string
 ): Promise<LpCapitalRow[]> {
-  const [{ capitalPostings }, owners, names, receivableByLp] = await Promise.all([
+  const [{ capitalPostings }, owners, names, classes, receivableByLp] = await Promise.all([
     loadPostedLedger(admin, fundId, group),
     loadOwnership(admin, fundId, group),
     loadEntityNames(admin, fundId, group),
+    loadEntityClasses(admin, fundId, group),
     lpReceivableBalances(admin, fundId, group),
   ])
   const commitmentByLp = new Map(owners.map(o => [o.lpEntityId, o.commitment]))
@@ -229,6 +231,7 @@ export async function lpCapitalSummary(
     return {
       lpEntityId,
       name: names.get(lpEntityId) ?? lpEntityId,
+      partnerClass: classes.get(lpEntityId) ?? 'lp',
       commitment,
       called,
       funded,

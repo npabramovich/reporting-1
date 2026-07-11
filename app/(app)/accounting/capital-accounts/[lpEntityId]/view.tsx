@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 
-interface Row { lpEntityId: string; name: string; commitment: number; called: number; funded: number; outstanding: number; receivable: number; ending: number }
+interface Row { lpEntityId: string; name: string; partnerClass: string; commitment: number; called: number; funded: number; outstanding: number; receivable: number; ending: number }
 interface RollForward { beginning: number; contributions: number; distributions: number; managementFees: number; expenses: number; gains: number; other: number; ending: number }
 interface Txn { date: string; memo: string | null; sourceType: string | null; amount: number; balance: number }
 interface Statement { row: Row; rollForward: RollForward; transactions: Txn[] }
@@ -51,7 +51,7 @@ export function LpStatementView({ lpEntityId }: { lpEntityId: string }) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-medium">{row.name}</h2>
+      <h2 className="text-lg font-medium">{row.name}{row.partnerClass === 'gp' && <span className="ml-2 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground align-middle">GP</span>}</h2>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {cards.map(c => (

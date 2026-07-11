@@ -22,6 +22,9 @@ export const DEFAULT_CHART: ChartAccountSeed[] = [
   // Liabilities
   { code: '2000', name: 'Accrued expenses', type: 'liability', subtype: 'accrued' },
   { code: '2100', name: 'Due to GP', type: 'liability', subtype: 'due_to_gp' },
+  // Bridge/subscription line or other borrowing used to fund investments ahead of
+  // capital calls; repaid as contributions arrive.
+  { code: '2200', name: 'Loan payable', type: 'liability', subtype: 'loan_payable' },
 
   // Equity — the GP account; per-LP capital accounts are added with lp_entity_id.
   { code: '3000', name: "Partners' capital — GP", type: 'equity', subtype: 'gp_capital' },
@@ -41,6 +44,33 @@ export const DEFAULT_CHART: ChartAccountSeed[] = [
   { code: '5100', name: 'Partnership expenses', type: 'expense', subtype: 'partnership_expense' },
   { code: '5200', name: 'Organizational expenses', type: 'expense', subtype: 'organizational_expense' },
   { code: '5300', name: 'Interest expense', type: 'expense', subtype: 'interest_expense' },
+]
+
+/**
+ * Starter chart for a GP / associate entity's own books (a separate vehicle from
+ * the fund). Its stake in the fund is an asset carried at capital-account value
+ * (equity method); its equity is members' capital; income is carry + its share
+ * of fund earnings. Reconciles to the GP's capital account on the fund's books.
+ */
+export const GP_ENTITY_CHART: ChartAccountSeed[] = [
+  // Assets
+  { code: '1000', name: 'Cash', type: 'asset', subtype: 'cash' },
+  { code: '1500', name: 'Investment in Fund', type: 'asset', subtype: 'investment_in_fund' },
+  { code: '1600', name: 'Carried interest receivable', type: 'asset', subtype: 'carry_receivable' },
+
+  // Liabilities
+  { code: '2000', name: 'Accrued expenses', type: 'liability', subtype: 'accrued' },
+
+  // Equity
+  { code: '3000', name: "Members' capital", type: 'equity', subtype: 'members_capital' },
+
+  // Income
+  { code: '4000', name: 'Carried interest income', type: 'income', subtype: 'carried_interest' },
+  { code: '4100', name: 'Equity in earnings of Fund', type: 'income', subtype: 'equity_method' },
+  { code: '4200', name: 'Management fee income', type: 'income', subtype: 'management_fee_income' },
+
+  // Expenses
+  { code: '5000', name: 'Operating expenses', type: 'expense', subtype: 'operating_expense' },
 ]
 
 /** The per-LP capital account code for an entity, e.g. 3100-<entity>. */

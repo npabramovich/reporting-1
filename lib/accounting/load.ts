@@ -96,6 +96,25 @@ export async function loadEntityNames(
   return out
 }
 
+/** entity_id → partner class ('lp' | 'gp') for the entities in this vehicle. */
+export async function loadEntityClasses(
+  admin: SupabaseClient,
+  fundId: string,
+  group: string
+): Promise<Map<string, string>> {
+  const { data: inv } = await admin
+    .from('lp_investments' as any)
+    .select('entity_id')
+    .eq('fund_id', fundId)
+    .eq('portfolio_group', group)
+  const ids = Array.from(new Set(((inv as any[]) ?? []).map(r => r.entity_id)))
+  const out = new Map<string, string>()
+  if (ids.length === 0) return out
+  const { data } = await admin.from('lp_entities' as any).select('id, partner_class').in('id', ids)
+  for (const e of ((data as any[]) ?? [])) out.set(e.id, (e.partner_class as string) ?? 'lp')
+  return out
+}
+
 /**
  * Committed capital per LP entity in this vehicle — the pro-rata basis for the
  * allocation engine and opening balances.
