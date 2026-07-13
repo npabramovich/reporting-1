@@ -54,6 +54,20 @@ export async function GET() {
     }
   }
 
+  // Read on its own, tolerating a missing column. `affinity_mcp_enabled` ships in the
+  // Affinity migration, which a given deployment may not have run yet — and one absent
+  // column in the SELECT above would fail the whole query and take the entire settings
+  // page down with it.
+  let affinityMcpEnabled = false
+  try {
+    const { data: aff } = await (admin as any)
+      .from('fund_settings')
+      .select('affinity_mcp_enabled')
+      .eq('fund_id', membership.fund_id)
+      .maybeSingle()
+    affinityMcpEnabled = !!aff?.affinity_mcp_enabled
+  } catch { /* migration not applied — the feature is simply off */ }
+
   return NextResponse.json({
     fundId: fund?.id,
     fundName: fund?.name,
@@ -112,6 +126,7 @@ export async function GET() {
     routingConfidenceThreshold: settings?.routing_confidence_threshold ?? null,
     routingModel: settings?.routing_model ?? null,
     lpPortalEnabled: settings?.lp_portal_enabled ?? false,
+    affinityMcpEnabled,
     displayName: membership.display_name ?? '',
     isAdmin: membership.role === 'admin',
     userId: user.id,
@@ -140,7 +155,7 @@ export async function PATCH(req: NextRequest) {
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 404 })
 
   const body = await req.json()
-  const { fundName, fundLogo, fundAddress, postmarkInboundAddress, claudeApiKey, claudeModel, retainResolvedReviews, resolvedReviewsTtlDays, googleClientId, googleClientSecret, aiSummaryPrompt, displayName, outboundEmailProvider, asksEmailProvider, approvalEmailSubject, approvalEmailBody, systemEmailFromName, systemEmailFromAddress, resendApiKey, postmarkServerToken, inboundEmailProvider, mailgunInboundDomain, mailgunSigningKey, mailgunApiKey, mailgunSendingDomain, fileStorageProvider, dropboxAppKey, dropboxAppSecret, openaiApiKey, openaiModel, defaultAIProvider, geminiApiKey, geminiModel, ollamaBaseUrl, ollamaModel, openrouterApiKey, openrouterModel, openrouterBaseUrl, analyticsFathomSiteId, analyticsGaMeasurementId, analyticsCustomHeadScript, currency, disableUserTracking, featureVisibility, dealThesis, dealScreeningPrompt, dealIntakeEnabled, routingConfidenceThreshold, routingModel, lpPortalEnabled } = body
+  const { fundName, fundLogo, fundAddress, postmarkInboundAddress, claudeApiKey, claudeModel, retainResolvedReviews, resolvedReviewsTtlDays, googleClientId, googleClientSecret, aiSummaryPrompt, displayName, outboundEmailProvider, asksEmailProvider, approvalEmailSubject, approvalEmailBody, systemEmailFromName, systemEmailFromAddress, resendApiKey, postmarkServerToken, inboundEmailProvider, mailgunInboundDomain, mailgunSigningKey, mailgunApiKey, mailgunSendingDomain, fileStorageProvider, dropboxAppKey, dropboxAppSecret, openaiApiKey, openaiModel, defaultAIProvider, geminiApiKey, geminiModel, ollamaBaseUrl, ollamaModel, openrouterApiKey, openrouterModel, openrouterBaseUrl, analyticsFathomSiteId, analyticsGaMeasurementId, analyticsCustomHeadScript, currency, disableUserTracking, featureVisibility, dealThesis, dealScreeningPrompt, dealIntakeEnabled, routingConfidenceThreshold, routingModel, lpPortalEnabled, affinityMcpEnabled } = body
 
   // Update display name on fund_members (any user can do this)
   if (displayName !== undefined) {
@@ -166,7 +181,7 @@ export async function PATCH(req: NextRequest) {
     disableUserTracking !== undefined || featureVisibility !== undefined ||
     dealThesis !== undefined || dealScreeningPrompt !== undefined ||
     dealIntakeEnabled !== undefined || routingConfidenceThreshold !== undefined ||
-    routingModel !== undefined || lpPortalEnabled !== undefined
+    routingModel !== undefined || lpPortalEnabled !== undefined || affinityMcpEnabled !== undefined
 
   if (hasAdminFields && membership.role !== 'admin') {
     return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
@@ -577,6 +592,13 @@ export async function PATCH(req: NextRequest) {
   }
   if (lpPortalEnabled !== undefined) {
     settingsUpdates.lp_portal_enabled = !!lpPortalEnabled
+  }
+  // Which Affinity transport the diligence assistant uses: Affinity's hosted MCP server
+  // (richer, live) or this app's three REST tools. Fund-wide, because it changes what
+  // every member's assistant can reach — but each member still authenticates with their
+  // OWN key, so nobody sees CRM records they couldn't open in Affinity themselves.
+  if (affinityMcpEnabled !== undefined) {
+    settingsUpdates.affinity_mcp_enabled = !!affinityMcpEnabled
   }
 
   // Update feature visibility

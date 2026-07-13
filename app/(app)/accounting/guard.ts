@@ -4,11 +4,15 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
  * Server-side gate for the Accounting section. The sidebar visibility flag is
- * cosmetic — hidden features are still reachable by URL — so every accounting
- * page and /api/accounting route must enforce admin access here. Resolves the
- * caller's fund or redirects away for non-admins.
+ * cosmetic — hidden features are still reachable by URL — so every accounting page
+ * enforces access here. Resolves the caller's fund or redirects away.
+ *
+ * `viewer` is admitted alongside `admin`: that's the read-only demo role, and the
+ * demo needs to SHOW the books. It cannot change them — every accounting write still
+ * goes through `assertAdminAccess`, which rejects `viewer`. A plain `member` is still
+ * turned away, matching the section's admin-only posture for real funds.
  */
-export async function requireAccountingAdmin(): Promise<{ fundId: string }> {
+export async function requireAccountingAccess(): Promise<{ fundId: string; role: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth')
@@ -21,7 +25,8 @@ export async function requireAccountingAdmin(): Promise<{ fundId: string }> {
     .maybeSingle()
 
   if (!membership) redirect('/dashboard')
-  if ((membership as { role: string }).role !== 'admin') redirect('/dashboard')
+  const role = (membership as { role: string }).role
+  if (role !== 'admin' && role !== 'viewer') redirect('/dashboard')
 
-  return { fundId: (membership as { fund_id: string }).fund_id }
+  return { fundId: (membership as { fund_id: string }).fund_id, role }
 }

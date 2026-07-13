@@ -278,18 +278,22 @@ export function scheduleOfInvestments(
       .reduce((s, row) => s + row.balance, 0)
   )
   const ledgerCost = balOf('investment')
-  const ledgerFairValue = r(ledgerCost + balOf('unrealized'))
+  // A position's carrying value is cost + the mark + the rate move. Leaving FX out here
+  // would make every non-USD position look like it fails its tie-out.
+  const ledgerFairValue = r(ledgerCost + balOf('unrealized') + balOf('fx_translation'))
 
-  // Per-company ledger balances, from the 1100-<id> / 1200-<id> accounts. This is what
-  // makes the tie-out meaningful per position: with a single aggregate account, one
-  // company overstated and another understated by the same amount still "ties".
-  const byCompany = new Map<string, { cost: number; unrealized: number }>()
+  // Per-company ledger balances, from the 1100-<id> / 1200-<id> / 1250-<id> accounts.
+  // This is what makes the tie-out meaningful per position: with a single aggregate
+  // account, one company overstated and another understated by the same amount still
+  // "ties".
+  const byCompany = new Map<string, { cost: number; unrealized: number; fx: number }>()
   for (const row of tb.rows) {
     const a = accounts.find(x => x.id === row.accountId)
     if (!a?.companyId || a.type !== 'asset') continue
-    const cur = byCompany.get(a.companyId) ?? { cost: 0, unrealized: 0 }
+    const cur = byCompany.get(a.companyId) ?? { cost: 0, unrealized: 0, fx: 0 }
     if (a.subtype === 'investment') cur.cost = r(cur.cost + row.balance)
     if (a.subtype === 'unrealized') cur.unrealized = r(cur.unrealized + row.balance)
+    if (a.subtype === 'fx_translation') cur.fx = r(cur.fx + row.balance)
     byCompany.set(a.companyId, cur)
   }
   const hasPerCompany = byCompany.size > 0
@@ -299,7 +303,7 @@ export function scheduleOfInvestments(
     ? positions.map(p => {
       const l = p.companyId ? byCompany.get(p.companyId) : undefined
       const lc = l ? l.cost : undefined
-      const lfv = l ? r(l.cost + l.unrealized) : undefined
+      const lfv = l ? r(l.cost + l.unrealized + l.fx) : undefined
       return {
         ...p,
         pctOfNetAssets: netAssets ? r(p.fairValue / netAssets) : 0,

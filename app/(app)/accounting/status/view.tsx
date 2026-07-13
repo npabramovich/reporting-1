@@ -6,7 +6,6 @@ import { Loader2, Check, AlertTriangle, Ban, Info, ChevronRight, SlidersHorizont
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 import { AccountingSetup } from '../setup'
-import { ReconciliationPanel } from './reconciliation-panel'
 import { AssistantPanel } from './assistant-panel'
 
 interface Issue { level: 'blocker' | 'warning' | 'info'; title: string; detail: string; href?: string; action?: string }
@@ -183,22 +182,6 @@ export function StatusView() {
           <AssistantPanel />
         </div>
       </div>
-
-      {/* Reconciling against an incumbent admin's statement is a validation exercise —
-          a takeover check and a parallel-run control, not a monthly step. It belongs
-          here rather than as its own nav item. Collapsed by default. */}
-      <details className="group border rounded-lg">
-        <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium">
-          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
-          Reconcile against an admin statement
-          <span className="ml-1 text-xs font-normal text-muted-foreground">
-            prove the ledger reproduces the fund admin&rsquo;s numbers, per partner, per line
-          </span>
-        </summary>
-        <div className="border-t p-3">
-          <ReconciliationPanel />
-        </div>
-      </details>
 
     </div>
   )

@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Plus, FileText, Check, AlertTriangle, PhoneCall } from 'lucide-react'
+import { Loader2, Plus, FileText, Check, AlertTriangle, PhoneCall, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 import { PERIOD_PRESETS, type PeriodPreset } from '@/lib/accounting/statement-period'
+import { ReconciliationPanel } from './reconciliation-panel'
 
 interface Account {
   beginning: number
@@ -18,6 +19,7 @@ interface Account {
   operatingIncome: number
   realizedGains: number
   unrealizedGains: number
+  fxTranslation: number
   transfers: number
   carriedInterest: number
   unclassified: number
@@ -57,6 +59,9 @@ const COLUMNS: { key: keyof Account; label: string }[] = [
   { key: 'operatingIncome', label: 'Operating income' },
   { key: 'realizedGains', label: 'Net realized G/(L)' },
   { key: 'unrealizedGains', label: 'Net unrealized G/(L)' },
+  // A currency swing is not investment performance — its own column, so a partner can
+  // see how the portfolio did apart from what the exchange rate did to it.
+  { key: 'fxTranslation', label: 'FX translation' },
   { key: 'transfers', label: 'Transfers' },
   { key: 'carriedInterest', label: 'Carry accrued' },
   { key: 'unclassified', label: 'Unclassified' },
@@ -430,6 +435,27 @@ export function CapitalAccountsView() {
           </div>
         </div>
       )}
+
+      {/* Reconciling against the incumbent administrator's statement compares one
+          partner's capital account, line by line — so it belongs with the capital
+          accounts, not on Admin.
+
+          It is a CUTOVER check, not a monthly step: it proves this ledger reproduces
+          the numbers the outgoing admin produced. Once you are closing periods here,
+          the ledger IS the record and there is nothing external left to reconcile
+          against. Hence collapsed, and last. */}
+      <details className="group border rounded-lg mt-6">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium">
+          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
+          Tie out to an administrator&rsquo;s statement
+          <span className="ml-1 text-xs font-normal text-muted-foreground">
+            a takeover check — prove these accounts reproduce theirs, per partner, per line
+          </span>
+        </summary>
+        <div className="border-t p-3">
+          <ReconciliationPanel />
+        </div>
+      </details>
     </div>
   )
 }

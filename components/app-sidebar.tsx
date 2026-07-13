@@ -70,7 +70,10 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
-    href: '/accounting', label: 'Accounting', icon: BookOpen, featureKey: 'accounting', adminOnly: true,
+    // No `adminOnly` — the featureKey already gates it (defaults to 'off', and a fund
+    // that turns it on to 'admin' still only shows it to admins). Hard-coding adminOnly
+    // on top of that also hid it from the read-only demo viewer, who should see the books.
+    href: '/accounting', label: 'Accounting', icon: BookOpen, featureKey: 'accounting',
     children: ACCOUNTING_SECTIONS.map(({ href, label }) => ({ href, label })),
   },
   { href: '/usage', label: 'Usage', icon: Users, adminOnly: true },

@@ -24,6 +24,8 @@ import { accountBalances } from './ledger'
 import { listVehicles } from './load'
 import type { SupabaseClient as _Sb } from '@supabase/supabase-js'
 import type { JournalEntry, Posting } from './types'
+import { PORTFOLIO_TOOL_MANIFEST } from '@/lib/agent/portfolio-tools-manifest'
+import { PORTFOLIO_HANDLERS } from '@/lib/agent/portfolio-tools'
 
 export interface AgentToolContext {
   admin: SupabaseClient
@@ -171,16 +173,38 @@ const HANDLERS: Record<string, AgentToolHandler> = {
 
 const VEHICLE_PROP = { type: 'string', description: 'vehicle (portfolio_group); optional when the fund has a single vehicle' }
 
-export const AGENT_TOOLS: AgentTool[] = AGENT_TOOL_MANIFEST.map(meta => {
-  const handler = HANDLERS[meta.name]
-  if (!handler) throw new Error(`No handler for agent tool ${meta.name}`)
-  // Every tool operates on one vehicle — advertise the `vehicle` argument.
-  const inputSchema = { ...meta.inputSchema, properties: { ...(meta.inputSchema.properties ?? {}), vehicle: VEHICLE_PROP } }
-  return { ...meta, inputSchema, handler }
-})
+/**
+ * The whole tool surface: the ledger tools plus the portfolio tools. One registry, so
+ * MCP and REST expose the same thing and an agent can move between "what does the fund
+ * own" and "what do the books say" without changing endpoints.
+ *
+ * The two domains are dispatched differently. A ledger tool operates on ONE set of
+ * books, so the caller must land on exactly one vehicle and we advertise `vehicle` as
+ * that scope. A portfolio tool is fund-wide — a company can sit in several vehicles —
+ * so `vehicle` is an optional filter it declares itself, and forcing it to pick one
+ * would make "list every company" impossible on a multi-vehicle fund.
+ */
+export const AGENT_TOOLS: AgentTool[] = [
+  ...AGENT_TOOL_MANIFEST.map(meta => {
+    const handler = HANDLERS[meta.name]
+    if (!handler) throw new Error(`No handler for agent tool ${meta.name}`)
+    const inputSchema = { ...meta.inputSchema, properties: { ...(meta.inputSchema.properties ?? {}), vehicle: VEHICLE_PROP } }
+    return { ...meta, domain: 'ledger' as const, inputSchema, handler }
+  }),
+  ...PORTFOLIO_TOOL_MANIFEST.map(meta => {
+    const handler = PORTFOLIO_HANDLERS[meta.name]
+    if (!handler) throw new Error(`No handler for agent tool ${meta.name}`)
+    return { ...meta, domain: 'portfolio' as const, handler }
+  }),
+]
 
 export function getTool(name: string): AgentTool | undefined {
   return AGENT_TOOLS.find(t => t.name === name)
+}
+
+/** Ledger tools are scoped to a vehicle; portfolio tools are scoped to the fund. */
+export function isLedgerTool(tool: AgentToolMeta): boolean {
+  return (tool.domain ?? 'ledger') === 'ledger'
 }
 
 /**
@@ -194,4 +218,19 @@ export async function resolveVehicle(admin: _Sb, fundId: string, requested?: str
   if (vehicles.length === 1) return vehicles[0]
   if (vehicles.length === 0) throw new Error('No vehicles found for this fund')
   throw new Error(`Specify a vehicle — this fund has several: ${vehicles.join(', ')}`)
+}
+
+/**
+ * The vehicle a tool call runs against. Portfolio tools get an empty string: they never
+ * read `ctx.portfolioGroup` (they take `vehicle` from their own input as a filter), and
+ * making them resolve one would throw on any fund with more than one vehicle.
+ */
+export async function resolveVehicleForTool(
+  tool: AgentToolMeta,
+  admin: _Sb,
+  fundId: string,
+  requested?: string
+): Promise<string> {
+  if (!isLedgerTool(tool)) return ''
+  return resolveVehicle(admin, fundId, requested)
 }

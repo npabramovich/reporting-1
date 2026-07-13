@@ -20,25 +20,25 @@ export const ACCOUNTING_SECTIONS: AccountingSection[] = [
     href: '/accounting/status',
     label: 'Admin',
     icon: Gauge,
-    desc: 'Where the books stand — onboarding, how far the close has got, and what needs attention — plus the AI assistant and reconciliation against an admin statement.',
+    desc: 'Current status and admin settings.',
   },
   {
     href: '/accounting/bank',
     label: 'Bank transactions',
     icon: Landmark,
-    desc: 'Import a transaction feed (CSV, Ramp, QuickBooks), auto-draft entries, and reconcile ledger cash against the bank.',
+    desc: 'Import a transaction feed (XLSX, CSV, Ramp, QuickBooks), auto-draft entries, and create journal entries.',
   },
   {
     href: '/accounting/capital-accounts',
     label: 'Capital accounts',
     icon: Users,
-    desc: "Per-partner roll-forward and commitments in one place: beginning → contributions → fees → gains → ending, with called and unfunded alongside. Issue capital calls and publish LP statements from here.",
+    desc: "Per-partner roll-forward and commitments, plus called and unfunded. Issue capital calls and publish LP capital statements.",
   },
   {
     href: '/accounting/journal',
     label: 'Journal',
     icon: ScrollText,
-    desc: 'The book of record, as plain-text double-entry. Create entries, and click any entry to view, unpost, or edit it.',
+    desc: 'Plain-text double-entry journal entries. Create, view, unpost, and edit all journal entries.',
   },
   // NOTE: /accounting/opening-balances is deliberately NOT listed. It only applies to
   // the "cutover" onboarding path, and is linked from the setup card there. On a
@@ -58,12 +58,12 @@ export const ACCOUNTING_SECTIONS: AccountingSection[] = [
     href: '/accounting/schedule-of-investments',
     label: 'Schedule of investments',
     icon: Layers,
-    desc: 'Each investment at cost and fair value, with its share of net assets — derived from the ledger.',
+    desc: 'Each investment at cost and fair value, with its share of net assets.',
   },
   {
     href: '/accounting/statements',
     label: 'Financial statements',
     icon: FileText,
-    desc: 'Balance sheet, income statement, and statement of changes in partners’ capital.',
+    desc: 'Balance sheet, income statement, statement of cash flows, and statement of changes in partners capital.',
   },
 ]

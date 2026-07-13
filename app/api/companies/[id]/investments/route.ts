@@ -7,6 +7,7 @@ import { logActivity } from '@/lib/activity'
 import type { InvestmentTransaction, CompanyStatus } from '@/lib/types/database'
 import type { CompanyInvestmentSummary } from '@/lib/types/investments'
 import { computeSummary } from '@/lib/investments'
+import { draftEntryForTransaction } from '@/lib/accounting/from-portfolio'
 
 // ---------------------------------------------------------------------------
 // GET — all transactions for a company + computed summary
@@ -97,7 +98,7 @@ export async function POST(
   // Verify company exists
   const { data: company } = await admin
     .from('companies')
-    .select('id, fund_id')
+    .select('id, fund_id, name')
     .eq('id', params.id)
     .maybeSingle()
 
@@ -170,5 +171,17 @@ export async function POST(
     transactionType: transaction_type,
   })
 
-  return NextResponse.json(txn)
+  // Mirror it into the ledger as a DRAFT for review. Deliberately after the insert and
+  // deliberately non-fatal: the transaction is saved either way, and `ledger.reason`
+  // says why no entry was drafted (vehicle not on the ledger, a closed period, a
+  // company-wide pricing row with no vehicle to attribute it to).
+  const ledger = await draftEntryForTransaction(
+    admin,
+    company.fund_id,
+    user.id,
+    txn,
+    (company as any).name ?? 'Investment',
+  )
+
+  return NextResponse.json({ ...txn, ledger })
 }

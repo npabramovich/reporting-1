@@ -29,6 +29,7 @@ export type RollForwardBucket =
   | 'operatingIncome'
   | 'realizedGains'
   | 'unrealizedGains'
+  | 'fxTranslation'
   | 'transfers'
   | 'carriedInterest'
   | 'unclassified'
@@ -60,6 +61,10 @@ export function bucketForSourceType(sourceType: string | null | undefined): Roll
     case 'valuation':
     case 'unrealized':
       return 'unrealizedGains'
+    case 'fx_revaluation':
+      // A currency swing is not investment performance. Its own line, so an LP can see
+      // how the portfolio did apart from what the exchange rate did to it.
+      return 'fxTranslation'
     case 'transfer':
       // LP-to-LP assignment/secondary: nets to zero across the fund.
       return 'transfers'
@@ -93,6 +98,7 @@ export interface CapitalAccount {
   operatingIncome: number
   realizedGains: number
   unrealizedGains: number
+  fxTranslation: number
   transfers: number
   carriedInterest: number
   unclassified: number
@@ -108,6 +114,7 @@ export const ACTIVITY_FIELDS: (keyof CapitalAccount)[] = [
   'operatingIncome',
   'realizedGains',
   'unrealizedGains',
+  'fxTranslation',
   'transfers',
   'carriedInterest',
   'unclassified',
@@ -122,6 +129,7 @@ export const CAPITAL_ACCOUNT_LABELS: Record<keyof CapitalAccount, string> = {
   operatingIncome: 'Operating income',
   realizedGains: 'Net realized gain / (loss)',
   unrealizedGains: 'Net unrealized gain / (loss)',
+  fxTranslation: 'Foreign currency translation',
   transfers: 'Transfers',
   carriedInterest: 'Carried interest accrued',
   unclassified: 'Unclassified',
@@ -138,6 +146,7 @@ export function emptyAccount(): CapitalAccount {
     operatingIncome: 0,
     realizedGains: 0,
     unrealizedGains: 0,
+    fxTranslation: 0,
     transfers: 0,
     carriedInterest: 0,
     unclassified: 0,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveFundFromApiKey, authorizeToolUse, type ResolvedKey } from '@/lib/accounting/api-keys'
-import { AGENT_TOOLS, getTool, resolveVehicle, type AgentToolContext } from '@/lib/accounting/agent-tools'
+import { AGENT_TOOLS, getTool, resolveVehicleForTool, type AgentToolContext } from '@/lib/accounting/agent-tools'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -43,7 +43,7 @@ async function handle(rpc: RpcRequest, ctx: BaseCtx, auth: ResolvedKey): Promise
       if (denied) return ok(rpc.id, { content: [{ type: 'text', text: denied }], isError: true })
       try {
         const args = rpc.params?.arguments ?? {}
-        const portfolioGroup = await resolveVehicle(ctx.admin, ctx.fundId, args.vehicle)
+        const portfolioGroup = await resolveVehicleForTool(tool, ctx.admin, ctx.fundId, args.vehicle)
         const result = await tool.handler({ ...ctx, portfolioGroup }, args)
         return ok(rpc.id, { content: [{ type: 'text', text: JSON.stringify(result) }] })
       } catch (e) {

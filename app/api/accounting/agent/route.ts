@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveFundFromApiKey, authorizeToolUse } from '@/lib/accounting/api-keys'
-import { AGENT_TOOLS, getTool, resolveVehicle } from '@/lib/accounting/agent-tools'
+import { AGENT_TOOLS, getTool, resolveVehicleForTool } from '@/lib/accounting/agent-tools'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const input = body?.input ?? {}
-    const portfolioGroup = await resolveVehicle(admin, auth.fundId, input.vehicle)
+    const portfolioGroup = await resolveVehicleForTool(tool, admin, auth.fundId, input.vehicle)
     const result = await tool.handler({ admin, fundId: auth.fundId, portfolioGroup, userId: auth.userId }, input)
     return NextResponse.json({ ok: true, result })
   } catch (e) {

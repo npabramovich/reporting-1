@@ -4,13 +4,23 @@ import { useEffect, useState } from 'react'
 import { Loader2, Copy, Check, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AGENT_TOOL_MANIFEST } from '@/lib/accounting/agent-tools-manifest'
+import { PORTFOLIO_TOOL_MANIFEST } from '@/lib/agent/portfolio-tools-manifest'
+
+// One surface, two domains: the portfolio (what the fund owns and how it's doing) and
+// the ledger (what the books say). Grouped so the list reads as capability, not a
+// flat wall of 28 names.
+const TOOL_GROUPS = [
+  { label: 'Portfolio, companies and performance', tools: PORTFOLIO_TOOL_MANIFEST },
+  { label: 'Ledger and accounting', tools: AGENT_TOOL_MANIFEST },
+]
+const TOOL_COUNT = PORTFOLIO_TOOL_MANIFEST.length + AGENT_TOOL_MANIFEST.length
 
 interface Key { id: string; name: string; key_prefix: string; scopes: string; last_used_at: string | null; revoked_at: string | null; created_at: string }
 
 /**
- * Ledger agent access: the caller's own API keys plus the MCP/REST endpoints an
- * agent connects to. Keys act as their owner — any member's key can read the
- * ledger; only an admin's key can write. Non-admins can mint read-only keys only.
+ * Agent access: the caller's own API keys plus the MCP/REST endpoints an agent connects
+ * to. Keys act as their owner — any member's key can read; only an admin's key can
+ * write. Non-admins can mint read-only keys only.
  */
 export function LedgerAgentAccess({ isAdmin }: { isAdmin: boolean }) {
   const [keys, setKeys] = useState<Key[]>([])
@@ -53,10 +63,16 @@ export function LedgerAgentAccess({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Let AI agents operate the ledger over MCP or REST — authenticated with an API key as a Bearer
-        token. Your keys act as you: {isAdmin
-          ? 'as an admin, your keys can read and write the ledger (post entries, run allocations, reconcile).'
-          : 'your keys can read the ledger (capital accounts, statements, reconcile); writing requires an admin.'}
+        Connect an AI agent (Claude, or anything that speaks MCP) to your fund over MCP or REST,
+        authenticated with an API key as a Bearer token. It can ask what the fund owns, how each
+        company and vehicle is performing, who the LPs are, and what the books say. Your keys act
+        as you: {isAdmin
+          ? 'as an admin, your keys can read everything and write — record investments, post entries, run allocations and closes.'
+          : 'your keys can read the portfolio, performance and the ledger; writing requires an admin.'}
+      </p>
+      <p className="text-[11px] text-muted-foreground">
+        Agent writes to the ledger land as <strong>drafts</strong> for you to review — recording an
+        investment drafts the journal entry it implies rather than posting it.
       </p>
 
       {/* Endpoints */}
@@ -113,15 +129,20 @@ export function LedgerAgentAccess({ isAdmin }: { isAdmin: boolean }) {
       )}
 
       <button onClick={() => setShowTools(v => !v)} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
-        {showTools ? 'Hide' : 'Show'} available tools ({AGENT_TOOL_MANIFEST.length})
+        {showTools ? 'Hide' : 'Show'} available tools ({TOOL_COUNT})
       </button>
       {showTools && (
-        <div className="space-y-1.5">
-          {AGENT_TOOL_MANIFEST.map(t => (
-            <div key={t.name} className="text-sm flex gap-2">
-              <code className="text-xs bg-muted rounded px-1.5 py-0.5 font-mono shrink-0">{t.name}</code>
-              <span className={`text-[10px] uppercase tracking-wider px-1 py-0.5 rounded self-center shrink-0 ${t.scope === 'write' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-muted text-muted-foreground'}`}>{t.scope}</span>
-              <span className="text-muted-foreground text-xs self-center">{t.description}</span>
+        <div className="space-y-4">
+          {TOOL_GROUPS.map(g => (
+            <div key={g.label} className="space-y-1.5">
+              <p className="text-xs font-medium">{g.label} <span className="text-muted-foreground font-normal">({g.tools.length})</span></p>
+              {g.tools.map(t => (
+                <div key={t.name} className="text-sm flex gap-2">
+                  <code className="text-xs bg-muted rounded px-1.5 py-0.5 font-mono shrink-0">{t.name}</code>
+                  <span className={`text-[10px] uppercase tracking-wider px-1 py-0.5 rounded self-center shrink-0 ${t.scope === 'write' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-muted text-muted-foreground'}`}>{t.scope}</span>
+                  <span className="text-muted-foreground text-xs self-center">{t.description}</span>
+                </div>
+              ))}
             </div>
           ))}
         </div>

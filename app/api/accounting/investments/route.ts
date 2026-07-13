@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { assertAdminAccess } from '@/lib/api-helpers'
+import { assertAdminAccess, assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import {
   previewBootstrapInvestments, bootstrapInvestments, markInvestment, ledgerByCompany,
-  previewInvestmentHistory, replayInvestmentHistory,
+  previewInvestmentHistory, replayInvestmentHistory, revalueInvestmentFx,
 } from '@/lib/accounting/investments'
 import { buildSoiPositions, type SoiCompany } from '@/lib/accounting/soi'
 
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const gate = await assertAdminAccess(admin, user.id)
+  const gate = await assertReadAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
   const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
@@ -91,6 +91,24 @@ export async function POST(req: NextRequest) {
     const result = await replayInvestmentHistory(admin, gate.fundId, group, user.id, {
       from: body?.from ?? null,
       force: !!body?.force,
+    })
+    if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 })
+    return NextResponse.json({ ok: true, ...result })
+  }
+
+  // A rate move, not a mark. Books to 1250-<company> / 4300 so a currency swing is never
+  // reported as investment performance.
+  if (body?.action === 'fx') {
+    const result = await revalueInvestmentFx(admin, gate.fundId, group, user.id, {
+      companyId: body?.companyId,
+      companyName: body?.companyName ?? 'Investment',
+      delta: Number(body?.delta),
+      entryDate: body?.entryDate,
+      currency: body?.currency ?? null,
+      priorRate: body?.priorRate ?? null,
+      newRate: body?.newRate ?? null,
+      memo: body?.memo ?? null,
+      status: body?.status === 'draft' ? 'draft' : 'posted',
     })
     if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 })
     return NextResponse.json({ ok: true, ...result })

@@ -7,6 +7,15 @@ export interface AgentToolMeta {
   name: string
   description: string
   scope: 'read' | 'write'
+  /**
+   * `ledger` tools operate on ONE set of books, so the dispatcher resolves a vehicle for
+   * them and injects a `vehicle` argument. `portfolio` tools are fund-scoped — a company
+   * can sit in several vehicles, and "how is the fund doing" spans all of them — so they
+   * take an optional vehicle FILTER instead and must not be forced to pick one.
+   *
+   * Defaults to `ledger` when omitted, which is what every tool in this file is.
+   */
+  domain?: 'ledger' | 'portfolio'
   inputSchema: Record<string, any>
 }
 

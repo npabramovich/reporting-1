@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { seedInboundDeals, DEMO_DEAL_THESIS } from './seed-deals'
 import { seedDiligence } from './seed-diligence'
 import { seedLpSnapshot } from './seed-lps'
+import { seedAccounting } from './seed-accounting'
 
 const DEMO_FUND_NAME = 'Hemrock Ventures'
 
@@ -642,6 +643,7 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
           lp_portal_access: 'everyone',
           lp_portal: 'everyone',
           lp_activity: 'everyone',
+          accounting: 'everyone',
         },
         deal_intake_enabled: true,
         deal_thesis: DEMO_DEAL_THESIS,
@@ -679,6 +681,10 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
     await seedDiligence(admin, existingFund.id, adminUserId)
     await seedLpSnapshot(admin, existingFund.id)
     await seedDemoVehicles(admin, existingFund.id)
+    // After the LPs and the vehicles: the books reference lp_entities (which
+    // seedLpSnapshot just recreated) and fund_vehicles, and replay the investment
+    // transactions re-seeded above.
+    await seedAccounting(admin, existingFund.id, adminUserId)
 
     // Clear and re-seed interactions
     await admin
@@ -784,6 +790,7 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
       lp_portal_access: 'everyone',
       lp_portal: 'everyone',
       lp_activity: 'everyone',
+      accounting: 'everyone',
     },
     deal_intake_enabled: true,
     deal_thesis: DEMO_DEAL_THESIS,
@@ -1000,6 +1007,10 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
       current_share_price: inv.current_share_price ?? null,
       cost_basis_exited: inv.cost_basis_exited ?? null,
       proceeds_received: inv.proceeds_received ?? null,
+      // Without this a fresh demo has no vehicle on any transaction, so the schedule
+      // of investments and the accounting ledger both see an empty portfolio. The
+      // backfill path always wrote it; the create path silently didn't.
+      portfolio_group: inv.portfolio_group ?? null,
     })
   }
 
@@ -1188,6 +1199,12 @@ export async function seedDemoData(adminUserId: string): Promise<boolean> {
   // -------------------------------------------------------------------------
   await seedLpSnapshot(admin, fundId)
   await seedDemoVehicles(admin, fundId)
+
+  // -------------------------------------------------------------------------
+  // Accounting — must come last: it reads lp_entities, fund_vehicles, and the
+  // investment transactions, and rewrites the LP snapshot from the closed ledger.
+  // -------------------------------------------------------------------------
+  await seedAccounting(admin, fundId, adminUserId)
 
   console.log('[demo] Demo data seeded successfully')
   return true

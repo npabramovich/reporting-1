@@ -15,6 +15,7 @@ export const RECON_LINES: (keyof CapitalAccount)[] = [
   'operatingIncome',
   'realizedGains',
   'unrealizedGains',
+  'fxTranslation',
   'transfers',
   'carriedInterest',
   'ending',

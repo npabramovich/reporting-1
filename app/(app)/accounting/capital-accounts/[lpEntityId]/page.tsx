@@ -1,13 +1,13 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { requireAccountingAdmin } from '../../guard'
+import { requireAccountingAccess } from '../../guard'
 import { LpStatementView } from './view'
 
 export const metadata: Metadata = { title: 'LP capital statement' }
 
 export default async function LpStatementPage({ params }: { params: { lpEntityId: string } }) {
-  await requireAccountingAdmin()
+  await requireAccountingAccess()
   return (
     <div className="px-4 md:pl-8 md:pr-4 pt-3 pb-8 w-full">
       <Link href="/accounting/capital-accounts" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-4">

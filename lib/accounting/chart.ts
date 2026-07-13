@@ -17,6 +17,13 @@ export const DEFAULT_CHART: ChartAccountSeed[] = [
   { code: '1000', name: 'Cash', type: 'asset', subtype: 'cash' },
   { code: '1100', name: 'Investments at cost', type: 'asset', subtype: 'investment' },
   { code: '1200', name: 'Unrealized appreciation/(depreciation)', type: 'asset', subtype: 'unrealized' },
+  // A non-USD position moves for two unrelated reasons: the company got more (or less)
+  // valuable, and the currency moved. Blending both into 1200/4200 makes "change in
+  // unrealized appreciation" report investment performance and currency noise as one
+  // number, and no LP can tell which they're looking at. ASC 830 wants them split, so
+  // the rate move gets its own asset and its own income line. Carrying value of a
+  // position is therefore 1100 + 1200 + 1250.
+  { code: '1250', name: 'Foreign currency translation', type: 'asset', subtype: 'fx_translation' },
   { code: '1300', name: 'Due from LPs', type: 'asset', subtype: 'receivable' },
 
   // Liabilities
@@ -38,6 +45,9 @@ export const DEFAULT_CHART: ChartAccountSeed[] = [
   { code: '4000', name: 'Realized gains', type: 'income', subtype: 'realized_gain' },
   { code: '4100', name: 'Interest and dividend income', type: 'income', subtype: 'interest_income' },
   { code: '4200', name: 'Change in unrealized appreciation', type: 'income', subtype: 'unrealized' },
+  // The counterpart to 1250. Kept out of 4200 so the income statement can say how much
+  // of the period's gain was the portfolio and how much was the dollar.
+  { code: '4300', name: 'Foreign currency translation gain/(loss)', type: 'income', subtype: 'fx_translation' },
 
   // Expenses
   { code: '5000', name: 'Management fee', type: 'expense', subtype: 'management_fee' },

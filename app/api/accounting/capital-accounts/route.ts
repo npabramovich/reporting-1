@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { assertAdminAccess } from '@/lib/api-helpers'
+import { assertAdminAccess, assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { loadPostedLedger, loadEntityNames, loadEntityClasses } from '@/lib/accounting/load'
 import { computeCapitalAccounts, totalNav } from '@/lib/accounting/capital-account'
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const gate = await assertAdminAccess(admin, user.id)
+  const gate = await assertReadAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
   const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group

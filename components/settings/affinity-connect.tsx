@@ -28,13 +28,39 @@ export function AffinityConnect() {
   const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The assistant's Affinity transport is a FUND setting, so it rides on /api/settings
+  // rather than the per-user key endpoint, and only an admin may change it.
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [mcpEnabled, setMcpEnabled] = useState(false)
+  const [savingMcp, setSavingMcp] = useState(false)
 
   useEffect(() => {
     fetch('/api/settings/affinity')
       .then(r => r.json())
       .then(setStatus)
       .catch(() => setStatus({ connected: false, affinity_user_email: null, affinity_user_name: null, last_verified_at: null, last_error: null }))
+
+    fetch('/api/settings')
+      .then(r => (r.ok ? r.json() : null))
+      .then(s => {
+        if (!s) return
+        setIsAdmin(!!s.isAdmin)
+        setMcpEnabled(!!s.affinityMcpEnabled)
+      })
+      .catch(() => {})
   }, [])
+
+  async function setMcp(next: boolean) {
+    setSavingMcp(true)
+    setMcpEnabled(next) // optimistic
+    const res = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ affinityMcpEnabled: next }),
+    })
+    if (!res.ok) setMcpEnabled(!next) // roll back rather than lie about the state
+    setSavingMcp(false)
+  }
 
   async function connect() {
     setSaving(true)
@@ -148,6 +174,54 @@ export function AffinityConnect() {
           Generate a key in Affinity under Settings → API. Requires the “Generate an API key”
           permission from your Affinity admin.
         </p>
+
+        {/* How the sync actually behaves. It was doing all of this already and saying none
+            of it, so nobody could tell whether they had to press anything. */}
+        {status.connected && (
+          <div className="rounded-md border bg-muted/30 p-3 space-y-1.5">
+            <p className="text-xs font-medium">How the sync works</p>
+            <ul className="text-xs text-muted-foreground space-y-1 list-disc ml-4">
+              <li>
+                <strong>Link a deal once</strong> to an Affinity organization on the deal&rsquo;s
+                Diligence page. Nothing syncs until you do — the app will not guess which CRM
+                record a deal is.
+              </li>
+              <li>
+                <strong>Then it pulls automatically, hourly</strong>, for every active deal:
+                new notes and attached files land in that deal&rsquo;s data room. Passed and won
+                deals stop syncing.
+              </li>
+              <li>
+                <strong>&ldquo;Import now&rdquo;</strong> on the deal forces an immediate pull if you
+                don&rsquo;t want to wait for the hour.
+              </li>
+            </ul>
+          </div>
+        )}
+
+        {/* The assistant's Affinity transport. This flag existed and was read by the
+            diligence chat, but nothing could ever set it — so the MCP path was dead code. */}
+        {status.connected && isAdmin && (
+          <label className="flex items-start gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={mcpEnabled}
+              onChange={e => setMcp(e.target.checked)}
+              disabled={savingMcp}
+              className="mt-1 h-3.5 w-3.5"
+            />
+            <span>
+              Let the assistant query Affinity live
+              <span className="block text-xs text-muted-foreground">
+                Uses Affinity&rsquo;s hosted MCP server rather than the three built-in REST tools, so
+                the assistant can reach lists, fields and relationship data instead of just notes and
+                files. Fund-wide — but each person still authenticates with their own key, so nobody
+                sees a CRM record they couldn&rsquo;t open in Affinity themselves.
+              </span>
+            </span>
+            {savingMcp && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+          </label>
+        )}
       </CardContent>
     </Card>
   )

@@ -186,16 +186,21 @@ export default function SettingsPage() {
           </Section>
         </AdminSectionContext.Provider>
       )}
+      {/* Per-USER, not per-fund: the Affinity key is the caller's own personal access
+          token and every user needs their own. It sat inside the admin-only block, so
+          non-admins had no way to connect their CRM at all. */}
+      <GroupHeader label="CRM" />
+      <AffinityConnect />
+
       <GroupHeader label="Notes" />
       <NotificationPreferencesSection />
-      {settings.featureVisibility?.accounting !== 'off' && (
-        <>
-          <GroupHeader label="Ledger" />
-          <Section title="Agent access (API keys)">
-            <LedgerAgentAccess isAdmin={settings.isAdmin} />
-          </Section>
-        </>
-      )}
+      {/* No longer gated on the accounting feature: the agent surface now covers the
+          portfolio, companies, performance and LPs as well as the ledger, so a fund with
+          accounting switched off still has most of it. */}
+      <GroupHeader label="AI agents" />
+      <Section title="Agent access (MCP + REST API keys)">
+        <LedgerAgentAccess isAdmin={settings.isAdmin} />
+      </Section>
       {!settings.isAdmin && (
         <AiSummaryPromptReadOnly prompt={settings.aiSummaryPrompt} />
       )}
@@ -272,9 +277,6 @@ export default function SettingsPage() {
 
           <GroupHeader label="Diligence" />
           <MemoAgentSection />
-
-          <GroupHeader label="CRM" />
-          <AffinityConnect />
 
           <GroupHeader label="LP Portal" />
           <LpPortalSection enabled={settings.lpPortalEnabled} onSaved={load} />

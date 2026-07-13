@@ -1,12 +1,21 @@
 // Per-investment ledger accounts, bootstrap, and marks.
 //
-// Each company the vehicle holds gets its own pair of accounts:
+// Each company the vehicle holds gets its own set of accounts:
 //   1100-<companyId8>  Investments at cost — <Company>      (asset, subtype 'investment')
 //   1200-<companyId8>  Unrealized — <Company>               (asset, subtype 'unrealized')
+//   1250-<companyId8>  FX translation — <Company>           (asset, subtype 'fx_translation')
 //
-// `scheduleOfInvestments` already sums every account carrying those subtypes, so the
-// totals are unchanged — but now each position can be tied out, marked, or written
-// off on its own, which the single aggregate line could not do.
+// so a position's carrying value is 1100 + 1200 + 1250.
+//
+// The third account exists because a non-USD position moves for two unrelated reasons.
+// The tracker already separates them (`valuation_change_source` is 'mark' or 'fx', and
+// an FX row carries `fx_value_change`), so the ledger must too — otherwise the income
+// statement's "change in unrealized appreciation" silently blends how the companies
+// performed with how the dollar moved, and the two can even cancel out.
+//
+// `scheduleOfInvestments` sums every account carrying these subtypes, so the totals are
+// unchanged — but each position can now be tied out, marked, revalued for FX, or
+// written off on its own.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadPostedLedger } from './load'
@@ -18,16 +27,20 @@ import type { JournalEntry, Posting } from './types'
 
 const COST_CODE = '1100'
 const UNREALIZED_CODE = '1200'
+const FX_CODE = '1250'
 const CASH_CODE = '1000'
 const UNREALIZED_INCOME_CODE = '4200'
+const FX_INCOME_CODE = '4300'
 
 const short = (id: string) => id.slice(0, 8)
 export const investmentCostCode = (companyId: string) => `${COST_CODE}-${short(companyId)}`
 export const investmentUnrealizedCode = (companyId: string) => `${UNREALIZED_CODE}-${short(companyId)}`
+export const investmentFxCode = (companyId: string) => `${FX_CODE}-${short(companyId)}`
 
 export interface InvestmentAccounts {
   costId: string
   unrealizedId: string
+  fxId: string
 }
 
 /**
@@ -49,14 +62,21 @@ export async function ensureInvestmentAccounts(
     .eq('vehicle_id', vehicleId)
     .not('company_id', 'is', null)
 
+  const assign = (cur: Partial<InvestmentAccounts>, subtype: string, id: string) => {
+    if (subtype === 'investment') cur.costId = id
+    if (subtype === 'unrealized') cur.unrealizedId = id
+    if (subtype === 'fx_translation') cur.fxId = id
+  }
+
   const byCompany = new Map<string, Partial<InvestmentAccounts>>()
   for (const a of ((existing as any[]) ?? [])) {
     const cur = byCompany.get(a.company_id) ?? {}
-    if (a.subtype === 'investment') cur.costId = a.id
-    if (a.subtype === 'unrealized') cur.unrealizedId = a.id
+    assign(cur, a.subtype, a.id)
     byCompany.set(a.company_id, cur)
   }
 
+  // Additive: a company onboarded before FX accounts existed gets its 1250 backfilled
+  // here rather than needing a migration.
   const rows: any[] = []
   for (const c of companies) {
     const cur = byCompany.get(c.id) ?? {}
@@ -74,6 +94,13 @@ export async function ensureInvestmentAccounts(
         type: 'asset', subtype: 'unrealized', company_id: c.id,
       })
     }
+    if (!cur.fxId) {
+      rows.push({
+        fund_id: fundId, portfolio_group: group, vehicle_id: vehicleId,
+        code: investmentFxCode(c.id), name: `FX translation — ${c.name}`,
+        type: 'asset', subtype: 'fx_translation', company_id: c.id,
+      })
+    }
   }
 
   if (rows.length > 0) {
@@ -84,8 +111,7 @@ export async function ensureInvestmentAccounts(
     if (error) throw new Error(error.message)
     for (const a of ((created as any[]) ?? [])) {
       const cur = byCompany.get(a.company_id) ?? {}
-      if (a.subtype === 'investment') cur.costId = a.id
-      if (a.subtype === 'unrealized') cur.unrealizedId = a.id
+      assign(cur, a.subtype, a.id)
       byCompany.set(a.company_id, cur)
     }
   }
@@ -93,7 +119,9 @@ export async function ensureInvestmentAccounts(
   const out = new Map<string, InvestmentAccounts>()
   for (const c of companies) {
     const cur = byCompany.get(c.id)
-    if (cur?.costId && cur?.unrealizedId) out.set(c.id, { costId: cur.costId, unrealizedId: cur.unrealizedId })
+    if (cur?.costId && cur?.unrealizedId && cur?.fxId) {
+      out.set(c.id, { costId: cur.costId, unrealizedId: cur.unrealizedId, fxId: cur.fxId })
+    }
   }
   return out
 }
@@ -105,11 +133,15 @@ export async function ensureInvestmentAccounts(
 export interface CompanyLedger {
   companyId: string
   cost: number
+  /** The mark: what the position did in its OWN currency. */
   unrealized: number
+  /** What the exchange rate did to it. Always 0 for a USD position. */
+  fxTranslation: number
+  /** cost + unrealized + fxTranslation — what the balance sheet carries. */
   carrying: number
 }
 
-/** Ledger cost + unrealized per company, from the per-investment accounts. */
+/** Ledger cost, mark, and FX per company, from the per-investment accounts. */
 export async function ledgerByCompany(
   admin: SupabaseClient,
   fundId: string,
@@ -122,11 +154,15 @@ export async function ledgerByCompany(
   for (const a of accounts) {
     const companyId = (a as any).companyId as string | undefined
     if (!companyId) continue
-    const cur = out.get(companyId) ?? { companyId, cost: 0, unrealized: 0, carrying: 0 }
+    // `unrealized` and `fx_translation` are subtypes on BOTH an asset (1200/1250) and an
+    // income account (4200/4300). Only the asset side is the position's carrying value.
+    if (a.type !== 'asset') continue
+    const cur = out.get(companyId) ?? { companyId, cost: 0, unrealized: 0, fxTranslation: 0, carrying: 0 }
     const amount = roundCents(bal.get(a.id) ?? 0)
     if (a.subtype === 'investment') cur.cost = roundCents(cur.cost + amount)
     if (a.subtype === 'unrealized') cur.unrealized = roundCents(cur.unrealized + amount)
-    cur.carrying = roundCents(cur.cost + cur.unrealized)
+    if (a.subtype === 'fx_translation') cur.fxTranslation = roundCents(cur.fxTranslation + amount)
+    cur.carrying = roundCents(cur.cost + cur.unrealized + cur.fxTranslation)
     out.set(companyId, cur)
   }
   return out
@@ -318,8 +354,10 @@ export interface InvestmentEvent {
   costDelta: number
   /** Change in carrying value on this date. */
   carryingDelta: number
-  /** The mark: carrying change beyond the cost change. */
+  /** The MARK only — the position moving in its own currency. Excludes the rate move. */
   unrealizedDelta: number
+  /** The rate move only. Zero for a USD position. */
+  fxDelta: number
 }
 
 export interface HistoryPreview {
@@ -327,6 +365,7 @@ export interface HistoryPreview {
   dates: string[]
   totalCost: number
   totalUnrealized: number
+  totalFx: number
   warnings: string[]
 }
 
@@ -334,6 +373,28 @@ export interface HistoryPreview {
 function positionsAsOf(txns: any[], companies: SoiCompany[], group: string, date: string): SoiPosition[] {
   const upTo = txns.filter(t => !t.transaction_date || t.transaction_date <= date)
   return buildSoiPositions(upTo, companies, group, new Date(`${date}T00:00:00Z`))
+}
+
+/**
+ * How much of a company's value change on a date was the exchange rate rather than the
+ * company. The tracker stamps `valuation_change_source = 'fx'` on a revaluation row and
+ * puts the fund-currency delta in `fx_value_change`, so this is a lookup, not a guess.
+ *
+ * Legacy rows have a null source and are treated as marks — which is right: they were
+ * booked before FX revaluation existed, so none of them are rate moves.
+ */
+function fxByCompanyDate(txns: any[], group: string): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const t of txns) {
+    if (t.valuation_change_source !== 'fx') continue
+    if (t.portfolio_group && t.portfolio_group !== group) continue
+    if (!t.transaction_date || !t.company_id) continue
+    const delta = Number(t.fx_value_change ?? t.unrealized_value_change ?? 0)
+    if (!delta) continue
+    const key = `${t.company_id}|${t.transaction_date}`
+    out.set(key, roundCents((out.get(key) ?? 0) + delta))
+  }
+  return out
 }
 
 /**
@@ -371,8 +432,11 @@ export async function previewInvestmentHistory(
       .map(t => t.transaction_date as string)
   )).sort()
 
+  const fxMap = fxByCompanyDate(txns, group)
   const events: InvestmentEvent[] = []
-  const prev = new Map<string, { cost: number; carrying: number }>()
+  // `fx` is the CUMULATIVE rate effect carried on the position, so unwinding an exit
+  // reverses exactly what was booked to 1250 rather than an estimate.
+  const prev = new Map<string, { cost: number; carrying: number; fx: number }>()
 
   for (const date of dates) {
     const positions = positionsAsOf(txns, companies, group, date)
@@ -380,9 +444,11 @@ export async function previewInvestmentHistory(
 
     for (const p of positions) {
       seen.add(p.companyId)
-      const before = prev.get(p.companyId) ?? { cost: 0, carrying: 0 }
+      const before = prev.get(p.companyId) ?? { cost: 0, carrying: 0, fx: 0 }
       const costDelta = roundCents(p.cost - before.cost)
       const carryingDelta = roundCents(p.fairValue - before.carrying)
+      // The rate move is known; the mark is what's left once cost and FX are removed.
+      const fxDelta = fxMap.get(`${p.companyId}|${date}`) ?? 0
       if (costDelta !== 0 || carryingDelta !== 0) {
         events.push({
           date,
@@ -390,14 +456,15 @@ export async function previewInvestmentHistory(
           companyName: p.name,
           costDelta,
           carryingDelta,
-          unrealizedDelta: roundCents(carryingDelta - costDelta),
+          unrealizedDelta: roundCents(carryingDelta - costDelta - fxDelta),
+          fxDelta,
         })
       }
-      prev.set(p.companyId, { cost: p.cost, carrying: p.fairValue })
+      prev.set(p.companyId, { cost: p.cost, carrying: p.fairValue, fx: roundCents(before.fx + fxDelta) })
     }
 
     // A position that dropped out entirely (fully exited / written to nothing) has to
-    // be taken off the books, or its cost and mark linger forever.
+    // be taken off the books, or its cost, mark and FX linger forever.
     for (const [companyId, before] of Array.from(prev.entries())) {
       if (seen.has(companyId) || (before.cost === 0 && before.carrying === 0)) continue
       const name = finalPositions.find(p => p.companyId === companyId)?.name ?? 'Investment'
@@ -407,9 +474,10 @@ export async function previewInvestmentHistory(
         companyName: name,
         costDelta: roundCents(-before.cost),
         carryingDelta: roundCents(-before.carrying),
-        unrealizedDelta: roundCents(-(before.carrying - before.cost)),
+        unrealizedDelta: roundCents(-(before.carrying - before.cost - before.fx)),
+        fxDelta: roundCents(-before.fx),
       })
-      prev.set(companyId, { cost: 0, carrying: 0 })
+      prev.set(companyId, { cost: 0, carrying: 0, fx: 0 })
     }
   }
 
@@ -423,7 +491,7 @@ export async function previewInvestmentHistory(
   const bal = accountBalances(postings)
   const existingInvestment = roundCents(
     accounts
-      .filter(a => a.type === 'asset' && (a.subtype === 'investment' || a.subtype === 'unrealized'))
+      .filter(a => a.type === 'asset' && (a.subtype === 'investment' || a.subtype === 'unrealized' || a.subtype === 'fx_translation'))
       .reduce((s, a) => s + (bal.get(a.id) ?? 0), 0)
   )
   if (existingInvestment !== 0) {
@@ -438,14 +506,16 @@ export async function previewInvestmentHistory(
     dates: Array.from(new Set(kept.map(e => e.date))).sort(),
     totalCost: roundCents(kept.reduce((s, e) => s + e.costDelta, 0)),
     totalUnrealized: roundCents(kept.reduce((s, e) => s + e.unrealizedDelta, 0)),
+    totalFx: roundCents(kept.reduce((s, e) => s + e.fxDelta, 0)),
     warnings,
   }
 }
 
 /**
- * Post the tracker's history to the ledger: one purchase entry and one valuation entry
- * per date on which something changed. Each lands on its own date, so the income
- * statement and the close see the gain in the period it belongs to.
+ * Post the tracker's history to the ledger: a purchase entry, a mark entry, and an FX
+ * revaluation entry per date on which each changed. Each lands on its own date, so the
+ * income statement and the close see the gain in the period it belongs to — and the
+ * mark and the rate move stay in separate accounts, so neither can hide the other.
  */
 export async function replayInvestmentHistory(
   admin: SupabaseClient,
@@ -453,7 +523,7 @@ export async function replayInvestmentHistory(
   group: string,
   userId: string | null,
   opts: { from?: string | null; force?: boolean } = {}
-): Promise<{ entries: number; dates: number; cost: number; unrealized: number } | { error: string }> {
+): Promise<{ entries: number; dates: number; cost: number; unrealized: number; fx: number } | { error: string }> {
   const preview = await previewInvestmentHistory(admin, fundId, group, opts)
   if ('error' in preview) return preview
   if (preview.warnings.length > 0 && !opts.force) return { error: preview.warnings.join(' ') }
@@ -467,8 +537,14 @@ export async function replayInvestmentHistory(
   const codes = await accountIdByCode(admin, fundId, group)
   const cashId = codes.get(CASH_CODE)
   const incomeId = codes.get(UNREALIZED_INCOME_CODE)
+  const fxIncomeId = codes.get(FX_INCOME_CODE)
   if (!cashId) return { error: 'Chart is missing account 1000 (Cash)' }
   if (!incomeId) return { error: 'Chart is missing account 4200 (Change in unrealized appreciation)' }
+  // Only demanded when there's actually a rate move to book, so a USD-only fund whose
+  // chart predates FX doesn't get blocked on an account it will never use.
+  if (!fxIncomeId && preview.totalFx !== 0) {
+    return { error: 'Chart is missing account 4300 (Foreign currency translation) — re-sync the chart of accounts' }
+  }
 
   let entries = 0
 
@@ -514,6 +590,28 @@ export async function replayInvestmentHistory(
       if ('error' in result) return { error: `${date}: ${result.error}` }
       entries++
     }
+
+    // FX revaluation — the rate moved, the company didn't. Its own entry, its own
+    // accounts, its own source type, so the close allocates it as a distinct line and
+    // the income statement can report portfolio performance apart from currency.
+    const fxLegs: Posting[] = []
+    for (const e of onDate) {
+      if (e.fxDelta === 0) continue
+      const a = accts.get(e.companyId)
+      if (!a || !fxIncomeId) continue
+      fxLegs.push({ accountId: a.fxId, amount: e.fxDelta, currency: 'USD', lpEntityId: null })
+    }
+    if (fxLegs.length > 0 && fxIncomeId) {
+      const total = roundCents(fxLegs.reduce((s, p) => s + p.amount, 0))
+      fxLegs.push({ accountId: fxIncomeId, amount: roundCents(-total), currency: 'USD', lpEntityId: null })
+      const result = await persistEntry(admin, fundId, group, userId, {
+        fundId, entryDate: date, sourceType: 'fx_revaluation',
+        memo: `Foreign currency revaluation — ${onDate.filter(e => e.fxDelta !== 0).map(e => e.companyName).join(', ')}`,
+        postings: fxLegs,
+      } as JournalEntry, 'posted')
+      if ('error' in result) return { error: `${date}: ${result.error}` }
+      entries++
+    }
   }
 
   return {
@@ -521,6 +619,7 @@ export async function replayInvestmentHistory(
     dates: preview.dates.length,
     cost: preview.totalCost,
     unrealized: preview.totalUnrealized,
+    fx: preview.totalFx,
   }
 }
 
@@ -574,6 +673,79 @@ export async function markInvestment(
   }
 
   const result = await persistEntry(admin, fundId, group, userId, entry, 'posted')
+  if ('error' in result) return { error: result.error }
+  return { entryId: result.entryId, delta }
+}
+
+// ---------------------------------------------------------------------------
+// Revaluing one company for a rate move
+// ---------------------------------------------------------------------------
+
+/**
+ * Book the fund-currency effect of an exchange-rate move on ONE position:
+ *
+ *   Dr/Cr 1250-<company>   delta        Cr/Dr 4300 Foreign currency translation
+ *
+ * Deliberately NOT `markInvestment`. The company did not become more valuable — the
+ * currency moved — and running it through 1200/4200 would report a currency swing as
+ * investment performance. Keeping them apart is what lets the income statement answer
+ * "how did the portfolio do, in its own currency?" separately from "and what did the
+ * dollar do to that?".
+ *
+ * `delta` is the fund-currency change and is the tracker's `fx_value_change`, i.e.
+ * positionValueInLocalCurrency × (newRate − priorRate). Compute it with
+ * `computeFxRevaluation` in lib/fx.ts rather than by hand.
+ */
+export async function revalueInvestmentFx(
+  admin: SupabaseClient,
+  fundId: string,
+  group: string,
+  userId: string | null,
+  opts: {
+    companyId: string
+    companyName: string
+    /** Fund-currency gain (+) or loss (−) caused purely by the rate move. */
+    delta: number
+    entryDate: string
+    /** For the memo — e.g. EUR 1.0850 → 1.1020. */
+    currency?: string | null
+    priorRate?: number | null
+    newRate?: number | null
+    memo?: string | null
+    status?: 'draft' | 'posted'
+  }
+): Promise<{ entryId: string; delta: number } | { error: string }> {
+  if (!opts.entryDate) return { error: 'An entry date is required' }
+  const delta = roundCents(Number(opts.delta))
+  if (!Number.isFinite(delta)) return { error: 'The FX value change must be a number' }
+  if (delta === 0) return { error: 'The rate did not move — nothing to revalue.' }
+
+  const accts = await ensureInvestmentAccounts(admin, fundId, group, [{ id: opts.companyId, name: opts.companyName }])
+  const a = accts.get(opts.companyId)
+  if (!a) return { error: `Could not resolve accounts for ${opts.companyName}` }
+
+  const codes = await accountIdByCode(admin, fundId, group)
+  const fxIncomeId = codes.get(FX_INCOME_CODE)
+  if (!fxIncomeId) {
+    return { error: 'Chart is missing account 4300 (Foreign currency translation) — re-sync the chart of accounts' }
+  }
+
+  const rates = opts.priorRate != null && opts.newRate != null
+    ? ` (${opts.currency ?? 'FX'} ${opts.priorRate} → ${opts.newRate})`
+    : ''
+
+  const entry: JournalEntry = {
+    fundId,
+    entryDate: opts.entryDate,
+    memo: opts.memo || `Foreign currency revaluation — ${opts.companyName}${rates}`,
+    sourceType: 'fx_revaluation',
+    postings: [
+      { accountId: a.fxId, amount: delta, currency: 'USD', lpEntityId: null },
+      { accountId: fxIncomeId, amount: roundCents(-delta), currency: 'USD', lpEntityId: null },
+    ],
+  }
+
+  const result = await persistEntry(admin, fundId, group, userId, entry, opts.status ?? 'posted')
   if ('error' in result) return { error: result.error }
   return { entryId: result.entryId, delta }
 }

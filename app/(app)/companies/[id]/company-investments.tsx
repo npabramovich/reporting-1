@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo, Fragment } from 'react'
-import { DollarSign, Plus, Trash2, Pencil, Loader2, ChevronDown, ChevronRight, Lock } from 'lucide-react'
+import Link from 'next/link'
+import { DollarSign, Plus, Trash2, Pencil, Loader2, ChevronDown, ChevronRight, Lock, FileText, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -103,6 +104,8 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Set when saving a transaction also drafted a journal entry in the ledger.
+  const [ledger, setLedger] = useState<{ kind: string; amount: number; vehicle: string } | null>(null)
   const [showOrigCurrency, setShowOrigCurrency] = useState(false)
   const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10))
 
@@ -336,6 +339,12 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
         return
       }
 
+      // The transaction is saved. If the vehicle keeps books, the API also drafted the
+      // journal entry it implies — say so and link to it, because a draft nobody knows
+      // about is worse than no draft at all.
+      const saved = await res.json().catch(() => null)
+      setLedger(saved?.ledger?.drafted ? saved.ledger : null)
+
       setDialogOpen(false)
       load()
     } catch {
@@ -375,8 +384,36 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
     )
   }
 
+  const LEDGER_KIND_LABEL: Record<string, string> = {
+    investment: 'an investment purchase',
+    valuation: 'a mark to fair value',
+    fx_revaluation: 'a foreign currency revaluation',
+    proceeds: 'an exit',
+  }
+
   return (
     <div className="mt-6">
+      {/* A draft entry nobody knows about is worse than none — it sits in the journal
+          silently changing nothing while the books drift. So say it, and link to it. */}
+      {ledger && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-sm">
+          <FileText className="h-4 w-4 shrink-0 text-blue-700 dark:text-blue-400" />
+          <span>
+            Drafted {LEDGER_KIND_LABEL[ledger.kind] ?? 'a journal entry'} in{' '}
+            <strong>{ledger.vehicle}</strong>&rsquo;s ledger. It is <strong>not posted</strong> until you review it.
+          </span>
+          <Link
+            href="/accounting/journal"
+            className="ml-auto text-xs underline underline-offset-2 hover:text-foreground"
+          >
+            Review the entry
+          </Link>
+          <button onClick={() => setLedger(null)} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-2">
         <button
           onClick={() => setExpanded(!expanded)}

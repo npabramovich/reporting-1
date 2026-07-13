@@ -1,13 +1,13 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ACCOUNTING_SECTIONS } from '@/lib/accounting/nav'
-import { requireAccountingAdmin } from './guard'
+import { requireAccountingAccess } from './guard'
 import { AccountingSetup } from './setup'
 
 export const metadata: Metadata = { title: 'Accounting' }
 
 export default async function AccountingPage() {
-  await requireAccountingAdmin()
+  await requireAccountingAccess()
 
   return (
     <div className="px-4 md:pl-8 md:pr-4 pt-3 pb-8 w-full">

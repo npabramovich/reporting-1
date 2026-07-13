@@ -11,6 +11,9 @@ export const ENTRY_SOURCE_TYPES = [
   'realized_gain',
   'income',
   'valuation',
+  // The rate moved, not the company. Kept apart from `valuation` so the close allocates
+  // it as its own line and it never masquerades as investment performance.
+  'fx_revaluation',
   'opening_balance',
   'manual',
 ]

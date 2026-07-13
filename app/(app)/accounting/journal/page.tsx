@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
-import { requireAccountingAdmin } from '../guard'
+import { requireAccountingAccess } from '../guard'
 import { JournalView } from './view'
 
 export const metadata: Metadata = { title: 'Journal' }
 
 export default async function JournalPage() {
-  await requireAccountingAdmin()
+  await requireAccountingAccess()
   return (
     <div className="px-4 md:pl-8 md:pr-4 pt-3 pb-8 w-full">
       <div className="mb-6 space-y-1">
