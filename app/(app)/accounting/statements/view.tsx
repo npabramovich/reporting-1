@@ -153,18 +153,22 @@ export function StatementsView() {
       ) : !data || data.trialBalance.rows.length === 0 ? (
         <div className="border border-dashed rounded-lg p-8 text-center text-sm text-muted-foreground">No statements yet — the ledger has no posted entries{period?.end ? ` as of ${period.end}` : ''}.</div>
       ) : (
-    <div className="space-y-6">
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div>
-        <h2 className="text-sm font-semibold">Balance sheet</h2>
-        <p className="text-xs text-muted-foreground mb-2">Statement of assets, liabilities and partners&rsquo; capital — {asOfLabel}</p>
-        <table className="w-full text-sm border rounded-lg overflow-hidden">
-          <tbody>
-            <Sec s={data.balanceSheet.assets} />
-            <Sec s={data.balanceSheet.liabilities} />
-            <Sec s={data.balanceSheet.equity} />
-          </tbody>
-        </table>
+    // ASC 946 order: assets & liabilities, then operations, then cash flows, then
+    // changes in partners' capital last — the per-partner detail behind the single
+    // capital line on the balance sheet.
+    <div className="space-y-8">
+      <section>
+        <h2 className="text-sm font-semibold">Statement of assets, liabilities and partners&rsquo; capital</h2>
+        <p className="text-xs text-muted-foreground mb-2">Balance sheet — {asOfLabel}</p>
+        <div className="border rounded-lg overflow-x-auto">
+          <table className="w-full text-sm">
+            <tbody>
+              <Sec s={data.balanceSheet.assets} />
+              <Sec s={data.balanceSheet.liabilities} />
+              <Sec s={data.balanceSheet.equity} />
+            </tbody>
+          </table>
+        </div>
         {/* Only worth saying when it's actionable: unallocated earnings mean the
             per-LP capital accounts understate until the period is closed. */}
         {data.balanceSheet.partnersCapital.unallocatedEarnings !== 0 && (
@@ -178,109 +182,116 @@ export function StatementsView() {
             Does not balance — residual {fmt(data.balanceSheet.check)}.
           </p>
         )}
-      </div>
+      </section>
 
-      <div>
-        <h2 className="text-sm font-semibold">Income statement</h2>
-        <p className="text-xs text-muted-foreground mb-2">Statement of operations — {overLabel}</p>
-        <table className="w-full text-sm border rounded-lg overflow-hidden">
-          <tbody>
-            <Sec s={data.incomeStatement.income} />
-            <Sec s={data.incomeStatement.expenses} />
-            <tr className="border-t font-semibold bg-muted/30">
-              <td className="px-3 py-1.5">Net income</td>
-              <td className="px-3 py-1.5 text-right font-mono">{fmt(data.incomeStatement.netIncome)}</td>
-            </tr>
-          </tbody>
-        </table>
-
+      <section>
+        <h2 className="text-sm font-semibold">Statement of operations</h2>
+        <p className="text-xs text-muted-foreground mb-2">Income statement — {overLabel}</p>
+        <div className="border rounded-lg overflow-x-auto">
+          <table className="w-full text-sm">
+            <tbody>
+              <Sec s={data.incomeStatement.income} />
+              <Sec s={data.incomeStatement.expenses} />
+              <tr className="border-t font-semibold bg-muted/30">
+                <td className="px-3 py-1.5">Net income</td>
+                <td className="px-3 py-1.5 text-right font-mono">{fmt(data.incomeStatement.netIncome)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         {/* A balanced trial balance is the expected state — only worth saying when it isn't. */}
         {!data.trialBalance.balanced && (
-          <p className="text-xs text-amber-600 dark:text-amber-400 mt-4">
+          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
             Trial balance is out of balance — debits {fmt(data.trialBalance.totalDebits)} vs credits {fmt(data.trialBalance.totalCredits)}.
           </p>
         )}
-      </div>
-    </div>
+      </section>
 
-    <div>
-      <h2 className="text-sm font-semibold">Statement of changes in partners&rsquo; capital</h2>
-      <p className="text-xs text-muted-foreground mb-2">{overLabel} — beginning capital is the balance carried into the period</p>
-      <div className="border rounded-lg overflow-x-auto">
-        <table className="w-full text-sm whitespace-nowrap">
-          <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="text-left px-3 py-2 font-medium">Partner</th>
-              {CAP_COLS.map(c => <th key={c.key} className="text-right px-3 py-2 font-medium">{c.label}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {data.changesInPartnersCapital.partners.map(p => (
-              <tr key={p.id} className="border-b last:border-b-0">
-                <td className="px-3 py-2">{p.name}</td>
-                {CAP_COLS.map(c => <td key={c.key} className={`px-3 py-2 text-right font-mono ${c.key === 'ending' ? 'font-semibold' : ''}`}>{fmt(p[c.key] as number)}</td>)}
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t bg-muted/30 font-semibold">
-              <td className="px-3 py-2">Total</td>
-              {CAP_COLS.map(c => <td key={c.key} className="px-3 py-2 text-right font-mono">{fmt(data.changesInPartnersCapital.totals[c.key] as number)}</td>)}
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-
-    {data.cashFlows && (
-      <div>
-        <h2 className="text-sm font-semibold">Statement of cash flows</h2>
-        <p className="text-xs text-muted-foreground mb-2">{overLabel}</p>
-        <table className="w-full max-w-lg text-sm border rounded-lg overflow-hidden">
-          <tbody>
-            <CFSec sec={data.cashFlows.operating} />
-            <CFSec sec={data.cashFlows.financing} />
-            <tr className="border-t font-semibold bg-muted/30">
-              <td className="px-3 py-1.5">Net change in cash</td>
-              <td className="px-3 py-1.5 text-right font-mono">{fmt(data.cashFlows.netChange)}</td>
-            </tr>
-            <tr className="border-t">
-              <td className="px-3 py-1.5 text-muted-foreground">Ending cash</td>
-              <td className="px-3 py-1.5 text-right font-mono">{fmt(data.cashFlows.endingCash)}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        {/* Required by ASC 230: investing/financing that bypassed the bank account.
-            Without it, a loan the lender paid straight to the company looks like a
-            repayment of money that was never borrowed. */}
-        {data.cashFlows.nonCash.length > 0 && (
-          <div className="mt-4 max-w-2xl">
-            <h3 className="text-sm font-medium">Supplemental — non-cash investing and financing activities</h3>
-            <p className="text-xs text-muted-foreground mb-2">
-              Transactions that changed investments, borrowings, or partners&rsquo; capital without moving cash,
-              so they do not appear above.
-            </p>
-            <table className="w-full text-sm border rounded-lg overflow-hidden">
+      {data.cashFlows && (
+        <section>
+          <h2 className="text-sm font-semibold">Statement of cash flows</h2>
+          <p className="text-xs text-muted-foreground mb-2">{overLabel}</p>
+          <div className="border rounded-lg overflow-x-auto">
+            <table className="w-full text-sm">
               <tbody>
-                {data.cashFlows.nonCash.map(n => (
-                  <tr key={n.entryId} className="border-t first:border-t-0">
-                    <td className="px-3 py-1.5">
-                      <span className="font-mono text-xs text-muted-foreground mr-2">{n.date}</span>
-                      {n.description}
-                      <div className="text-[11px] text-muted-foreground mt-0.5">
-                        {n.legs.map(l => `${l.amount > 0 ? 'Dr' : 'Cr'} ${l.name}`).join(' · ')}
-                      </div>
-                    </td>
-                    <td className="px-3 py-1.5 text-right font-mono align-top">{fmt(n.amount)}</td>
-                  </tr>
-                ))}
+                <CFSec sec={data.cashFlows.operating} />
+                <CFSec sec={data.cashFlows.financing} />
+                <tr className="border-t font-semibold bg-muted/30">
+                  <td className="px-3 py-1.5">Net change in cash</td>
+                  <td className="px-3 py-1.5 text-right font-mono">{fmt(data.cashFlows.netChange)}</td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-3 py-1.5 text-muted-foreground">Ending cash</td>
+                  <td className="px-3 py-1.5 text-right font-mono">{fmt(data.cashFlows.endingCash)}</td>
+                </tr>
               </tbody>
             </table>
           </div>
-        )}
-      </div>
-    )}
+
+          {/* Required by ASC 230: investing/financing that bypassed the bank account.
+              Without it, a loan the lender paid straight to the company looks like a
+              repayment of money that was never borrowed. */}
+          {data.cashFlows.nonCash.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-sm font-medium">Supplemental — non-cash investing and financing activities</h3>
+              <p className="text-xs text-muted-foreground mb-2">
+                Transactions that changed investments, borrowings, or partners&rsquo; capital without moving cash,
+                so they do not appear above.
+              </p>
+              <div className="border rounded-lg overflow-x-auto">
+                <table className="w-full text-sm">
+                  <tbody>
+                    {data.cashFlows.nonCash.map(n => (
+                      <tr key={n.entryId} className="border-t first:border-t-0">
+                        <td className="px-3 py-1.5">
+                          <span className="font-mono text-xs text-muted-foreground mr-2">{n.date}</span>
+                          {n.description}
+                          <div className="text-[11px] text-muted-foreground mt-0.5">
+                            {n.legs.map(l => `${l.amount > 0 ? 'Dr' : 'Cr'} ${l.name}`).join(' · ')}
+                          </div>
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono align-top whitespace-nowrap">{fmt(n.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      <section>
+        <h2 className="text-sm font-semibold">Statement of changes in partners&rsquo; capital</h2>
+        <p className="text-xs text-muted-foreground mb-2">
+          {overLabel} — beginning capital is the balance carried into the period; this is the detail behind the
+          single partners&rsquo; capital line on the balance sheet
+        </p>
+        <div className="border rounded-lg overflow-x-auto">
+          <table className="w-full text-sm whitespace-nowrap">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="text-left px-3 py-2 font-medium">Partner</th>
+                {CAP_COLS.map(c => <th key={c.key} className="text-right px-3 py-2 font-medium">{c.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {data.changesInPartnersCapital.partners.map(p => (
+                <tr key={p.id} className="border-b last:border-b-0">
+                  <td className="px-3 py-2">{p.name}</td>
+                  {CAP_COLS.map(c => <td key={c.key} className={`px-3 py-2 text-right font-mono ${c.key === 'ending' ? 'font-semibold' : ''}`}>{fmt(p[c.key] as number)}</td>)}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t bg-muted/30 font-semibold">
+                <td className="px-3 py-2">Total</td>
+                {CAP_COLS.map(c => <td key={c.key} className="px-3 py-2 text-right font-mono">{fmt(data.changesInPartnersCapital.totals[c.key] as number)}</td>)}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
     </div>
       )}
     </div>
