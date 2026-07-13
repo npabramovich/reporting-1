@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { STATUS_OPTIONS, DEFAULT_STATUSES, STATUS_ORDER } from '@/lib/deals/statuses'
 
 interface Deal {
   id: string
@@ -37,18 +38,6 @@ const FIT_BADGE: Record<string, { label: string; cls: string }> = {
   spam: { label: 'Spam', cls: 'bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 line-through' },
 }
 
-const STATUS_OPTIONS: Deal['status'][] = ['new', 'reviewing', 'advancing', 'met', 'diligence', 'invested', 'passed']
-
-/**
- * What the pipeline shows before you touch anything: the deals still needing a
- * decision. `diligence` is already a whole section of its own, and `invested` /
- * `passed` are settled — they'd otherwise pile up and bury the live pitches.
- *
- * The server component applies this same default, so the first paint matches what
- * the filter says rather than flashing every deal and then hiding half of them.
- */
-export const DEFAULT_STATUSES: Deal['status'][] = ['new', 'reviewing', 'advancing', 'met']
-
 const FIT_OPTIONS = ['strong', 'moderate', 'weak', 'out_of_thesis', 'spam']
 const SOURCE_OPTIONS = ['referral', 'cold', 'warm_intro', 'accelerator', 'demo_day', 'event', 'other']
 
@@ -63,16 +52,6 @@ const FIT_ORDER: Record<NonNullable<Deal['thesis_fit_score']>, number> = {
   moderate: 3,
   strong: 4,
 }
-const STATUS_ORDER: Record<Deal['status'], number> = {
-  new: 0,
-  reviewing: 1,
-  advancing: 2,
-  met: 3,
-  diligence: 4,
-  invested: 5,
-  passed: 6,
-}
-
 export function DealsContent({ initialDeals }: { initialDeals: Deal[] }) {
   const fv = useFeatureVisibility()
   const [deals, setDeals] = useState<Deal[]>(initialDeals)

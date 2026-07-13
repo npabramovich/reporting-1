@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { DealsContent, DEFAULT_STATUSES } from './deals-content'
+import { DealsContent } from './deals-content'
+import { DEFAULT_STATUSES } from '@/lib/deals/statuses'
 
 export const metadata: Metadata = { title: 'Deals' }
 
