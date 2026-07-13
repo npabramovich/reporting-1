@@ -1,6 +1,11 @@
-// Shared allocation logic used by both the REST route and the agent tools, so
-// humans and agents drive the exact same code path. Builds (but does not persist)
-// the balanced entry for an allocation action; the caller decides preview vs post.
+// Entry-building for the agent/MCP `allocation` tool. Builds (but does not persist)
+// the balanced entry for an action; the caller decides preview vs post.
+//
+// NOTE — despite the name, these actions no longer ALLOCATE to partners' capital.
+// Booking an expense, fee, gain, or mark posts P&L only; allocation to capital
+// accounts happens in exactly one place, the period close (`./close.ts`). The two
+// used to both allocate, which would have double-counted. Distributions and carry
+// still move capital directly — they are capital movements, not P&L.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadOwnership, loadPostedLedger } from './load'
@@ -16,7 +21,7 @@ import {
   buildPeriodCloseEntry,
   buildRevaluationEntry,
   type CapitalAccountMap,
-  type BridgeAccounts,
+  type PnlAccounts,
 } from './entries'
 import type { JournalEntry } from './types'
 
@@ -74,14 +79,8 @@ export async function buildAllocationEntry(
       return { entry: buildPeriodCloseEntry(base, pnl, need(CODE.bridge)) }
     }
 
-    const owners = await loadOwnership(admin, fundId, group)
-    const entityIds =
-      action === 'distribution' || action === 'carry'
-        ? Object.keys(body.perLp ?? {})
-        : owners.map(o => o.lpEntityId)
-    const capMap: CapitalAccountMap = await ensureCapitalAccounts(admin, fundId, group, entityIds)
-
     if (action === 'management_fee') {
+      const owners = await loadOwnership(admin, fundId, group)
       const overrides = body.overrides ?? {}
       const feeOwners = owners.map(o => ({
         lpEntityId: o.lpEntityId,
@@ -93,19 +92,19 @@ export async function buildAllocationEntry(
         { annualRate: Number(body.annualRate), basis: 'committed', periodFraction: Number(body.periodFraction) },
         feeOwners
       )
-      const accts: BridgeAccounts = { pnlAccountId: need(CODE.mgmtFeeExpense), bridgeAccountId: need(CODE.bridge), offsetAccountId: need(CODE.dueToGp) }
-      return { entry: buildManagementFeeEntry(base, fee, capMap, accts) }
+      const accts: PnlAccounts = { pnlAccountId: need(CODE.mgmtFeeExpense), offsetAccountId: need(CODE.dueToGp) }
+      return { entry: buildManagementFeeEntry(base, fee, accts) }
     }
     if (action === 'expense') {
-      const accts: BridgeAccounts = { pnlAccountId: need(CODE.partnershipExpense), bridgeAccountId: need(CODE.bridge), offsetAccountId: need(CODE.cash) }
-      return { entry: buildExpenseEntry(base, Number(body.amount), owners, capMap, accts) }
+      const accts: PnlAccounts = { pnlAccountId: need(CODE.partnershipExpense), offsetAccountId: need(CODE.cash) }
+      return { entry: buildExpenseEntry(base, Number(body.amount), accts) }
     }
     if (action === 'gain') {
-      const accts: BridgeAccounts = { pnlAccountId: need(CODE.realizedGains), bridgeAccountId: need(CODE.bridge), offsetAccountId: need(CODE.cash) }
-      return { entry: buildGainEntry(base, Number(body.amount), owners, capMap, accts) }
+      const accts: PnlAccounts = { pnlAccountId: need(CODE.realizedGains), offsetAccountId: need(CODE.cash) }
+      return { entry: buildGainEntry(base, Number(body.amount), accts) }
     }
     if (action === 'revalue') {
-      // Mark the investment to a new fair value; book the unrealized change per LP.
+      // Mark the investment to a new fair value. P&L only — the close allocates it.
       const { accounts, postings } = await loadPostedLedger(admin, fundId, group)
       const bal = accountBalances(postings)
       const byCode = new Map(accounts.map(a => [a.code, a.id]))
@@ -116,8 +115,12 @@ export async function buildAllocationEntry(
       )
       const delta = roundCents(Number(body.fairValue) - carrying)
       if (delta === 0) return { error: 'Fair value equals the current carrying value — nothing to revalue' }
-      return { entry: buildRevaluationEntry(base, delta, owners, capMap, { unrealizedAssetId: need(CODE.unrealizedAsset), incomeId: need(CODE.unrealizedIncome), bridgeId: need(CODE.bridge) }) }
+      return { entry: buildRevaluationEntry(base, delta, { unrealizedAssetId: need(CODE.unrealizedAsset), incomeId: need(CODE.unrealizedIncome) }) }
     }
+
+    // Distributions and carry DO move capital directly — they aren't P&L.
+    const capMap: CapitalAccountMap = await ensureCapitalAccounts(admin, fundId, group, Object.keys(body.perLp ?? {}))
+
     if (action === 'distribution') {
       const perLp = new Map<string, number>(Object.entries(body.perLp ?? {}).map(([k, v]) => [k, Number(v)]))
       return { entry: buildDistributionEntry(base, perLp, capMap, need(CODE.cash)) }

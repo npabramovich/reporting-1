@@ -84,6 +84,9 @@ export async function persistEntry(
       entry_date: entry.entryDate,
       memo: entry.memo ?? null,
       source_type: entry.sourceType ?? 'manual',
+      // Ties an entry back to what produced it — the period close tags its allocation
+      // entries `close:<periodId>` so reopening can find and void exactly those.
+      source_ref: entry.sourceRef ?? null,
       status,
       created_by: userId,
       posted_at: status === 'posted' ? new Date().toISOString() : null,

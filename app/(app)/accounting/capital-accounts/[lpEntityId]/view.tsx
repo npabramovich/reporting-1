@@ -2,22 +2,42 @@
 
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
+import { PERIOD_PRESETS, type PeriodPreset } from '@/lib/accounting/statement-period'
 
 interface Row { lpEntityId: string; name: string; partnerClass: string; commitment: number; called: number; funded: number; outstanding: number; receivable: number; ending: number }
-interface RollForward { beginning: number; contributions: number; distributions: number; managementFees: number; expenses: number; gains: number; other: number; ending: number }
+interface RollForward {
+  beginning: number
+  contributions: number
+  distributions: number
+  managementFees: number
+  expenses: number
+  operatingIncome: number
+  realizedGains: number
+  unrealizedGains: number
+  transfers: number
+  carriedInterest: number
+  unclassified: number
+  ending: number
+}
 interface Txn { date: string; memo: string | null; sourceType: string | null; amount: number; balance: number }
-interface Statement { row: Row; rollForward: RollForward; transactions: Txn[] }
+interface Period { preset: PeriodPreset; start: string | null; end: string | null; label: string }
+interface Statement { row: Row; rollForward: RollForward; periodRollForward: RollForward; transactions: Txn[]; period: Period }
 
 const ROLL: { key: keyof RollForward; label: string }[] = [
   { key: 'beginning', label: 'Beginning capital' },
-  { key: 'contributions', label: 'Contributions (called)' },
+  { key: 'contributions', label: 'Contributions' },
   { key: 'distributions', label: 'Distributions' },
   { key: 'managementFees', label: 'Management fees' },
-  { key: 'expenses', label: 'Expenses' },
-  { key: 'gains', label: 'Gains / (losses)' },
-  { key: 'other', label: 'Other' },
+  { key: 'expenses', label: 'Partnership expenses' },
+  { key: 'operatingIncome', label: 'Operating income' },
+  { key: 'realizedGains', label: 'Net realized gain / (loss)' },
+  { key: 'unrealizedGains', label: 'Net unrealized gain / (loss)' },
+  { key: 'transfers', label: 'Transfers' },
+  { key: 'carriedInterest', label: 'Carried interest accrued' },
+  { key: 'unclassified', label: 'Unclassified' },
   { key: 'ending', label: 'Ending capital (NAV)' },
 ]
 
@@ -27,19 +47,33 @@ export function LpStatementView({ lpEntityId }: { lpEntityId: string }) {
   const lf = useLedgerFetch()
   const [data, setData] = useState<Statement | null>(null)
   const [loading, setLoading] = useState(true)
+  const [preset, setPreset] = useState<PeriodPreset>('ytd')
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
 
   useEffect(() => {
     setLoading(true)
-    lf(`/api/accounting/lp-statement?lp=${encodeURIComponent(lpEntityId)}`)
+    const qs = new URLSearchParams({ lp: lpEntityId, preset })
+    if (preset === 'custom') {
+      if (start) qs.set('start', start)
+      if (end) qs.set('end', end)
+    }
+    lf(`/api/accounting/lp-statement?${qs}`)
       .then(r => (r.ok ? r.json() : null))
       .then(d => setData(d && !d.error ? d : null))
       .finally(() => setLoading(false))
-  }, [lf, lpEntityId])
+  }, [lf, lpEntityId, preset, start, end])
 
   if (loading) return <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>
   if (!data) return <div className="border border-dashed rounded-lg p-8 text-center text-sm text-muted-foreground">No statement for this LP in the selected vehicle.</div>
 
-  const { row, rollForward, transactions } = data
+  const { row, rollForward, periodRollForward, transactions, period } = data
+  // Hide a line only when it's zero in BOTH columns — a line that's zero this period
+  // but non-zero since inception still belongs on the statement.
+  const lines = ROLL.filter(l =>
+    l.key === 'beginning' || l.key === 'ending' ||
+    Math.abs(rollForward[l.key]) > 0.004 || Math.abs(periodRollForward[l.key]) > 0.004
+  )
   const cards: { label: string; value: number }[] = [
     { label: 'Commitment', value: row.commitment },
     { label: 'Called', value: row.called },
@@ -63,14 +97,41 @@ export function LpStatementView({ lpEntityId }: { lpEntityId: string }) {
       </div>
 
       <div>
-        <p className="text-sm font-medium mb-2">Capital roll-forward</p>
+        <div className="flex flex-wrap items-end justify-between gap-3 mb-2">
+          <p className="text-sm font-medium">Capital roll-forward</p>
+          <div className="flex flex-wrap items-end gap-2">
+            <select
+              value={preset}
+              onChange={e => setPreset(e.target.value as PeriodPreset)}
+              className="h-8 px-2 rounded-md border border-input bg-background text-xs"
+            >
+              {PERIOD_PRESETS.filter(p => p.value !== 'itd').map(p => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+            {preset === 'custom' && (
+              <>
+                <Input type="date" value={start} onChange={e => setStart(e.target.value)} className="h-8 w-36 text-xs" />
+                <Input type="date" value={end} onChange={e => setEnd(e.target.value)} className="h-8 w-36 text-xs" />
+              </>
+            )}
+          </div>
+        </div>
         <div className="border rounded-lg overflow-x-auto">
           <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted/50 text-xs">
+                <th className="text-left px-3 py-2 font-medium" />
+                <th className="text-right px-3 py-2 font-medium">Statement period<div className="font-normal text-muted-foreground">{period?.label}</div></th>
+                <th className="text-right px-3 py-2 font-medium">Inception to date</th>
+              </tr>
+            </thead>
             <tbody>
-              {ROLL.map(r => (
+              {lines.map(r => (
                 <tr key={r.key} className={`border-b last:border-b-0 ${r.key === 'ending' ? 'font-semibold bg-muted/30' : ''}`}>
                   <td className="px-3 py-2">{r.label}</td>
-                  <td className="px-3 py-2 text-right font-mono">{fmt(rollForward[r.key])}</td>
+                  <td className={`px-3 py-2 text-right font-mono ${r.key === 'unclassified' && Math.abs(periodRollForward[r.key]) > 0.004 ? 'text-amber-600' : ''}`}>{fmt(periodRollForward[r.key])}</td>
+                  <td className={`px-3 py-2 text-right font-mono ${r.key === 'unclassified' && Math.abs(rollForward[r.key]) > 0.004 ? 'text-amber-600' : ''}`}>{fmt(rollForward[r.key])}</td>
                 </tr>
               ))}
             </tbody>

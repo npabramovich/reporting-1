@@ -4,7 +4,7 @@
 // given the fund's actual chart. Prompt and parser are pure and testable; the
 // model call lives in the route.
 
-import { DRAFT_SOURCE_TYPES } from './draft'
+import { ENTRY_SOURCE_TYPES } from './source-types'
 import type { Account } from './types'
 
 export interface TxnToCategorize {
@@ -23,7 +23,7 @@ export function buildCategorizePrompt(accounts: Account[], txns: TxnToCategorize
     '- Use ONLY these accounts, by code:',
     chart,
     '- amount is signed: positive = money IN (deposit), negative = money OUT.',
-    `- sourceType must be one of: ${DRAFT_SOURCE_TYPES.join(', ')}.`,
+    `- sourceType must be one of: ${ENTRY_SOURCE_TYPES.join(', ')}.`,
     '- Respond with STRICT JSON only — an array, no prose, no code fences:',
     '[{"id":"<txn id>","accountCode":"5100","sourceType":"partnership_expense"}]',
   ].join('\n')

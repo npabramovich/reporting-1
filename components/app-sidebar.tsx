@@ -7,6 +7,7 @@ import type { LucideIcon } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import { useSidebar } from '@/components/sidebar-context'
+import { ACCOUNTING_SECTIONS } from '@/lib/accounting/nav'
 import { isFeatureVisible } from '@/lib/types/features'
 import type { FeatureKey, FeatureVisibilityMap } from '@/lib/types/features'
 
@@ -70,18 +71,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/accounting', label: 'Accounting', icon: BookOpen, featureKey: 'accounting', adminOnly: true,
-    children: [
-      { href: '/accounting/bank',             label: 'Bank transactions' },
-      { href: '/accounting/capital-accounts', label: 'Capital accounts' },
-      { href: '/accounting/allocations',      label: 'Allocations' },
-      { href: '/accounting/reconciliation',   label: 'Reconciliation' },
-      { href: '/accounting/journal',          label: 'Journal' },
-      { href: '/accounting/capital-calls',    label: 'Capital calls' },
-      { href: '/accounting/assistant',        label: 'Assistant' },
-      { href: '/accounting/ledger-text',      label: 'Plain text' },
-      { href: '/accounting/periods',          label: 'Periods' },
-      { href: '/accounting/draft',            label: 'Draft from doc' },
-    ],
+    children: ACCOUNTING_SECTIONS.map(({ href, label }) => ({ href, label })),
   },
   { href: '/usage', label: 'Usage', icon: Users, adminOnly: true },
   { href: '/settings', label: 'Settings', icon: Settings, badgeKey: 'settings' },

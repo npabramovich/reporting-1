@@ -8,7 +8,8 @@ import { runAssistant, applyProposal } from '@/lib/accounting/assistant'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// POST — { action: 'ask', message }  → review + proposals for the vehicle
+// POST — { action: 'ask', message, documentText?, pdfBase64? }
+//          → review + proposals for the vehicle, optionally drafting from a document
 //        { action: 'apply', proposal } → apply one proposal as a draft entry
 export async function POST(req: NextRequest) {
   const supabase = createClient()
@@ -29,7 +30,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ...result })
   }
 
-  const result = await runAssistant(admin, gate.fundId, group, String(body?.message ?? ''))
+  // A source document may arrive as already-extracted text, or as a PDF to extract here.
+  let documentText: string = (body?.documentText ?? '').toString()
+  if (body?.pdfBase64) {
+    try {
+      const { getDocumentProxy, extractText } = await import('unpdf')
+      const bytes = new Uint8Array(Buffer.from(String(body.pdfBase64), 'base64'))
+      const pdf = await getDocumentProxy(bytes)
+      const extracted = await extractText(pdf, { mergePages: true })
+      documentText = Array.isArray(extracted.text) ? extracted.text.join('\n') : extracted.text
+    } catch (e) {
+      return NextResponse.json({ error: `Could not read the PDF: ${(e as Error).message}` }, { status: 400 })
+    }
+  }
+
+  const message = String(body?.message ?? '')
+  if (!message.trim() && !documentText.trim()) {
+    return NextResponse.json({ error: 'Ask a question or attach a document' }, { status: 400 })
+  }
+
+  const result = await runAssistant(admin, gate.fundId, group, message, documentText)
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 })
   return NextResponse.json(result)
 }

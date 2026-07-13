@@ -10,7 +10,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadPostedLedger, loadOwnership, loadEntityNames, loadEntityClasses } from './load'
 import { accountIdByCode, ensureCapitalAccounts, persistEntry } from './persist'
-import { computeCapitalAccounts, type CapitalAccount } from './capital-account'
+import { computeCapitalAccounts, emptyAccount, type CapitalAccount, type CapitalPeriod } from './capital-account'
 import { buildCapitalCallIssuanceEntry } from './entries'
 import { allocateAmount } from './allocation'
 import { vehicleIdByName } from './vehicle-id'
@@ -252,7 +252,10 @@ export interface LpStatementTxn {
 }
 export interface LpStatement {
   row: LpCapitalRow
+  /** Inception-to-date roll-forward. */
   rollForward: CapitalAccount
+  /** Roll-forward scoped to the statement period, opening with capital carried in. */
+  periodRollForward: CapitalAccount
   transactions: LpStatementTxn[]
 }
 
@@ -261,16 +264,18 @@ export async function lpStatement(
   admin: SupabaseClient,
   fundId: string,
   group: string,
-  lpEntityId: string
+  lpEntityId: string,
+  period?: CapitalPeriod
 ): Promise<LpStatement | { error: string }> {
   const summary = await lpCapitalSummary(admin, fundId, group)
   const row = summary.find(r => r.lpEntityId === lpEntityId)
   if (!row) return { error: 'LP not found in this vehicle' }
 
   const { capitalPostings } = await loadPostedLedger(admin, fundId, group)
-  const rollForward = computeCapitalAccounts(capitalPostings).get(lpEntityId) ?? {
-    beginning: 0, contributions: 0, distributions: 0, managementFees: 0, expenses: 0, gains: 0, other: 0, ending: 0,
-  }
+  const rollForward = computeCapitalAccounts(capitalPostings, { end: period?.end })
+    .get(lpEntityId) ?? emptyAccount()
+  const periodRollForward = computeCapitalAccounts(capitalPostings, period)
+    .get(lpEntityId) ?? emptyAccount()
 
   const vehicleId = await vehicleIdByName(admin, fundId, group)
   const { data: acct } = await admin
@@ -299,5 +304,5 @@ export async function lpStatement(
     }
   }
 
-  return { row, rollForward, transactions }
+  return { row, rollForward, periodRollForward, transactions }
 }

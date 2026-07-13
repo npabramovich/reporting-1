@@ -99,62 +99,52 @@ describe('entry builders', () => {
     expect(caps.get('b')!.contributions).toBe(400_000)
   })
 
-  const bridgeAccts = { pnlAccountId: 'mgmt-fee-exp', bridgeAccountId: 'bridge', offsetAccountId: 'due-to-gp' }
+  const feeAccts = { pnlAccountId: 'mgmt-fee-exp', offsetAccountId: 'due-to-gp' }
 
-  it('management fee (compound) hits P&L and reduces LP capital by the computed fee', () => {
+  // P&L entries book P&L ONLY. They must never touch a capital account — allocation
+  // happens exclusively at the period close, or the two paths would double-count.
+  it('management fee books P&L and does NOT touch capital accounts', () => {
     const fee = computeManagementFee({ annualRate: 0.02, basis: 'committed', periodFraction: 1 },
       [{ lpEntityId: 'a', basisAmount: 6_000_000 }, { lpEntityId: 'b', basisAmount: 4_000_000 }])
-    const e = buildManagementFeeEntry(base, fee, capMap, bridgeAccts)
+    const e = buildManagementFeeEntry(base, fee, feeAccts)
     expect(isBalanced(e)).toBe(true)
-    // P&L expense recorded (income statement correct).
     expect(accountBalances(e.postings).get('mgmt-fee-exp')).toBe(200_000)
-    // Capital reduced per LP.
-    const caps = computeCapitalAccounts(
-      e.postings.filter(p => p.lpEntityId).map(p => ({ lpEntityId: p.lpEntityId!, amount: p.amount, sourceType: e.sourceType }))
-    )
-    expect(caps.get('a')!.managementFees).toBe(-120_000)
-    expect(caps.get('b')!.managementFees).toBe(-80_000)
+    expect(e.postings.filter(p => p.lpEntityId)).toHaveLength(0)
   })
 
-  it('expense entry is balanced and pro-rata', () => {
-    const e = buildExpenseEntry(base, 100_000, owners, capMap, { pnlAccountId: 'exp', bridgeAccountId: 'bridge', offsetAccountId: 'cash' })
+  it('expense entry books P&L only', () => {
+    const e = buildExpenseEntry(base, 100_000, { pnlAccountId: 'exp', offsetAccountId: 'cash' })
     expect(isBalanced(e)).toBe(true)
     expect(accountBalances(e.postings).get('exp')).toBe(100_000)
+    expect(e.postings.filter(p => p.lpEntityId)).toHaveLength(0)
   })
 
-  it('gain entry increases LP capital and books income', () => {
-    const e = buildGainEntry(base, 50_000, owners, capMap, { pnlAccountId: 'gains', bridgeAccountId: 'bridge', offsetAccountId: 'cash' })
+  it('gain entry books income only', () => {
+    const e = buildGainEntry(base, 50_000, { pnlAccountId: 'gains', offsetAccountId: 'cash' })
     expect(isBalanced(e)).toBe(true)
-    const caps = computeCapitalAccounts(
-      e.postings.filter(p => p.lpEntityId).map(p => ({ lpEntityId: p.lpEntityId!, amount: p.amount, sourceType: e.sourceType }))
-    )
-    expect(caps.get('a')!.gains).toBe(30_000)
-    expect(caps.get('b')!.gains).toBe(20_000)
+    expect(accountBalances(e.postings).get('gains')).toBe(-50_000) // credit income
+    expect(e.postings.filter(p => p.lpEntityId)).toHaveLength(0)
   })
 
-  it('revaluation allocates the mark per LP (up and down) and balances', () => {
-    const up = buildRevaluationEntry(base, 100_000, owners, capMap, { unrealizedAssetId: 'unrl', incomeId: 'inc', bridgeId: 'bridge' })
+  it('revaluation marks the asset up and down without touching capital', () => {
+    const up = buildRevaluationEntry(base, 100_000, { unrealizedAssetId: 'unrl', incomeId: 'inc' })
     expect(isBalanced(up)).toBe(true)
-    const capsUp = computeCapitalAccounts(up.postings.filter(p => p.lpEntityId).map(p => ({ lpEntityId: p.lpEntityId!, amount: p.amount, sourceType: up.sourceType })))
-    expect(capsUp.get('a')!.gains).toBe(60_000)
-    expect(capsUp.get('b')!.gains).toBe(40_000)
+    expect(accountBalances(up.postings).get('unrl')).toBe(100_000)
+    expect(up.postings.filter(p => p.lpEntityId)).toHaveLength(0)
 
-    const down = buildRevaluationEntry(base, -50_000, owners, capMap, { unrealizedAssetId: 'unrl', incomeId: 'inc', bridgeId: 'bridge' })
+    const down = buildRevaluationEntry(base, -50_000, { unrealizedAssetId: 'unrl', incomeId: 'inc' })
     expect(isBalanced(down)).toBe(true)
-    const capsDown = computeCapitalAccounts(down.postings.filter(p => p.lpEntityId).map(p => ({ lpEntityId: p.lpEntityId!, amount: p.amount, sourceType: down.sourceType })))
-    expect(capsDown.get('a')!.gains).toBe(-30_000)
+    expect(accountBalances(down.postings).get('unrl')).toBe(-50_000)
   })
 
-  it('period close zeroes P&L and nets the bridge to zero', () => {
-    // Book a fee, then a gain, then close. Bridge should end at 0 and P&L flat.
+  it('year-end close zeroes P&L into the bridge', () => {
     const fee = computeManagementFee({ annualRate: 0.02, basis: 'committed', periodFraction: 1 },
       [{ lpEntityId: 'a', basisAmount: 6_000_000 }, { lpEntityId: 'b', basisAmount: 4_000_000 }])
-    const feeEntry = buildManagementFeeEntry(base, fee, capMap, bridgeAccts)
-    const gainEntry = buildGainEntry(base, 50_000, owners, capMap, { pnlAccountId: 'gains', bridgeAccountId: 'bridge', offsetAccountId: 'cash' })
+    const feeEntry = buildManagementFeeEntry(base, fee, feeAccts)
+    const gainEntry = buildGainEntry(base, 50_000, { pnlAccountId: 'gains', offsetAccountId: 'cash' })
     const all = [...feeEntry.postings, ...gainEntry.postings]
     const bals = accountBalances(all)
 
-    // P&L balances feed the close.
     const close = buildPeriodCloseEntry(base, [
       { accountId: 'mgmt-fee-exp', balance: bals.get('mgmt-fee-exp')! },
       { accountId: 'gains', balance: bals.get('gains')! },
@@ -164,7 +154,9 @@ describe('entry builders', () => {
     const afterClose = accountBalances([...all, ...close.postings])
     expect(afterClose.get('mgmt-fee-exp')).toBe(0)
     expect(afterClose.get('gains')).toBe(0)
-    expect(afterClose.get('bridge') ?? 0).toBe(0) // bridge nets to zero
+    // The bridge absorbs the net P&L — a 150k net expense lands as a DEBIT, reducing
+    // equity. It only returns to zero once a close has also allocated it to partners.
+    expect(afterClose.get('bridge')).toBe(150_000)
   })
 
   it('distribution and carry entries balance', () => {

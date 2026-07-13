@@ -5,11 +5,20 @@
 // so a posting's contribution to capital is the NEGATED signed amount (a credit,
 // which is negative in debit-positive convention, increases capital).
 //
-//   ending = beginning + contributions + distributions + fees + expenses + gains + other
+//   ending = beginning + contributions + distributions + managementFees + expenses
+//          + operatingIncome + realizedGains + unrealizedGains + transfers
+//          + carriedInterest + unclassified
 //
-// contributions are positive; distributions/fees/expenses are negative; gains are
-// signed. `ending` is computed as the raw sum so it always ties to the ledger,
-// independent of how lines are bucketed.
+// contributions are positive; distributions/fees/expenses/carry are negative;
+// income, gains and transfers are signed. `ending` is computed as the RAW SUM of
+// capital deltas, never from the buckets — so it always ties to the ledger no
+// matter how lines are categorized. That invariant is what makes re-bucketing safe.
+//
+// PERIODS. Passing a { start, end } window turns this into a period statement:
+// `beginning` becomes the capital balance carried in from before `start`, the
+// activity lines cover only the window, and `ending` is the balance as of `end`.
+// With no window it's the inception-to-date view, where `beginning` holds only
+// explicit opening_balance entries. Both satisfy the same tie-out identity.
 
 export type RollForwardBucket =
   | 'beginning'
@@ -17,8 +26,12 @@ export type RollForwardBucket =
   | 'distributions'
   | 'managementFees'
   | 'expenses'
-  | 'gains'
-  | 'other'
+  | 'operatingIncome'
+  | 'realizedGains'
+  | 'unrealizedGains'
+  | 'transfers'
+  | 'carriedInterest'
+  | 'unclassified'
 
 /** Map a journal entry source_type to a roll-forward line. */
 export function bucketForSourceType(sourceType: string | null | undefined): RollForwardBucket {
@@ -38,18 +51,27 @@ export function bucketForSourceType(sourceType: string | null | undefined): Roll
     case 'organizational_expense':
       return 'expenses'
     case 'income':
+      // Interest, dividends, and other operating income — distinct from investment
+      // gains, which is why this no longer shares a line with them.
+      return 'operatingIncome'
     case 'realized_gain':
-    case 'unrealized':
-    case 'valuation':
     case 'gain':
-      return 'gains'
+      return 'realizedGains'
+    case 'valuation':
+    case 'unrealized':
+      return 'unrealizedGains'
+    case 'transfer':
+      // LP-to-LP assignment/secondary: nets to zero across the fund.
+      return 'transfers'
     case 'carried_interest':
     case 'carry':
-      // Carry is a reallocation of profit from LPs to the GP; it lands in
-      // `other` on the LP roll-forward (a dedicated carry line can be added later).
-      return 'other'
+      return 'carriedInterest'
     default:
-      return 'other'
+      // Catch-all for `manual` and any source_type we don't recognize. It should be
+      // zero on clean books, and the UI only shows the line when it isn't — but the
+      // bucket must exist, or a manual posting to LP capital would vanish from the
+      // roll-forward while still sitting inside `ending`.
+      return 'unclassified'
   }
 }
 
@@ -58,6 +80,8 @@ export interface CapitalPosting {
   /** Signed, debit-positive posting amount to the LP's equity account. */
   amount: number
   sourceType?: string | null
+  /** Entry date (YYYY-MM-DD). Required for period scoping; ignored without a window. */
+  entryDate?: string | null
 }
 
 export interface CapitalAccount {
@@ -66,32 +90,59 @@ export interface CapitalAccount {
   distributions: number
   managementFees: number
   expenses: number
-  gains: number
-  other: number
+  operatingIncome: number
+  realizedGains: number
+  unrealizedGains: number
+  transfers: number
+  carriedInterest: number
+  unclassified: number
   ending: number
 }
 
-function emptyAccount(): CapitalAccount {
+/** The activity lines, in statement order. `beginning`/`ending` bracket them. */
+export const ACTIVITY_FIELDS: (keyof CapitalAccount)[] = [
+  'contributions',
+  'distributions',
+  'managementFees',
+  'expenses',
+  'operatingIncome',
+  'realizedGains',
+  'unrealizedGains',
+  'transfers',
+  'carriedInterest',
+  'unclassified',
+]
+
+export const CAPITAL_ACCOUNT_LABELS: Record<keyof CapitalAccount, string> = {
+  beginning: 'Beginning capital',
+  contributions: 'Contributions',
+  distributions: 'Distributions',
+  managementFees: 'Management fees',
+  expenses: 'Partnership expenses',
+  operatingIncome: 'Operating income',
+  realizedGains: 'Net realized gain / (loss)',
+  unrealizedGains: 'Net unrealized gain / (loss)',
+  transfers: 'Transfers',
+  carriedInterest: 'Carried interest accrued',
+  unclassified: 'Unclassified',
+  ending: 'Ending capital',
+}
+
+export function emptyAccount(): CapitalAccount {
   return {
     beginning: 0,
     contributions: 0,
     distributions: 0,
     managementFees: 0,
     expenses: 0,
-    gains: 0,
-    other: 0,
+    operatingIncome: 0,
+    realizedGains: 0,
+    unrealizedGains: 0,
+    transfers: 0,
+    carriedInterest: 0,
+    unclassified: 0,
     ending: 0,
   }
-}
-
-const BUCKET_FIELD: Record<RollForwardBucket, keyof CapitalAccount> = {
-  beginning: 'beginning',
-  contributions: 'contributions',
-  distributions: 'distributions',
-  managementFees: 'managementFees',
-  expenses: 'expenses',
-  gains: 'gains',
-  other: 'other',
 }
 
 /** Round to cents to keep the roll-forward free of float drift. */
@@ -99,18 +150,48 @@ function r(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100
 }
 
+export interface CapitalPeriod {
+  /** Inclusive start (YYYY-MM-DD). Activity before this rolls into `beginning`. */
+  start?: string | null
+  /** Inclusive end (YYYY-MM-DD). Activity after this is excluded entirely. */
+  end?: string | null
+}
+
 /**
- * Build per-LP capital accounts from postings to LP equity accounts. Each
- * account's `ending` equals the raw sum of capital deltas, so it always ties to
- * the ledger regardless of source-type categorization.
+ * Build per-LP capital accounts from postings to LP equity accounts.
+ *
+ * With a `period`, this is a period statement: `beginning` is everything before
+ * `start`, the activity lines cover `[start, end]`, and `ending` is the balance at
+ * `end`. Without one, it's inception-to-date.
+ *
+ * `ending` is always the raw sum of capital deltas in scope — never derived from
+ * the buckets — so it ties to the ledger regardless of categorization.
  */
-export function computeCapitalAccounts(postings: CapitalPosting[]): Map<string, CapitalAccount> {
+export function computeCapitalAccounts(
+  postings: CapitalPosting[],
+  period?: CapitalPeriod
+): Map<string, CapitalAccount> {
+  const start = period?.start || null
+  const end = period?.end || null
+
   const out = new Map<string, CapitalAccount>()
   for (const p of postings) {
     if (!p.lpEntityId) continue
+    const date = p.entryDate ?? null
+
+    // Outside the window entirely — not part of this statement.
+    if (end && date && date > end) continue
+
     const acct = out.get(p.lpEntityId) ?? emptyAccount()
     const capitalDelta = -p.amount // credit increases capital
-    const field = BUCKET_FIELD[bucketForSourceType(p.sourceType)]
+
+    // Everything before the window is carried in as opening capital, whatever its
+    // source_type — that IS what "beginning capital" means on a period statement.
+    const isCarriedIn = !!start && !!date && date < start
+    const field: keyof CapitalAccount = isCarriedIn
+      ? 'beginning'
+      : bucketForSourceType(p.sourceType)
+
     acct[field] = r(acct[field] + capitalDelta)
     acct.ending = r(acct.ending + capitalDelta)
     out.set(p.lpEntityId, acct)
@@ -123,4 +204,14 @@ export function totalNav(accounts: Map<string, CapitalAccount>): number {
   let sum = 0
   for (const a of Array.from(accounts.values())) sum += a.ending
   return r(sum)
+}
+
+/**
+ * Does the roll-forward add up? beginning + activity must equal ending. A failure
+ * means a posting was counted into `ending` but into no line — i.e. a bug here, not
+ * bad data, since `unclassified` catches every unknown source_type.
+ */
+export function rollForwardTies(a: CapitalAccount): boolean {
+  const sum = ACTIVITY_FIELDS.reduce((s, f) => s + a[f], a.beginning)
+  return Math.abs(r(sum) - a.ending) < 0.005
 }

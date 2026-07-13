@@ -70,7 +70,7 @@ export function AccountingSetup() {
         <ol className="text-sm text-muted-foreground space-y-1 list-decimal ml-4">
           <li><Link href="/accounting/bank" className="underline underline-offset-2 hover:text-foreground">Import the bank history</Link> (CSV/XLS) — dated cash back to inception.</li>
           <li>Categorize, and match inflows to capital calls / the investment purchase.</li>
-          <li>Enter periodic <Link href="/accounting/allocations" className="underline underline-offset-2 hover:text-foreground">revaluations</Link> to walk NAV forward.</li>
+          <li>Mark investments to fair value with the <Link href="/accounting/assistant" className="underline underline-offset-2 hover:text-foreground">assistant</Link> to walk NAV forward.</li>
           <li>Reconcile capital accounts against the LP snapshot (Reconciliation → Load from LP snapshot).</li>
         </ol>
       )}

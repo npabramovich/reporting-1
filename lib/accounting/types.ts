@@ -26,6 +26,12 @@ export interface Posting {
   currency: string
   /** Optional per-LP dimension for allocation. */
   lpEntityId?: string | null
+  /**
+   * The parent entry's date (YYYY-MM-DD). Set by loadPostedLedger. Needed to scope
+   * period statements: a balance sheet is cumulative to a date, but the income
+   * statement and cash flows cover a window.
+   */
+  entryDate?: string | null
 }
 
 export interface JournalEntry {

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { apportionCents, allocateAmount, ownershipFractions } from './allocation'
 import { computeCapitalAccounts, totalNav, bucketForSourceType } from './capital-account'
 import { reconcileCapital } from './reconcile'
-import { trialBalance, balanceSheet, incomeStatement, scheduleOfInvestments, changesInPartnersCapital, statementOfCashFlows } from './statements'
+import { trialBalance, balanceSheet, incomeStatement, scheduleOfInvestments, changesInPartnersCapital, statementOfCashFlows, postingsInPeriod, postingsAsOf, openingCashBalance, type CashPosting } from './statements'
 import type { Account, Posting } from './types'
 
 describe('apportionCents', () => {
@@ -75,8 +75,12 @@ describe('bucketForSourceType', () => {
     expect(bucketForSourceType('distribution')).toBe('distributions')
     expect(bucketForSourceType('management_fee')).toBe('managementFees')
     expect(bucketForSourceType('partnership_expense')).toBe('expenses')
-    expect(bucketForSourceType('realized_gain')).toBe('gains')
-    expect(bucketForSourceType('mystery')).toBe('other')
+    expect(bucketForSourceType('income')).toBe('operatingIncome')
+    expect(bucketForSourceType('realized_gain')).toBe('realizedGains')
+    expect(bucketForSourceType('valuation')).toBe('unrealizedGains')
+    expect(bucketForSourceType('transfer')).toBe('transfers')
+    expect(bucketForSourceType('carried_interest')).toBe('carriedInterest')
+    expect(bucketForSourceType('mystery')).toBe('unclassified')
   })
 })
 
@@ -98,7 +102,7 @@ describe('computeCapitalAccounts', () => {
     expect(a.beginning).toBe(100_000)
     expect(a.contributions).toBe(50_000)
     expect(a.managementFees).toBe(-2_000)
-    expect(a.gains).toBe(10_000)
+    expect(a.realizedGains).toBe(10_000)
     expect(a.ending).toBe(158_000)
 
     const b = accounts.get('b')!
@@ -172,13 +176,62 @@ describe('statements', () => {
     expect(is.netIncome).toBe(8_000)
   })
 
-  it('balance sheet: assets = liabilities + equity', () => {
+  it('balance sheet: assets = liabilities + partners’ capital, and it BALANCES', () => {
     const bs = balanceSheet(accounts, postings)
     expect(bs.assets.total).toBe(108_000)
-    expect(bs.equity.total).toBe(100_000)
-    // check is assets - liabilities - equity; equity here excludes retained income,
-    // so the 8k net income is the residual (unbooked to capital yet).
-    expect(bs.check).toBe(8_000)
+
+    // Partners' capital is ONE total with no per-partner detail — that belongs in the
+    // statement of changes. It folds in the 8k of net income no close has allocated
+    // yet; otherwise the balance sheet wouldn't balance and the residual would
+    // silently carry the P&L.
+    expect(bs.equity.rows).toHaveLength(0)
+    expect(bs.equity.total).toBe(108_000)
+    expect(bs.partnersCapital).toEqual({ total: 108_000, unallocatedEarnings: 8_000 })
+    expect(bs.check).toBe(0)
+  })
+})
+
+describe('period-scoped statements', () => {
+  const accounts: Account[] = [
+    { id: 'cash', fundId: 'f', code: '1000', name: 'Cash', type: 'asset', subtype: 'cash' },
+    { id: 'cap', fundId: 'f', code: '3100', name: 'LP capital', type: 'equity', subtype: 'lp_capital' },
+    { id: 'fee', fundId: 'f', code: '5000', name: 'Management fee', type: 'expense', subtype: 'management_fee' },
+  ]
+  // 100k called in 2025; a 2k fee in Q1-2026 and a 3k fee in Q2-2026.
+  const postings: Posting[] = [
+    { accountId: 'cash', amount: 100_000, currency: 'USD', entryDate: '2025-11-01' },
+    { accountId: 'cap', amount: -100_000, currency: 'USD', entryDate: '2025-11-01' },
+    { accountId: 'fee', amount: 2_000, currency: 'USD', entryDate: '2026-02-10' },
+    { accountId: 'cash', amount: -2_000, currency: 'USD', entryDate: '2026-02-10' },
+    { accountId: 'fee', amount: 3_000, currency: 'USD', entryDate: '2026-05-10' },
+    { accountId: 'cash', amount: -3_000, currency: 'USD', entryDate: '2026-05-10' },
+  ]
+
+  it('income statement covers only the window', () => {
+    const q2 = incomeStatement(accounts, postingsInPeriod(postings, '2026-04-01', '2026-06-30'))
+    expect(q2.expenses.total).toBe(3_000) // NOT 5,000 — the Q1 fee is out of scope
+    expect(q2.netIncome).toBe(-3_000)
+  })
+
+  it('balance sheet is cumulative to the period end, not just the window', () => {
+    const bs = balanceSheet(accounts, postingsAsOf(postings, '2026-06-30'))
+    expect(bs.assets.total).toBe(95_000)  // 100k − 2k − 3k
+    expect(bs.equity.total).toBe(95_000)  // capital 100k + (−5k) undistributed
+    expect(bs.check).toBe(0)
+  })
+
+  it('opening cash is the balance carried into the period', () => {
+    expect(openingCashBalance('cash', postings, '2026-04-01')).toBe(98_000) // 100k − the Q1 fee
+    expect(openingCashBalance('cash', postings, null)).toBe(0)
+  })
+
+  it('cash flows tie: opening + net change = ending', () => {
+    const cash: CashPosting[] = postingsInPeriod(postings, '2026-04-01', '2026-06-30')
+      .map(p => ({ ...p, entryId: 'q2fee', sourceType: 'management_fee' as string | null }))
+    const cf = statementOfCashFlows('cash', cash, accounts, openingCashBalance('cash', postings, '2026-04-01'))
+    expect(cf.openingCash).toBe(98_000)
+    expect(cf.netChange).toBe(-3_000)
+    expect(cf.endingCash).toBe(95_000)
   })
 })
 
@@ -216,18 +269,95 @@ describe('statement of changes in partners capital', () => {
 })
 
 describe('statement of cash flows', () => {
-  it('splits financing (contributions/distributions) from operating and ties to net change', () => {
-    const cash = [
-      { accountId: 'cash', amount: 5_000_000, sourceType: 'capital_call' },
-      { accountId: 'cash', amount: -4_800_000, sourceType: 'manual' },   // investment purchase
-      { accountId: 'cash', amount: -12_000, sourceType: 'partnership_expense' },
-      { accountId: 'cash', amount: -500_000, sourceType: 'distribution' },
-      { accountId: 'other', amount: 999, sourceType: 'capital_call' },   // non-cash line ignored
+  const accts: Account[] = [
+    { id: 'cash', fundId: 'f', code: '1000', name: 'Cash', type: 'asset', subtype: 'cash' },
+    { id: 'inv', fundId: 'f', code: '1100', name: 'Investments at cost', type: 'asset', subtype: 'investment' },
+    { id: 'cap', fundId: 'f', code: '3100', name: "Partners' capital", type: 'equity', subtype: 'lp_capital' },
+    { id: 'note', fundId: 'f', code: '2200', name: 'Note payable', type: 'liability', subtype: 'note_payable' },
+    { id: 'exp', fundId: 'f', code: '5100', name: 'Partnership expenses', type: 'expense', subtype: 'partnership_expense' },
+    { id: 'int', fundId: 'f', code: '5300', name: 'Interest expense', type: 'expense', subtype: 'interest_expense' },
+    { id: 'unrl', fundId: 'f', code: '1200', name: 'Unrealized appreciation', type: 'asset', subtype: 'unrealized' },
+    { id: 'unrlInc', fundId: 'f', code: '4200', name: 'Change in unrealized', type: 'income', subtype: 'unrealized' },
+  ]
+
+  it('splits financing (capital, borrowings) from operating and ties to net change', () => {
+    const cash: CashPosting[] = [
+      { entryId: 'e1', accountId: 'cash', amount: 5_000_000, sourceType: 'capital_call' },
+      { entryId: 'e1', accountId: 'cap', amount: -5_000_000, sourceType: 'capital_call' },
+      { entryId: 'e2', accountId: 'cash', amount: -4_800_000, sourceType: 'manual' },
+      { entryId: 'e2', accountId: 'inv', amount: 4_800_000, sourceType: 'manual' },
+      { entryId: 'e3', accountId: 'cash', amount: -12_000, sourceType: 'partnership_expense' },
+      { entryId: 'e3', accountId: 'exp', amount: 12_000, sourceType: 'partnership_expense' },
     ]
-    const scf = statementOfCashFlows('cash', cash, 0)
-    expect(scf.financing.total).toBe(4_500_000) // 5M in - 500k out
-    expect(scf.operating.total).toBe(-4_812_000) // -4.8M - 12k
-    expect(scf.netChange).toBe(-312_000)
-    expect(scf.endingCash).toBe(-312_000)
+    const scf = statementOfCashFlows('cash', cash, accts, 0)
+    expect(scf.financing.total).toBe(5_000_000)
+    expect(scf.operating.total).toBe(-4_812_000) // investment purchase + expense
+    expect(scf.netChange).toBe(188_000)
+  })
+
+  it('splits ONE payment of principal + interest across financing and operating', () => {
+    // The real Tern payoff: a single 20,689.95 wire that is 14,992.64 of loan
+    // principal (financing) and 5,700.31 of accrued interest (operating). Classifying
+    // by the entry's source_type would dump the whole thing into financing.
+    const cash: CashPosting[] = [
+      { entryId: 'payoff', accountId: 'cash', amount: -21_000.00, sourceType: 'loan_repayment' },
+      { entryId: 'payoff', accountId: 'note', amount: 15_000.00, sourceType: 'loan_repayment' },
+      { entryId: 'payoff', accountId: 'int', amount: 5_700.00, sourceType: 'loan_repayment' },
+    ]
+    const scf = statementOfCashFlows('cash', cash, accts, 100_000)
+
+    expect(scf.financing.total).toBe(-15_000.00)
+    expect(scf.financing.lines[0].label).toBe('Note payable')
+
+    expect(scf.operating.total).toBe(-5_700.00)
+    expect(scf.operating.lines[0].label).toBe('Interest expense')
+
+    expect(scf.netChange).toBe(-21_000.00) // still ties to the actual cash moved
+    expect(scf.endingCash).toBe(79_000.00)
+  })
+
+  it('ignores non-cash entries in the cash sections', () => {
+    const cash: CashPosting[] = [
+      { entryId: 'mark', accountId: 'unrl', amount: 500_000, sourceType: 'valuation' },
+      { entryId: 'mark', accountId: 'unrlInc', amount: -500_000, sourceType: 'valuation' },
+    ]
+    const scf = statementOfCashFlows('cash', cash, accts, 0)
+    expect(scf.netChange).toBe(0)
+    expect(scf.operating.lines).toHaveLength(0)
+    expect(scf.financing.lines).toHaveLength(0)
+    // A revaluation is neither investing nor financing, so it isn't disclosed either.
+    expect(scf.nonCash).toHaveLength(0)
+  })
+
+  it('DISCLOSES an investment bought with borrowed money that bypassed the bank', () => {
+    // Tern: the lender paid the company directly. No cash moved, so neither the
+    // 2.75M draw nor the purchase can appear in the cash sections — but omitting them
+    // entirely makes the loan look like it was repaid without ever being borrowed.
+    const cash: CashPosting[] = [
+      { entryId: 'draw', accountId: 'inv', amount: 2_700_000.00, sourceType: 'investment', entryDate: '2026-02-02', memo: 'Investment funded by loan' },
+      { entryId: 'draw', accountId: 'note', amount: -2_700_000.00, sourceType: 'investment', entryDate: '2026-02-02', memo: 'Investment funded by loan' },
+    ]
+    const scf = statementOfCashFlows('cash', cash, accts, 0)
+    expect(scf.netChange).toBe(0)
+    expect(scf.operating.lines).toHaveLength(0)
+    expect(scf.financing.lines).toHaveLength(0)
+
+    expect(scf.nonCash).toHaveLength(1)
+    expect(scf.nonCash[0]).toMatchObject({
+      date: '2026-02-02',
+      description: 'Investment funded by loan',
+      amount: 2_700_000.00,
+    })
+  })
+
+  it('DISCLOSES a loan repaid directly by a partner as their capital contribution', () => {
+    const cash: CashPosting[] = [
+      { entryId: 'direct', accountId: 'note', amount: 130_000, sourceType: 'capital_call', entryDate: '2026-02-26', memo: 'Partner paid the lender directly' },
+      { entryId: 'direct', accountId: 'cap', amount: -130_000, sourceType: 'capital_call', entryDate: '2026-02-26', memo: 'Partner paid the lender directly' },
+    ]
+    const scf = statementOfCashFlows('cash', cash, accts, 0)
+    expect(scf.netChange).toBe(0)
+    expect(scf.nonCash).toHaveLength(1)
+    expect(scf.nonCash[0].amount).toBe(130_000)
   })
 })

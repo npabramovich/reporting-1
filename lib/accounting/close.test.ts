@@ -1,0 +1,116 @@
+import { describe, it, expect } from 'vitest'
+import { balanceSheet } from './statements'
+import { computeCapitalAccounts, rollForwardTies } from './capital-account'
+import { allocateAmount } from './allocation'
+import type { Account, Posting } from './types'
+
+// Mirrors what closePeriodWithAllocation posts, so the arithmetic is locked down
+// without needing a database. The real function does exactly this per category.
+const accounts: Account[] = [
+  { id: 'cash', fundId: 'f', code: '1000', name: 'Cash', type: 'asset', subtype: 'cash' },
+  { id: 'unrl', fundId: 'f', code: '1200', name: 'Unrealized', type: 'asset', subtype: 'unrealized' },
+  { id: 'capA', fundId: 'f', code: '3100-a', name: 'Capital — A', type: 'equity', subtype: 'lp_capital', lpEntityId: 'a' },
+  { id: 'capB', fundId: 'f', code: '3100-b', name: 'Capital — B', type: 'equity', subtype: 'lp_capital', lpEntityId: 'b' },
+  { id: 'bridge', fundId: 'f', code: '3200', name: 'Undistributed earnings', type: 'equity', subtype: 'undistributed_earnings' },
+  { id: 'unrlInc', fundId: 'f', code: '4200', name: 'Change in unrealized', type: 'income', subtype: 'unrealized' },
+  { id: 'fee', fundId: 'f', code: '5000', name: 'Management fee', type: 'expense', subtype: 'management_fee' },
+]
+
+const owners = [{ lpEntityId: 'a', commitment: 600_000 }, { lpEntityId: 'b', commitment: 400_000 }]
+
+// Books BEFORE any close: 1M called, a 100k fee, a 500k markup. Nothing allocated.
+const preClose: Posting[] = [
+  { accountId: 'cash', amount: 1_000_000, currency: 'USD', entryDate: '2026-01-15' },
+  { accountId: 'capA', amount: -600_000, currency: 'USD', lpEntityId: 'a', entryDate: '2026-01-15' },
+  { accountId: 'capB', amount: -400_000, currency: 'USD', lpEntityId: 'b', entryDate: '2026-01-15' },
+  { accountId: 'fee', amount: 100_000, currency: 'USD', entryDate: '2026-02-01' },
+  { accountId: 'cash', amount: -100_000, currency: 'USD', entryDate: '2026-02-01' },
+  { accountId: 'unrl', amount: 500_000, currency: 'USD', entryDate: '2026-03-31' },
+  { accountId: 'unrlInc', amount: -500_000, currency: 'USD', entryDate: '2026-03-31' },
+]
+
+/** One balanced allocation entry per category, exactly as the close posts them. */
+function allocationPostings(capitalEffect: number, capAccount: Record<string, string>): Posting[] {
+  const split = allocateAmount(capitalEffect, owners)
+  return [
+    { accountId: 'bridge', amount: capitalEffect, currency: 'USD', entryDate: '2026-03-31' },
+    ...Array.from(split.entries()).map(([lp, share]) => ({
+      accountId: capAccount[lp],
+      amount: -share,
+      currency: 'USD',
+      lpEntityId: lp,
+      entryDate: '2026-03-31',
+    })),
+  ]
+}
+
+const capAccount = { a: 'capA', b: 'capB' }
+// Fee reduces capital (−100k); the mark increases it (+500k).
+const feeAlloc = allocationPostings(-100_000, capAccount)
+const markAlloc = allocationPostings(500_000, capAccount)
+const postClose = [...preClose, ...feeAlloc, ...markAlloc]
+
+describe('period close allocation', () => {
+  it('before closing, capital accounts hold only contributions', () => {
+    const caps = computeCapitalAccounts(
+      preClose.filter(p => p.lpEntityId).map(p => ({ lpEntityId: p.lpEntityId!, amount: p.amount, sourceType: 'capital_call', entryDate: p.entryDate }))
+    )
+    expect(caps.get('a')!.ending).toBe(600_000)
+    expect(caps.get('b')!.ending).toBe(400_000)
+
+    const bs = balanceSheet(accounts, preClose)
+    expect(bs.partnersCapital.total).toBe(1_400_000)       // net assets
+    expect(bs.partnersCapital.unallocatedEarnings).toBe(400_000) // 500k mark − 100k fee
+    expect(bs.check).toBe(0)
+  })
+
+  it('each allocation entry balances on its own', () => {
+    for (const entry of [feeAlloc, markAlloc]) {
+      expect(entry.reduce((s, p) => s + p.amount, 0)).toBe(0)
+    }
+  })
+
+  it('after closing, capital accounts carry each partner’s share, split by commitment', () => {
+    const capitalPostings = [
+      ...preClose.filter(p => p.lpEntityId).map(p => ({ lpEntityId: p.lpEntityId!, amount: p.amount, sourceType: 'capital_call', entryDate: p.entryDate })),
+      ...feeAlloc.filter(p => p.lpEntityId).map(p => ({ lpEntityId: p.lpEntityId!, amount: p.amount, sourceType: 'management_fee', entryDate: p.entryDate })),
+      ...markAlloc.filter(p => p.lpEntityId).map(p => ({ lpEntityId: p.lpEntityId!, amount: p.amount, sourceType: 'valuation', entryDate: p.entryDate })),
+    ]
+    const caps = computeCapitalAccounts(capitalPostings)
+    const a = caps.get('a')!
+    const b = caps.get('b')!
+
+    // A holds 60% of commitments, B 40%.
+    expect(a.contributions).toBe(600_000)
+    expect(a.managementFees).toBe(-60_000)
+    expect(a.unrealizedGains).toBe(300_000)
+    expect(a.ending).toBe(840_000)
+    expect(rollForwardTies(a)).toBe(true)
+
+    expect(b.managementFees).toBe(-40_000)
+    expect(b.unrealizedGains).toBe(200_000)
+    expect(b.ending).toBe(560_000)
+    expect(rollForwardTies(b)).toBe(true)
+
+    // Capital accounts now sum to net assets — the whole point of the close.
+    expect(a.ending + b.ending).toBe(1_400_000)
+  })
+
+  it('the bridge cancels the double-count, so the balance sheet still balances', () => {
+    const bs = balanceSheet(accounts, postClose)
+    expect(bs.assets.total).toBe(1_400_000)
+    expect(bs.partnersCapital.total).toBe(1_400_000)
+    expect(bs.partnersCapital.unallocatedEarnings).toBe(0) // fully allocated now
+    expect(bs.check).toBe(0)
+  })
+
+  it('reopening (voiding the allocation entries) restores the pre-close state exactly', () => {
+    // Voiding removes the allocation postings from the ledger — nothing else changes.
+    const reopened = postClose.filter(p => !feeAlloc.includes(p) && !markAlloc.includes(p))
+    expect(reopened).toEqual(preClose)
+
+    const bs = balanceSheet(accounts, reopened)
+    expect(bs.partnersCapital.unallocatedEarnings).toBe(400_000)
+    expect(bs.check).toBe(0)
+  })
+})

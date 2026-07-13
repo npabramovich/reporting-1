@@ -12,9 +12,35 @@ export const RECON_LINES: (keyof CapitalAccount)[] = [
   'distributions',
   'managementFees',
   'expenses',
-  'gains',
+  'operatingIncome',
+  'realizedGains',
+  'unrealizedGains',
+  'transfers',
+  'carriedInterest',
   'ending',
 ]
+
+/**
+ * Admin statements rarely split income and gains the way the ledger now does, so a
+ * payload keyed with the old single `gains` line is folded into the closest line
+ * rather than silently dropped. Same for `other` → `carriedInterest`, which is what
+ * it held in practice.
+ */
+const LEGACY_LINES: Record<string, keyof CapitalAccount> = {
+  gains: 'realizedGains',
+  other: 'carriedInterest',
+}
+
+/** Normalize an admin payload that may still use the pre-split line names. */
+export function normalizeAdminAccount(admin: Record<string, number | undefined>): AdminCapitalAccount {
+  const out: AdminCapitalAccount = {}
+  for (const [k, v] of Object.entries(admin)) {
+    if (v == null) continue
+    const key = (LEGACY_LINES[k] ?? k) as keyof CapitalAccount
+    out[key] = (out[key] ?? 0) + v
+  }
+  return out
+}
 
 /** Admin figures for one LP. Any omitted line is skipped in the comparison. */
 export type AdminCapitalAccount = Partial<Record<keyof CapitalAccount, number>>

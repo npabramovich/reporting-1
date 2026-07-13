@@ -29,7 +29,7 @@ export function BankView() {
   const [importing, setImporting] = useState(false)
   const [categorizing, setCategorizing] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
-  const [editing, setEditing] = useState<{ txnId: string; entryId: string } | null>(null)
+  const [editing, setEditing] = useState<{ txnId: string; entryId: string; readOnly?: boolean } | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bookedLp, setBookedLp] = useState<Record<string, string>>({})
   const [search, setSearch] = useState('')
@@ -275,7 +275,11 @@ export function BankView() {
                       </span>
                     )}
                     {t.status === 'reconciled' && (
-                      <span className="flex justify-end"><button onClick={() => act(t.id, 'unpost')} title="Revert to draft so you can edit it" className={actionBtn}>Unpost</button></span>
+                      <span className="flex justify-end">
+                        {t.journal_entry_id
+                          ? <button onClick={() => setEditing({ txnId: t.id, entryId: t.journal_entry_id!, readOnly: true })} title="See the journal entry that was booked — unpost from there to edit it" className={actionBtn}>View / edit</button>
+                          : <button onClick={() => act(t.id, 'unpost')} title="Revert to draft" className={actionBtn}>Unpost</button>}
+                      </span>
                     )}
                     {t.status === 'ignored' && (
                       <span className="flex items-center gap-1.5 justify-end">
@@ -294,7 +298,7 @@ export function BankView() {
         </>
       )}
 
-      {editing && <EntryModal txnId={editing.txnId} entryId={editing.entryId} onClose={() => setEditing(null)} onSaved={load} />}
+      {editing && <EntryModal txnId={editing.txnId} entryId={editing.entryId} readOnly={editing.readOnly} onClose={() => setEditing(null)} onSaved={load} />}
     </div>
   )
 }

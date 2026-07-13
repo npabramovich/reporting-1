@@ -5,6 +5,8 @@
 import type { Account, AccountType, Posting } from './types'
 import { NORMAL_SIDE } from './types'
 import type { CapitalAccount } from './capital-account'
+import { ACTIVITY_FIELDS, emptyAccount } from './capital-account'
+import { apportionCents } from './allocation'
 
 function r(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100
@@ -69,21 +71,89 @@ function section(label: string, tb: TrialBalance, type: AccountType): StatementS
   return { label, rows, total }
 }
 
+/**
+ * Postings within a window. A missing `entryDate` is treated as in-scope rather
+ * than dropped — losing a posting would silently unbalance a statement, which is
+ * far worse than including one whose date we don't know.
+ */
+export function postingsInPeriod<T extends Posting>(postings: T[], start?: string | null, end?: string | null): T[] {
+  return postings.filter(p => {
+    const d = p.entryDate
+    if (!d) return true
+    if (start && d < start) return false
+    if (end && d > end) return false
+    return true
+  })
+}
+
+/** Postings cumulative up to and including a date — the basis for a balance sheet. */
+export function postingsAsOf<T extends Posting>(postings: T[], end?: string | null): T[] {
+  return postingsInPeriod(postings, null, end)
+}
+
 export interface BalanceSheet {
   assets: StatementSection
   liabilities: StatementSection
   equity: StatementSection
   /** assets − liabilities − equity; zero when the ledger balances. */
   check: number
+  partnersCapital: {
+    /** Net assets — the single partners'-capital line. */
+    total: number
+    /**
+     * Cumulative net income that has NOT yet been allocated to partners' capital
+     * accounts — i.e. periods that haven't been closed. Zero on fully-closed books.
+     * Non-zero means fund-level statements are right but PER-LP numbers understate.
+     */
+    unallocatedEarnings: number
+  }
 }
 
-/** Balance sheet: assets = liabilities + partners' capital. */
+/**
+ * Balance sheet as of a date: assets = liabilities + partners' capital.
+ *
+ * Pass CUMULATIVE postings (everything up to the date) — a balance sheet is a
+ * point-in-time statement, unlike the income statement and cash flows.
+ *
+ * Partners' capital is a SINGLE total, not a line per partner: the statement of
+ * changes in partners' capital is where the per-partner detail belongs. That total
+ * is net assets, so it includes cumulative net income that hasn't been closed into
+ * the capital accounts yet — otherwise the balance sheet simply would not balance,
+ * and `check` would silently carry the unclosed P&L.
+ */
 export function balanceSheet(accounts: Account[], postings: Posting[]): BalanceSheet {
   const tb = trialBalance(accounts, postings)
   const assets = section('Assets', tb, 'asset')
   const liabilities = section('Liabilities', tb, 'liability')
-  const equity = section("Partners' capital", tb, 'equity')
-  return { assets, liabilities, equity, check: r(assets.total - liabilities.total - equity.total) }
+
+  const capitalAccounts = section("Partners' capital", tb, 'equity')
+  const income = section('Income', tb, 'income')
+  const expenses = section('Expenses', tb, 'expense')
+  const netIncome = r(income.total - expenses.total)
+
+  // Net income already pushed into capital accounts by a period close sits as a
+  // DEBIT in the undistributed-earnings bridge, cancelling the double-count. What's
+  // left is what no close has allocated yet.
+  const bridge = accounts.find(a => a.subtype === 'undistributed_earnings')
+  const bridgeRow = bridge ? tb.rows.find(row => row.accountId === bridge.id) : undefined
+  const allocated = bridgeRow ? r(-bridgeRow.balance) : 0 // equity normal is credit; a debit balance is allocation
+  const unallocatedEarnings = r(netIncome - allocated)
+
+  // One line, no per-partner detail: that belongs in the statement of changes.
+  const total = r(capitalAccounts.total + netIncome)
+  const equity: StatementSection = {
+    label: "Partners' capital",
+    rows: [],
+    total,
+  }
+
+  return {
+    assets,
+    liabilities,
+    equity,
+    check: r(assets.total - liabilities.total - total),
+    partnersCapital: { total, unallocatedEarnings },
+  }
 }
 
 export interface IncomeStatement {
@@ -92,7 +162,12 @@ export interface IncomeStatement {
   netIncome: number
 }
 
-/** Income statement: net income = income − expenses. */
+/**
+ * Income statement FOR A PERIOD: net income = income − expenses.
+ *
+ * Pass postings scoped to the window (`postingsInPeriod`). Handing it cumulative
+ * postings yields an inception-to-date figure, which is what this used to do.
+ */
 export function incomeStatement(accounts: Account[], postings: Posting[]): IncomeStatement {
   const tb = trialBalance(accounts, postings)
   const income = section('Income', tb, 'income')
@@ -110,35 +185,112 @@ export interface SoiRow {
   fairValue: number
   /** Fair value as a fraction of net assets (0..1). */
   pctOfNetAssets: number
+  // Present only when the row came from the portfolio tracker (source: 'tracker').
+  companyId?: string
+  industry?: string | null
+  country?: string | null
+  stage?: string | null
+  assetType?: string
+  shares?: number | null
+  sharePrice?: number | null
+  unrealized?: number
+  moic?: number | null
+}
+/** A subtotal band — ASC 946 wants fair value grouped by industry and asset type. */
+export interface SoiGroup {
+  name: string
+  cost: number
+  fairValue: number
+  pctOfNetAssets: number
 }
 export interface ScheduleOfInvestments {
   rows: SoiRow[]
   totalCost: number
   totalFairValue: number
   netAssets: number
+  /** 'tracker' = per-company rows; 'ledger' = the single aggregate fallback. */
+  source: 'tracker' | 'ledger'
+  /** Control totals from the ledger — the rows must tie to these. */
+  ledgerCost: number
+  ledgerFairValue: number
+  /** rows − ledger. Non-zero means the tracker and the books disagree. */
+  costVariance: number
+  fairValueVariance: number
+  byIndustry: SoiGroup[]
+  byGeography: SoiGroup[]
+  byAssetType: SoiGroup[]
+}
+
+function groupBy(rows: SoiRow[], key: (row: SoiRow) => string, netAssets: number): SoiGroup[] {
+  const m = new Map<string, { cost: number; fairValue: number }>()
+  for (const row of rows) {
+    const k = key(row)
+    const g = m.get(k) ?? { cost: 0, fairValue: 0 }
+    m.set(k, { cost: g.cost + row.cost, fairValue: g.fairValue + row.fairValue })
+  }
+  return Array.from(m.entries())
+    .map(([name, g]) => ({
+      name,
+      cost: r(g.cost),
+      fairValue: r(g.fairValue),
+      pctOfNetAssets: netAssets ? r(g.fairValue / netAssets) : 0,
+    }))
+    .sort((a, b) => b.fairValue - a.fairValue)
 }
 
 /**
- * Schedule of investments derived from the ledger: cost from investment-cost
- * accounts, fair value = cost + the unrealized-appreciation accounts. Aggregated
- * to a portfolio line today (per-investment tagging is a later refinement); for
- * an SPV that single line is exactly right.
+ * Schedule of investments.
+ *
+ * Rows come from the portfolio tracker (`positions`) — the ledger only knows
+ * totals, so it can't name a company or a share count. The ledger still supplies
+ * the CONTROL TOTALS (investment-cost accounts; fair value = cost + unrealized),
+ * and the variance between the two is reported rather than hidden: a non-zero
+ * variance means a mark was booked in one system and not the other.
+ *
+ * With no positions supplied, it degrades to the old single aggregate line, which
+ * is still correct for a vehicle whose holdings aren't tracked per-company.
  */
-export function scheduleOfInvestments(accounts: Account[], postings: Posting[], netAssets: number): ScheduleOfInvestments {
+export function scheduleOfInvestments(
+  accounts: Account[],
+  postings: Posting[],
+  netAssets: number,
+  // pctOfNetAssets is derived here, so callers don't supply it.
+  positions: Omit<SoiRow, 'pctOfNetAssets'>[] = []
+): ScheduleOfInvestments {
   const tb = trialBalance(accounts, postings)
   const balOf = (subtype: string) => r(
     tb.rows.filter(row => accounts.find(a => a.id === row.accountId)?.subtype === subtype).reduce((s, row) => s + row.balance, 0)
   )
-  const cost = balOf('investment')
-  const unrealized = balOf('unrealized')
-  const fairValue = r(cost + unrealized)
-  const rows: SoiRow[] = fairValue === 0 && cost === 0 ? [] : [{
-    name: 'Portfolio investments',
-    cost,
-    fairValue,
-    pctOfNetAssets: netAssets ? r(fairValue / netAssets) : 0,
-  }]
-  return { rows, totalCost: cost, totalFairValue: fairValue, netAssets: r(netAssets) }
+  const ledgerCost = balOf('investment')
+  const ledgerFairValue = r(ledgerCost + balOf('unrealized'))
+
+  const fromTracker = positions.length > 0
+  const rows: SoiRow[] = fromTracker
+    ? positions.map(p => ({ ...p, pctOfNetAssets: netAssets ? r(p.fairValue / netAssets) : 0 }))
+    : ledgerFairValue === 0 && ledgerCost === 0 ? [] : [{
+      name: 'Portfolio investments',
+      cost: ledgerCost,
+      fairValue: ledgerFairValue,
+      pctOfNetAssets: netAssets ? r(ledgerFairValue / netAssets) : 0,
+    }]
+
+  const totalCost = r(rows.reduce((s, x) => s + x.cost, 0))
+  const totalFairValue = r(rows.reduce((s, x) => s + x.fairValue, 0))
+
+  return {
+    rows,
+    totalCost,
+    totalFairValue,
+    netAssets: r(netAssets),
+    source: fromTracker ? 'tracker' : 'ledger',
+    ledgerCost,
+    ledgerFairValue,
+    costVariance: r(totalCost - ledgerCost),
+    fairValueVariance: r(totalFairValue - ledgerFairValue),
+    byIndustry: fromTracker ? groupBy(rows, x => x.industry || 'Unclassified', netAssets) : [],
+    byGeography: fromTracker ? groupBy(rows, x => x.country || 'Unclassified', netAssets) : [],
+    byAssetType: fromTracker ? groupBy(rows, x => x.assetType || 'Unclassified', netAssets) : [],
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -154,13 +306,13 @@ export interface ChangesInPartnersCapital {
   totals: CapitalAccount
 }
 
-const CAP_FIELDS: (keyof CapitalAccount)[] = ['beginning', 'contributions', 'distributions', 'managementFees', 'expenses', 'gains', 'other', 'ending']
+const CAP_FIELDS: (keyof CapitalAccount)[] = ['beginning', ...ACTIVITY_FIELDS, 'ending']
 
 /**
  * Statement of changes in partners' capital: each LP's roll-forward plus a GP
  * row, with a totals column. `gpEnding` is the GP capital balance (carry + GP
- * commitment); the GP's activity lines aren't tracked per-source, so it carries
- * as `other`.
+ * commitment); the GP's activity isn't tracked per-source, so it carries on the
+ * carried-interest line — which is what a GP capital balance overwhelmingly is.
  */
 export function changesInPartnersCapital(
   capitalAccounts: Map<string, CapitalAccount>,
@@ -172,7 +324,13 @@ export function changesInPartnersCapital(
     .sort((a, b) => a.name.localeCompare(b.name))
 
   if (gpEnding !== 0) {
-    partners.push({ id: 'gp', name: 'General Partner', beginning: 0, contributions: 0, distributions: 0, managementFees: 0, expenses: 0, gains: 0, other: r(gpEnding), ending: r(gpEnding) })
+    partners.push({
+      id: 'gp',
+      name: 'General Partner',
+      ...emptyAccount(),
+      carriedInterest: r(gpEnding),
+      ending: r(gpEnding),
+    })
   }
 
   const totals = CAP_FIELDS.reduce((acc, f) => { acc[f] = r(partners.reduce((s, p) => s + (p[f] as number), 0)); return acc }, {} as CapitalAccount)
@@ -184,58 +342,187 @@ export function changesInPartnersCapital(
 // ---------------------------------------------------------------------------
 
 export interface CashPosting {
+  /** The journal entry this posting belongs to — used to find a cash movement's counter-legs. */
+  entryId: string
   accountId: string
   amount: number
   sourceType: string | null
+  entryDate?: string | null
+  memo?: string | null
 }
 export interface CashFlowLine { sourceType: string; label: string; amount: number }
 export interface CashFlowSection { label: string; lines: CashFlowLine[]; total: number }
+/** A disclosable non-cash investing/financing transaction (ASC 230-10-50-3). */
+export interface NonCashItem {
+  entryId: string
+  date: string | null
+  description: string
+  amount: number
+  legs: { name: string; amount: number }[]
+}
 export interface StatementOfCashFlows {
   operating: CashFlowSection
   financing: CashFlowSection
   netChange: number
   openingCash: number
   endingCash: number
+  /**
+   * Supplemental non-cash investing and financing activities. Without this, a fund
+   * whose lender paid the portfolio company directly shows a loan being repaid that
+   * was never drawn, and an investment that was never bought — because neither leg
+   * ever touched the bank account.
+   */
+  nonCash: NonCashItem[]
 }
 
 // Contributions and distributions are financing; everything else that moves cash
 // (fees, expenses, realized proceeds, investment purchases) is operating —
 // investment-company style, where investment activity runs through operating.
-const FINANCING_SOURCES = new Set(['capital_call', 'opening_balance', 'distribution'])
-const CASH_LINE_LABELS: Record<string, string> = {
-  capital_call: 'Capital contributions',
-  opening_balance: 'Opening capital',
-  distribution: 'Distributions to partners',
-  management_fee: 'Management fees paid',
-  partnership_expense: 'Partnership expenses paid',
-  organizational_expense: 'Organizational expenses paid',
-  realized_gain: 'Investment proceeds / realizations',
-  income: 'Interest and dividends received',
-  manual: 'Investment purchases / other',
+/**
+ * Financing activity is defined by the COUNTER-ACCOUNT a cash movement hits —
+ * partners' capital, the capital-call receivable, or borrowings. Everything else
+ * that moves cash (fees, expenses, interest, investment purchases, realizations) is
+ * operating, investment-company style.
+ */
+const FINANCING_SUBTYPES = new Set([
+  'lp_capital', 'gp_capital', 'members_capital',
+  'receivable',                    // 1300 Due from LPs — funding a capital call
+  'loan_payable', 'note_payable',  // borrowings: draws and principal repayments
+])
+
+function isFinancing(account: Account): boolean {
+  return !!account.subtype && FINANCING_SUBTYPES.has(account.subtype)
 }
 
 /**
- * Statement of cash flows for the vehicle, built from postings to the cash
- * account grouped by source type. `netChange` reconciles to ending − opening cash.
+ * Accounts whose movement makes a non-cash entry DISCLOSABLE — i.e. it was an
+ * investing or financing transaction that simply bypassed the bank account.
+ * A revaluation (unrealized ↔ income) is non-cash but is neither, so it is not
+ * disclosed here; nor are period-close allocations, which are equity reclasses and
+ * are filtered out via the bridge account below.
  */
-export function statementOfCashFlows(cashAccountId: string, postings: CashPosting[], openingCash = 0): StatementOfCashFlows {
-  const cash = postings.filter(p => p.accountId === cashAccountId)
-  const bySource = new Map<string, number>()
-  for (const p of cash) {
-    const key = p.sourceType ?? 'manual'
-    bySource.set(key, r((bySource.get(key) ?? 0) + p.amount))
+const NONCASH_DISCLOSABLE_SUBTYPES = new Set([
+  'investment',
+  'loan_payable', 'note_payable',
+  'lp_capital', 'gp_capital', 'members_capital',
+  'receivable',
+  'investment_in_fund', 'due_to_fund', 'due_to_gp',
+])
+
+/**
+ * Statement of cash flows FOR A PERIOD.
+ *
+ * Classified by what the cash was paid FOR — the counter-accounts of each entry —
+ * NOT by the entry's source_type. That distinction is load-bearing: a single wire
+ * that repays loan principal AND accrued interest is one entry with one source_type,
+ * but the principal is financing and the interest is operating. Splitting the cash
+ * movement across its counter-legs pro-rata is the only way to report both correctly.
+ *
+ * Pass postings scoped to the window and the cash balance carried in at the start
+ * (`openingCashBalance`).
+ */
+export function statementOfCashFlows(
+  cashAccountId: string,
+  postings: CashPosting[],
+  accounts: Account[],
+  openingCash = 0
+): StatementOfCashFlows {
+  const acctById = new Map(accounts.map(a => [a.id, a]))
+  const byEntry = new Map<string, CashPosting[]>()
+  for (const p of postings) {
+    if (!byEntry.has(p.entryId)) byEntry.set(p.entryId, [])
+    byEntry.get(p.entryId)!.push(p)
   }
 
-  const build = (label: string, keys: string[]): CashFlowSection => {
-    const lines = keys
-      .filter(k => bySource.get(k) !== undefined && bySource.get(k) !== 0)
-      .map(k => ({ sourceType: k, label: CASH_LINE_LABELS[k] ?? k, amount: bySource.get(k)! }))
+  // accountId → net cash attributed to it.
+  const byCounterAccount = new Map<string, number>()
+  const nonCash: NonCashItem[] = []
+
+  for (const legs of Array.from(byEntry.values())) {
+    const cashAmount = r(legs.filter(l => l.accountId === cashAccountId).reduce((s, l) => s + l.amount, 0))
+
+    if (cashAmount === 0) {
+      // No cash moved. If it was nonetheless an investing/financing transaction —
+      // an investment bought with borrowed money, a loan repaid by a partner
+      // directly — ASC 230 requires it be disclosed, not silently omitted.
+      const isAllocation = legs.some(l => acctById.get(l.accountId)?.subtype === 'undistributed_earnings')
+      const disclosable = !isAllocation && legs.some(l => {
+        const st = acctById.get(l.accountId)?.subtype
+        return !!st && NONCASH_DISCLOSABLE_SUBTYPES.has(st)
+      })
+      if (disclosable) {
+        const first = legs[0]
+        nonCash.push({
+          entryId: first.entryId,
+          date: first.entryDate ?? null,
+          description: first.memo ?? first.sourceType ?? 'Non-cash transaction',
+          // Gross size of the entry = the debit side.
+          amount: r(legs.filter(l => l.amount > 0).reduce((s, l) => s + l.amount, 0)),
+          legs: legs
+            .filter(l => l.amount !== 0)
+            .map(l => ({ name: acctById.get(l.accountId)?.name ?? l.accountId, amount: r(l.amount) })),
+        })
+      }
+      continue
+    }
+
+    const counter = legs.filter(l => l.accountId !== cashAccountId && l.amount !== 0)
+    if (counter.length === 0) continue
+
+    // Split the cash movement across its counter-legs in proportion to their size, so
+    // a mixed principal-plus-interest payment lands partly in financing and partly in
+    // operating. apportionCents keeps the split exact to the cent.
+    const shares = apportionCents(
+      Math.round(cashAmount * 100),
+      counter.map(l => Math.abs(l.amount))
+    )
+    counter.forEach((leg, i) => {
+      const amount = shares[i] / 100
+      byCounterAccount.set(leg.accountId, r((byCounterAccount.get(leg.accountId) ?? 0) + amount))
+    })
+  }
+
+  const build = (label: string, ids: string[]): CashFlowSection => {
+    const lines: CashFlowLine[] = ids
+      .filter(id => (byCounterAccount.get(id) ?? 0) !== 0)
+      .map(id => {
+        const a = acctById.get(id)
+        return {
+          sourceType: a?.code ?? id,
+          label: a ? a.name : 'Unclassified',
+          amount: byCounterAccount.get(id)!,
+        }
+      })
+      .sort((x, y) => Math.abs(y.amount) - Math.abs(x.amount))
     return { label, lines, total: r(lines.reduce((s, l) => s + l.amount, 0)) }
   }
 
-  const allKeys = Array.from(bySource.keys())
-  const financing = build('Financing activities', allKeys.filter(k => FINANCING_SOURCES.has(k)))
-  const operating = build('Operating activities', allKeys.filter(k => !FINANCING_SOURCES.has(k)))
+  const ids = Array.from(byCounterAccount.keys())
+  const financingIds = ids.filter(id => { const a = acctById.get(id); return a ? isFinancing(a) : false })
+  const operatingIds = ids.filter(id => !financingIds.includes(id))
+
+  const financing = build('Financing activities', financingIds)
+  const operating = build('Operating activities', operatingIds)
   const netChange = r(operating.total + financing.total)
-  return { operating, financing, netChange, openingCash: r(openingCash), endingCash: r(openingCash + netChange) }
+  nonCash.sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''))
+  return {
+    operating,
+    financing,
+    netChange,
+    openingCash: r(openingCash),
+    endingCash: r(openingCash + netChange),
+    nonCash,
+  }
+}
+
+/** The cash balance carried into a period — every cash posting strictly before `start`. */
+export function openingCashBalance(
+  cashAccountId: string,
+  postings: { accountId: string; amount: number; entryDate?: string | null }[],
+  start?: string | null
+): number {
+  if (!start) return 0
+  return r(postings
+    .filter(p => p.accountId === cashAccountId && p.entryDate && p.entryDate < start)
+    .reduce((s, p) => s + p.amount, 0))
 }

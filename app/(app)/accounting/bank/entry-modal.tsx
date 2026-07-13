@@ -15,11 +15,13 @@ const newLine = (): Line => ({ key: `l${seq++}`, accountId: '', debit: '', credi
 const num = (s: string) => { const n = parseFloat(s); return Number.isFinite(n) ? n : 0 }
 
 /**
- * Edit a drafted journal entry inline — the double-entry lines behind a bank
- * transaction. Change accounts/amounts, add or remove lines, and save (or save
- * and post) without the two-step suggest-then-post flow. Draft entries only.
+ * The double-entry lines behind a bank transaction. Opens read-only for posted
+ * entries (`readOnly`) so you can see what was booked without reverting it, and
+ * editable for drafts — change accounts/amounts, add or remove lines, and save
+ * (or save and post) without the two-step suggest-then-post flow. Unposting from
+ * the read-only view flips the same modal into edit mode.
  */
-export function EntryModal({ txnId, entryId, onClose, onSaved }: { txnId: string; entryId: string; onClose: () => void; onSaved: () => void }) {
+export function EntryModal({ txnId, entryId, readOnly = false, onClose, onSaved }: { txnId: string; entryId: string; readOnly?: boolean; onClose: () => void; onSaved: () => void }) {
   const lf = useLedgerFetch()
   const currency = useCurrency()
   const fmt = (v: number) => formatCurrencyPrice(v, currency)
@@ -31,6 +33,7 @@ export function EntryModal({ txnId, entryId, onClose, onSaved }: { txnId: string
   const [date, setDate] = useState('')
   const [memo, setMemo] = useState('')
   const [lines, setLines] = useState<Line[]>([])
+  const [editable, setEditable] = useState(!readOnly)
 
   useEffect(() => {
     Promise.all([
@@ -50,7 +53,10 @@ export function EntryModal({ txnId, entryId, onClose, onSaved }: { txnId: string
   }, [lf, entryId])
 
   const acctById = new Map(accounts.map(a => [a.id, a]))
-  const selectable = accounts.filter(a => !a.lp_entity_id) // regular chart accounts (not per-LP capital)
+  // Both kinds are selectable. A per-LP capital account carries its own lp_entity_id,
+  // so choosing one is how you set (or change) the partner on that line.
+  const general = accounts.filter(a => !a.lp_entity_id)
+  const partnerAccounts = accounts.filter(a => a.lp_entity_id)
 
   const totalDebit = lines.reduce((s, l) => s + num(l.debit), 0)
   const totalCredit = lines.reduce((s, l) => s + num(l.credit), 0)
@@ -71,12 +77,24 @@ export function EntryModal({ txnId, entryId, onClose, onSaved }: { txnId: string
     setSaving(false); onSaved(); onClose()
   }
 
+  // Revert the entry to draft and stay open in edit mode — the read-only view's
+  // way in. Refuses on a closed period, which surfaces as the API error.
+  async function unpostAndEdit() {
+    setSaving(true); setError(null)
+    const res = await lf('/api/accounting/bank', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'unpost', id: txnId }) })
+    if (!res.ok) { setError((await res.json().catch(() => ({}))).error ?? 'Unpost failed'); setSaving(false); return }
+    setSaving(false); setEditable(true); onSaved()
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="w-full max-w-2xl rounded-lg border bg-card shadow-xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="text-sm font-medium">Edit journal entry</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+          <h2 className="text-sm font-medium">{editable ? 'Edit journal entry' : 'Journal entry'}</h2>
+          <div className="flex items-center gap-2">
+            {!editable && <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Posted</span>}
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+          </div>
         </div>
 
         {loading ? (
@@ -85,10 +103,14 @@ export function EntryModal({ txnId, entryId, onClose, onSaved }: { txnId: string
           <div className="space-y-3 p-4">
             <div className="flex flex-wrap gap-3">
               <label className="text-xs text-muted-foreground">Date
-                <input type="date" value={date} onChange={e => setDate(e.target.value)} className="mt-0.5 block rounded border border-input bg-transparent px-2 py-1 text-sm" />
+                {editable
+                  ? <input type="date" value={date} onChange={e => setDate(e.target.value)} className="mt-0.5 block rounded border border-input bg-transparent px-2 py-1 text-sm" />
+                  : <span className="mt-0.5 block px-2 py-1 font-mono text-sm text-foreground">{date || '—'}</span>}
               </label>
               <label className="min-w-[200px] flex-1 text-xs text-muted-foreground">Memo
-                <input value={memo} onChange={e => setMemo(e.target.value)} className="mt-0.5 block w-full rounded border border-input bg-transparent px-2 py-1 text-sm" />
+                {editable
+                  ? <input value={memo} onChange={e => setMemo(e.target.value)} className="mt-0.5 block w-full rounded border border-input bg-transparent px-2 py-1 text-sm" />
+                  : <span className="mt-0.5 block px-2 py-1 text-sm text-foreground">{memo || '—'}</span>}
               </label>
             </div>
 
@@ -103,29 +125,58 @@ export function EntryModal({ txnId, entryId, onClose, onSaved }: { txnId: string
               </thead>
               <tbody>
                 {lines.map(l => {
-                  const locked = !!l.lpEntityId
+                  const acct = acctById.get(l.accountId)
                   return (
                     <tr key={l.key}>
                       <td className="py-1 pr-2">
-                        {locked ? (
-                          <span className="text-xs">{acctById.get(l.accountId)?.name ?? 'LP capital'}</span>
+                        {!editable ? (
+                          <span className="text-xs">
+                            {acct?.name ?? '—'}
+                            {acct?.code && <span className="ml-1.5 font-mono text-muted-foreground/70">{acct.code}</span>}
+                          </span>
                         ) : (
-                          <select value={l.accountId} onChange={e => update(l.key, { accountId: e.target.value })} className="w-full rounded border border-input bg-transparent px-1.5 py-1 text-xs">
+                          <select
+                            value={l.accountId}
+                            onChange={e => {
+                              const a = acctById.get(e.target.value)
+                              // The account determines the partner: per-LP capital accounts carry
+                              // their own lp_entity_id, so switching account switches partner.
+                              update(l.key, { accountId: e.target.value, lpEntityId: a?.lp_entity_id ?? null })
+                            }}
+                            className="w-full rounded border border-input bg-transparent px-1.5 py-1 text-xs"
+                          >
                             <option value="">Select account…</option>
-                            {selectable.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}
+                            <optgroup label="Accounts">
+                              {general.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}
+                            </optgroup>
+                            {partnerAccounts.length > 0 && (
+                              <optgroup label="Partner capital">
+                                {partnerAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                              </optgroup>
+                            )}
                           </select>
                         )}
                       </td>
-                      <td className="px-1 py-1"><input inputMode="decimal" value={l.debit} onChange={e => update(l.key, { debit: e.target.value, credit: '' })} className="w-full rounded border border-input bg-transparent px-1.5 py-1 text-right font-mono text-xs" /></td>
-                      <td className="px-1 py-1"><input inputMode="decimal" value={l.credit} onChange={e => update(l.key, { credit: e.target.value, debit: '' })} className="w-full rounded border border-input bg-transparent px-1.5 py-1 text-right font-mono text-xs" /></td>
-                      <td className="py-1 text-right">{!locked && <button onClick={() => setLines(prev => prev.filter(x => x.key !== l.key))} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>}</td>
+                      {editable ? (
+                        <>
+                          <td className="px-1 py-1"><input inputMode="decimal" value={l.debit} onChange={e => update(l.key, { debit: e.target.value, credit: '' })} className="w-full rounded border border-input bg-transparent px-1.5 py-1 text-right font-mono text-xs" /></td>
+                          <td className="px-1 py-1"><input inputMode="decimal" value={l.credit} onChange={e => update(l.key, { credit: e.target.value, debit: '' })} className="w-full rounded border border-input bg-transparent px-1.5 py-1 text-right font-mono text-xs" /></td>
+                          <td className="py-1 text-right"><button onClick={() => setLines(prev => prev.filter(x => x.key !== l.key))} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button></td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-1 py-1 text-right font-mono text-xs">{num(l.debit) > 0 ? fmt(num(l.debit)) : ''}</td>
+                          <td className="px-1 py-1 text-right font-mono text-xs">{num(l.credit) > 0 ? fmt(num(l.credit)) : ''}</td>
+                          <td />
+                        </>
+                      )}
                     </tr>
                   )
                 })}
               </tbody>
               <tfoot>
                 <tr className="border-t text-xs">
-                  <td className="pt-1"><button onClick={() => setLines(prev => [...prev, newLine()])} className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"><Plus className="h-3.5 w-3.5" /> Add line</button></td>
+                  <td className="pt-1">{editable && <button onClick={() => setLines(prev => [...prev, newLine()])} className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"><Plus className="h-3.5 w-3.5" /> Add line</button>}</td>
                   <td className="pt-1 text-right font-mono">{fmt(totalDebit)}</td>
                   <td className="pt-1 text-right font-mono">{fmt(totalCredit)}</td>
                   <td />
@@ -138,11 +189,18 @@ export function EntryModal({ txnId, entryId, onClose, onSaved }: { txnId: string
               {error && <span className="text-xs text-destructive">{error}</span>}
             </div>
 
-            <div className="flex justify-end gap-2 pt-1">
-              <Button size="sm" variant="outline" onClick={onClose}>Cancel</Button>
-              <Button size="sm" variant="outline" onClick={() => save(false)} disabled={saving || !balanced}>{saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Save draft</Button>
-              <Button size="sm" onClick={() => save(true)} disabled={saving || !balanced}>Save &amp; post</Button>
-            </div>
+            {editable ? (
+              <div className="flex justify-end gap-2 pt-1">
+                <Button size="sm" variant="outline" onClick={onClose}>Cancel</Button>
+                <Button size="sm" variant="outline" onClick={() => save(false)} disabled={saving || !balanced}>{saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Save draft</Button>
+                <Button size="sm" onClick={() => save(true)} disabled={saving || !balanced}>Save &amp; post</Button>
+              </div>
+            ) : (
+              <div className="flex justify-end gap-2 pt-1">
+                <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
+                <Button size="sm" variant="outline" onClick={unpostAndEdit} disabled={saving} title="Revert to draft so you can edit it">{saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Unpost &amp; edit</Button>
+              </div>
+            )}
           </div>
         )}
       </div>

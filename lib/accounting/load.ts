@@ -8,7 +8,7 @@ import type { Account, AccountType, Posting } from './types'
 import type { CapitalPosting } from './capital-account'
 import { vehicleIdByName } from './vehicle-id'
 
-export type SourcedPosting = Posting & { sourceType: string | null }
+export type SourcedPosting = Posting & { sourceType: string | null; entryId: string; memo: string | null }
 
 export interface LoadedLedger {
   accounts: Account[]
@@ -30,7 +30,9 @@ export async function loadPostedLedger(
   asOf?: string
 ): Promise<LoadedLedger> {
   const vehicleId = await vehicleIdByName(admin, fundId, group)
-  let entriesQ = admin.from('journal_entries' as any).select('id, source_type, status').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'posted')
+  // entry_date rides along so the capital-account roll-forward can be scoped to a
+  // statement period without a second load.
+  let entriesQ = admin.from('journal_entries' as any).select('id, source_type, status, entry_date, memo').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'posted')
   if (asOf) entriesQ = entriesQ.lte('entry_date', asOf)
 
   const [{ data: acctRows }, { data: entryRows }, { data: postingRows }] = await Promise.all([
@@ -52,6 +54,12 @@ export async function loadPostedLedger(
   const sourceByEntry = new Map<string, string | null>(
     ((entryRows as any[]) ?? []).map(e => [e.id as string, (e.source_type ?? null) as string | null])
   )
+  const dateByEntry = new Map<string, string | null>(
+    ((entryRows as any[]) ?? []).map(e => [e.id as string, (e.entry_date ?? null) as string | null])
+  )
+  const memoByEntry = new Map<string, string | null>(
+    ((entryRows as any[]) ?? []).map(e => [e.id as string, (e.memo ?? null) as string | null])
+  )
 
   // LP capital accounts carry lp_entity_id on the account itself. Only postings to
   // THOSE accounts belong in the capital-account roll-forward — a posting can also
@@ -66,10 +74,11 @@ export async function loadPostedLedger(
     if (!sourceByEntry.has(p.journal_entry_id)) continue
     const amount = Number(p.amount)
     const sourceType = sourceByEntry.get(p.journal_entry_id) ?? null
-    postings.push({ accountId: p.account_id, amount, currency: p.currency ?? 'USD', lpEntityId: p.lp_entity_id ?? null })
-    sourcedPostings.push({ accountId: p.account_id, amount, currency: p.currency ?? 'USD', lpEntityId: p.lp_entity_id ?? null, sourceType })
+    const entryDate = dateByEntry.get(p.journal_entry_id) ?? null
+    postings.push({ accountId: p.account_id, amount, currency: p.currency ?? 'USD', lpEntityId: p.lp_entity_id ?? null, entryDate })
+    sourcedPostings.push({ entryId: p.journal_entry_id, accountId: p.account_id, amount, currency: p.currency ?? 'USD', lpEntityId: p.lp_entity_id ?? null, sourceType, entryDate, memo: memoByEntry.get(p.journal_entry_id) ?? null })
     if (p.lp_entity_id && lpCapitalAccountIds.has(p.account_id)) {
-      capitalPostings.push({ lpEntityId: p.lp_entity_id, amount, sourceType })
+      capitalPostings.push({ lpEntityId: p.lp_entity_id, amount, sourceType, entryDate })
     }
   }
 
