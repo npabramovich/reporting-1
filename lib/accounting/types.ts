@@ -17,6 +17,8 @@ export interface Account {
   subtype?: string | null
   /** Set for per-LP capital sub-accounts. */
   lpEntityId?: string | null
+  /** Set for per-investment sub-accounts (1100-<companyId> cost, 1200-<companyId> unrealized). */
+  companyId?: string | null
 }
 
 export interface Posting {

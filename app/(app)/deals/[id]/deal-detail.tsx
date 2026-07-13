@@ -11,6 +11,7 @@ import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { useAnalystContext } from '@/components/analyst-context'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
+import { DealResearchCard } from '@/components/deals/research-card'
 
 type DealStatus = 'new' | 'reviewing' | 'advancing' | 'met' | 'diligence' | 'invested' | 'passed'
 
@@ -37,6 +38,21 @@ interface Deal {
   prior_deal_id: string | null
   promoted_diligence_id: string | null
   created_at: string
+  // External web research — only run for deals that cleared the fund's interest
+  // bar (see lib/deals/research.ts).
+  research_status: 'pending' | 'running' | 'done' | 'failed' | 'skipped' | null
+  research_summary: string | null
+  research_findings: {
+    founder_background?: string
+    prior_companies?: string[]
+    traction_corroboration?: string
+    market_context?: string
+    red_flags?: string[]
+    open_questions?: string[]
+  } | null
+  research_sources: Array<{ url: string; title: string }> | null
+  research_error: string | null
+  researched_at: string | null
 }
 
 interface EmailRow {
@@ -278,6 +294,19 @@ export function DealDetail({ deal: initial, email, priorDeal }: { deal: Deal; em
           {deal.thesis_fit_analysis || <span className="text-muted-foreground italic">No analysis yet.</span>}
         </CardContent>
       </Card>
+
+      {/* External research sits right after thesis fit: it exists to corroborate
+          (or contradict) the pitch that fit was scored on. */}
+      <DealResearchCard
+        dealId={deal.id}
+        status={deal.research_status}
+        summary={deal.research_summary}
+        findings={deal.research_findings}
+        sources={deal.research_sources}
+        error={deal.research_error}
+        researchedAt={deal.researched_at}
+        onQueued={() => setDeal(d => d ? { ...d, research_status: 'pending', research_error: null } : d)}
+      />
 
       <Card>
         <CardHeader className="pb-3">

@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, FileText } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
-import { useLedgerFetch } from '@/components/accounting-vehicle'
+import { useLedgerFetch, useVehicle } from '@/components/accounting-vehicle'
 import { PERIOD_PRESETS, type PeriodPreset } from '@/lib/accounting/statement-period'
 
 interface Row { lpEntityId: string; name: string; partnerClass: string; commitment: number; called: number; funded: number; outstanding: number; receivable: number; ending: number }
@@ -45,6 +45,7 @@ export function LpStatementView({ lpEntityId }: { lpEntityId: string }) {
   const currency = useCurrency()
   const fmt = (v: number) => formatCurrencyPrice(v, currency)
   const lf = useLedgerFetch()
+  const { group } = useVehicle()
   const [data, setData] = useState<Statement | null>(null)
   const [loading, setLoading] = useState(true)
   const [preset, setPreset] = useState<PeriodPreset>('ytd')
@@ -68,6 +69,11 @@ export function LpStatementView({ lpEntityId }: { lpEntityId: string }) {
   if (!data) return <div className="border border-dashed rounded-lg p-8 text-center text-sm text-muted-foreground">No statement for this LP in the selected vehicle.</div>
 
   const { row, rollForward, periodRollForward, transactions, period } = data
+  const pdfQs = new URLSearchParams({ lp: lpEntityId })
+  if (group) pdfQs.set('group', group)
+  if (preset === 'custom') { if (start) pdfQs.set('start', start); if (end) pdfQs.set('end', end) }
+  else pdfQs.set('preset', preset)
+  const statementPdfUrl = `/api/accounting/lp-statement/pdf?${pdfQs}`
   // Hide a line only when it's zero in BOTH columns — a line that's zero this period
   // but non-zero since inception still belongs on the statement.
   const lines = ROLL.filter(l =>
@@ -85,7 +91,19 @@ export function LpStatementView({ lpEntityId }: { lpEntityId: string }) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-medium">{row.name}{row.partnerClass === 'gp' && <span className="ml-2 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground align-middle">GP</span>}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-medium">{row.name}{row.partnerClass === 'gp' && <span className="ml-2 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground align-middle">GP</span>}</h2>
+        {/* Preview only — renders the PDF without storing or sharing it. Publishing
+            to the portal is the bulk action on the capital accounts page. */}
+        <a
+          href={statementPdfUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 rounded border border-input px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <FileText className="h-3.5 w-3.5" />Preview statement PDF
+        </a>
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {cards.map(c => (

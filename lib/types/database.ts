@@ -2937,9 +2937,14 @@ export type IssueType          =
   | 'deal_extraction'
   | 'routing_low_confidence'
   | 'multi_company_email'
+  | 'diligence_intake_pending'
 
-export type RoutingLabel       = 'reporting' | 'interactions' | 'deals' | 'other'
-export type RoutedTo           = 'reporting' | 'interactions' | 'deals' | 'audit' | 'review'
+// 'deals' = a company pitching us (screening / dealflow → inbound_deals).
+// 'diligence' = an email about a company ALREADY in diligence; it is proposed
+// for that deal's data room and imported only once a human accepts it.
+export type RoutingLabel       = 'reporting' | 'interactions' | 'deals' | 'diligence' | 'other'
+export type RoutedTo           = 'reporting' | 'interactions' | 'deals' | 'diligence' | 'audit' | 'review'
+export type DiligenceIntakeStatus = 'pending' | 'accepted' | 'rejected'
 export type ThesisFitScore     = 'strong' | 'moderate' | 'weak' | 'out_of_thesis' | 'spam'
 export type DealStatus         = 'new' | 'reviewing' | 'advancing' | 'met' | 'diligence' | 'invested' | 'passed'
 export type IntroSource        = 'referral' | 'cold' | 'warm_intro' | 'accelerator' | 'demo_day' | 'event' | 'other'

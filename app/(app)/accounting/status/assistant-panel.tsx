@@ -25,7 +25,7 @@ const SEVERITY = {
   info: { icon: Info, cls: 'text-muted-foreground' },
 }
 
-export function AssistantView() {
+export function AssistantPanel() {
   const currency = useCurrency()
   const fmt = (v: number) => formatCurrencyPrice(v, currency)
   const lf = useLedgerFetch()

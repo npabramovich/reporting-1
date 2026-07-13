@@ -17,6 +17,9 @@ export function AccountingSetup({ alwaysShow = false }: { alwaysShow?: boolean }
   const [cutoverDate, setCutoverDate] = useState('')
   const [bootstrapping, setBootstrapping] = useState(false)
   const [bootstrapMsg, setBootstrapMsg] = useState<string | null>(null)
+  // A vehicle could finish every step here and still carry no investments — the tracker
+  // knew about them and the ledger didn't. That's a setup step, so it belongs on this card.
+  const [inv, setInv] = useState<{ booked: boolean; positions: number } | null>(null)
   const lf = useLedgerFetch()
 
   const refresh = useCallback(async () => {
@@ -27,6 +30,9 @@ export function AccountingSetup({ alwaysShow = false }: { alwaysShow?: boolean }
     setAccountCount(Array.isArray(chart) ? chart.length : 0)
     setPath(status?.setup?.historyMode ?? null)
     setOnboarded(!!status?.onboarded)
+    setInv(status
+      ? { booked: !!status.setup?.investmentsBooked, positions: status.investments?.trackerPositions ?? 0 }
+      : null)
   }, [lf])
 
   useEffect(() => { refresh() }, [refresh])
@@ -95,7 +101,7 @@ export function AccountingSetup({ alwaysShow = false }: { alwaysShow?: boolean }
           <ol className="text-sm text-muted-foreground space-y-1 list-decimal ml-4">
             <li><Link href="/accounting/bank" className="underline underline-offset-2 hover:text-foreground">Import the bank history</Link> (CSV/XLS) — dated cash back to inception.</li>
             <li>Categorize, and match inflows to capital calls / the investment purchase.</li>
-            <li>Mark investments to fair value with the <Link href="/accounting/assistant" className="underline underline-offset-2 hover:text-foreground">assistant</Link> to walk NAV forward.</li>
+            <li><Link href="/accounting/schedule-of-investments" className="underline underline-offset-2 hover:text-foreground">Replay the investment history</Link> — each purchase and mark posts on the date it happened, so gains land in the period they were earned.</li>
             <li><Link href="/accounting/allocation-terms" className="underline underline-offset-2 hover:text-foreground">Set the allocation terms</Link>, then <Link href="/accounting/periods" className="underline underline-offset-2 hover:text-foreground">close each period</Link> to allocate P&amp;L to partners.</li>
             <li>Reconcile capital accounts against the LP snapshot (Reconciliation → Load from LP snapshot).</li>
           </ol>
@@ -117,6 +123,40 @@ export function AccountingSetup({ alwaysShow = false }: { alwaysShow?: boolean }
             Prefer to type each LP&rsquo;s balance from their statement instead?{' '}
             <Link href="/accounting/opening-balances" className="underline underline-offset-2 hover:text-foreground">Enter opening balances manually</Link>.
           </p>
+        </div>
+      )}
+
+      {/* Step 3 — investments. Neither path put them on the ledger: the bank import
+          brings in cash, the cutover bootstrap brings in capital, and the investments
+          themselves are nobody's job. A vehicle can otherwise finish setup with a
+          balance sheet holding no investments at all, which is simply wrong. */}
+      {path && inv && inv.positions > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm border-t pt-3">
+          {inv.booked ? (
+            <>
+              <Check className="h-4 w-4 text-green-600 shrink-0" />
+              <span className="text-muted-foreground">
+                Investments are on the ledger ({inv.positions} {inv.positions === 1 ? 'position' : 'positions'}).
+              </span>
+              <Link href="/accounting/schedule-of-investments" className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
+                Schedule of investments
+              </Link>
+            </>
+          ) : (
+            <>
+              <span className="text-muted-foreground">
+                3. Book the {inv.positions} {inv.positions === 1 ? 'investment' : 'investments'} the tracker holds for this vehicle onto the ledger
+                {path === 'full_history'
+                  ? ' — replay the dated history so each mark lands in its own period.'
+                  : ' — one snapshot at the cutover date.'}
+              </span>
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/accounting/schedule-of-investments">
+                  {path === 'full_history' ? 'Replay investment history' : 'Book investments'}
+                </Link>
+              </Button>
+            </>
+          )}
         </div>
       )}
     </div>

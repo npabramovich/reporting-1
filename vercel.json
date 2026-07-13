@@ -24,6 +24,18 @@
     },
     "app/api/diligence/*/agent/render/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/diligence/*/documents/from-affinity/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/emails/*/accept-to-diligence/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/cron/affinity-sync/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/deal-research/route.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [
@@ -34,6 +46,14 @@
     {
       "path": "/api/cron/memo-agent-worker",
       "schedule": "*/3 * * * *"
+    },
+    {
+      "path": "/api/cron/affinity-sync",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/deal-research",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

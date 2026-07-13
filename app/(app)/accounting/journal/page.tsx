@@ -11,8 +11,7 @@ export default async function JournalPage() {
       <div className="mb-6 space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Journal</h1>
         <p className="text-sm text-muted-foreground">
-          The book of record, as plain-text double-entry. Every entry balances; capital accounts,
-          NAV, and the statements are queries over these postings. Click an entry to view, unpost,
+          Journal ledger as plain-text double-entry entries. All outputs are queries over these entires. Click an entry to view, unpost,
           or edit it.
         </p>
       </div>

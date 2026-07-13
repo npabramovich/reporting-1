@@ -33,6 +33,17 @@ export interface VehicleStatus {
     hasPostedEntries: boolean
     partnerCount: number
     partnersWithCommitment: number
+    /** False only when the tracker holds positions the ledger doesn't carry. */
+    investmentsBooked: boolean
+  }
+  investments: {
+    trackerPositions: number
+    trackerCost: number
+    trackerFairValue: number
+    ledgerCost: number
+    ledgerFairValue: number
+    /** Positions whose own accounts disagree with the tracker. */
+    offLedger: number
   }
   ledger: {
     entryCount: number
@@ -105,7 +116,14 @@ export async function vehicleStatus(
 
   const chartSeeded = accounts.length > 0
   const hasPostedEntries = postedCount > 0
-  const onboarded = chartSeeded && !!historyMode && hasPostedEntries
+
+  // A vehicle whose tracker holds positions the ledger doesn't carry is NOT onboarded,
+  // however complete the rest of it looks. Leaving investments out of this definition
+  // is what let a vehicle "finish" setup with an empty investment ledger — the setup
+  // card vanished and the only hint was a blocker on Status, discovered after the fact.
+  // A vehicle with no positions at all (a fresh SPV pre-investment) is fine.
+  const investmentsBooked = positions.length === 0 || Math.abs(soi.ledgerCost) >= 0.005
+  const onboarded = chartSeeded && !!historyMode && hasPostedEntries && investmentsBooked
 
   // ---------------------------------------------------------------------------
   // What needs attention, worst first.
@@ -143,11 +161,36 @@ export async function vehicleStatus(
     })
   }
 
-  if (soi.source === 'tracker' && (soi.costVariance !== 0 || soi.fairValueVariance !== 0)) {
+  // The tracker knows the fund holds these companies; the ledger doesn't. Without
+  // this, the balance sheet shows no investments and nobody is told why — it would
+  // only surface indirectly as an SOI variance, and only once the chart was seeded.
+  if (positions.length > 0 && Math.abs(soi.ledgerCost) < 0.005) {
+    const trackerCost = roundCents(positions.reduce((s, p) => s + p.cost, 0))
+    const trackerFv = roundCents(positions.reduce((s, p) => s + p.fairValue, 0))
+    issues.push({
+      level: 'blocker',
+      title: 'Investments are not on the ledger',
+      detail: `The portfolio tracker holds ${positions.length} ${positions.length === 1 ? 'position' : 'positions'} in this vehicle (${trackerCost.toFixed(2)} at cost, ${trackerFv.toFixed(2)} at fair value), but the ledger carries no investment balance. The balance sheet and the schedule of investments are both wrong until they're booked.`,
+      href: '/accounting/schedule-of-investments',
+      action: 'Bootstrap investments',
+    })
+  } else if (soi.source === 'tracker' && (soi.costVariance !== 0 || soi.fairValueVariance !== 0)) {
     issues.push({
       level: 'warning',
       title: 'Schedule of investments does not tie to the ledger',
       detail: `Cost is off by ${soi.costVariance.toFixed(2)} and fair value by ${soi.fairValueVariance.toFixed(2)}. A mark or purchase was recorded in one system and not the other.`,
+      href: '/accounting/schedule-of-investments',
+      action: 'Open the schedule',
+    })
+  }
+
+  // Per-company accounts exist but a position disagrees with its own account.
+  const offRows = soi.rows.filter(r => r.tiesOut === false)
+  if (offRows.length > 0) {
+    issues.push({
+      level: 'warning',
+      title: `${offRows.length} ${offRows.length === 1 ? 'investment does' : 'investments do'} not tie to the ledger`,
+      detail: `${offRows.slice(0, 3).map(r => r.name).join(', ')}${offRows.length > 3 ? `, and ${offRows.length - 3} more` : ''}. The tracker and the ledger disagree on cost or fair value for these positions.`,
       href: '/accounting/schedule-of-investments',
       action: 'Open the schedule',
     })
@@ -180,6 +223,15 @@ export async function vehicleStatus(
       hasPostedEntries,
       partnerCount: owners.length,
       partnersWithCommitment,
+      investmentsBooked,
+    },
+    investments: {
+      trackerPositions: positions.length,
+      trackerCost: roundCents(positions.reduce((s, p) => s + p.cost, 0)),
+      trackerFairValue: roundCents(positions.reduce((s, p) => s + p.fairValue, 0)),
+      ledgerCost: soi.ledgerCost,
+      ledgerFairValue: soi.ledgerFairValue,
+      offLedger: soi.rows.filter(r => r.tiesOut === false).length,
     },
     ledger: {
       entryCount: entries.length,

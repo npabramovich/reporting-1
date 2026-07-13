@@ -36,7 +36,7 @@ export async function loadPostedLedger(
   if (asOf) entriesQ = entriesQ.lte('entry_date', asOf)
 
   const [{ data: acctRows }, { data: entryRows }, { data: postingRows }] = await Promise.all([
-    admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
+    admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id, company_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
     entriesQ,
     admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, currency, lp_entity_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
   ])
@@ -49,6 +49,7 @@ export async function loadPostedLedger(
     type: a.type as AccountType,
     subtype: a.subtype ?? null,
     lpEntityId: a.lp_entity_id ?? null,
+    companyId: a.company_id ?? null,
   }))
 
   const sourceByEntry = new Map<string, string | null>(

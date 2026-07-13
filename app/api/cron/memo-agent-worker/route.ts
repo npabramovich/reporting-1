@@ -9,6 +9,7 @@ import { runScoreJob } from '@/lib/memo-agent/jobs/score-job'
 import { runRenderJob } from '@/lib/memo-agent/jobs/render-job'
 import { runTranscribeJob, isAwaitingCallback } from '@/lib/memo-agent/jobs/transcribe-job'
 import { runChecklistAssessmentJob } from '@/lib/memo-agent/jobs/checklist-assessment-job'
+import { runAffinitySyncJob } from '@/lib/memo-agent/jobs/affinity-sync-job'
 import { kickWorker } from '@/lib/memo-agent/kick'
 
 /**
@@ -111,7 +112,7 @@ interface Job {
   fund_id: string
   deal_id: string
   draft_id: string | null
-  kind: 'ingest' | 'ingest_synthesis' | 'research' | 'qa' | 'draft' | 'draft_review' | 'score' | 'render' | 'transcribe' | 'checklist_assessment'
+  kind: 'ingest' | 'ingest_synthesis' | 'research' | 'qa' | 'draft' | 'draft_review' | 'score' | 'render' | 'transcribe' | 'checklist_assessment' | 'affinity_sync'
   payload: Record<string, unknown>
   enqueued_by: string | null
 }
@@ -131,6 +132,7 @@ async function processJob(admin: ReturnType<typeof createAdminClient>, job: Job)
       case 'render': result = await runRenderJob(admin, job); break
       case 'transcribe': result = await runTranscribeJob(admin, job); break
       case 'checklist_assessment': result = await runChecklistAssessmentJob(admin, job); break
+      case 'affinity_sync': result = await runAffinitySyncJob(admin, job); break
       case 'qa':
         // Q&A is a synchronous interactive flow, not a worker job — fail if seen.
         await markFailed(admin, job.id, 'Q&A is run interactively; no worker job needed.')

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { buildStages, countChecklist, countDocuments, assessedCount } from '@/lib/diligence/progress'
 
 /**
  * Polled by the deal detail UI while a memo-agent job is in flight.
@@ -93,6 +94,49 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     documentsAddedSinceDraft = count ?? 0
   }
 
+  // The three bars need checklist statuses and document parse states. Fetching them
+  // here means one poll drives the whole progress view, instead of each tab doing its
+  // own round trip and disagreeing with the others.
+  const [{ data: checklistRows }, { data: docRows }] = await Promise.all([
+    (admin as any)
+      .from('diligence_checklist_items')
+      .select('status')
+      .eq('deal_id', params.id)
+      .eq('fund_id', fundId)
+      .eq('kind', 'item'),
+    (admin as any)
+      .from('diligence_documents')
+      .select('parse_status')
+      .eq('deal_id', params.id)
+      .eq('fund_id', fundId),
+  ])
+
+  const checklist = countChecklist(((checklistRows as any[]) ?? []).map(r => ({ status: r.status })))
+  const dataRoom = countDocuments(((docRows as any[]) ?? []).map(r => ({ parse_status: r.parse_status })))
+
+  // Scoring lives inside the draft's memo_draft_output, not in its own column, so
+  // there was no way to tell "has it been scored" without a separate /drafts fetch.
+  const scores = (latestDraft as any)?.memo_draft_output?.scores
+  const hasScores = Array.isArray(scores) && scores.length > 0
+
+  const job = latestJob as any
+  const runningKind = job && (job.status === 'pending' || job.status === 'running') ? job.kind : null
+  const failedKind = job && job.status === 'failed' ? job.kind : null
+
+  const stages = buildStages({
+    hasIngestion: !!(latestDraft as any)?.ingestion_output,
+    hasResearch: !!(latestDraft as any)?.research_output,
+    hasQa: !!(latestDraft as any)?.qa_answers,
+    hasMemoDraft: hasMemo,
+    hasScores,
+    finalized: !!(latestDraft as any)?.finalized_at,
+    documentCount: dataRoom.total,
+    checklistAssessed: assessedCount(checklist.counts),
+    checklistTotal: checklist.total,
+    runningKind,
+    failedKind,
+  })
+
   return NextResponse.json({
     deal: { id: (deal as any).id, current_memo_stage: (deal as any).current_memo_stage },
     latest_job: latestJob ?? null,
@@ -106,8 +150,16 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       has_research: !!(latestDraft as any).research_output,
       has_qa: !!(latestDraft as any).qa_answers,
       has_memo_draft: !!(latestDraft as any).memo_draft_output,
+      has_scores: hasScores,
     } : null,
     memo_stale: memoStale,
     documents_added_since_draft: documentsAddedSinceDraft,
+    // Progress model — drives the stage bar and the two composition bars.
+    progress: {
+      stages,
+      checklist,
+      data_room: dataRoom,
+      checklist_assessed: assessedCount(checklist.counts),
+    },
   })
 }

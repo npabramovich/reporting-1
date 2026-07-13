@@ -1,0 +1,164 @@
+import { describe, it, expect } from 'vitest'
+import {
+  buildStages, countChecklist, countDocuments, docBucket, assessedCount, stageProgress,
+  type ProgressInput,
+} from './progress'
+
+const base: ProgressInput = {
+  hasIngestion: false,
+  hasResearch: false,
+  hasQa: false,
+  hasMemoDraft: false,
+  hasScores: false,
+  finalized: false,
+  documentCount: 0,
+  checklistAssessed: 0,
+  checklistTotal: 0,
+  runningKind: null,
+  failedKind: null,
+}
+const stagesOf = (p: Partial<ProgressInput>) => {
+  const s = buildStages({ ...base, ...p })
+  return Object.fromEntries(s.map(x => [x.key, x.state]))
+}
+
+describe('countDocuments', () => {
+  it('buckets parse_status, treating anything unknown as not-processed', () => {
+    const { counts, total } = countDocuments([
+      { parse_status: 'parsed' },
+      { parse_status: 'transcribed' }, // a processed recording still counts as read
+      { parse_status: 'partial' },
+      { parse_status: 'failed' },
+      { parse_status: 'pending' },
+      { parse_status: 'skipped' },
+      { parse_status: null },          // no status at all → not processed
+      { parse_status: 'something_new' }, // parse_status has no CHECK constraint
+    ])
+    expect(counts.processed).toBe(2)
+    expect(counts.partial).toBe(1)
+    expect(counts.failed).toBe(1)
+    expect(counts.pending).toBe(3) // pending + null + unknown value
+    expect(counts.skipped).toBe(1)
+    expect(total).toBe(8)
+  })
+
+  it('never silently drops a document', () => {
+    const docs = Array.from({ length: 20 }, (_, i) => ({ parse_status: ['parsed', 'failed', null, 'zzz'][i % 4] }))
+    const { counts, total } = countDocuments(docs)
+    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(total)
+  })
+
+  it('maps an unrecognized status to pending rather than crashing', () => {
+    expect(docBucket(undefined)).toBe('pending')
+    expect(docBucket('who_knows')).toBe('pending')
+  })
+})
+
+describe('countChecklist', () => {
+  it('counts by status; an unrecognized status falls back to unknown', () => {
+    const { counts, total } = countChecklist([
+      { status: 'found' }, { status: 'found' },
+      { status: 'partial' },
+      { status: 'missing' },
+      { status: 'not_applicable' },
+      { status: 'unknown' },
+      { status: null },
+      { status: 'garbage' },
+    ])
+    expect(counts.found).toBe(2)
+    expect(counts.unknown).toBe(3) // unknown + null + garbage
+    expect(total).toBe(8)
+    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(total)
+  })
+
+  it('assessed = anything the agent reached a view on', () => {
+    const { counts } = countChecklist([
+      { status: 'found' }, { status: 'partial' }, { status: 'missing' },
+      { status: 'not_applicable' }, { status: 'unknown' },
+    ])
+    expect(assessedCount(counts)).toBe(4) // everything except `unknown`
+  })
+})
+
+describe('buildStages', () => {
+  it('a fresh deal blocks everything behind the data room', () => {
+    const s = stagesOf({})
+    expect(s.data_room).toBe('blocked')   // no documents yet
+    expect(s.checklist).toBe('blocked')
+    expect(s.research).toBe('blocked')
+    expect(s.memo).toBe('blocked')
+    expect(s.scoring).toBe('blocked')
+  })
+
+  it('uploading documents unblocks the data room but nothing downstream', () => {
+    const s = stagesOf({ documentCount: 5 })
+    expect(s.data_room).toBe('todo')
+    expect(s.research).toBe('blocked') // still needs ingestion
+  })
+
+  it('ingestion unblocks checklist, research, Q&A and memo — but not scoring', () => {
+    const s = stagesOf({ documentCount: 5, hasIngestion: true, checklistTotal: 10 })
+    expect(s.data_room).toBe('done')
+    expect(s.checklist).toBe('todo')
+    expect(s.research).toBe('todo')
+    expect(s.qa).toBe('todo')
+    expect(s.memo).toBe('todo')
+    expect(s.scoring).toBe('blocked') // scoring needs a memo, not just evidence
+  })
+
+  it('scoring unblocks only once a memo exists', () => {
+    const s = stagesOf({ documentCount: 5, hasIngestion: true, hasMemoDraft: true })
+    expect(s.memo).toBe('done')
+    expect(s.scoring).toBe('todo')
+  })
+
+  it('the checklist is only done when EVERY item has been assessed', () => {
+    const partly = stagesOf({ documentCount: 1, hasIngestion: true, checklistTotal: 10, checklistAssessed: 9 })
+    expect(partly.checklist).toBe('todo')
+
+    const all = stagesOf({ documentCount: 1, hasIngestion: true, checklistTotal: 10, checklistAssessed: 10 })
+    expect(all.checklist).toBe('done')
+  })
+
+  it('an in-flight job shows as running on the stage it belongs to', () => {
+    // ingest_synthesis is a separate job kind but the same stage as ingest.
+    const s = stagesOf({ documentCount: 5, runningKind: 'ingest_synthesis' })
+    expect(s.data_room).toBe('running')
+
+    // draft_review rolls up to the memo stage.
+    const m = stagesOf({ documentCount: 5, hasIngestion: true, runningKind: 'draft_review' })
+    expect(m.memo).toBe('running')
+  })
+
+  it('running beats done — a re-run in flight is not "complete"', () => {
+    const s = stagesOf({ documentCount: 5, hasIngestion: true, runningKind: 'ingest' })
+    expect(s.data_room).toBe('running')
+  })
+
+  it('a failed job surfaces on its stage', () => {
+    const s = stagesOf({ documentCount: 5, hasIngestion: true, failedKind: 'research' })
+    expect(s.research).toBe('failed')
+  })
+
+  it('offers the right verb: run first, re-run after', () => {
+    const first = buildStages({ ...base, documentCount: 3 }).find(s => s.key === 'data_room')!
+    expect(first.actionLabel).toBe('Analyze data room')
+
+    const again = buildStages({ ...base, documentCount: 3, hasIngestion: true }).find(s => s.key === 'data_room')!
+    expect(again.actionLabel).toBe('Re-analyze data room')
+  })
+
+  it('a blocked stage explains what is blocking it', () => {
+    const scoring = buildStages({ ...base, documentCount: 1, hasIngestion: true }).find(s => s.key === 'scoring')!
+    expect(scoring.state).toBe('blocked')
+    expect(scoring.hint).toBe('Draft the memo first')
+  })
+
+  it('counts completed stages for the headline', () => {
+    const stages = buildStages({
+      ...base, documentCount: 5, hasIngestion: true, hasResearch: true,
+      checklistTotal: 4, checklistAssessed: 4,
+    })
+    expect(stageProgress(stages)).toEqual({ done: 3, total: 6 }) // data room, checklist, research
+  })
+})

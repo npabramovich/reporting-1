@@ -10,7 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useConfirm } from '@/components/confirm-dialog'
 import { IngestionSummary } from '@/components/diligence/ingestion-summary'
+import { StageHeader, DiligenceStageBar } from '@/components/diligence/stage-header'
+import { DataRoomBar } from '@/components/diligence/progress-bars'
+import { countDocuments } from '@/lib/diligence/progress'
 import { SchemaViewer } from '@/components/diligence/schema-viewer'
+import { AffinityPanel } from '@/components/diligence/affinity-panel'
+import { EmailIntakeTray } from '@/components/diligence/email-intake-tray'
 import type { IngestionOutput } from '@/lib/memo-agent/stages/ingest'
 import type { ResearchOutput } from '@/lib/memo-agent/stages/research'
 import { uploadDiligenceDocument } from '@/lib/diligence/upload-document'
@@ -233,6 +238,10 @@ export function DealDetail({ deal: initial, initialDocuments, latestDraft, isAdm
         </div>
       </div>
 
+      {/* Where the deal is in the pipeline, and what's left. Clicking a stage jumps
+          to the tab that runs it. */}
+      <DiligenceStageBar dealId={deal.id} onJump={tab => setActiveTab(tab as Tab)} />
+
       <div className="border-b mb-4">
         <nav className="flex gap-4 -mb-px">
           {TABS.map(t => (
@@ -253,7 +262,7 @@ export function DealDetail({ deal: initial, initialDocuments, latestDraft, isAdm
             <ChecklistTab deal={deal} documentCount={documents.length} latestDraft={latestDraft} isAdmin={isAdmin} onJumpToTab={setActiveTab} onJumpToDoc={jumpToDoc} />
           )}
           {activeTab === 'Data Room' && (
-            <DealRoomTab dealId={deal.id} documents={documents} setDocuments={setDocuments} initialDriveFolderUrl={deal.drive_folder_url} focusDocId={focusDocId} onFocusConsumed={() => setFocusDocId(null)} />
+            <DealRoomTab dealId={deal.id} dealName={deal.name} documents={documents} setDocuments={setDocuments} initialDriveFolderUrl={deal.drive_folder_url} focusDocId={focusDocId} onFocusConsumed={() => setFocusDocId(null)} />
           )}
           {activeTab === 'Diligence' && <DiligenceTab dealId={deal.id} userId={currentUserId} isAdmin={isAdmin} />}
           {activeTab === 'Founders' && <FoundersTab dealId={deal.id} />}
@@ -634,25 +643,14 @@ function ChecklistTab({ deal, documentCount, isAdmin, onJumpToDoc }: {
 
   return (
     <div className="space-y-4">
-      {/* Data-room analysis, the primary action sits at the top of the tab;
-          the gaps + inconsistencies it finds render here, above the checklist
-          they inform. */}
-      <IngestionPanel dealId={deal.id} documentCount={documentCount} />
+      {/* The checklist assessment had no button at all before — you could only reach it
+          through a failure banner or as a side effect of analyzing the data room. */}
+      <StageHeader dealId={deal.id} stageKey="checklist" />
 
       {/* Action bar */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-muted-foreground">
-          {isEmpty ? (
-            <>No checklist yet for this deal.</>
-          ) : (
-            <>
-              <span className="font-medium text-foreground">{allItems.length}</span> items ·
-              <span className="ml-1">{counts.found} found</span> ·
-              <span className="ml-1">{counts.partial} partial</span> ·
-              <span className="ml-1">{counts.missing} missing</span> ·
-              <span className="ml-1">{counts.unknown} pending</span>
-            </>
-          )}
+          {isEmpty && <>No checklist yet for this deal.</>}
         </div>
         <div className="flex items-center gap-2">
           {!isEmpty && (
@@ -1261,7 +1259,7 @@ const DOC_TYPE_OPTIONS = [
   { value: 'other', label: 'Other' },
 ]
 
-function DealRoomTab({ dealId, documents, setDocuments, initialDriveFolderUrl, focusDocId, onFocusConsumed }: { dealId: string; documents: DiligenceDocument[]; setDocuments: React.Dispatch<React.SetStateAction<DiligenceDocument[]>>; initialDriveFolderUrl: string | null; focusDocId: string | null; onFocusConsumed: () => void }) {
+function DealRoomTab({ dealId, dealName, documents, setDocuments, initialDriveFolderUrl, focusDocId, onFocusConsumed }: { dealId: string; dealName: string; documents: DiligenceDocument[]; setDocuments: React.Dispatch<React.SetStateAction<DiligenceDocument[]>>; initialDriveFolderUrl: string | null; focusDocId: string | null; onFocusConsumed: () => void }) {
   const confirm = useConfirm()
   // When the partner jumps from a checklist evidence row, scroll to and
   // briefly highlight the target document so the connection is obvious.
@@ -1423,9 +1421,33 @@ function DealRoomTab({ dealId, documents, setDocuments, initialDriveFolderUrl, f
     await fetch(`/api/diligence/${dealId}/documents/${id}`, { method: 'DELETE' })
   }
 
+  // Pull the documents list fresh after an external import (Affinity, accepted
+  // email) so the new rows show up without a page reload.
+  const refreshDocuments = async () => {
+    try {
+      const res = await fetch(`/api/diligence/${dealId}/documents`)
+      if (res.ok) setDocuments(await res.json() as DiligenceDocument[])
+    } catch { /* the next poll or reload will catch up */ }
+  }
+
   return (
     <div className="space-y-6">
+      {/* Inbound emails matched to this deal, waiting on a human. Sits at the top
+          because it's the only thing here that's a queue — everything below is
+          reference. */}
+      <EmailIntakeTray dealId={dealId} onAccepted={refreshDocuments} />
+
+      {/* Analyze-the-data-room used to live on the CHECKLIST tab — which is why it was
+          so hard to find. It belongs here, with the documents it reads. */}
+      <IngestionPanel dealId={dealId} documents={documents} />
+
       <div>
+      {/* Affinity link + import. Its own block rather than a toolbar button:
+          it streams a progress log and carries link/sync status underneath. */}
+      <div className="mb-3">
+        <AffinityPanel dealId={dealId} dealName={dealName} onImported={refreshDocuments} />
+      </div>
+
       <div className="flex items-center justify-between gap-2 mb-3">
         <span className="text-sm font-medium text-muted-foreground">Documents</span>
         <div className="flex items-center gap-2">
@@ -1998,7 +2020,9 @@ function useAgentStatus(dealId: string) {
   return { status, refresh }
 }
 
-function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCount: number }) {
+function IngestionPanel({ dealId, documents }: { dealId: string; documents: DiligenceDocument[] }) {
+  const documentCount = documents.length
+  const docCounts = countDocuments(documents)
   const { status, refresh } = useAgentStatus(dealId)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -2102,6 +2126,12 @@ function IngestionPanel({ dealId, documentCount }: { dealId: string; documentCou
         </div>
       }
     >
+      {/* How much of the room has actually been read. "12 documents" says nothing
+          about whether the agent could parse them. */}
+      <div className="mt-3">
+        <DataRoomBar counts={docCounts.counts} total={docCounts.total} />
+      </div>
+
       {documentCount === 0 && (
         <p className="text-xs text-muted-foreground italic mt-2">Upload at least one document to enable ingestion.</p>
       )}
@@ -2317,6 +2347,12 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
 
   return (
     <div className="space-y-6 max-w-6xl">
+      {/* The two actions this tab is FOR, at the top of it. External research was
+          previously a button buried in a section below; Q&A had no run button here at
+          all. Each header knows if it's blocked and says why. */}
+      <StageHeader dealId={dealId} stageKey="research" />
+      <StageHeader dealId={dealId} stageKey="qa" />
+
       {/* Ask anything, moved here from its own tab so questions sit alongside the evidence. */}
       <QATab dealId={dealId} />
 
@@ -3444,6 +3480,11 @@ function ScoringTab({ dealId }: { dealId: string }) {
 
   return (
     <div className="space-y-6 max-w-6xl">
+      {/* Previously the Run-scoring button only existed once a memo did — with no memo
+          you got a dead-end sentence and no way forward. The header renders either way
+          and says what's blocking it. */}
+      <StageHeader dealId={dealId} stageKey="scoring" />
+
       <Section
         title="Scoring"
         help="Scores are derived from the memo draft and evidence. Edit any score, rating, or rationale; changes save to the deal."
@@ -3630,6 +3671,8 @@ function MemoTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: stri
 
   return (
     <div className="space-y-6 max-w-6xl">
+      <StageHeader dealId={dealId} stageKey="memo" />
+
       <Section
         title="Memo draft"
         action={

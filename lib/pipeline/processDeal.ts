@@ -3,6 +3,7 @@ import type { AIProvider } from '@/lib/ai/types'
 import type { ExtractionResult } from '@/lib/parsing/extractAttachmentText'
 import type { PostmarkPayload } from '@/lib/pipeline/processEmail'
 import { analyzeDeal, DEFAULT_SCREENING_PROMPT, type DealAnalysis } from '@/lib/claude/analyzeDeal'
+import { loadDealResearchSettings, shouldResearchDeal } from '@/lib/deals/research'
 
 type Supabase = ReturnType<typeof createAdminClient>
 
@@ -80,11 +81,21 @@ export async function processDeal(params: ProcessDealParams): Promise<ProcessDea
   const founderEmail = analysis.founder_email ?? senderEmail
   const companyDomain = analysis.company_domain ?? deriveDomain(founderEmail)
 
+  // External research is queued, not run here: a web-search round takes 30-60s
+  // and this function runs inside the inbound-email webhook, which would time
+  // out. /api/cron/deal-research drains the queue. Only deals that clear the
+  // fund's interest bar are queued at all — see lib/deals/research.ts.
+  const researchSettings = await loadDealResearchSettings(supabase, fundId)
+  const researchStatus = shouldResearchDeal(analysis.thesis_fit_score, researchSettings)
+    ? 'pending'
+    : 'skipped'
+
   const insertResult = await supabase
     .from('inbound_deals')
     .insert({
       email_id: emailId,
       fund_id: fundId,
+      research_status: researchStatus,
       company_name: analysis.company_name,
       company_url: analysis.company_url,
       company_domain: companyDomain,

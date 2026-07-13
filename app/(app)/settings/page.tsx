@@ -28,6 +28,8 @@ import { DEFAULT_FEATURE_VISIBILITY, FEATURES_WITH_OFF } from '@/lib/types/featu
 import type { FeatureKey, FeatureVisibility } from '@/lib/types/features'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
+import { AffinityConnect } from '@/components/settings/affinity-connect'
+import { DealResearchSettings } from '@/components/settings/deal-research-settings'
 
 const AdminSectionContext = createContext(false)
 
@@ -254,6 +256,7 @@ export default function SettingsPage() {
             submissionToken={settings.dealSubmissionToken}
             onSaved={load}
           />
+          <DealResearchSettings />
           <KnownReferrersSection />
           <RoutingSection
             threshold={settings.routingConfidenceThreshold}
@@ -269,6 +272,9 @@ export default function SettingsPage() {
 
           <GroupHeader label="Diligence" />
           <MemoAgentSection />
+
+          <GroupHeader label="CRM" />
+          <AffinityConnect />
 
           <GroupHeader label="LP Portal" />
           <LpPortalSection enabled={settings.lpPortalEnabled} onSaved={load} />

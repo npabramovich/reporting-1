@@ -195,6 +195,14 @@ export interface SoiRow {
   sharePrice?: number | null
   unrealized?: number
   moic?: number | null
+  /**
+   * What the LEDGER carries for this company, from its own 1100-<id> / 1200-<id>
+   * accounts. Present only once per-investment accounts exist. Without them the
+   * tie-out is total-only, and two offsetting per-company errors cancel out.
+   */
+  ledgerCost?: number
+  ledgerFairValue?: number
+  tiesOut?: boolean
 }
 /** A subtotal band — ASC 946 wants fair value grouped by industry and asset type. */
 export interface SoiGroup {
@@ -272,9 +280,37 @@ export function scheduleOfInvestments(
   const ledgerCost = balOf('investment')
   const ledgerFairValue = r(ledgerCost + balOf('unrealized'))
 
+  // Per-company ledger balances, from the 1100-<id> / 1200-<id> accounts. This is what
+  // makes the tie-out meaningful per position: with a single aggregate account, one
+  // company overstated and another understated by the same amount still "ties".
+  const byCompany = new Map<string, { cost: number; unrealized: number }>()
+  for (const row of tb.rows) {
+    const a = accounts.find(x => x.id === row.accountId)
+    if (!a?.companyId || a.type !== 'asset') continue
+    const cur = byCompany.get(a.companyId) ?? { cost: 0, unrealized: 0 }
+    if (a.subtype === 'investment') cur.cost = r(cur.cost + row.balance)
+    if (a.subtype === 'unrealized') cur.unrealized = r(cur.unrealized + row.balance)
+    byCompany.set(a.companyId, cur)
+  }
+  const hasPerCompany = byCompany.size > 0
+
   const fromTracker = positions.length > 0
   const rows: SoiRow[] = fromTracker
-    ? positions.map(p => ({ ...p, pctOfNetAssets: netAssets ? r(p.fairValue / netAssets) : 0 }))
+    ? positions.map(p => {
+      const l = p.companyId ? byCompany.get(p.companyId) : undefined
+      const lc = l ? l.cost : undefined
+      const lfv = l ? r(l.cost + l.unrealized) : undefined
+      return {
+        ...p,
+        pctOfNetAssets: netAssets ? r(p.fairValue / netAssets) : 0,
+        ledgerCost: lc,
+        ledgerFairValue: lfv,
+        // Only claim a tie-out where the ledger actually holds this company separately.
+        tiesOut: hasPerCompany && lc !== undefined && lfv !== undefined
+          ? Math.abs(p.cost - lc) < 0.005 && Math.abs(p.fairValue - lfv) < 0.005
+          : undefined,
+      }
+    })
     : ledgerFairValue === 0 && ledgerCost === 0 ? [] : [{
       name: 'Portfolio investments',
       cost: ledgerCost,

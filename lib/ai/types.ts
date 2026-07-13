@@ -70,9 +70,73 @@ export interface CreateChatParams {
   messages: ChatMessage[]
 }
 
+// ---------------------------------------------------------------------------
+// Tool use
+// ---------------------------------------------------------------------------
+
+/**
+ * A tool the model can call, executed by US (client-side). The provider runs the
+ * request → tool_use → execute → tool_result loop internally and returns only
+ * the final text, so callers never have to model tool blocks in their own
+ * message history.
+ */
+export interface ToolDefinition {
+  name: string
+  description: string
+  /** JSON Schema for the tool's arguments. */
+  inputSchema: Record<string, unknown>
+}
+
+export interface ToolInvocation {
+  name: string
+  input: Record<string, unknown>
+}
+
+/** Executes one tool call and returns the result as text for the model. */
+export type ToolExecutor = (call: ToolInvocation) => Promise<string>
+
+/**
+ * A remote MCP server the PROVIDER connects to on our behalf (Anthropic's MCP
+ * connector). Its tools execute on the MCP server, not here — so no executor is
+ * needed, and `executeTool` is never called for them.
+ */
+export interface McpServerConfig {
+  name: string
+  url: string
+  /** Bearer token passed to the MCP server (for Affinity: the user's API key). */
+  authorizationToken?: string
+}
+
+export interface CreateToolLoopParams extends CreateMessageParams {
+  tools?: ToolDefinition[]
+  executeTool?: ToolExecutor
+  mcpServers?: McpServerConfig[]
+  /** Safety valve: stop after this many model round-trips. Defaults to 6. */
+  maxIterations?: number
+}
+
+export interface ToolCallRecord {
+  name: string
+  input: Record<string, unknown>
+  /** Truncated — for surfacing "what the assistant looked up", not for replay. */
+  resultPreview: string
+  isError: boolean
+}
+
+export interface ToolLoopResult extends AIResult {
+  toolCalls: ToolCallRecord[]
+}
+
 export interface AIProvider {
   createMessage(params: CreateMessageParams): Promise<AIResult>
   createChat(params: CreateChatParams): Promise<AIResult>
   testConnection(): Promise<void>
   listModels(): Promise<AIModel[]>
+  /**
+   * Run an agentic tool-use loop. Optional: only providers that support tool
+   * calling implement it. Callers MUST check `supportsToolLoop` and fall back to
+   * a plain createMessage — the fund's provider may be OpenAI/Gemini/Ollama.
+   */
+  readonly supportsToolLoop?: boolean
+  createToolLoop?(params: CreateToolLoopParams): Promise<ToolLoopResult>
 }

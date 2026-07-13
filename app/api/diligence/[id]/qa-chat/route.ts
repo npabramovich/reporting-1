@@ -6,6 +6,9 @@ import { withTopicalGuardrail } from '@/lib/ai/topical-guard'
 import { getStageProvider } from '@/lib/memo-agent/stage-provider'
 import { extractJsonObject } from '@/lib/memo-agent/parse-ai-json'
 import { buildQAChatContext } from '@/lib/diligence/qa-chat-context'
+import { getAffinityKey } from '@/lib/affinity/credentials'
+import { AFFINITY_TOOLS, makeAffinityExecutor, affinityMcpServer } from '@/lib/affinity/tools'
+import type { AIResult } from '@/lib/ai/types'
 
 // The POST handler makes a synchronous, user-facing LLM call plus several DB
 // round-trips. Netlify functions default to a 10s timeout, which the model
@@ -49,9 +52,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const question = typeof body.question === 'string' ? body.question.trim() : ''
   if (!question) return NextResponse.json({ error: 'question is required' }, { status: 400 })
 
-  const { data: deal } = await admin
+  const { data: deal } = await (admin as any)
     .from('diligence_deals')
-    .select('id')
+    .select('id, name, affinity_organization_id')
     .eq('id', params.id)
     .eq('fund_id', fundId)
     .maybeSingle()
@@ -91,14 +94,51 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Use the Q&A stage's provider for cost-tracking consistency.
   const { provider, model, providerType } = await getStageProvider(admin, fundId, 'qa')
 
-  const systemPrompt = `You answer partner questions about an active diligence deal using ONLY the evidence below. If the evidence does not contain the answer, say so plainly and suggest where the partner could look (a missing document, a research gap, a question to ask the founders).
+  // Affinity is attached only when THIS user has connected their own Affinity
+  // key. The key carries their permissions, so the assistant can never surface
+  // CRM records the asking partner couldn't open themselves.
+  const affinityKey = await getAffinityKey(admin, userId)
+  const { data: fundSettings } = await (admin as any)
+    .from('fund_settings')
+    .select('affinity_mcp_enabled')
+    .eq('fund_id', fundId)
+    .maybeSingle()
+  const useMcp = !!(fundSettings as any)?.affinity_mcp_enabled
+
+  const linkedOrgId = (deal as any).affinity_organization_id as number | null
+  // Tool use is Anthropic-only in this codebase. On any other provider we fall
+  // back to the plain evidence-only answer rather than silently pretending the
+  // assistant has CRM access it doesn't have.
+  const affinityAvailable = !!affinityKey && provider.supportsToolLoop === true
+
+  const affinityBlock = affinityAvailable
+    ? `
+
+AFFINITY CRM ACCESS
+You can query the fund's Affinity CRM with the affinity_* tools to answer questions about the
+RELATIONSHIP history — past meetings, call notes, who introduced us, what was discussed and when.
+${linkedOrgId
+    ? `This deal is already linked to Affinity organization_id ${linkedOrgId}. Use that id directly; you do not need to search for it.`
+    : `This deal is not linked to an Affinity company yet, so use affinity_search_companies first to find it by name.`}
+
+When to reach for Affinity:
+- The question is about history, relationships, or what was said in a meeting — the data room holds
+  documents, but the CRM holds the conversation record.
+- The data-room evidence below does not answer the question and the CRM plausibly might.
+
+Do NOT use Affinity for questions the data room already answers — it costs a round-trip and the
+documents are the primary evidence. Content you take from Affinity should be attributed in your
+answer as coming from an Affinity note (with its date), not cited as a data-room document.`
+    : ''
+
+  const systemPrompt = `You answer partner questions about an active diligence deal using the evidence below${affinityAvailable ? ', plus the fund\'s Affinity CRM when the question is about relationship history' : ''}. If the evidence does not contain the answer, say so plainly and suggest where the partner could look (a missing document, a research gap, a question to ask the founders).
 
 Rules:
 - Be concise and direct. No throat-clearing.
 - Never fabricate numbers, names, or sources.
 - When you cite a document, reference it by its file name as listed in DATA-ROOM EVIDENCE.
 - If multiple sources agree, say so. If they contradict, surface the contradiction.
-- Stage-aware: ${ctx.stage ? `this is a ${ctx.stage} company, calibrate expectations accordingly` : 'no stage on record, ask the partner if it matters'}.
+- Stage-aware: ${ctx.stage ? `this is a ${ctx.stage} company, calibrate expectations accordingly` : 'no stage on record, ask the partner if it matters'}.${affinityBlock}
 
 Output format: return JSON ONLY of the form:
 {
@@ -117,13 +157,38 @@ ${ctx.text}`
 
   let answerText = ''
   let citations: Array<{ document_id: string; summary: string }> = []
+  let affinityLookups: string[] = []
   try {
-    const { text, usage } = await provider.createMessage({
-      model,
-      maxTokens: 1500,
-      system: withTopicalGuardrail(systemPrompt),
-      content: userTurn,
-    })
+    let result: AIResult
+
+    if (affinityAvailable && provider.createToolLoop) {
+      const loop = await provider.createToolLoop({
+        model,
+        maxTokens: 1500,
+        system: withTopicalGuardrail(systemPrompt),
+        content: userTurn,
+        // Either our read-only tools, or Affinity's hosted MCP server if the
+        // fund opted into it (which also grants the model write access — see
+        // lib/affinity/tools.ts).
+        ...(useMcp
+          ? { mcpServers: [affinityMcpServer(affinityKey!)] }
+          : { tools: AFFINITY_TOOLS, executeTool: makeAffinityExecutor(affinityKey!) }),
+        maxIterations: 5,
+      })
+      result = loop
+      // Surfaced to the UI so the partner can see the assistant actually looked
+      // something up, rather than wondering where a claim came from.
+      affinityLookups = loop.toolCalls.filter(c => !c.isError).map(c => c.name)
+    } else {
+      result = await provider.createMessage({
+        model,
+        maxTokens: 1500,
+        system: withTopicalGuardrail(systemPrompt),
+        content: userTurn,
+      })
+    }
+
+    const { text, usage } = result
     logAIUsage(admin, {
       fundId,
       provider: providerType,
@@ -215,6 +280,8 @@ ${ctx.text}`
   return NextResponse.json({
     user_message: userMsg,
     assistant_message: assistantMsg,
+    // e.g. ['affinity_get_notes'] — lets the UI show "checked Affinity".
+    affinity_lookups: affinityLookups,
   })
 }
 

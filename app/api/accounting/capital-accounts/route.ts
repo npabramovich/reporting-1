@@ -5,6 +5,7 @@ import { assertAdminAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { loadPostedLedger, loadEntityNames, loadEntityClasses } from '@/lib/accounting/load'
 import { computeCapitalAccounts, totalNav } from '@/lib/accounting/capital-account'
+import { lpCapitalSummary, listCapitalCalls } from '@/lib/accounting/capital-calls'
 import { resolvePeriod, customPeriod, type PeriodPreset } from '@/lib/accounting/statement-period'
 
 // GET — per-LP capital-account roll-forward for a vehicle, derived from posted entries.
@@ -34,31 +35,51 @@ export async function GET(req: NextRequest) {
 
   // One load, unfiltered by date: both roll-forwards are computed from it, and the
   // period one needs the pre-period history anyway to open with a carried-in balance.
-  const [{ capitalPostings }, names, classes] = await Promise.all([
+  // `summary` and `calls` fold the old Capital calls page into this one — commitment,
+  // called, funded, and unfunded were the duplicated half of it.
+  const [{ capitalPostings }, names, classes, summary, calls] = await Promise.all([
     loadPostedLedger(admin, gate.fundId, group),
     loadEntityNames(admin, gate.fundId, group),
     loadEntityClasses(admin, gate.fundId, group),
+    lpCapitalSummary(admin, gate.fundId, group),
+    listCapitalCalls(admin, gate.fundId, group),
   ])
 
   const periodAccounts = computeCapitalAccounts(capitalPostings, period)
   const itdAccounts = computeCapitalAccounts(capitalPostings, { end: period.end })
+  const summaryByLp = new Map(summary.map(s => [s.lpEntityId, s]))
 
-  const rows = Array.from(itdAccounts.entries())
-    .map(([lpEntityId, itd]) => ({
-      lpEntityId,
-      name: names.get(lpEntityId) ?? lpEntityId,
-      partnerClass: classes.get(lpEntityId) ?? 'lp',
-      period: periodAccounts.get(lpEntityId) ?? null,
-      itd,
-      // The flat spread keeps the previous response shape working for existing
-      // consumers (reconciliation view, agent tools) — it's the ITD roll-forward.
-      ...itd,
-    }))
+  // Every partner with a commitment OR a capital account — a partner who has committed
+  // but never been called still belongs on the roll-forward.
+  const lpIds = Array.from(new Set([...Array.from(itdAccounts.keys()), ...summary.map(s => s.lpEntityId)]))
+
+  const rows = lpIds
+    .map(lpEntityId => {
+      const itd = itdAccounts.get(lpEntityId) ?? computeCapitalAccounts([]).get(lpEntityId) ?? null
+      const s = summaryByLp.get(lpEntityId)
+      const zero = computeCapitalAccounts([{ lpEntityId, amount: 0, sourceType: 'manual' }]).get(lpEntityId)!
+      return {
+        lpEntityId,
+        name: names.get(lpEntityId) ?? s?.name ?? lpEntityId,
+        partnerClass: classes.get(lpEntityId) ?? s?.partnerClass ?? 'lp',
+        commitment: s?.commitment ?? 0,
+        called: s?.called ?? 0,
+        funded: s?.funded ?? 0,
+        outstanding: s?.outstanding ?? 0,
+        receivable: s?.receivable ?? 0,
+        period: periodAccounts.get(lpEntityId) ?? null,
+        itd: itd ?? zero,
+        // The flat spread keeps the previous response shape working for existing
+        // consumers (reconciliation view, agent tools) — it's the ITD roll-forward.
+        ...(itd ?? zero),
+      }
+    })
     .sort((a, b) => a.name.localeCompare(b.name))
 
   return NextResponse.json({
     rows,
     nav: totalNav(itdAccounts),
     period,
+    calls,
   })
 }

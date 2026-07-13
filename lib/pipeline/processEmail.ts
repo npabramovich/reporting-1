@@ -18,6 +18,7 @@ import { getAccessToken as getDropboxAccessToken, findOrCreateFolder as findOrCr
 import { extractInteraction } from '@/lib/claude/extractInteraction'
 import { classifyEmail, detectForward, type SenderFlags, type AttachmentDescriptor } from '@/lib/pipeline/classifyEmail'
 import { isAuthorizedSender } from '@/lib/pipeline/isAuthorizedSender'
+import { loadActiveDiligenceDeals, matchDiligenceDeal } from '@/lib/pipeline/matchDiligenceDeal'
 import type { Json, IssueType, ProcessingStatus } from '@/lib/types/database'
 
 type Supabase = ReturnType<typeof createAdminClient>
@@ -96,6 +97,36 @@ export async function runPipeline(
       console.error('[pipeline] processDeal failed:', err)
       await finalizeEmail(supabase, emailId, { status: 'failed', warnings: [msg] })
     }
+    return
+  }
+
+  // Diligence: the email is about a company already under diligence. We do NOT
+  // copy it into the shared data room here. An inbound mailbox is a firehose,
+  // and a wrong match would hand the memo agent a stranger's attachment as
+  // evidence. Instead we park it as a proposal and let a human accept it —
+  // choosing the deal and which attachments to take. See
+  // /api/emails/[id]/accept-to-diligence.
+  if (routingDecision === 'diligence' && classification?.diligence_deal_id) {
+    await supabase
+      .from('inbound_emails')
+      .update({
+        routed_to: 'diligence',
+        diligence_deal_id: classification.diligence_deal_id,
+        diligence_intake_status: 'pending',
+      } as any)
+      .eq('id', emailId)
+
+    await createReview(supabase, {
+      fund_id: fundId,
+      email_id: emailId,
+      issue_type: 'diligence_intake_pending',
+      context_snippet:
+        `Matched to a deal in diligence (${classification.diligence_match_basis ?? 'classifier'}, ` +
+        `confidence ${classification.confidence.toFixed(2)}). ${classification.reasoning} ` +
+        `Accept it to add the email and its attachments to the deal's data room.`,
+    })
+
+    await finalizeEmail(supabase, emailId, { status: 'needs_review' })
     return
   }
 
@@ -853,13 +884,17 @@ async function saveToDropbox(
 // Routing classifier (Step 4.5)
 // ---------------------------------------------------------------------------
 
-export type RoutingDecision = 'deals' | 'audit' | 'review' | 'reporting' | 'interactions' | 'shadow'
+export type RoutingDecision = 'deals' | 'diligence' | 'audit' | 'review' | 'reporting' | 'interactions' | 'shadow'
 
 export interface ClassificationResultStored {
-  label: 'reporting' | 'interactions' | 'deals' | 'other'
+  label: 'reporting' | 'interactions' | 'deals' | 'diligence' | 'other'
   confidence: number
   reasoning: string
-  secondary_label: 'reporting' | 'interactions' | 'deals' | 'other' | null
+  secondary_label: 'reporting' | 'interactions' | 'deals' | 'diligence' | 'other' | null
+  diligence_deal_name: string | null
+  /** Resolved from diligence_deal_name (or the deterministic matcher) at classify time. */
+  diligence_deal_id: string | null
+  diligence_match_basis: string | null
 }
 
 interface DealsSettings {
@@ -888,6 +923,7 @@ async function loadDealsSettings(supabase: Supabase, fundId: string): Promise<De
  *   review       → confidence below threshold; queue for human resolution
  *   audit        → label 'other'; recorded but no pipeline runs
  *   deals        → run processDeal
+ *   diligence    → propose the email for a diligence deal's data room (human accepts)
  *   reporting    → existing flow runs (label confirms reporting)
  *   interactions → existing flow runs (label is interactions)
  */
@@ -899,6 +935,12 @@ function decideRoute(c: ClassificationResultStored, s: DealsSettings): RoutingDe
 
   if (c.label === 'other') return 'audit'
   if (c.label === 'deals') return 'deals'
+  if (c.label === 'diligence') {
+    // A diligence label we can't tie to an actual deal is useless — we'd have
+    // nowhere to file the email. Send it to the review queue so a human can
+    // pick the deal, rather than silently downgrading it to reporting.
+    return c.diligence_deal_id ? 'diligence' : 'review'
+  }
   return c.label // 'reporting' | 'interactions'
 }
 
@@ -942,18 +984,60 @@ async function classifyAndStore(
     sizeBytes: a.ContentLength ?? 0,
   }))
 
+  // Deterministic deal matching runs BEFORE the model. A sender-domain hit is
+  // stronger evidence than anything the classifier can infer from prose, and
+  // giving the model the answer it should already reach makes the label stable.
+  const activeDeals = await loadActiveDiligenceDeals(supabase, fundId)
+  const deterministic = matchDiligenceDeal({
+    senderEmail,
+    forwardedFromEmail: fwd.forwarded_from_email,
+    subject: payload.Subject ?? '',
+    deals: activeDeals,
+  })
+
   const result = await classifyEmail(
     {
       subject: payload.Subject ?? '',
       body: emailBody || '',
       attachments,
       flags,
+      activeDiligenceDeals: activeDeals.map(d => d.name),
+      matchedDealName: deterministic?.basis === 'sender_domain' ? deterministic.deal.name : null,
     },
     provider,
     providerType,
     routingModelOverride ?? defaultModel,
     { admin: supabase, fundId }
   )
+
+  // Resolve the label to a concrete deal. The model names a deal; we only trust
+  // a name that exactly matches one we gave it (case-insensitively) — otherwise
+  // a hallucinated company name would file an email against nothing. The
+  // deterministic match wins when both are present.
+  let dealId: string | null = null
+  let basis: string | null = null
+  if (deterministic) {
+    dealId = deterministic.deal.id
+    basis = deterministic.basis
+  }
+  if (!dealId && result.label === 'diligence' && result.diligence_deal_name) {
+    const wanted = result.diligence_deal_name.trim().toLowerCase()
+    const hit = activeDeals.find(d => d.name.trim().toLowerCase() === wanted)
+    if (hit) {
+      dealId = hit.id
+      basis = 'classifier'
+    }
+  }
+
+  const stored: ClassificationResultStored = {
+    label: result.label as ClassificationResultStored['label'],
+    confidence: result.confidence,
+    reasoning: result.reasoning,
+    secondary_label: result.secondary_label as ClassificationResultStored['secondary_label'],
+    diligence_deal_name: result.diligence_deal_name,
+    diligence_deal_id: dealId,
+    diligence_match_basis: basis,
+  }
 
   await supabase
     .from('inbound_emails')
@@ -962,10 +1046,13 @@ async function classifyAndStore(
       routing_confidence: result.confidence,
       routing_reasoning: result.reasoning,
       routing_secondary_label: result.secondary_label,
-    })
+      // Recorded even when we don't route to diligence: the review queue uses it
+      // to offer a one-click "file this under <deal>".
+      diligence_deal_id: dealId,
+    } as any)
     .eq('id', emailId)
 
-  return result
+  return stored
 }
 
 async function isKnownReferrer(supabase: Supabase, fundId: string, email: string): Promise<boolean> {

@@ -1,8 +1,17 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { AIProvider, AIModel, AIResult, CreateMessageParams, CreateChatParams, ContentBlock } from './types'
+import type {
+  AIProvider, AIModel, AIResult, CreateMessageParams, CreateChatParams, ContentBlock,
+  CreateToolLoopParams, ToolLoopResult, ToolCallRecord,
+} from './types'
+
+// Anthropic's MCP connector — lets the API connect to a remote MCP server
+// (e.g. Affinity's hosted server) and run its tools server-side.
+const MCP_BETA = 'mcp-client-2025-11-20'
 
 export class AnthropicProvider implements AIProvider {
   private client: Anthropic
+
+  readonly supportsToolLoop = true
 
   constructor(apiKey: string) {
     this.client = new Anthropic({ apiKey })
@@ -126,6 +135,158 @@ export class AnthropicProvider implements AIProvider {
       },
       truncated: response.stop_reason === 'max_tokens',
     }
+  }
+
+  /**
+   * Agentic tool-use loop.
+   *
+   * Two kinds of tools can be attached, and they execute in different places:
+   *
+   *   - Custom tools (`params.tools`) run HERE. The model emits tool_use, we run
+   *     `executeTool`, and feed a tool_result back. This is the path used for
+   *     Affinity by default: read-only, scoped to what we choose to expose.
+   *
+   *   - MCP servers (`params.mcpServers`) run on ANTHROPIC's side via the MCP
+   *     connector. We never see the calls; they resolve before the response
+   *     comes back. This is the path for Affinity's hosted MCP server, which
+   *     exposes its full tool surface (including writes).
+   *
+   * The loop is bounded (`maxIterations`) so a model that keeps calling tools
+   * can't spin forever on the user's dime.
+   */
+  async createToolLoop(params: CreateToolLoopParams): Promise<ToolLoopResult> {
+    const customTools = params.tools ?? []
+    const mcpServers = params.mcpServers ?? []
+    const maxIterations = params.maxIterations ?? 6
+
+    const toolDefs: any[] = [
+      ...customTools.map(t => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.inputSchema,
+      })),
+      // Each declared MCP server must be referenced by exactly one toolset entry,
+      // or the API rejects the request.
+      ...mcpServers.map(s => ({ type: 'mcp_toolset', mcp_server_name: s.name })),
+    ]
+
+    if (params.enableWebSearch) {
+      toolDefs.push({
+        type: 'web_search_20250305',
+        name: 'web_search',
+        max_uses: params.webSearchMaxUses ?? 5,
+      })
+    }
+
+    const systemBlocks = cacheableSystem(params.system)
+
+    const messages: Anthropic.MessageParam[] = [{
+      role: 'user',
+      content: typeof params.content === 'string' ? params.content : toAnthropicContent(params.content),
+    }]
+
+    const toolCalls: ToolCallRecord[] = []
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 }
+    let finalText = ''
+    let truncated = false
+
+    for (let i = 0; i < maxIterations; i++) {
+      const request: any = {
+        model: params.model,
+        max_tokens: params.maxTokens,
+        ...(systemBlocks ? { system: systemBlocks } : {}),
+        ...(toolDefs.length > 0 ? { tools: toolDefs } : {}),
+        messages,
+      }
+
+      // The MCP connector is a beta surface and needs both the flag and the
+      // server list; without the beta header the mcp_servers param is rejected.
+      let response: Anthropic.Message
+      if (mcpServers.length > 0) {
+        const stream = (this.client as any).beta.messages.stream({
+          ...request,
+          betas: [MCP_BETA],
+          mcp_servers: mcpServers.map(s => ({
+            type: 'url',
+            name: s.name,
+            url: s.url,
+            ...(s.authorizationToken ? { authorization_token: s.authorizationToken } : {}),
+          })),
+        })
+        response = await stream.finalMessage()
+      } else {
+        const stream = this.client.messages.stream(request)
+        response = await stream.finalMessage()
+      }
+
+      // Usage accumulates across the loop — a single "answer" may cost several
+      // round-trips, and billing the user for only the last one would understate
+      // the true cost.
+      usage.inputTokens += response.usage.input_tokens
+      usage.outputTokens += response.usage.output_tokens
+      usage.cacheReadTokens += response.usage.cache_read_input_tokens ?? 0
+      usage.cacheCreationTokens += response.usage.cache_creation_input_tokens ?? 0
+
+      const text = response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map(b => b.text)
+        .join('')
+      if (text) finalText = text
+
+      if (response.stop_reason === 'max_tokens') truncated = true
+
+      const pending = response.content.filter(
+        (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
+      )
+
+      // No client-side tool calls left to service — MCP and web-search calls have
+      // already resolved server-side by the time we get here.
+      if (pending.length === 0) break
+
+      messages.push({ role: 'assistant', content: response.content })
+
+      // Run the requested tools. All results go back in ONE user message —
+      // splitting them across messages teaches the model to stop calling tools
+      // in parallel.
+      const results: Anthropic.ToolResultBlockParam[] = []
+      for (const call of pending) {
+        const input = (call.input ?? {}) as Record<string, unknown>
+        let resultText: string
+        let isError = false
+
+        if (!params.executeTool) {
+          resultText = 'No tool executor is configured.'
+          isError = true
+        } else {
+          try {
+            resultText = await params.executeTool({ name: call.name, input })
+          } catch (err) {
+            resultText = err instanceof Error ? err.message : 'Tool execution failed'
+            isError = true
+          }
+        }
+
+        toolCalls.push({
+          name: call.name,
+          input,
+          resultPreview: resultText.slice(0, 500),
+          isError,
+        })
+
+        results.push({
+          type: 'tool_result',
+          tool_use_id: call.id,
+          content: resultText,
+          // Returning the failure (rather than dropping it) lets the model
+          // recover — say so, or try a different lookup — instead of hanging.
+          ...(isError ? { is_error: true } : {}),
+        })
+      }
+
+      messages.push({ role: 'user', content: results })
+    }
+
+    return { text: finalText, usage, truncated, toolCalls }
   }
 
   async testConnection(): Promise<void> {

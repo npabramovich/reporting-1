@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Check, AlertTriangle, Ban, Info, ChevronRight } from 'lucide-react'
+import { Loader2, Check, AlertTriangle, Ban, Info, ChevronRight, SlidersHorizontal, Lock } from 'lucide-react'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 import { AccountingSetup } from '../setup'
 import { ReconciliationPanel } from './reconciliation-panel'
+import { AssistantPanel } from './assistant-panel'
 
 interface Issue { level: 'blocker' | 'warning' | 'info'; title: string; detail: string; href?: string; action?: string }
 interface Status {
@@ -50,24 +51,29 @@ export function StatusView() {
   if (loading) return <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>
   if (!s) return <div className="border border-dashed rounded-lg p-8 text-center text-sm text-muted-foreground">Could not load status for this vehicle.</div>
 
+  // The close gets its own summary card below, so it isn't duplicated up here.
   const cards: { label: string; value: string; hint?: string }[] = [
     { label: 'Net assets', value: fmt(s.ledger.netAssets), hint: `${s.ledger.entryCount} entries` },
-    {
-      label: 'Closed through',
-      value: s.close.lastClosedEnd ?? 'Never',
-      hint: s.close.lastClosedLabel ?? (s.close.nextStart ? `next close starts ${s.close.nextStart}` : 'nothing to close'),
-    },
-    {
-      label: 'Unallocated income',
-      value: fmt(s.close.unallocatedEarnings),
-      hint: Math.abs(s.close.unallocatedEarnings) > 0.004 ? 'partners understate until closed' : 'fully allocated',
-    },
+    { label: 'Partners', value: String(s.setup.partnerCount), hint: `${s.setup.partnersWithCommitment} with a commitment` },
     {
       label: 'Bank',
       value: s.bank.needsAttention > 0 ? `${s.bank.needsAttention} to post` : 'All posted',
       hint: `${s.bank.total} transactions`,
     },
+    {
+      label: 'Trial balance',
+      value: s.ledger.trialBalanced ? 'Balanced' : 'Out',
+      hint: s.ledger.draftCount > 0 ? `${s.ledger.draftCount} draft entries` : 'all entries posted',
+    },
   ]
+
+  const unallocated = Math.abs(s.close.unallocatedEarnings) > 0.004
+  const closeSummary = s.close.lastClosedEnd
+    ? `Closed through ${s.close.lastClosedLabel ?? s.close.lastClosedEnd} (${s.close.lastClosedEnd}).`
+    : 'No period has been closed yet.'
+  const closeNext = s.close.nextStart
+    ? `The next close starts ${s.close.nextStart}.`
+    : 'Nothing left to close.'
 
   return (
     <div className="space-y-6">
@@ -122,6 +128,62 @@ export function StatusView() {
         )}
       </div>
 
+      {/* Where the close got to, and what it would pick up next — the one thing you
+          come to this page to find out. Amber when income is sitting unallocated,
+          because until it's closed every partner's capital account understates. */}
+      <Link
+        href="/accounting/periods"
+        className={`flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/30 ${unallocated ? 'border-amber-500/40 bg-amber-500/5' : ''}`}
+      >
+        <Lock className={`h-4 w-4 shrink-0 ${unallocated ? 'text-amber-600' : 'text-muted-foreground'}`} />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Period close</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {closeSummary} {closeNext}
+            {unallocated && (
+              <>
+                {' '}
+                <span className="text-amber-600">
+                  {fmt(s.close.unallocatedEarnings)} of net income is not yet allocated to partners.
+                </span>
+              </>
+            )}
+          </p>
+        </div>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </Link>
+
+      {/* Allocation terms is configuration, not a workspace — it lives here rather than
+          in the nav, next to the health check that surfaces when it's set wrong. */}
+      <Link
+        href="/accounting/allocation-terms"
+        className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/30"
+      >
+        <SlidersHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Allocation terms</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Splitting on <strong>{s.close.basis === 'capital_balance' ? 'capital-account balance' : 'committed capital'}</strong>
+            {' · '}{s.setup.partnersWithCommitment} of {s.setup.partnerCount} partners have a commitment
+            {' · '}who bears the management fee, expenses, and carry
+          </p>
+        </div>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </Link>
+
+      {/* The assistant reads the books and drafts entries — it belongs with the health
+          check that tells you what needs fixing, not as a separate destination. */}
+      <div>
+        <p className="text-sm font-medium mb-1">Assistant</p>
+        <p className="text-xs text-muted-foreground mb-2">
+          Ask about the books, explain a statement, or drop in a document to draft an entry.
+          Anything it proposes is applied as a draft you approve — nothing posts automatically.
+        </p>
+        <div className="border rounded-lg p-3">
+          <AssistantPanel />
+        </div>
+      </div>
+
       {/* Reconciling against an incumbent admin's statement is a validation exercise —
           a takeover check and a parallel-run control, not a monthly step. It belongs
           here rather than as its own nav item. Collapsed by default. */}
@@ -138,13 +200,6 @@ export function StatusView() {
         </div>
       </details>
 
-      <div className="text-xs text-muted-foreground">
-        Allocation basis: <strong>{s.close.basis === 'capital_balance' ? 'capital-account balance' : 'committed capital'}</strong>
-        {' · '}
-        <Link href="/accounting/allocation-terms" className="underline underline-offset-2 hover:text-foreground">Allocation terms</Link>
-        {' · '}
-        <Link href="/accounting/periods" className="underline underline-offset-2 hover:text-foreground">Close</Link>
-      </div>
     </div>
   )
 }
