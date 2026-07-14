@@ -1,23 +1,31 @@
 // Capital-call register + reporting. A call recognizes contributed capital and a
 // receivable (chart 1300 "Due from LPs") when issued; funding clears it later.
-// Called/funded/outstanding all derive from the ledger + the call register, so
-// they never drift:
+// Called/funded/outstanding all derive from the capital postings + the call register,
+// so they never drift:
 //   called      = Σ capital_call_lines.amount for the LP (the register)
 //   receivable  = the LP's balance in account 1300 (from the posted ledger)
 //   funded      = called − receivable   (cash actually received)
 //   outstanding = commitment − funded   (commitment still to be paid in)
+//
+// The reporting functions here go through `loadCapitalPostings`, NOT `loadPostedLedger`,
+// so they serve a capital-tracking-only vehicle (capital_source='events') as well as a
+// booked one. On an events vehicle the receivable is always empty — recognize-at-call is
+// a double-entry construct, and an event is recorded when the money moves — so called
+// and funded are the same thing there. That is the model, not a gap.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadPostedLedger, loadOwnership, loadEntityNames, loadEntityClasses } from './load'
+import { loadCapitalPostings } from './capital-source'
 import { accountIdByCode, ensureCapitalAccounts, persistEntry } from './persist'
 import { computeCapitalAccounts, emptyAccount, type CapitalAccount, type CapitalPeriod } from './capital-account'
 import { buildCapitalCallIssuanceEntry } from './entries'
 import { allocateAmount } from './allocation'
 import { vehicleIdByName } from './vehicle-id'
 import { roundCents } from './ledger'
+import { RECEIVABLE_CODE } from './chart'
 
-/** The chart account that holds called-but-unfunded capital (a receivable). */
-export const RECEIVABLE_CODE = '1300'
+// Re-exported for the callers that have always imported it from here.
+export { RECEIVABLE_CODE }
 
 export interface CallLineInput {
   lpEntityId: string
@@ -205,12 +213,14 @@ export async function lpCapitalSummary(
   fundId: string,
   group: string
 ): Promise<LpCapitalRow[]> {
-  const [{ capitalPostings }, owners, names, classes, receivableByLp] = await Promise.all([
-    loadPostedLedger(admin, fundId, group),
+  // One source-aware load: `postings` come from the ledger or from lp_capital_events
+  // depending on the vehicle, and `receivableByLp` falls out of the same read (it is
+  // always empty for an events vehicle).
+  const [{ postings: capitalPostings, receivableByLp }, owners, names, classes] = await Promise.all([
+    loadCapitalPostings(admin, fundId, group),
     loadOwnership(admin, fundId, group),
     loadEntityNames(admin, fundId, group),
     loadEntityClasses(admin, fundId, group),
-    lpReceivableBalances(admin, fundId, group),
   ])
   const commitmentByLp = new Map(owners.map(o => [o.lpEntityId, o.commitment]))
   const accountByLp = computeCapitalAccounts(capitalPostings)
@@ -259,6 +269,65 @@ export interface LpStatement {
   transactions: LpStatementTxn[]
 }
 
+/** One movement in an LP's capital, before it is windowed into a statement.
+ *  `delta` is credit-positive: what the movement did to the LP's capital. */
+interface Movement { date: string; memo: string | null; sourceType: string | null; delta: number }
+
+/** Movements from the posted ledger — the LP's own capital sub-account in the chart. */
+async function ledgerMovements(
+  admin: SupabaseClient,
+  fundId: string,
+  vehicleId: string | null,
+  lpEntityId: string
+): Promise<Movement[]> {
+  const { data: acct } = await admin
+    .from('chart_of_accounts' as any)
+    .select('id')
+    .eq('fund_id', fundId)
+    .eq('vehicle_id', vehicleId)
+    .eq('lp_entity_id', lpEntityId)
+    .maybeSingle()
+  if (!acct) return []
+
+  const { data: rows } = await admin
+    .from('journal_postings' as any)
+    .select('amount, journal_entries!inner(entry_date, memo, source_type, status)')
+    .eq('fund_id', fundId)
+    .eq('account_id', (acct as any).id)
+
+  return ((rows as any[]) ?? [])
+    .filter(r => r.journal_entries?.status === 'posted')
+    .map(r => ({
+      date: String(r.journal_entries.entry_date ?? ''),
+      memo: r.journal_entries.memo ?? null,
+      sourceType: r.journal_entries.source_type ?? null,
+      delta: roundCents(-Number(r.amount)),
+    }))
+}
+
+/** Movements from lp_capital_events — a vehicle tracked at the capital-account level only. */
+async function eventMovements(
+  admin: SupabaseClient,
+  fundId: string,
+  vehicleId: string | null,
+  lpEntityId: string
+): Promise<Movement[]> {
+  if (!vehicleId) return []
+  const { data } = await admin
+    .from('lp_capital_events' as any)
+    .select('event_date, memo, source_type, amount')
+    .eq('fund_id', fundId)
+    .eq('vehicle_id', vehicleId)
+    .eq('lp_entity_id', lpEntityId)
+
+  return ((data as any[]) ?? []).map(r => ({
+    date: String(r.event_date ?? ''),
+    memo: (r.memo as string) ?? null,
+    sourceType: (r.source_type as string) ?? null,
+    delta: roundCents(-Number(r.amount ?? 0)),
+  }))
+}
+
 /** A single LP's capital statement: summary, roll-forward, and every capital movement. */
 export async function lpStatement(
   admin: SupabaseClient,
@@ -271,20 +340,21 @@ export async function lpStatement(
   const row = summary.find(r => r.lpEntityId === lpEntityId)
   if (!row) return { error: 'LP not found in this vehicle' }
 
-  const { capitalPostings } = await loadPostedLedger(admin, fundId, group)
+  const { source, postings: capitalPostings } = await loadCapitalPostings(admin, fundId, group)
   const rollForward = computeCapitalAccounts(capitalPostings, { end: period?.end })
     .get(lpEntityId) ?? emptyAccount()
   const periodRollForward = computeCapitalAccounts(capitalPostings, period)
     .get(lpEntityId) ?? emptyAccount()
 
   const vehicleId = await vehicleIdByName(admin, fundId, group)
-  const { data: acct } = await admin
-    .from('chart_of_accounts' as any)
-    .select('id')
-    .eq('fund_id', fundId)
-    .eq('vehicle_id', vehicleId)
-    .eq('lp_entity_id', lpEntityId)
-    .maybeSingle()
+
+  // The movements behind the roll-forward, from whichever producer this vehicle uses. Both
+  // store debit-positive (like journal_postings), so a capital delta is the negated amount
+  // either way.
+  const movements = source === 'ledger'
+    ? await ledgerMovements(admin, fundId, vehicleId, lpEntityId)
+    : await eventMovements(admin, fundId, vehicleId, lpEntityId)
+  movements.sort((a, b) => a.date.localeCompare(b.date))
 
   // The statement lists activity IN THE PERIOD, under exactly that heading. This used to
   // return every posting since inception with no date filter at all, so a Q3 statement listed
@@ -294,29 +364,16 @@ export async function lpStatement(
   // balance is the LP's real capital, not the sum of three months. So we walk everything, and
   // only emit the rows that fall inside the window.
   const transactions: LpStatementTxn[] = []
-  if (acct) {
-    const { data: rows } = await admin
-      .from('journal_postings' as any)
-      .select('amount, journal_entries!inner(entry_date, memo, source_type, status)')
-      .eq('fund_id', fundId)
-      .eq('account_id', (acct as any).id)
-    const posted = ((rows as any[]) ?? [])
-      .filter(r => r.journal_entries?.status === 'posted')
-      .map(r => ({ e: r.journal_entries, delta: roundCents(-Number(r.amount)) }))
-      .sort((a, b) => String(a.e.entry_date).localeCompare(String(b.e.entry_date)))
+  let balance = 0
+  for (const m of movements) {
+    // Anything after the statement date isn't on this statement — it hasn't happened yet as
+    // far as this document is concerned, and must not move the closing balance either.
+    if (period?.end && m.date > period.end) continue
 
-    let balance = 0
-    for (const p of posted) {
-      const date = String(p.e.entry_date ?? '')
-      // Anything after the statement date isn't on this statement — it hasn't happened yet as
-      // far as this document is concerned, and must not move the closing balance either.
-      if (period?.end && date > period.end) continue
+    balance = roundCents(balance + m.delta)
 
-      balance = roundCents(balance + p.delta)
-
-      if (period?.start && date < period.start) continue // carried into `beginning`, not listed
-      transactions.push({ date: p.e.entry_date, memo: p.e.memo ?? null, sourceType: p.e.source_type ?? null, amount: p.delta, balance })
-    }
+    if (period?.start && m.date < period.start) continue // carried into `beginning`, not listed
+    transactions.push({ date: m.date, memo: m.memo, sourceType: m.sourceType, amount: m.delta, balance })
   }
 
   return { row, rollForward, periodRollForward, transactions }

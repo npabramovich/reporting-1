@@ -18,7 +18,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CapitalPosting } from './capital-account'
 import { loadPostedLedger } from './load'
 import { vehicleIdByName } from './vehicle-id'
-import { RECEIVABLE_CODE } from './capital-calls'
+import { RECEIVABLE_CODE } from './chart'
 import { roundCents } from './ledger'
 
 export type CapitalSource = 'ledger' | 'events'

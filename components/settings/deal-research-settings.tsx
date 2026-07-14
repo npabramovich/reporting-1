@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Section } from '@/components/settings/section'
 
 /**
  * Whether inbound deals get a round of external web research, and how
@@ -11,6 +11,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
  *
  * The bar exists because this costs money per deal and a VC inbox is mostly
  * noise. Researching every cold pitch would spend the budget on recruiter spam.
+ *
+ * Rendered as a <Section>, not a bare <Card>, so it carries the admin chrome (amber
+ * border + lock) of the block it sits in. It is admin-only in every other respect —
+ * fund_settings column, and /api/settings/deal-research 403s a non-admin on both GET
+ * and PUT — and looking like an ordinary member-editable card was the odd one out.
  */
 
 type MinFit = 'strong' | 'moderate' | 'weak'
@@ -69,11 +74,8 @@ export function DealResearchSettings() {
   if (loading) return null
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">External deal research</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <Section title="External deal research">
+      <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
           After an inbound deal is scored against your thesis, research the founder and company on
           the web: prior companies, whether their traction claims show up anywhere outside the deck,
@@ -120,7 +122,7 @@ export function DealResearchSettings() {
           {saved && <span className="text-xs text-green-600">Saved</span>}
           {error && <span className="text-xs text-destructive">{error}</span>}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Section>
   )
 }

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { dbError } from '@/lib/api-error'
 import { generateApiKey } from '@/lib/accounting/api-keys'
+import { agentApiEnabled } from '@/lib/oauth/enabled'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
@@ -43,6 +44,15 @@ export async function POST(req: NextRequest) {
   const m = await member(admin, user.id)
   if (!m) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
   if (m.role === 'viewer') return NextResponse.json({ error: 'The read-only demo cannot create API keys' }, { status: 403 })
+
+  // Don't hand out a credential for a surface that is switched off — it would look
+  // like it worked and then 403 on first use.
+  if (!(await agentApiEnabled(admin, m.fund_id))) {
+    return NextResponse.json(
+      { error: 'Agent access is disabled for this fund. An admin can enable it in Settings → Agent access.' },
+      { status: 403 }
+    )
+  }
 
   const body = await req.json().catch(() => ({}))
   const name = (body?.name ?? '').toString().trim()

@@ -3,16 +3,22 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertAdminAccess, assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
-import { loadPostedLedger, loadEntityNames, loadEntityClasses } from '@/lib/accounting/load'
+import { loadEntityNames, loadEntityClasses } from '@/lib/accounting/load'
+import { loadCapitalPostings } from '@/lib/accounting/capital-source'
 import { computeCapitalAccounts, totalNav } from '@/lib/accounting/capital-account'
 import { lpCapitalSummary, listCapitalCalls } from '@/lib/accounting/capital-calls'
 import { resolvePeriod, customPeriod, type PeriodPreset } from '@/lib/accounting/statement-period'
 
-// GET — per-LP capital-account roll-forward for a vehicle, derived from posted entries.
+// GET — per-LP capital-account roll-forward for a vehicle.
 //
 // Returns TWO roll-forwards per LP: `period` (activity within the statement period,
 // opening with the balance carried in) and `itd` (inception to date). A capital
 // account statement shows both columns side by side.
+//
+// `source` says where those numbers came from — 'ledger' (posted journal entries) or
+// 'events' (lp_capital_events, for a vehicle tracked at the capital-account level only).
+// The page is the same either way; it just grows an event-entry surface in 'events' mode
+// and drops the double-entry-only affordances (issuing a call, the administrator tie-out).
 //
 //   ?preset=this_quarter|last_quarter|ytd|prior_year|itd   — or —
 //   ?start=YYYY-MM-DD&end=YYYY-MM-DD                       (custom window)
@@ -37,8 +43,8 @@ export async function GET(req: NextRequest) {
   // period one needs the pre-period history anyway to open with a carried-in balance.
   // `summary` and `calls` fold the old Capital calls page into this one — commitment,
   // called, funded, and unfunded were the duplicated half of it.
-  const [{ capitalPostings }, names, classes, summary, calls] = await Promise.all([
-    loadPostedLedger(admin, gate.fundId, group),
+  const [{ source, postings: capitalPostings }, names, classes, summary, calls] = await Promise.all([
+    loadCapitalPostings(admin, gate.fundId, group),
     loadEntityNames(admin, gate.fundId, group),
     loadEntityClasses(admin, gate.fundId, group),
     lpCapitalSummary(admin, gate.fundId, group),
@@ -81,5 +87,6 @@ export async function GET(req: NextRequest) {
     nav: totalNav(itdAccounts),
     period,
     calls,
+    source,
   })
 }

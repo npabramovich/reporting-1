@@ -60,15 +60,18 @@ export async function runScore(params: {
     .eq('fund_id', fundId)
     .maybeSingle()
   if (!draft) throw new Error('Draft not found')
-  if (!(draft as any).memo_draft_output) {
-    throw new Error('memo_draft_output missing — Stage 4 (draft) must run first.')
+  // Scoring is INDEPENDENT of the memo: it judges the evidence base (ingestion +
+  // research + Q&A), and reads the memo prose only as extra context when one happens
+  // to exist. So the hard requirement is ingestion, not a draft.
+  if (!(draft as any).ingestion_output) {
+    throw new Error('ingestion_output missing — analyze the data room first.')
   }
 
   const ingestion = (draft as any).ingestion_output as IngestionOutput
   const research = ((draft as any).research_output as ResearchOutput | null) ?? null
   // Partner-excluded Q&A entries are dropped from evaluation entirely.
   const qa_answers = (Array.isArray((draft as any).qa_answers) ? (draft as any).qa_answers as QARecord[] : []).filter((r: QARecord) => !r.excluded)
-  const memo = (draft as any).memo_draft_output as MemoDraftOutput
+  const memo = ((draft as any).memo_draft_output as MemoDraftOutput | null) ?? null
 
   // Seed-on-demand for funds that never visited the Schemas editor.
   await ensureDefaults(fundId, admin)
@@ -89,7 +92,7 @@ export async function runScore(params: {
   await note('Building score prompt…')
   const { prompt: system } = await buildSystemPrompt({ admin, fundId, stage: 'score' })
 
-  const memoSummary = summarizeMemoForScoring(memo)
+  const memoSummary = memo ? summarizeMemoForScoring(memo) : null
 
   await note('Scoring rubric dimensions…')
   const { provider, model, providerType } = await getStageProvider(admin, fundId, 'score')
@@ -168,9 +171,12 @@ export async function runScore(params: {
   const output: ScoreOutput = { scores, low_confidence_attention }
 
   await note('Persisting scores to draft…')
-  // Merge into memo_draft_output.scores (live alongside the prose).
+  // Scores live in memo_draft_output alongside the prose when there IS prose. When
+  // scoring runs ahead of the memo, they land there on their own with an empty
+  // `paragraphs` — which is why "has a memo" is tested on paragraphs everywhere, not
+  // on the column being non-null. A later draft run fills the prose in around them.
   const merged: MemoDraftOutput & { scores: DimensionScore[]; low_confidence_attention?: ScoreOutput['low_confidence_attention'] } = {
-    ...memo,
+    ...(memo ?? ({ paragraphs: [] } as unknown as MemoDraftOutput)),
     scores,
     low_confidence_attention,
   }

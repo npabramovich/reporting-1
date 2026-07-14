@@ -48,19 +48,26 @@ export async function middleware(request: NextRequest) {
 
   const isSetupRoute = pathname === '/setup' && process.env.ENABLE_SETUP_PAGE === 'true'
   const isPortalRoute = pathname.startsWith('/portal')
+
+  // OAuth discovery (RFC 8414 / RFC 9728). An MCP client fetches these BEFORE it
+  // has any credential, so they must answer to an anonymous caller — bouncing them
+  // to /auth would return an HTML login page where JSON metadata was expected, and
+  // the connector would fail with an opaque registration error. They contain no
+  // secrets: they advertise endpoints and capabilities, nothing more.
+  const isOAuthDiscovery = pathname.startsWith('/.well-known/')
   // Onboarding begins before the LP has a session, so it must be reachable unauthenticated.
   const isPortalWelcome = pathname === '/portal/welcome'
 
   // Unauthenticated users can only access /auth, API, marketing pages (if
   // enabled), the token-gated public submit form, and setup routes.
-  if (!user && !isAuthRoute && !isApiRoute && !isPublicMarketingRoute && !isPublicTokenRoute && !isSetupRoute && !isPortalWelcome) {
+  if (!user && !isAuthRoute && !isApiRoute && !isPublicMarketingRoute && !isPublicTokenRoute && !isSetupRoute && !isPortalWelcome && !isOAuthDiscovery) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth'
     return NextResponse.redirect(url)
   }
 
   // Enforce MFA: redirect to verify page if user has enrolled TOTP but hasn't completed AAL2
-  if (user && !isAuthRoute && !isPublicMarketingRoute && !isPublicTokenRoute) {
+  if (user && !isAuthRoute && !isPublicMarketingRoute && !isPublicTokenRoute && !isOAuthDiscovery) {
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
       if (isApiRoute) {
@@ -77,7 +84,7 @@ export async function middleware(request: NextRequest) {
   // route context decides which applies. /portal is LP-only; the GP app is for
   // members. A dual GP+LP user is allowed in both. Resolved from the user's OWN
   // rows (RLS-scoped) — never cross-referenced.
-  if (user && !isApiRoute && !isAuthRoute && !isPublicMarketingRoute && !isPublicTokenRoute && !isSetupRoute) {
+  if (user && !isApiRoute && !isAuthRoute && !isPublicMarketingRoute && !isPublicTokenRoute && !isSetupRoute && !isOAuthDiscovery) {
     const [{ data: membership }, { data: lpAccount }] = await Promise.all([
       supabase.from('fund_members').select('fund_id').eq('user_id', user.id).maybeSingle(),
       supabase.from('lp_accounts').select('status').eq('auth_user_id', user.id).maybeSingle(),

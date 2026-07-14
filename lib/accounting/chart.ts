@@ -12,6 +12,11 @@ export interface ChartAccountSeed {
   subtype?: string
 }
 
+/** The chart account that holds called-but-unfunded capital (a receivable).
+ *  Lives here, not in capital-calls.ts, so capital-calls can depend on capital-source
+ *  (which needs this code) without the two importing each other. */
+export const RECEIVABLE_CODE = '1300'
+
 export const DEFAULT_CHART: ChartAccountSeed[] = [
   // Assets
   { code: '1000', name: 'Cash', type: 'asset', subtype: 'cash' },

@@ -9,6 +9,8 @@ import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 import { PERIOD_PRESETS, type PeriodPreset } from '@/lib/accounting/statement-period'
 import { ReconciliationPanel } from './reconciliation-panel'
+import { CapitalSourceCard, type CapitalSource } from './capital-source-card'
+import { EventsPanel } from './events-panel'
 
 interface Account {
   beginning: number
@@ -78,6 +80,9 @@ export function CapitalAccountsView() {
   const [nav, setNav] = useState(0)
   const [period, setPeriod] = useState<Period | null>(null)
   const [loading, setLoading] = useState(true)
+  // Which producer this vehicle's capital comes from. Null until the first load — the
+  // mode-specific parts of the page stay hidden rather than flashing the wrong ones.
+  const [source, setSource] = useState<CapitalSource | null>(null)
 
   const [preset, setPreset] = useState<PeriodPreset>('itd')
   const [start, setStart] = useState('')
@@ -115,10 +120,19 @@ export function CapitalAccountsView() {
     }
     lf(`/api/accounting/capital-accounts?${qs}`)
       .then(r => (r.ok ? r.json() : { rows: [], nav: 0, calls: [] }))
-      .then(d => { setRows(d.rows ?? []); setNav(d.nav ?? 0); setPeriod(d.period ?? null); setCalls(d.calls ?? []) })
+      .then(d => {
+        setRows(d.rows ?? []); setNav(d.nav ?? 0); setPeriod(d.period ?? null)
+        setCalls(d.calls ?? []); setSource(d.source ?? null)
+      })
       .finally(() => setLoading(false))
   }, [lf, preset, start, end])
   useEffect(() => { load() }, [load])
+
+  // A capital-tracking-only vehicle keeps no double-entry books, so the affordances that
+  // only exist inside one — issuing a call against a 1300 receivable, tying out a ledger
+  // to the outgoing administrator's statement — are not shown for it. Its capital is
+  // entered as events instead, below the roll-forward those events produce.
+  const isEvents = source === 'events'
 
   async function addLp() {
     setErr(null)
@@ -215,6 +229,9 @@ export function CapitalAccountsView() {
 
   return (
     <div className="space-y-3">
+      {/* Switching the source changes every number below it, so reload the roll-forward too. */}
+      {source && <CapitalSourceCard source={source} onChange={next => { setSource(next); load() }} />}
+
       <div className="flex flex-wrap items-end gap-3 border rounded-lg p-3">
         <label className="text-xs text-muted-foreground">Statement period
           <select
@@ -246,9 +263,11 @@ export function CapitalAccountsView() {
 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" onClick={() => setShowAdd(v => !v)}><Plus className="h-4 w-4 mr-1" />Add LP</Button>
-        <Button size="sm" variant="outline" onClick={() => setShowCall(v => !v)} disabled={rows.length === 0}>
-          <PhoneCall className="h-4 w-4 mr-1" />Issue a capital call
-        </Button>
+        {!isEvents && (
+          <Button size="sm" variant="outline" onClick={() => setShowCall(v => !v)} disabled={rows.length === 0}>
+            <PhoneCall className="h-4 w-4 mr-1" />Issue a capital call
+          </Button>
+        )}
         <Button size="sm" variant="outline" onClick={publishStatements} disabled={publishing || rows.length === 0}>
           {publishing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileText className="h-4 w-4 mr-1" />}
           Publish statements to LP portal
@@ -284,8 +303,10 @@ export function CapitalAccountsView() {
         </div>
       )}
 
-      {/* Issue a call — folded in from the old Capital calls page. */}
-      {showCall && rows.length > 0 && (
+      {/* Issue a call — folded in from the old Capital calls page. Gated on `!isEvents` as
+          well as `showCall`: switching vehicle while the panel is open would otherwise leave
+          it showing on a vehicle that has no receivable to call against. */}
+      {showCall && !isEvents && rows.length > 0 && (
         <div className="border rounded-lg p-4 space-y-3">
           <p className="text-sm font-medium">Issue a capital call</p>
           <div className="flex flex-wrap items-end gap-3">
@@ -436,6 +457,15 @@ export function CapitalAccountsView() {
         </div>
       )}
 
+      {/* The entry surface for a capital-tracking-only vehicle. It sits BELOW the
+          roll-forward because the roll-forward is what it produces — the same order the
+          Journal has to the statements it feeds. */}
+      {isEvents && (
+        <div className="pt-6">
+          <EventsPanel onChange={load} />
+        </div>
+      )}
+
       {/* Reconciling against the incumbent administrator's statement compares one
           partner's capital account, line by line — so it belongs with the capital
           accounts, not on Admin.
@@ -443,7 +473,9 @@ export function CapitalAccountsView() {
           It is a CUTOVER check, not a monthly step: it proves this ledger reproduces
           the numbers the outgoing admin produced. Once you are closing periods here,
           the ledger IS the record and there is nothing external left to reconcile
-          against. Hence collapsed, and last. */}
+          against. Hence collapsed, and last. Ledger-only: on a capital-tracking vehicle
+          the events ARE the administrator's statement, so there is nothing to tie out to. */}
+      {!isEvents && (
       <details className="group border rounded-lg mt-6">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium">
           <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
@@ -456,6 +488,7 @@ export function CapitalAccountsView() {
           <ReconciliationPanel />
         </div>
       </details>
+      )}
     </div>
   )
 }

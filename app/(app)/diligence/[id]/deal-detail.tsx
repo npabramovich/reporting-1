@@ -63,7 +63,7 @@ type LatestDraft = {
 // (DDP status, details, finalize/promote), then the pipeline goes Data Room →
 // Diligence (external research) → Partner Q&A → Memo. Notes live in a
 // right-side slide-in panel, mirroring the Companies notes UX.
-const TABS = ['Checklist', 'Data Room', 'Diligence', 'Founders', 'Scoring', 'Memo', 'Settings'] as const
+const TABS = ['Checklist', 'Data Room', 'Research', 'Founders', 'Scoring', 'Memo', 'Settings'] as const
 type Tab = typeof TABS[number]
 
 // Deal stages: Invested, Active, Passed. No color accents — the label alone
@@ -264,7 +264,7 @@ export function DealDetail({ deal: initial, initialDocuments, latestDraft, isAdm
           {activeTab === 'Data Room' && (
             <DealRoomTab dealId={deal.id} dealName={deal.name} documents={documents} setDocuments={setDocuments} initialDriveFolderUrl={deal.drive_folder_url} focusDocId={focusDocId} onFocusConsumed={() => setFocusDocId(null)} />
           )}
-          {activeTab === 'Diligence' && <DiligenceTab dealId={deal.id} userId={currentUserId} isAdmin={isAdmin} />}
+          {activeTab === 'Research' && <ResearchTab dealId={deal.id} userId={currentUserId} isAdmin={isAdmin} />}
           {activeTab === 'Founders' && <FoundersTab dealId={deal.id} />}
           {activeTab === 'Scoring' && <ScoringTab dealId={deal.id} />}
           {activeTab === 'Memo' && <MemoTab dealId={deal.id} dealName={deal.name} isAdmin={isAdmin} />}
@@ -2240,10 +2240,8 @@ function Disclosure({ title, subtitle, defaultOpen, children }: { title: string;
 // Diligence tab — Internal (contradictions, founders), External (web research),
 // and the Q&A library, all in accordions for easier scanning.
 // ---------------------------------------------------------------------------
-function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: string; isAdmin: boolean }) {
-  const { status, refresh } = useAgentStatus(dealId)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+function ResearchTab({ dealId, userId, isAdmin }: { dealId: string; userId: string; isAdmin: boolean }) {
+  const { status } = useAgentStatus(dealId)
   const [draft, setDraft] = useState<any>(null)
   // Doc-name map so cross-document inconsistencies can render "Across: <file>, <file>".
   const [fileNamesById, setFileNamesById] = useState<Record<string, string>>({})
@@ -2310,21 +2308,6 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
     patchCrossFlags(crossDocFlags.map((f, i) => (i === index ? { ...f, dismissed: !f.dismissed } : f)))
   }
 
-  async function runResearch() {
-    setSubmitting(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/diligence/${dealId}/agent/research`, { method: 'POST' })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.error ?? 'Failed to enqueue research')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to enqueue research')
-    } finally {
-      setSubmitting(false)
-      await refresh()
-    }
-  }
-
   const contradictions = research?.contradictions ?? []
   const findings = research?.findings ?? []
   const gaps = research?.research_gaps ?? []
@@ -2347,11 +2330,11 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
 
   return (
     <div className="space-y-6 max-w-6xl">
-      {/* The two actions this tab is FOR, at the top of it. External research was
-          previously a button buried in a section below; Q&A had no run button here at
-          all. Each header knows if it's blocked and says why. */}
+      {/* The one action this tab is FOR, at the top of it. It's the only run button on
+          the tab — the header knows if it's blocked and says why, and it reports the
+          last run, so a second button and status line in the section below would only
+          disagree with it. */}
       <StageHeader dealId={dealId} stageKey="research" />
-      <StageHeader dealId={dealId} stageKey="qa" />
 
       {/* Ask anything, moved here from its own tab so questions sit alongside the evidence. */}
       <QATab dealId={dealId} />
@@ -2382,17 +2365,10 @@ function DiligenceTab({ dealId, userId, isAdmin }: { dealId: string; userId: str
       <Section
         title="External research"
         count={activeFindings}
-        help="Verifies findings via web search, surfaces competitors, builds founder dossiers, and lists gaps. Web search runs only when it's enabled in Settings → Memo agent and the research stage uses an Anthropic model."
-        action={
-          <Button variant="outline" size="sm" onClick={runResearch} disabled={submitting || !!isResearchInFlight || !ingestReady}>
-            {isResearchInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : research ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
-            {research ? 'Re-run' : 'Run research'}
-          </Button>
-        }
+        help="Verifies findings via web search, surfaces competitors, builds founder dossiers, and lists gaps. Web search runs only when it's enabled in Settings → Memo agent and the research stage uses an Anthropic model. Run it from the header above."
       >
         {research?.research_mode === 'no_web_search' && <p className="text-[11px] text-amber-700 dark:text-amber-400">Last run: web search was off.</p>}
         {research?.research_mode === 'with_web_search' && <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Last run: web search was on.</p>}
-        <JobStatusLine job={job ?? null} kind="research" error={error} />
         {research && !isResearchInFlight && (
           <ExternalResearchView
             research={research}
@@ -3420,10 +3396,8 @@ function SettingsTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: 
 // Run-scoring button stays in the Memo tab; this tab is the read-out.
 // ---------------------------------------------------------------------------
 function ScoringTab({ dealId }: { dealId: string }) {
-  const { status, refresh } = useAgentStatus(dealId)
+  const { status } = useAgentStatus(dealId)
   const [draft, setDraft] = useState<any>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/diligence/${dealId}/drafts`).then(r => r.ok ? r.json() : []).then(rows => {
@@ -3431,23 +3405,8 @@ function ScoringTab({ dealId }: { dealId: string }) {
     }).catch(() => {})
   }, [dealId, status?.latest_draft?.id, status?.latest_job?.status])
 
-  const job = status?.latest_job
   const memoOutput = draft?.memo_draft_output as { scores?: Array<{ dimension_id: string; mode: string; score: number | null; confidence: 'low' | 'medium' | 'high' | null; rationale: string | null }> } | null
   const scores = memoOutput?.scores ?? []
-
-  async function runScore() {
-    setSubmitting(true); setError(null)
-    try {
-      const res = await fetch(`/api/diligence/${dealId}/agent/score`, { method: 'POST' })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.error ?? 'Failed to enqueue scoring')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to enqueue scoring')
-    } finally {
-      setSubmitting(false)
-      await refresh()
-    }
-  }
 
   async function patchScore(dimensionId: string, patch: { score?: number | null; confidence?: string | null; rationale?: string }) {
     if (!draft?.id) return
@@ -3475,35 +3434,19 @@ function ScoringTab({ dealId }: { dealId: string }) {
     }
   }
 
-  const hasMemo = !!memoOutput
-  const isScoreInFlight = job && (job.status === 'pending' || job.status === 'running') && job.kind === 'score'
-
   return (
     <div className="space-y-6 max-w-6xl">
-      {/* Previously the Run-scoring button only existed once a memo did — with no memo
-          you got a dead-end sentence and no way forward. The header renders either way
-          and says what's blocking it. */}
+      {/* The only run button on this tab. It knows if it's blocked, says why, and
+          reports the last run — so the section below carries no second button. */}
       <StageHeader dealId={dealId} stageKey="scoring" />
 
       <Section
         title="Scoring"
-        help="Scores are derived from the memo draft and evidence. Edit any score, rating, or rationale; changes save to the deal."
-        action={hasMemo ? (
-          <Button variant="outline" size="sm" onClick={runScore} disabled={submitting || !!isScoreInFlight}>
-            {isScoreInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
-            Re-run scoring
-          </Button>
-        ) : undefined}
+        help="Scores are judged from the evidence — the data room, research and Q&A. A memo isn't required; run scoring as soon as the data room is analyzed. Edit any score, rating, or rationale; changes save to the deal."
       >
-        <JobStatusLine job={job ?? null} kind="score" error={error} />
-
-        {!hasMemo ? (
+        {scores.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">
-            No memo draft yet. Run draft from the Memo tab, scoring runs automatically as part of the draft workflow.
-          </p>
-        ) : scores.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">
-            Memo exists but scoring hasn&apos;t produced output yet. Click &ldquo;Re-run scoring&rdquo; above.
+            Not scored yet. Run scoring from the header above.
           </p>
         ) : (
           <div className="divide-y mt-2 -mx-1">
@@ -3623,11 +3566,9 @@ function ScoreEditRow({ score, onSave }: {
 // ---------------------------------------------------------------------------
 
 function MemoTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: string; isAdmin: boolean }) {
-  const { status, refresh } = useAgentStatus(dealId)
+  const { status } = useAgentStatus(dealId)
   const [draft, setDraft] = useState<any | null>(null)
   const [attention, setAttention] = useState<any[]>([])
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Re-fetch whenever the draft job lifecycle changes so the inline editor
@@ -3652,39 +3593,20 @@ function MemoTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: stri
   const job = status?.latest_job
   const isDraftWorkflowJob = job?.kind === 'draft' || job?.kind === 'draft_review' || job?.kind === 'score'
   const isInFlight = job && (job.status === 'pending' || job.status === 'running') && isDraftWorkflowJob
-  const hasMemo = !!draft?.memo_draft_output
-
-  async function runDraft() {
-    setSubmitting(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/diligence/${dealId}/agent/draft`, { method: 'POST' })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.error ?? 'Failed to enqueue draft')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed')
-    } finally {
-      setSubmitting(false)
-      await refresh()
-    }
-  }
+  // Prose, not merely a non-null memo_draft_output — scoring parks its scores in that
+  // same column and can run before the memo is ever drafted.
+  const memoParagraphs = draft?.memo_draft_output?.paragraphs
+  const hasMemo = Array.isArray(memoParagraphs) && memoParagraphs.length > 0
 
   return (
     <div className="space-y-6 max-w-6xl">
+      {/* The only run button on this tab, and the only place the last run is reported. */}
       <StageHeader dealId={dealId} stageKey="memo" />
 
       <Section
         title="Memo draft"
-        action={
-          <Button variant="outline" size="sm" onClick={runDraft} disabled={submitting || !!isInFlight}>
-            {isInFlight || submitting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : hasMemo ? <RefreshCw className="h-3.5 w-3.5 mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />}
-            {hasMemo ? 'Re-draft' : 'Run draft'}
-          </Button>
-        }
-        help="Assemble a structured memo from ingestion, research, and Q&A. Scoring runs automatically as a follow-up; view it in the Scoring tab."
+        help="Assemble a structured memo from ingestion, research, and Q&A. Run it from the header above. Scoring is separate and does not wait for the memo — see the Scoring tab."
       />
-
-      {error && <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
 
       {status?.memo_stale && !isInFlight && (
         <div className="rounded-md border border-amber-500/40 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-900 dark:text-amber-200">
@@ -3696,15 +3618,13 @@ function MemoTab({ dealId, dealName, isAdmin }: { dealId: string; dealName: stri
         </div>
       )}
 
-      <JobStatusLine job={job ?? null} kind={['draft', 'draft_review', 'score']} error={null} />
-
       {loading ? (
         <div className="rounded-md border bg-card p-12 text-center text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 inline animate-spin mr-2" /> Loading memo…
         </div>
       ) : !hasMemo ? (
         <div className="rounded-md border bg-card p-12 text-center text-sm text-muted-foreground">
-          No memo yet. Click &ldquo;Run draft&rdquo; above once ingest + research + Q&amp;A are ready.
+          No memo yet. Run the draft from the header above once the data room and research are ready.
         </div>
       ) : (
         <MemoEditor

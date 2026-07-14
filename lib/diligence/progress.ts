@@ -9,13 +9,18 @@
 // finished: the draft's output columns, the checklist's assessed statuses, the
 // documents' parse_status. Those can't lie.
 
-export type StageKey = 'data_room' | 'checklist' | 'research' | 'qa' | 'memo' | 'scoring'
-export type StageState = 'done' | 'running' | 'failed' | 'blocked' | 'todo'
+export type StageKey = 'data_room' | 'checklist' | 'research' | 'scoring' | 'memo'
+export type StageState = 'done' | 'partial' | 'running' | 'failed' | 'blocked' | 'todo'
 
 export interface StageInfo {
   key: StageKey
   label: string
   state: StageState
+  /**
+   * How far through the stage the deal is, 0–1. Only ever 1 when `state` is
+   * 'done', so a bar can never render full while work remains.
+   */
+  progress: number
   /** Which tab the work lives on. */
   tab: string
   /** The agent endpoint that runs it, if it can be triggered directly. */
@@ -122,13 +127,17 @@ export function assessedCount(counts: Record<ChecklistStatus, number>): number {
 export interface ProgressInput {
   hasIngestion: boolean
   hasResearch: boolean
-  hasQa: boolean
   hasMemoDraft: boolean
   hasScores: boolean
   finalized: boolean
   documentCount: number
+  /** Documents that have reached a settled parse state — processed, partial or skipped. */
+  documentsHandled: number
   checklistAssessed: number
   checklistTotal: number
+  /** Rubric dimensions the scorer reached a view on, and how many exist. */
+  scoredDimensions: number
+  totalDimensions: number
   /** The in-flight job, if any. */
   runningKind: string | null
   failedKind: string | null
@@ -141,28 +150,53 @@ const KIND_TO_STAGE: Record<string, StageKey> = {
   transcribe: 'data_room',
   checklist_assessment: 'checklist',
   research: 'research',
-  qa: 'qa',
   draft: 'memo',
   draft_review: 'memo',
   render: 'memo',
   score: 'scoring',
 }
 
+/** A stage that isn't finished never reads as full — partial fill is capped below 100%. */
+const PARTIAL_CEILING = 0.9
+
 export function buildStages(p: ProgressInput): StageInfo[] {
   const running = p.runningKind ? KIND_TO_STAGE[p.runningKind] ?? null : null
   const failed = p.failedKind ? KIND_TO_STAGE[p.failedKind] ?? null : null
 
-  const state = (key: StageKey, done: boolean, blocked: boolean, blockedHint: string, hint: string): StageInfo => {
+  const state = (
+    key: StageKey,
+    done: boolean,
+    blocked: boolean,
+    blockedHint: string,
+    hint: string,
+    /** 0–1 share of the stage's own work that's finished, where that's measurable. */
+    fraction = 0,
+  ): StageInfo => {
     let st: StageState = 'todo'
     if (running === key) st = 'running'
     else if (done) st = 'done'
     else if (failed === key) st = 'failed'
     else if (blocked) st = 'blocked'
-    return { key, label: '', state: st, tab: '', action: null, actionLabel: '', hint: st === 'blocked' ? blockedHint : hint }
+    else if (fraction > 0) st = 'partial'
+
+    const progress = st === 'done' ? 1
+      : st === 'blocked' ? 0
+      : Math.min(Math.max(fraction, 0), PARTIAL_CEILING)
+
+    return {
+      key, label: '', state: st, progress, tab: '', action: null, actionLabel: '',
+      hint: st === 'blocked' ? blockedHint : hint,
+    }
   }
 
+  const share = (n: number, d: number) => (d > 0 ? n / d : 0)
+
   const dataRoom = {
-    ...state('data_room', p.hasIngestion, p.documentCount === 0, 'Upload documents first', 'Read every document and extract the evidence base'),
+    ...state(
+      'data_room', p.hasIngestion, p.documentCount === 0,
+      'Upload documents first', 'Read every document and extract the evidence base',
+      share(p.documentsHandled, p.documentCount),
+    ),
     label: 'Data room',
     tab: 'Data Room',
     action: 'ingest',
@@ -170,7 +204,11 @@ export function buildStages(p: ProgressInput): StageInfo[] {
   }
 
   const checklist = {
-    ...state('checklist', p.checklistTotal > 0 && p.checklistAssessed === p.checklistTotal, !p.hasIngestion, 'Analyze the data room first', 'Judge each checklist item against the evidence'),
+    ...state(
+      'checklist', p.checklistTotal > 0 && p.checklistAssessed === p.checklistTotal, !p.hasIngestion,
+      'Analyze the data room first', 'Judge each checklist item against the evidence',
+      share(p.checklistAssessed, p.checklistTotal),
+    ),
     label: 'Checklist',
     tab: 'Checklist',
     action: 'checklist-assessment',
@@ -180,17 +218,27 @@ export function buildStages(p: ProgressInput): StageInfo[] {
   const research = {
     ...state('research', p.hasResearch, !p.hasIngestion, 'Analyze the data room first', 'Search outside the data room — market, competitors, team'),
     label: 'Research',
-    tab: 'Diligence',
+    tab: 'Research',
     action: 'research',
     actionLabel: p.hasResearch ? 'Re-run research' : 'Run research',
   }
 
-  const qa = {
-    ...state('qa', p.hasQa, !p.hasIngestion, 'Analyze the data room first', 'Answer the open diligence questions from the evidence'),
-    label: 'Q&A',
-    tab: 'Diligence',
-    action: 'qa',
-    actionLabel: p.hasQa ? 'Re-run Q&A' : 'Run Q&A',
+  // Scoring reads the evidence base directly (ingestion + research + Q&A), so it is
+  // NOT gated on the memo — you can score a deal you never write up, and the memo can
+  // then quote the scores. It's only "done" once every rubric dimension has been
+  // reached; a rubric with unscored dimensions left over shows as partial.
+  const scoring = {
+    ...state(
+      'scoring',
+      p.hasScores && p.totalDimensions > 0 && p.scoredDimensions === p.totalDimensions,
+      !p.hasIngestion,
+      'Analyze the data room first', 'Score the deal against the fund’s criteria',
+      share(p.scoredDimensions, p.totalDimensions),
+    ),
+    label: 'Scoring',
+    tab: 'Scoring',
+    action: 'score',
+    actionLabel: p.hasScores ? 'Re-run scoring' : 'Run scoring',
   }
 
   const memo = {
@@ -201,16 +249,8 @@ export function buildStages(p: ProgressInput): StageInfo[] {
     actionLabel: p.hasMemoDraft ? 'Re-draft memo' : 'Draft memo',
   }
 
-  const scoring = {
-    ...state('scoring', p.hasScores, !p.hasMemoDraft, 'Draft the memo first', 'Score the deal against the fund’s criteria'),
-    label: 'Scoring',
-    tab: 'Scoring',
-    action: 'score',
-    actionLabel: p.hasScores ? 'Re-run scoring' : 'Run scoring',
-  }
-
-  // Pipeline order — the order the agent actually chains them in.
-  return [dataRoom, checklist, research, qa, memo, scoring]
+  // Pipeline order — evidence, then judgement, then the write-up.
+  return [dataRoom, checklist, research, scoring, memo]
 }
 
 /** How far through the pipeline, for the headline "3 of 6". */

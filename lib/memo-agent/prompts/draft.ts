@@ -148,7 +148,8 @@ export interface ScorePromptInput {
   ingestion: IngestionOutput
   research: ResearchOutput | null
   qa_answers: QARecord[]
-  memo_draft_output_summary: string
+  /** The memo prose, when one has been drafted. Scoring runs without it. */
+  memo_draft_output_summary: string | null
   /**
    * When set, the model scores ONLY these rubric dimension_ids in this pass.
    * Used to batch scoring across several calls so no single response runs past
@@ -170,8 +171,13 @@ export function buildScoreUserContent(params: ScorePromptInput): ContentBlock[] 
       ? `IMPORTANT — for THIS pass, score ONLY these dimension_ids and omit all others from "scores" (they are scored in separate passes): ${params.onlyDimensionIds.join(', ')}.`
       : '',
     '',
-    `--- DRAFT MEMO (high-level) ---`,
-    params.memo_draft_output_summary,
+    // Scoring judges the EVIDENCE. The memo is a convenience summary of that same
+    // evidence, so when it hasn't been drafted yet the rubric is still fully
+    // scoreable — say so explicitly rather than leaving the model to infer that a
+    // missing memo means missing information.
+    params.memo_draft_output_summary
+      ? `--- DRAFT MEMO (high-level) ---\n${params.memo_draft_output_summary}`
+      : `--- DRAFT MEMO ---\n(not drafted yet — score from the evidence below; do NOT mark a dimension down or lower its confidence merely because no memo exists)`,
     '',
     `--- INGESTION CLAIMS ---`,
     summarizeIngestion(params.ingestion),

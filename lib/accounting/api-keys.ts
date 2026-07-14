@@ -83,14 +83,68 @@ export async function resolveFundFromApiKey(admin: SupabaseClient, req: Request)
 }
 
 /**
- * Authorization for a tool given a resolved key: reads for any member, writes
- * for admins only (and the key must carry the write scope). Returns null if
- * allowed, or an error message.
+ * Resolve a Bearer credential of EITHER kind:
+ *
+ *   lk_…      a static fund API key  — what CLI/headless clients use.
+ *   mcp_at_…  an OAuth access token  — what the claude.ai connector obtains.
+ *
+ * Both collapse to the same {@link ResolvedKey}, so every downstream check —
+ * fund scoping, authorizeToolUse, rate limiting — is identical regardless of how
+ * the caller authenticated. That is the point: OAuth is a second front door, not
+ * a second security model.
+ *
+ * As with static keys, the owner's role is re-read live from `fund_members` on
+ * every call, so demoting or removing someone instantly downgrades every token
+ * they hold without anyone having to hunt those tokens down.
+ */
+export async function resolveAgentAuth(admin: SupabaseClient, req: Request): Promise<ResolvedKey | null> {
+  const token = bearerToken(req)
+  if (!token) return null
+
+  if (token.startsWith('mcp_at_')) {
+    // Imported lazily so the REST agent route, which has no OAuth surface, doesn't
+    // pull the OAuth store into its bundle.
+    const { resolveAccessToken } = await import('@/lib/oauth/store')
+    const resolved = await resolveAccessToken(admin, token)
+    if (!resolved) return null
+
+    const { data: membership } = await admin
+      .from('fund_members')
+      .select('role')
+      .eq('fund_id', resolved.fundId)
+      .eq('user_id', resolved.userId)
+      .maybeSingle()
+    if (!membership) return null
+
+    return {
+      fundId: resolved.fundId,
+      // Not a fund_api_keys row — surfaced this way so audit/rate-limit call sites
+      // can still name the credential without pretending it's a static key.
+      keyId: `oauth:${resolved.clientId}`,
+      userId: resolved.userId,
+      role: (membership as { role: string }).role,
+      // OAuth scope strings are space-delimited ('read write'); API-key scopes are
+      // comma-delimited. Normalize on the way in so authorizeToolUse sees one shape.
+      scopes: resolved.scope.split(/[\s,]+/).map(s => s.trim()).filter(Boolean),
+    }
+  }
+
+  return resolveFundFromApiKey(admin, req)
+}
+
+/**
+ * Authorization for a tool given a resolved credential: reads for any member,
+ * writes for admins only — AND the credential must itself carry the write scope.
+ * Returns null if allowed, or an error message.
+ *
+ * The role check is the one that matters: it reflects the owner's CURRENT
+ * membership, so a write-scoped credential held by someone who has since been
+ * demoted is inert, even though its scope string still says 'write'.
  */
 export function authorizeToolUse(scope: 'read' | 'write', auth: ResolvedKey): string | null {
   if (scope === 'write') {
-    if (auth.role !== 'admin') return 'This key belongs to a non-admin; writing to the ledger requires an admin.'
-    if (!auth.scopes.includes('write')) return 'This key is read-only.'
+    if (auth.role !== 'admin') return 'This credential belongs to a non-admin; writing to the ledger requires an admin.'
+    if (!auth.scopes.includes('write')) return 'This credential is read-only.'
   }
   return null
 }

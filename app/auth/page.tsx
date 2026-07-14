@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { safeNextPath } from '@/lib/safe-redirect'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,6 +37,16 @@ function AuthForm() {
   const urlError = searchParams.get('error')
   const emailConfirmed = searchParams.get('confirmed') === 'true'
 
+  // Where to land after signing in. Set when a page bounced the user here to log
+  // in first — notably the OAuth consent screen (/oauth/authorize), which must
+  // resume the exact authorization request afterwards, query string and all.
+  //
+  // Validated by safeNextPath, NOT by an inline startsWith check: a redirect fired
+  // straight after a successful login is a phishing primitive, and the obvious
+  // check misses `/\evil.com` (a backslash is a slash for http(s), so it resolves
+  // off-origin). See lib/safe-redirect.ts.
+  const nextPath = safeNextPath(searchParams.get('next'))
+
   const supabase = createClient()
 
   // Handle code param (e.g. password reset link landing on /auth instead of /auth/callback)
@@ -51,9 +62,11 @@ function AuthForm() {
       }
       // Check if this is a recovery session — redirect to set new password
       const { data: { session } } = await supabase.auth.getSession()
-      let destination = session?.user?.recovery_sent_at ? '/auth/reset-password' : '/'
-      // If user has no fund, send to onboarding
-      if (destination === '/') {
+      let destination = session?.user?.recovery_sent_at ? '/auth/reset-password' : (nextPath ?? '/')
+      // If user has no fund, send to onboarding. A password recovery keeps its own
+      // destination; everything else (including a pending OAuth authorization)
+      // still needs a fund to land in.
+      if (destination !== '/auth/reset-password') {
         const { data: fund } = await supabase.from('funds').select('id').limit(1).maybeSingle()
         if (!fund) destination = '/onboarding?confirmed=true'
       }
@@ -76,9 +89,11 @@ function AuthForm() {
       setError(error.message)
     } else {
       fetch('/api/auth/activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'password' }) }).catch(() => {})
-      // Check if user has a fund — if not, go to onboarding
+      // Check if user has a fund — if not, go to onboarding. A pending `next`
+      // (e.g. an OAuth authorization to resume) wins, but only for a user who
+      // actually has a fund — there is nothing to authorize otherwise.
       const { data: fund } = await supabase.from('funds').select('id').limit(1).maybeSingle()
-      const destination = fund ? '/' : '/onboarding'
+      const destination = fund ? (nextPath ?? '/') : '/onboarding'
       // Check if user has MFA enrolled and needs to verify
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
       if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {

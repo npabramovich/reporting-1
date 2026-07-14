@@ -31,19 +31,20 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     .maybeSingle()
   if (!deal) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Require an existing memo draft — scoring has nothing to act on otherwise.
+  // Scoring judges the evidence base, not the memo — so it needs an analyzed data
+  // room, and nothing more. It can run before the memo is ever drafted.
   const { data: draft } = await admin
     .from('diligence_memo_drafts')
-    .select('id, memo_draft_output')
+    .select('id, ingestion_output')
     .eq('deal_id', params.id)
     .eq('fund_id', fundId)
     .eq('is_draft', true)
-    .not('memo_draft_output', 'is', null)
+    .not('ingestion_output', 'is', null)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
   if (!draft) {
-    return NextResponse.json({ error: 'No memo draft to score. Run Stage 4 draft first.' }, { status: 409 })
+    return NextResponse.json({ error: 'Nothing to score yet. Analyze the data room first.' }, { status: 409 })
   }
 
   const { data: existing } = await admin

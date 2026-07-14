@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { safeNextPath } from '@/lib/safe-redirect'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -80,8 +81,13 @@ function MfaVerifyForm() {
         setCode('')
         inputRef.current?.focus()
       } else {
-        // Prevent open redirect — only allow relative paths
-        const dest = nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/'
+        // Prevent open redirect. This is a RAW window.location assignment fired the
+        // instant a valid TOTP code is accepted, so a bypass here hands a
+        // freshly-authenticated user straight to an attacker. The old inline check
+        // (`startsWith('/') && !startsWith('//')`) missed `/\evil.com`, which the
+        // URL parser resolves off-origin because a backslash is a slash for
+        // http(s). safeNextPath rejects it; see lib/safe-redirect.ts.
+        const dest = safeNextPath(nextPath) ?? '/'
         // Hard navigation so the server picks up the updated AAL2 session cookie
         window.location.href = dest
         return

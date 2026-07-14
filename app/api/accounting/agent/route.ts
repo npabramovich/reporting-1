@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveFundFromApiKey, authorizeToolUse } from '@/lib/accounting/api-keys'
+import { agentApiEnabled } from '@/lib/oauth/enabled'
 import { AGENT_TOOLS, getTool, resolveVehicleForTool } from '@/lib/accounting/agent-tools'
 import { rateLimit } from '@/lib/rate-limit'
 
@@ -16,6 +17,16 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient()
   const auth = await resolveFundFromApiKey(admin, req)
   if (!auth) return NextResponse.json({ error: 'Unauthorized — provide a fund API key as a Bearer token' }, { status: 401 })
+
+  // The fund's master switch for the agent surface. Checked per request rather
+  // than baked into the key, so turning it off immediately disarms keys that were
+  // already issued.
+  if (!(await agentApiEnabled(admin, auth.fundId))) {
+    return NextResponse.json(
+      { error: 'Agent access is disabled for this fund. An admin can enable it in Settings → Agent access.' },
+      { status: 403 }
+    )
+  }
   return NextResponse.json({
     tools: AGENT_TOOLS.map(t => ({ name: t.name, description: t.description, scope: t.scope, inputSchema: t.inputSchema })),
   })
@@ -25,6 +36,16 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient()
   const auth = await resolveFundFromApiKey(admin, req)
   if (!auth) return NextResponse.json({ error: 'Unauthorized — provide a fund API key as a Bearer token' }, { status: 401 })
+
+  // The fund's master switch for the agent surface. Checked per request rather
+  // than baked into the key, so turning it off immediately disarms keys that were
+  // already issued.
+  if (!(await agentApiEnabled(admin, auth.fundId))) {
+    return NextResponse.json(
+      { error: 'Agent access is disabled for this fund. An admin can enable it in Settings → Agent access.' },
+      { status: 403 }
+    )
+  }
 
   const body = await req.json().catch(() => ({}))
   const tool = getTool(body?.tool)

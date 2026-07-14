@@ -14,10 +14,11 @@ interface ScoreJob {
 /**
  * Stage 5 — standalone rubric scoring.
  *
- * Scores an existing memo draft without re-running draft/review. Targets the
- * job's draft_id when set, else the most recent draft that already has a
- * memo_draft_output. Used by the "Run scoring" action and as the retry path
- * when the inline score (in draft_review) failed.
+ * Scores the deal's evidence base against the rubric. Targets the job's draft_id
+ * when set, else the most recent draft that has been ingested. Scoring does NOT
+ * require the memo — it judges ingestion + research + Q&A, so it can run before the
+ * memo is drafted, alongside it, or as the retry path when the inline score (in
+ * draft_review) failed.
  */
 export async function runScoreJob(admin: Admin, job: ScoreJob): Promise<unknown> {
   let draftId = job.draft_id
@@ -28,14 +29,14 @@ export async function runScoreJob(admin: Admin, job: ScoreJob): Promise<unknown>
       .eq('deal_id', job.deal_id)
       .eq('fund_id', job.fund_id)
       .eq('is_draft', true)
-      .not('memo_draft_output', 'is', null)
+      .not('ingestion_output', 'is', null)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
     draftId = (data as { id: string } | null)?.id ?? null
   }
   if (!draftId) {
-    throw new Error('No draft with a memo_draft_output found to score. Run Stage 4 draft first.')
+    throw new Error('No analyzed data room to score. Analyze the data room first.')
   }
 
   const result = await runScore({

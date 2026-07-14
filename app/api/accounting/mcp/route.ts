@@ -1,15 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { resolveFundFromApiKey, authorizeToolUse, type ResolvedKey } from '@/lib/accounting/api-keys'
+import { resolveAgentAuth, authorizeToolUse, type ResolvedKey } from '@/lib/accounting/api-keys'
 import { AGENT_TOOLS, getTool, resolveVehicleForTool, type AgentToolContext } from '@/lib/accounting/agent-tools'
 import { rateLimit } from '@/lib/rate-limit'
+import { agentApiEnabled } from '@/lib/oauth/enabled'
+import { wwwAuthenticate } from '@/lib/oauth/metadata'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 // Minimal MCP server over Streamable HTTP (stateless JSON mode). Exposes the
-// ledger tool registry so any MCP client / agent can drive the books with a
-// fund API key as the Bearer token. Implements initialize, tools/list, tools/call.
+// ledger + portfolio tool registry so any MCP client can drive the books.
+// Implements initialize, tools/list, tools/call.
+//
+// AUTH — two accepted credentials, one security model:
+//   * `lk_…`      static fund API key (CLI / headless clients)
+//   * `mcp_at_…`  OAuth access token (the claude.ai connector, via /oauth/authorize)
+// Both resolve to the same ResolvedKey, so fund scoping and write authorization
+// are identical either way. See lib/accounting/api-keys.ts:resolveAgentAuth.
+//
+// The 401 carries a `WWW-Authenticate` header pointing at our protected-resource
+// metadata. That header is what lets an OAuth client discover how to authenticate
+// from a bare 401 — without it, a connector that hasn't been told where to look
+// has nowhere to start.
 
 const PROTOCOL_VERSION = '2024-11-05'
 const SERVER_INFO = { name: 'reporting-ledger', version: '0.1.0' }
@@ -61,8 +74,23 @@ const MAX_BATCH = 20
 
 export async function POST(req: NextRequest) {
   const admin = createAdminClient()
-  const auth = await resolveFundFromApiKey(admin, req)
-  if (!auth) return NextResponse.json(err(null, -32001, 'Unauthorized — provide a valid fund API key as a Bearer token'), { status: 401 })
+  const auth = await resolveAgentAuth(admin, req)
+  if (!auth) {
+    return NextResponse.json(
+      err(null, -32001, 'Unauthorized — present a fund API key or an OAuth access token as a Bearer token'),
+      { status: 401, headers: { 'WWW-Authenticate': wwwAuthenticate(req) } }
+    )
+  }
+
+  // The fund's master switch for the whole agent surface. Checked per request, not
+  // baked into the credential, so an admin turning it off immediately kills keys
+  // and tokens that were already issued.
+  if (!(await agentApiEnabled(admin, auth.fundId))) {
+    return NextResponse.json(
+      err(null, -32003, 'Agent access is disabled for this fund. An admin can enable it in Settings → Agent access.'),
+      { status: 403 }
+    )
+  }
 
   const ctx: BaseCtx = { admin, fundId: auth.fundId, userId: auth.userId }
   const body = await req.json().catch(() => null)

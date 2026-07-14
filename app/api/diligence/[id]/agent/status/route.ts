@@ -79,7 +79,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   // i.e. evidence was added/changed after the memo prose was assembled.
   const ingestAt = (lastIngestJob as { finished_at: string } | null)?.finished_at ?? null
   const draftAt = (lastDraftJob as { finished_at: string } | null)?.finished_at ?? null
-  const hasMemo = !!(latestDraft as any)?.memo_draft_output
+  // "Has a memo" means memo PROSE exists — not merely that memo_draft_output is
+  // non-null. Scoring now runs without the memo and parks its scores in that same
+  // column, so a scores-only object must not read as a drafted memo.
+  const memoParagraphs = (latestDraft as any)?.memo_draft_output?.paragraphs
+  const hasMemo = Array.isArray(memoParagraphs) && memoParagraphs.length > 0
   const memoStale = hasMemo && !!ingestAt && !!draftAt && ingestAt > draftAt
 
   // Best-effort count of documents uploaded since the memo was drafted.
@@ -117,7 +121,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   // Scoring lives inside the draft's memo_draft_output, not in its own column, so
   // there was no way to tell "has it been scored" without a separate /drafts fetch.
   const scores = (latestDraft as any)?.memo_draft_output?.scores
-  const hasScores = Array.isArray(scores) && scores.length > 0
+  const scoreRows: Array<{ score: number | null; mode?: string }> = Array.isArray(scores) ? scores : []
+  const hasScores = scoreRows.length > 0
+  // A dimension counts as reached once it has a number, or once it's partner_only —
+  // those are never machine-scored, so waiting on one would strand the stage forever.
+  const scoredDimensions = scoreRows.filter(s => s.score !== null || s.mode === 'partner_only').length
+
+  // Documents in a settled parse state. Failed ones are a problem, not progress.
+  const documentsHandled = dataRoom.counts.processed + dataRoom.counts.partial + dataRoom.counts.skipped
 
   const job = latestJob as any
   const runningKind = job && (job.status === 'pending' || job.status === 'running') ? job.kind : null
@@ -126,13 +137,15 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const stages = buildStages({
     hasIngestion: !!(latestDraft as any)?.ingestion_output,
     hasResearch: !!(latestDraft as any)?.research_output,
-    hasQa: !!(latestDraft as any)?.qa_answers,
     hasMemoDraft: hasMemo,
     hasScores,
     finalized: !!(latestDraft as any)?.finalized_at,
     documentCount: dataRoom.total,
+    documentsHandled,
     checklistAssessed: assessedCount(checklist.counts),
     checklistTotal: checklist.total,
+    scoredDimensions,
+    totalDimensions: scoreRows.length,
     runningKind,
     failedKind,
   })
@@ -149,7 +162,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       has_ingestion: !!(latestDraft as any).ingestion_output,
       has_research: !!(latestDraft as any).research_output,
       has_qa: !!(latestDraft as any).qa_answers,
-      has_memo_draft: !!(latestDraft as any).memo_draft_output,
+      has_memo_draft: hasMemo,
       has_scores: hasScores,
     } : null,
     memo_stale: memoStale,

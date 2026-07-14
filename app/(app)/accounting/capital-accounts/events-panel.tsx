@@ -1,18 +1,19 @@
 'use client'
 
-// LP capital events for one vehicle.
+// The entry surface for a capital-tracking-only vehicle — what the Journal is to a booked
+// one. Only rendered when the vehicle's capital_source is 'events'; the roll-forward above
+// it on the page is computed from exactly these rows.
 //
-// Everything on this screen speaks in capital deltas the way a human would: "Acme contributed
-// $100,000" is +100,000. The debit-positive storage convention lives in lib/accounting/lp-events.ts
-// and never surfaces here.
+// Everything here speaks in capital deltas the way a human would: "Acme contributed $100,000"
+// is +100,000. The debit-positive storage convention lives in lib/accounting/lp-events.ts and
+// never surfaces here.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, Plus, Upload, Trash2, Pencil, X, Check, BookOpen, ListTree, AlertTriangle } from 'lucide-react'
+import { Loader2, Plus, Upload, Trash2, Pencil, Check, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 
@@ -40,12 +41,12 @@ interface ParsedRow {
 
 const EMPTY_FORM = { lpEntityId: '', eventDate: '', sourceType: 'capital_call', amount: '', memo: '' }
 
-export function LpEventsView() {
+/** `onChange` reloads the roll-forward on the page above — these rows are its inputs. */
+export function EventsPanel({ onChange }: { onChange: () => void }) {
   const currency = useCurrency()
   const fmt = (v: number) => formatCurrencyPrice(v, currency)
   const lf = useLedgerFetch()
 
-  const [source, setSource] = useState<'ledger' | 'events'>('events')
   const [events, setEvents] = useState<LpEvent[]>([])
   const [roster, setRoster] = useState<Roster[]>([])
   const [types, setTypes] = useState<EventType[]>([])
@@ -66,7 +67,6 @@ export function LpEventsView() {
     const res = await lf('/api/accounting/lp-events')
     if (res.ok) {
       const d = await res.json()
-      setSource(d.source)
       setEvents(d.events ?? [])
       setRoster(d.roster ?? [])
       setTypes(d.types ?? [])
@@ -75,10 +75,7 @@ export function LpEventsView() {
   }, [lf])
   useEffect(() => { load() }, [load])
 
-  const typeLabel = useMemo(
-    () => new Map(types.map(t => [t.value, t.label])),
-    [types]
-  )
+  const typeLabel = useMemo(() => new Map(types.map(t => [t.value, t.label])), [types])
 
   const call = async (url: string, method: string, body?: object) => {
     setBusy(true); setError(null)
@@ -93,10 +90,8 @@ export function LpEventsView() {
     return data
   }
 
-  const setCapitalSource = async (next: 'ledger' | 'events') => {
-    const ok = await call('/api/accounting/lp-events', 'PATCH', { capitalSource: next })
-    if (ok) { setSource(next); load() }
-  }
+  /** Reload the events table AND the roll-forward the page renders from them. */
+  const refresh = () => { load(); onChange() }
 
   const submitForm = async () => {
     const amount = Number(form.amount)
@@ -114,7 +109,7 @@ export function LpEventsView() {
     const ok = editingId
       ? await call('/api/accounting/lp-events', 'PUT', { id: editingId, event })
       : await call('/api/accounting/lp-events', 'POST', { event })
-    if (ok) { setForm(EMPTY_FORM); setShowForm(false); setEditingId(null); load() }
+    if (ok) { setForm(EMPTY_FORM); setShowForm(false); setEditingId(null); refresh() }
   }
 
   const startEdit = (e: LpEvent) => {
@@ -131,7 +126,7 @@ export function LpEventsView() {
 
   const remove = async (id: string) => {
     const ok = await call(`/api/accounting/lp-events?id=${id}`, 'DELETE')
-    if (ok) load()
+    if (ok) refresh()
   }
 
   const runPreview = async () => {
@@ -150,7 +145,7 @@ export function LpEventsView() {
         memo: r.memo,
       })),
     })
-    if (ok) { setShowImport(false); setPasted(''); setPreview(null); load() }
+    if (ok) { setShowImport(false); setPasted(''); setPreview(null); refresh() }
   }
 
   const runningTotal = useMemo(
@@ -159,57 +154,35 @@ export function LpEventsView() {
   )
 
   if (loading) {
-    return <div className="flex items-center py-16 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading…</div>
+    return (
+      <div className="flex items-center py-8 text-sm text-muted-foreground">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading capital events…
+      </div>
+    )
   }
 
-  const isLedger = source === 'ledger'
-
   return (
-    <div className="space-y-6">
-      {/* Which producer this vehicle reads from. The single most important thing on the page:
-          if it says "ledger", nothing entered below is being used. */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between gap-6 flex-wrap">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                {isLedger ? <BookOpen className="h-4 w-4" /> : <ListTree className="h-4 w-4" />}
-                This vehicle&rsquo;s LP capital comes from{' '}
-                <Badge variant={isLedger ? 'default' : 'secondary'}>
-                  {isLedger ? 'the ledger' : 'capital events'}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground max-w-2xl">
-                {isLedger
-                  ? 'Its capital accounts are derived from posted journal entries. Events entered here are kept, but ignored — a vehicle reads from exactly one source, because reading both would double every LP’s capital.'
-                  : 'Its capital accounts are derived from the events below. Switch to the ledger once you have seeded a chart of accounts and booked its history.'}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => setCapitalSource(isLedger ? 'events' : 'ledger')}
-            >
-              Use {isLedger ? 'capital events' : 'the ledger'} instead
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm font-medium">Capital events</p>
+        <p className="text-xs text-muted-foreground">
+          Every movement in an LP&rsquo;s capital on this vehicle. The roll-forward above is the sum of these.
+        </p>
+      </div>
 
       {error && (
-        <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-md p-3">
-          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600 dark:border-red-900 dark:bg-red-950/30">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={() => { setShowForm(v => !v); setEditingId(null); setForm(EMPTY_FORM) }}>
-          <Plus className="h-4 w-4 mr-1" /> Add event
+          <Plus className="mr-1 h-4 w-4" /> Add event
         </Button>
         <Button size="sm" variant="outline" onClick={() => { setShowImport(v => !v); setPreview(null) }}>
-          <Upload className="h-4 w-4 mr-1" /> Import
+          <Upload className="mr-1 h-4 w-4" /> Import
         </Button>
         <span className="flex-1" />
         {events.length > 0 && (
@@ -222,12 +195,12 @@ export function LpEventsView() {
 
       {showForm && (
         <Card>
-          <CardContent className="p-4 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <CardContent className="space-y-3 p-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">LP</label>
                 <select
-                  className="w-full h-9 rounded-md border bg-background px-2 text-sm"
+                  className="h-9 w-full rounded-md border bg-background px-2 text-sm"
                   value={form.lpEntityId}
                   onChange={e => setForm(f => ({ ...f, lpEntityId: e.target.value }))}
                 >
@@ -242,7 +215,7 @@ export function LpEventsView() {
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Type</label>
                 <select
-                  className="w-full h-9 rounded-md border bg-background px-2 text-sm"
+                  className="h-9 w-full rounded-md border bg-background px-2 text-sm"
                   value={form.sourceType}
                   onChange={e => setForm(f => ({ ...f, sourceType: e.target.value }))}
                 >
@@ -271,7 +244,7 @@ export function LpEventsView() {
             </p>
             <div className="flex gap-2">
               <Button size="sm" onClick={submitForm} disabled={busy}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Check className="h-4 w-4 mr-1" />}
+                {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
                 {editingId ? 'Save' : 'Add'}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setEditingId(null); setForm(EMPTY_FORM) }}>
@@ -284,7 +257,7 @@ export function LpEventsView() {
 
       {showImport && (
         <Card>
-          <CardContent className="p-4 space-y-3">
+          <CardContent className="space-y-3 p-4">
             <div className="text-sm font-medium">Paste rows from a spreadsheet</div>
             <p className="text-xs text-muted-foreground">
               Needs a header row with <span className="font-mono">LP</span>,{' '}
@@ -302,7 +275,7 @@ export function LpEventsView() {
             />
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={runPreview} disabled={busy || !pasted.trim()}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null} Preview
+                {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null} Preview
               </Button>
               <Button size="sm" variant="ghost" onClick={() => { setShowImport(false); setPasted(''); setPreview(null) }}>
                 Cancel
@@ -312,26 +285,26 @@ export function LpEventsView() {
             {preview && (
               <div className="space-y-3 pt-2">
                 {preview.errors.length > 0 && (
-                  <div className="text-sm border border-amber-300 bg-amber-50 dark:bg-amber-950/20 rounded-md p-3 space-y-1">
-                    <div className="font-medium text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                  <div className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:bg-amber-950/20">
+                    <div className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-400">
                       <AlertTriangle className="h-4 w-4" />
                       {preview.errors.length} row{preview.errors.length === 1 ? '' : 's'} not imported
                     </div>
-                    <ul className="text-xs text-muted-foreground list-disc pl-5 space-y-0.5">
+                    <ul className="list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
                       {preview.errors.map((e, i) => <li key={i}>{e}</li>)}
                     </ul>
                   </div>
                 )}
                 {preview.rows.length > 0 ? (
                   <>
-                    <div className="border rounded-md overflow-hidden">
+                    <div className="overflow-hidden rounded-md border">
                       <table className="w-full text-sm">
                         <thead className="bg-muted/40">
                           <tr>
-                            <th className="text-left font-medium p-2">LP</th>
-                            <th className="text-left font-medium p-2">Date</th>
-                            <th className="text-left font-medium p-2">Type</th>
-                            <th className="text-right font-medium p-2">Amount</th>
+                            <th className="p-2 text-left font-medium">LP</th>
+                            <th className="p-2 text-left font-medium">Date</th>
+                            <th className="p-2 text-left font-medium">Type</th>
+                            <th className="p-2 text-right font-medium">Amount</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -349,7 +322,7 @@ export function LpEventsView() {
                       </table>
                     </div>
                     <Button size="sm" onClick={commitImport} disabled={busy}>
-                      {busy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Check className="h-4 w-4 mr-1" />}
+                      {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
                       Import {preview.rows.length} event{preview.rows.length === 1 ? '' : 's'}
                     </Button>
                   </>
@@ -364,7 +337,7 @@ export function LpEventsView() {
 
       {events.length === 0 ? (
         <Card>
-          <CardContent className="p-8 text-center text-muted-foreground text-sm">
+          <CardContent className="p-8 text-center text-sm text-muted-foreground">
             No capital events yet. Add one, or paste a history from a spreadsheet.
           </CardContent>
         </Card>
@@ -374,11 +347,11 @@ export function LpEventsView() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
-                  <th className="text-left font-medium p-3">LP</th>
-                  <th className="text-left font-medium p-3">Date</th>
-                  <th className="text-left font-medium p-3">Type</th>
-                  <th className="text-right font-medium p-3">Amount</th>
-                  <th className="text-left font-medium p-3">Memo</th>
+                  <th className="p-3 text-left font-medium">LP</th>
+                  <th className="p-3 text-left font-medium">Date</th>
+                  <th className="p-3 text-left font-medium">Type</th>
+                  <th className="p-3 text-right font-medium">Amount</th>
+                  <th className="p-3 text-left font-medium">Memo</th>
                   <th className="w-20" />
                 </tr>
               </thead>
@@ -386,14 +359,14 @@ export function LpEventsView() {
                 {events.map(e => (
                   <tr key={e.id} className="border-b hover:bg-muted/20">
                     <td className="p-3 font-medium">{e.lpName}</td>
-                    <td className="p-3 text-muted-foreground tabular-nums">{e.eventDate}</td>
+                    <td className="p-3 tabular-nums text-muted-foreground">{e.eventDate}</td>
                     <td className="p-3 text-muted-foreground">{typeLabel.get(e.sourceType) ?? e.sourceType}</td>
                     <td className={`p-3 text-right tabular-nums ${e.capitalDelta < 0 ? 'text-red-600' : ''}`}>
                       {fmt(e.capitalDelta)}
                     </td>
-                    <td className="p-3 text-muted-foreground text-xs">{e.memo}</td>
+                    <td className="p-3 text-xs text-muted-foreground">{e.memo}</td>
                     <td className="p-3">
-                      <div className="flex gap-1 justify-end">
+                      <div className="flex justify-end gap-1">
                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(e)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>

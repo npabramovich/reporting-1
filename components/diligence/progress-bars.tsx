@@ -100,12 +100,17 @@ export function DataRoomBar({ counts, total }: { counts: Record<DocBucket, numbe
 // the actual question.
 // ---------------------------------------------------------------------------
 
-const STATE_STYLE: Record<StageInfo['state'], { bar: string; text: string; Icon: typeof Check | null }> = {
-  done:    { bar: 'bg-emerald-500',            text: 'text-foreground',        Icon: Check },
-  running: { bar: 'bg-primary animate-pulse',  text: 'text-foreground',        Icon: Loader2 },
-  failed:  { bar: 'bg-red-500',                text: 'text-red-600',           Icon: AlertTriangle },
-  blocked: { bar: 'bg-muted-foreground/10',    text: 'text-muted-foreground/60', Icon: Lock },
-  todo:    { bar: 'bg-muted-foreground/25',    text: 'text-muted-foreground',  Icon: null },
+// Each segment is a TRACK with a FILL sized to `stage.progress`, so a stage that's
+// under way reads as under way rather than as not-started. Colour carries the state
+// (amber = in progress, emerald = finished); width carries how far in it is. A stage
+// that isn't done is capped below 100% fill upstream, so amber can never look full.
+const STATE_STYLE: Record<StageInfo['state'], { fill: string; text: string; Icon: typeof Check | null }> = {
+  done:    { fill: 'bg-emerald-500',           text: 'text-foreground',          Icon: Check },
+  partial: { fill: 'bg-amber-500',             text: 'text-foreground',          Icon: null },
+  running: { fill: 'bg-primary animate-pulse', text: 'text-foreground',          Icon: Loader2 },
+  failed:  { fill: 'bg-red-500',               text: 'text-red-600',             Icon: AlertTriangle },
+  blocked: { fill: 'bg-transparent',           text: 'text-muted-foreground/60', Icon: Lock },
+  todo:    { fill: 'bg-transparent',           text: 'text-muted-foreground',    Icon: null },
 }
 
 export function StageBar({
@@ -136,19 +141,30 @@ export function StageBar({
         {stages.map(s => {
           const st = STATE_STYLE[s.state]
           const Icon = st.Icon
+          const pct = Math.round(s.progress * 100)
+          // A running stage with no measurable sub-progress still needs to look alive.
+          const width = s.state === 'running' && pct === 0 ? 100 : pct
           return (
             <button
               key={s.key}
               type="button"
               onClick={onJump ? () => onJump(s.tab) : undefined}
               disabled={!onJump}
-              title={s.hint}
+              title={s.state === 'partial' ? `${s.label}: ${pct}% — ${s.hint}` : s.hint}
               className="group text-left disabled:cursor-default"
             >
-              <div className={`h-1.5 w-full rounded-full ${st.bar}`} />
+              <div className={`h-1.5 w-full overflow-hidden rounded-full ${s.state === 'blocked' ? 'bg-muted-foreground/10' : 'bg-muted-foreground/20'}`}>
+                <div
+                  className={`h-full rounded-full transition-[width] duration-500 ${st.fill}`}
+                  style={{ width: `${width}%` }}
+                />
+              </div>
               <span className={`mt-1.5 flex items-center gap-1 text-[11px] leading-tight ${st.text} ${onJump ? 'group-hover:text-foreground' : ''}`}>
                 {Icon && <Icon className={`h-3 w-3 shrink-0 ${s.state === 'running' ? 'animate-spin' : ''}`} />}
                 <span className="truncate">{s.label}</span>
+                {s.state === 'partial' && (
+                  <span className="shrink-0 tabular-nums text-amber-600 dark:text-amber-500">{pct}%</span>
+                )}
               </span>
             </button>
           )

@@ -17,6 +17,34 @@ const nextConfig = {
       '/**': ['./lib/memo-agent/defaults/**/*'],
     },
   },
+  // OAuth discovery lives at /.well-known/*, but Next's app router will not route
+  // a literal dot-prefixed directory — so the well-known paths are rewritten onto
+  // real routes under /api/oauth/metadata/.
+  //
+  // The path-suffixed variants matter: RFC 9728 says a client MAY probe
+  // /.well-known/oauth-protected-resource/<resource-path>, and Claude does exactly
+  // that for /api/mcp. Serving only the bare path would leave discovery failing
+  // for no visible reason.
+  async rewrites() {
+    return [
+      {
+        source: '/.well-known/oauth-authorization-server',
+        destination: '/api/oauth/metadata/authorization-server',
+      },
+      {
+        source: '/.well-known/oauth-authorization-server/:path*',
+        destination: '/api/oauth/metadata/authorization-server',
+      },
+      {
+        source: '/.well-known/oauth-protected-resource',
+        destination: '/api/oauth/metadata/protected-resource',
+      },
+      {
+        source: '/.well-known/oauth-protected-resource/:path*',
+        destination: '/api/oauth/metadata/protected-resource',
+      },
+    ]
+  },
   async headers() {
     const securityHeaders = [
       { key: 'X-Frame-Options', value: 'DENY' },

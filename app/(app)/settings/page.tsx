@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -29,9 +29,9 @@ import type { FeatureKey, FeatureVisibility } from '@/lib/types/features'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { AffinityConnect } from '@/components/settings/affinity-connect'
+import { HeartbeatConnect } from '@/components/settings/heartbeat-connect'
 import { DealResearchSettings } from '@/components/settings/deal-research-settings'
-
-const AdminSectionContext = createContext(false)
+import { AdminSectionContext, GroupHeader, Section } from '@/components/settings/section'
 
 interface Sender {
   id: string
@@ -190,6 +190,9 @@ export default function SettingsPage() {
           token and every user needs their own. This section used for all external data integrations. */}
       <GroupHeader label="External Data" />
       <AffinityConnect />
+      {/* Heartbeat, unlike Affinity, is a per-FUND credential that reads the whole
+          community — so the card is admin-only and renders nothing for everyone else. */}
+      <HeartbeatConnect />
 
       <GroupHeader label="Notes" />
       <NotificationPreferencesSection />
@@ -684,8 +687,8 @@ const FEATURE_META: Record<FeatureKey, { label: string; description: string; hre
   lps: { label: 'LPs', description: 'Investor-level report cards with consolidated performance across fund vehicles', href: '/support#lps' },
   lp_associates: { label: 'GP Entities', description: 'Entity ownership mappings and pro-rata associates calculations for LP reporting', href: '/support#lps' },
   lp_portal_access: { label: 'LP portal controls', description: 'Admin controls for the LP portal: the "Share with LPs" panels on snapshots and letters, and managing authorized users', href: '/support#lps' },
-  lp_portal: { label: 'LPs documents', description: 'Who can see the LPs → Documents page (invite LPs, upload documents, read LP messages). Only takes effect while the LP portal is enabled below.', href: '/support#lps' },
-  lp_activity: { label: 'LPs · Activity', description: 'Who can see the LPs → Activity page — the access log of which LPs and authorized users logged in, viewed, or downloaded documents. Only takes effect while the LP portal is enabled below.', href: '/support#lps' },
+  lp_portal: { label: 'LPs Documents', description: 'Who can see the LPs Documents page (invite LPs, upload documents, read LP messages). Only takes effect while the LP portal is enabled below.', href: '/support#lps' },
+  lp_activity: { label: 'LPs Activity', description: 'Who can see the LPs Activity page — the access log of which LPs and authorized users logged in, viewed, or downloaded documents. Only takes effect while the LP portal is enabled below.', href: '/support#lps' },
   compliance: { label: 'Compliance', description: 'Track regulatory deadlines, filings, and compliance workflows', href: '/support#compliance' },
   deals: { label: 'Deals', description: 'Inbound deal pitches screened against your fund thesis', href: '/support#deals' },
   diligence: { label: 'Diligence', description: 'Pre-investment record-keeping and AI-assisted memo drafting', href: '/support#diligence' },
@@ -4703,44 +4706,7 @@ function MemoAgentSection() {
 }
 
 // ──────────────────────────── Shared ────────────────────────────
-
-function GroupHeader({ label }: { label: string }) {
-  const isAdminSection = useContext(AdminSectionContext)
-  const lineColor = isAdminSection ? 'bg-amber-500/30' : 'bg-border'
-  return (
-    <div className="flex items-center gap-3 pt-2">
-      <div className={`h-px flex-1 ${lineColor}`} />
-      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-        {isAdminSection && <Lock className="h-2.5 w-2.5 text-amber-500" />}
-        {label}
-      </span>
-      <div className={`h-px flex-1 ${lineColor}`} />
-    </div>
-  )
-}
-
-function InfoSection({ title, description }: { title: string; description: string }) {
-  const isAdminSection = useContext(AdminSectionContext)
-  return (
-    <div className={`rounded-lg border bg-card p-5 ${isAdminSection ? 'border-amber-500/30' : ''}`}>
-      <h2 className="text-sm font-medium mb-1 flex items-center gap-1.5">
-        {isAdminSection && <Lock className="h-3 w-3 text-amber-500" />}
-        {title}
-      </h2>
-      <p className="text-xs text-muted-foreground">{description}</p>
-    </div>
-  )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const isAdminSection = useContext(AdminSectionContext)
-  return (
-    <div className={`rounded-lg border bg-card p-5 ${isAdminSection ? 'border-amber-500/30' : ''}`}>
-      <h2 className="text-sm font-medium mb-3 flex items-center gap-1.5">
-        {isAdminSection && <Lock className="h-3 w-3 text-amber-500" />}
-        {title}
-      </h2>
-      {children}
-    </div>
-  )
-}
+//
+// GroupHeader / Section / AdminSectionContext now live in components/settings/section.tsx,
+// so the settings cards that live in their own files can render with the same admin chrome
+// instead of a bare <Card>. They are imported at the top of this file.

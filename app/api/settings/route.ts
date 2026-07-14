@@ -69,6 +69,49 @@ export async function GET() {
     affinityMcpEnabled = !!aff?.affinity_mcp_enabled
   } catch { /* migration not applied — the feature is simply off */ }
 
+  // The master switch for the whole agent surface (MCP + REST + API keys + OAuth).
+  // Same tolerate-a-missing-column posture as above: a deployment that hasn't run
+  // the OAuth migration reads `false` rather than failing the settings page.
+  let agentApiEnabled = false
+  try {
+    const { data: agentRow } = await (admin as any)
+      .from('fund_settings')
+      .select('agent_api_enabled')
+      .eq('fund_id', membership.fund_id)
+      .maybeSingle()
+    agentApiEnabled = !!agentRow?.agent_api_enabled
+  } catch { /* migration not applied — the surface is simply off */ }
+
+  // Whether the Deals UI should offer "Heartbeat" as a source at all.
+  //
+  // True if the integration is connected and switched on, OR if a deal has ever
+  // actually arrived through it. The second clause is what keeps history honest:
+  // disconnecting Heartbeat must not make the source filter for deals you already
+  // have vanish, leaving rows you can see but can no longer filter for.
+  //
+  // Same tolerate-a-missing-table posture as affinity_mcp_enabled above — a
+  // deployment that hasn't run the Heartbeat migration just gets `false` instead
+  // of a settings page that won't load.
+  let heartbeatSourceAvailable = false
+  try {
+    const { data: hb } = await (admin as any)
+      .from('heartbeat_credentials')
+      .select('enabled')
+      .eq('fund_id', membership.fund_id)
+      .maybeSingle()
+
+    if (hb?.enabled) {
+      heartbeatSourceAvailable = true
+    } else {
+      const { count } = await (admin as any)
+        .from('inbound_deals')
+        .select('id', { count: 'exact', head: true })
+        .eq('fund_id', membership.fund_id)
+        .eq('intro_source', 'heartbeat')
+      heartbeatSourceAvailable = (count ?? 0) > 0
+    }
+  } catch { /* migration not applied — the source is simply not offered */ }
+
   return NextResponse.json({
     fundId: fund?.id,
     fundName: fund?.name,
@@ -128,6 +171,8 @@ export async function GET() {
     routingModel: settings?.routing_model ?? null,
     lpPortalEnabled: settings?.lp_portal_enabled ?? false,
     affinityMcpEnabled,
+    heartbeatSourceAvailable,
+    agentApiEnabled,
     displayName: membership.display_name ?? '',
     isAdmin: membership.role === 'admin',
     userId: user.id,
@@ -156,7 +201,7 @@ export async function PATCH(req: NextRequest) {
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 404 })
 
   const body = await req.json()
-  const { fundName, fundLogo, fundAddress, postmarkInboundAddress, claudeApiKey, claudeModel, retainResolvedReviews, resolvedReviewsTtlDays, googleClientId, googleClientSecret, aiSummaryPrompt, displayName, outboundEmailProvider, asksEmailProvider, approvalEmailSubject, approvalEmailBody, systemEmailFromName, systemEmailFromAddress, resendApiKey, postmarkServerToken, inboundEmailProvider, mailgunInboundDomain, mailgunSigningKey, mailgunApiKey, mailgunSendingDomain, fileStorageProvider, dropboxAppKey, dropboxAppSecret, openaiApiKey, openaiModel, defaultAIProvider, geminiApiKey, geminiModel, ollamaBaseUrl, ollamaModel, openrouterApiKey, openrouterModel, openrouterBaseUrl, analyticsFathomSiteId, analyticsGaMeasurementId, analyticsCustomHeadScript, currency, disableUserTracking, featureVisibility, dealThesis, dealScreeningPrompt, dealIntakeEnabled, routingConfidenceThreshold, routingModel, lpPortalEnabled, affinityMcpEnabled } = body
+  const { fundName, fundLogo, fundAddress, postmarkInboundAddress, claudeApiKey, claudeModel, retainResolvedReviews, resolvedReviewsTtlDays, googleClientId, googleClientSecret, aiSummaryPrompt, displayName, outboundEmailProvider, asksEmailProvider, approvalEmailSubject, approvalEmailBody, systemEmailFromName, systemEmailFromAddress, resendApiKey, postmarkServerToken, inboundEmailProvider, mailgunInboundDomain, mailgunSigningKey, mailgunApiKey, mailgunSendingDomain, fileStorageProvider, dropboxAppKey, dropboxAppSecret, openaiApiKey, openaiModel, defaultAIProvider, geminiApiKey, geminiModel, ollamaBaseUrl, ollamaModel, openrouterApiKey, openrouterModel, openrouterBaseUrl, analyticsFathomSiteId, analyticsGaMeasurementId, analyticsCustomHeadScript, currency, disableUserTracking, featureVisibility, dealThesis, dealScreeningPrompt, dealIntakeEnabled, routingConfidenceThreshold, routingModel, lpPortalEnabled, affinityMcpEnabled, agentApiEnabled } = body
 
   // Update display name on fund_members (any user can do this)
   if (displayName !== undefined) {
@@ -182,7 +227,8 @@ export async function PATCH(req: NextRequest) {
     disableUserTracking !== undefined || featureVisibility !== undefined ||
     dealThesis !== undefined || dealScreeningPrompt !== undefined ||
     dealIntakeEnabled !== undefined || routingConfidenceThreshold !== undefined ||
-    routingModel !== undefined || lpPortalEnabled !== undefined || affinityMcpEnabled !== undefined
+    routingModel !== undefined || lpPortalEnabled !== undefined || affinityMcpEnabled !== undefined ||
+    agentApiEnabled !== undefined
 
   if (hasAdminFields && membership.role !== 'admin') {
     return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
@@ -603,6 +649,19 @@ export async function PATCH(req: NextRequest) {
   // OWN key, so nobody sees CRM records they couldn't open in Affinity themselves.
   if (affinityMcpEnabled !== undefined) {
     settingsUpdates.affinity_mcp_enabled = !!affinityMcpEnabled
+  }
+
+  // The master switch for the entire agent surface: the MCP endpoint (OAuth and
+  // static-key alike), the REST agent endpoint, API-key creation, and the OAuth
+  // consent screen. Admin-only (enforced by hasAdminFields above) and off by
+  // default — this is the switch that decides whether anything outside the app can
+  // read the ledger or post to it.
+  //
+  // Turning it OFF does not revoke keys or tokens; it makes them inert. Every
+  // request re-checks this flag, so the surface goes dark immediately and comes
+  // back exactly as it was if the admin changes their mind.
+  if (agentApiEnabled !== undefined) {
+    settingsUpdates.agent_api_enabled = !!agentApiEnabled
   }
 
   // Update feature visibility

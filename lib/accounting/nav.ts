@@ -4,7 +4,7 @@
 
 import {
   Landmark, Users, ScrollText, Gauge,
-  Lock, Layers, FileText, ListTree,
+  Lock, Layers, FileText,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -34,12 +34,12 @@ export const ACCOUNTING_SECTIONS: AccountingSection[] = [
     icon: Users,
     desc: "Per-partner roll-forward and commitments, plus called and unfunded. Issue capital calls and publish LP capital statements.",
   },
-  {
-    href: '/accounting/lp-events',
-    label: 'LP capital events',
-    icon: ListTree,
-    desc: "Capital movements for a vehicle you don't keep books on — an SPV, a direct investment, a fund whose administrator sends you a statement. They feed the same capital accounts and LP report as a full ledger.",
-  },
+  // NOTE: /accounting/lp-events is deliberately NOT listed — it now redirects here. LP
+  // capital events are not a separate destination: they are one of the two producers a
+  // capital account can read from, so they belong ON the capital accounts page, and only
+  // for a vehicle that actually uses them (capital_source='events'). Surfacing them in
+  // the nav offered them to every vehicle, including the fully-booked ones where anything
+  // entered there is ignored.
   {
     href: '/accounting/journal',
     label: 'Journal',
