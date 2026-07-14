@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2, FileDown, FileText, ExternalLink, Lock, AlertTriangle, AlertCircle, ChevronRight, Save, GripVertical, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/confirm-dialog'
+import { formatSource, type SourceLabel } from '@/lib/memo-agent/render/source-labels'
 
 interface Paragraph {
   id: string
@@ -78,11 +79,17 @@ function humanizeSectionId(id: string): string {
   return id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 }
 
-export function MemoEditor({ dealId, dealName, draft: initial, initialAttention, isAdmin, embedded }: {
+export function MemoEditor({ dealId, dealName, draft: initial, initialAttention, sourceLabels, isAdmin, embedded }: {
   dealId: string
   dealName: string
   draft: Draft
   initialAttention: AttentionItem[]
+  /**
+   * `"<source_type>:<source_id>"` → the data-room document (or research source) behind
+   * that citation. Resolved on the server, where the ingestion output and the document
+   * names both live. Absent keys fall back to the raw id.
+   */
+  sourceLabels?: Record<string, SourceLabel>
   isAdmin: boolean
   /** When true, drop the page wrapper + back link so this can render inside the
    *  deal-detail Memo tab without extra chrome. */
@@ -92,6 +99,12 @@ export function MemoEditor({ dealId, dealName, draft: initial, initialAttention,
   const confirm = useConfirm()
   const [draft, setDraft] = useState(initial)
   const [attention, setAttention] = useState(initialAttention)
+  // Serialized as a plain object across the server boundary; a Map is what the
+  // renderers want.
+  const labels = useMemo(
+    () => new Map<string, SourceLabel>(Object.entries(sourceLabels ?? {})),
+    [sourceLabels]
+  )
   const [selected, setSelected] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
@@ -439,6 +452,7 @@ export function MemoEditor({ dealId, dealName, draft: initial, initialAttention,
                     >
                       <ParagraphView
                         paragraph={p}
+                        sourceLabels={labels}
                         isSelected={selected === p.id}
                         onSelect={() => setSelected(p.id)}
                         editing={selected === p.id && !isReadOnly}
@@ -491,9 +505,10 @@ export function MemoEditor({ dealId, dealName, draft: initial, initialAttention,
 }
 
 function ParagraphView({
-  paragraph, editing, proseDraft, onProseChange, onSave, onCancel, saving, onSelect, readOnly, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onToggleHidden, dragHandle,
+  paragraph, editing, proseDraft, onProseChange, onSave, onCancel, saving, onSelect, readOnly, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onToggleHidden, dragHandle, sourceLabels,
 }: {
   paragraph: Paragraph
+  sourceLabels: Map<string, SourceLabel>
   editing: boolean
   proseDraft: string
   onProseChange: (v: string) => void
@@ -550,14 +565,7 @@ function ParagraphView({
             {paragraph.contains_contradiction && <Badge tone="red">contradiction</Badge>}
           </span>
         </div>
-        {realSources.length > 0 && (
-          <div className="text-[11px] text-muted-foreground mt-2">
-            <span className="font-medium">Sources: </span>
-            {realSources.slice(0, 8).map((s, i) => (
-              <span key={i} className="font-mono">{i > 0 ? '  ·  ' : ''}[{i + 1}] {s.source_type}:{s.source_id}</span>
-            ))}
-          </div>
-        )}
+        {realSources.length > 0 && <SourceList sources={realSources} labels={sourceLabels} />}
       </div>
     )
   }
@@ -570,10 +578,17 @@ function ParagraphView({
         {paragraph.prose}
         {!paragraph.hidden && realSources.length > 0 && (
           <sup className="ml-1 text-[10px] text-muted-foreground">
-            {realSources.slice(0, 5).map((_, i) => `[${i + 1}]`).join('')}
+            {realSources.slice(0, 5).map((s, i) => (
+              // The marker names its document on hover, so a reader can check a sentence
+              // without leaving the prose.
+              <span key={i} title={formatSource(s, sourceLabels)} className="cursor-help">[{i + 1}]</span>
+            ))}
           </sup>
         )}
       </p>
+      {!paragraph.hidden && realSources.length > 0 && (
+        <SourceList sources={realSources} labels={sourceLabels} />
+      )}
       <div className="flex flex-wrap items-center gap-1.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
         {dragHandle}
         {!readOnly && !isPlaceholder && (
@@ -606,6 +621,39 @@ function ParagraphView({
           </span>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * The sources behind a paragraph, named.
+ *
+ * This used to print `[1] claim:c_4f2a` — the id of the claim, which tells a reader
+ * nothing they can check. What they need is the document in the data room that backs
+ * the sentence, so that is what leads; the raw id is kept only as a hover title for
+ * tracing back to the ingestion output.
+ */
+function SourceList({ sources, labels }: { sources: Array<{ source_type: string; source_id: string }>; labels: Map<string, SourceLabel> }) {
+  return (
+    <div className="text-[11px] text-muted-foreground mt-2 flex flex-wrap gap-x-3 gap-y-1">
+      <span className="font-medium">Sources:</span>
+      {sources.slice(0, 8).map((s, i) => {
+        const hit = labels.get(`${s.source_type}:${s.source_id}`)
+        return (
+          <span key={i} title={`${s.source_type}:${s.source_id}`} className="inline-flex items-center gap-1">
+            <span className="tabular-nums">[{i + 1}]</span>
+            {hit?.url ? (
+              <a href={hit.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+                {hit.label}
+              </a>
+            ) : (
+              <span className="text-foreground/80">{hit?.label ?? `${s.source_type}:${s.source_id}`}</span>
+            )}
+            {hit?.detail && <span className="text-muted-foreground/70">— {hit.detail}</span>}
+          </span>
+        )
+      })}
+      {sources.length > 8 && <span className="text-muted-foreground/60">+{sources.length - 8} more</span>}
     </div>
   )
 }

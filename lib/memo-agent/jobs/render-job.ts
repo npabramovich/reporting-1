@@ -31,14 +31,30 @@ export async function runRenderJob(admin: Admin, job: RenderJob): Promise<unknow
   const draftId = job.draft_id ?? (typeof job.payload?.draft_id === 'string' ? (job.payload.draft_id as string) : null)
   if (!draftId) throw new Error('draft_id required for render job')
 
+  // ingestion_output / research_output ride along so the citation appendix can name the
+  // data-room document behind each claim instead of printing a bare claim id.
   const { data: draft } = await admin
     .from('diligence_memo_drafts')
-    .select('id, draft_version, is_draft, memo_draft_output')
+    .select('id, draft_version, is_draft, memo_draft_output, ingestion_output, research_output, qa_answers')
     .eq('id', draftId)
     .eq('fund_id', job.fund_id)
     .maybeSingle()
   if (!draft) throw new Error('Draft not found')
   if (!(draft as any).memo_draft_output) throw new Error('Draft has no memo_draft_output — run Stage 4 first.')
+
+  const { data: docRows } = await admin
+    .from('diligence_documents')
+    .select('id, file_name')
+    .eq('deal_id', job.deal_id)
+    .eq('fund_id', job.fund_id)
+  const sources = {
+    ingestion: (draft as any).ingestion_output ?? null,
+    research: (draft as any).research_output ?? null,
+    qa: (draft as any).qa_answers ?? null,
+    documentNames: Object.fromEntries(
+      ((docRows as any[]) ?? []).map(d => [d.id as string, (d.file_name ?? '') as string])
+    ),
+  }
 
   const { data: deal } = await admin
     .from('diligence_deals')
@@ -82,6 +98,7 @@ export async function runRenderJob(admin: Admin, job: RenderJob): Promise<unknow
     fontFamily: fontFamily ?? undefined,
     fontSize: fontSize ?? undefined,
     sectionConfig,
+    sources,
   }
 
   if (format === 'markdown') {

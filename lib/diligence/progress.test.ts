@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildStages, countChecklist, countDocuments, docBucket, assessedCount, stageProgress,
+  checklistCoverage, countAttention,
   type ProgressInput,
 } from './progress'
 
@@ -14,8 +15,14 @@ const base: ProgressInput = {
   documentsHandled: 0,
   checklistAssessed: 0,
   checklistTotal: 0,
+  checklistCovered: 0,
+  checklistApplicable: 0,
+  checklistGaps: 0,
   scoredDimensions: 0,
   totalDimensions: 0,
+  memoAttentionBlocking: 0,
+  memoAttentionOpen: 0,
+  memoAttentionTotal: 0,
   runningKind: null,
   failedKind: null,
 }
@@ -129,12 +136,33 @@ describe('buildStages', () => {
     expect(buildStages(base).map(s => s.key)).not.toContain('qa')
   })
 
-  it('the checklist is only done when EVERY item has been assessed', () => {
-    const partly = stagesOf({ documentCount: 1, hasIngestion: true, checklistTotal: 10, checklistAssessed: 9 })
+  it('the checklist is only done when every item is assessed AND nothing is missing', () => {
+    const partly = stagesOf({
+      documentCount: 1, hasIngestion: true,
+      checklistTotal: 10, checklistAssessed: 9,
+      checklistCovered: 9, checklistApplicable: 10, checklistGaps: 0,
+    })
     expect(partly.checklist).toBe('partial')
 
-    const all = stagesOf({ documentCount: 1, hasIngestion: true, checklistTotal: 10, checklistAssessed: 10 })
+    const all = stagesOf({
+      documentCount: 1, hasIngestion: true,
+      checklistTotal: 10, checklistAssessed: 10,
+      checklistCovered: 10, checklistApplicable: 10, checklistGaps: 0,
+    })
     expect(all.checklist).toBe('done')
+  })
+
+  // The bug: every item assessed, but most of them assessed as MISSING. The old model
+  // called that done at ~100%, because `missing` counted toward assessment coverage.
+  it('a fully-assessed checklist with missing items is NOT done', () => {
+    const s = stage({
+      documentCount: 1, hasIngestion: true,
+      checklistTotal: 10, checklistAssessed: 10,
+      checklistCovered: 3, checklistApplicable: 10, checklistGaps: 7,
+    }, 'checklist')
+    expect(s.state).toBe('partial')
+    expect(s.progress).toBeCloseTo(0.3)   // not 1.0 — the 7 missing items are holes
+    expect(s.hint).toContain('7 items still missing')
   })
 
   it('an in-flight job shows as running on the stage it belongs to', () => {
@@ -175,16 +203,99 @@ describe('buildStages', () => {
     const stages = buildStages({
       ...base, documentCount: 5, hasIngestion: true, hasResearch: true,
       checklistTotal: 4, checklistAssessed: 4,
+      checklistCovered: 4, checklistApplicable: 4, checklistGaps: 0,
     })
     expect(stageProgress(stages)).toEqual({ done: 3, total: 5 }) // data room, checklist, research
+  })
+
+  // A first draft is not a finished memo. It used to read as done the moment a draft
+  // row existed — even with a dozen unresolved must-address items on it.
+  it('the memo is NOT done while must-address items are open', () => {
+    const s = stage({
+      documentCount: 1, hasIngestion: true, hasMemoDraft: true, finalized: true,
+      memoAttentionTotal: 10, memoAttentionOpen: 4, memoAttentionBlocking: 3,
+    }, 'memo')
+    expect(s.state).toBe('partial')
+    expect(s.progress).toBeCloseTo(0.6)
+    expect(s.hint).toContain('3 must-address items still open')
+  })
+
+  it('the memo is NOT done while unfinalized, even with everything addressed', () => {
+    const s = stage({
+      documentCount: 1, hasIngestion: true, hasMemoDraft: true, finalized: false,
+      memoAttentionTotal: 5, memoAttentionOpen: 0, memoAttentionBlocking: 0,
+    }, 'memo')
+    expect(s.state).toBe('partial')
+    expect(s.hint).toContain('finalize')
+  })
+
+  it('the memo is done once finalized with no must-address item open', () => {
+    const s = stage({
+      documentCount: 1, hasIngestion: true, hasMemoDraft: true, finalized: true,
+      memoAttentionTotal: 5, memoAttentionOpen: 0, memoAttentionBlocking: 0,
+    }, 'memo')
+    expect(s.state).toBe('done')
+    expect(s.progress).toBe(1)
+  })
+})
+
+describe('checklistCoverage', () => {
+  const counts = (p: Partial<Record<string, number>>) => ({
+    found: 0, partial: 0, missing: 0, unknown: 0, not_applicable: 0, ...p,
+  } as any)
+
+  it('missing items are gaps, NOT progress — this is the bug', () => {
+    // 9 of 10 assessed as missing. Assessment coverage says 100%; completeness is 10%.
+    const c = checklistCoverage(counts({ found: 1, missing: 9 }))
+    expect(c.fraction).toBeCloseTo(0.1)
+    expect(c.gaps).toBe(9)
+  })
+
+  it('unassessed items count for nothing', () => {
+    expect(checklistCoverage(counts({ found: 2, unknown: 8 })).fraction).toBeCloseTo(0.2)
+  })
+
+  it('partial earns half credit', () => {
+    expect(checklistCoverage(counts({ found: 1, partial: 2, missing: 1 })).fraction).toBeCloseTo(0.5)
+  })
+
+  it('N/A leaves the denominator entirely — it can never be obtained', () => {
+    const c = checklistCoverage(counts({ found: 3, not_applicable: 7 }))
+    expect(c.applicable).toBe(3)
+    expect(c.fraction).toBe(1)
+  })
+
+  it('an all-N/A checklist reads complete, not zero', () => {
+    expect(checklistCoverage(counts({ not_applicable: 5 })).fraction).toBe(1)
+  })
+})
+
+describe('countAttention', () => {
+  it('only open must/should items count against the memo; fyi never gates', () => {
+    const a = countAttention([
+      { urgency: 'must_address', status: 'open' },
+      { urgency: 'must_address', status: 'addressed' },
+      { urgency: 'should_address', status: 'open' },
+      { urgency: 'fyi', status: 'open' },          // informational — excluded entirely
+    ])
+    expect(a).toEqual({ blocking: 1, open: 2, total: 3 })
+  })
+
+  it('deferred counts as handled — setting an item aside is a decision', () => {
+    const a = countAttention([{ urgency: 'must_address', status: 'deferred' }])
+    expect(a).toEqual({ blocking: 0, open: 0, total: 1 })
   })
 })
 
 // The bar has to distinguish "not started" from "half way through", so every stage
 // carries a 0–1 progress alongside its state.
 describe('stage progress (the intermediate fill)', () => {
-  it('a part-assessed checklist is partial, and reports how far in it is', () => {
-    const s = stage({ documentCount: 1, hasIngestion: true, checklistTotal: 10, checklistAssessed: 4 }, 'checklist')
+  it('a part-assessed checklist is partial, and reports the evidence actually held', () => {
+    const s = stage({
+      documentCount: 1, hasIngestion: true,
+      checklistTotal: 10, checklistAssessed: 4,
+      checklistCovered: 4, checklistApplicable: 10, checklistGaps: 0,
+    }, 'checklist')
     expect(s.state).toBe('partial')
     expect(s.progress).toBeCloseTo(0.4)
   })

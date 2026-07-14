@@ -162,10 +162,12 @@ export default function SignUpPage() {
           </div>
         )}
         <div className="text-center">
-          <div className="h-10 w-10 rounded bg-muted flex items-center justify-center mx-auto mb-2">
-            <Building2 className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <h1 className="text-lg font-semibold tracking-tight">Portfolio Reporting</h1>
+          <Link href="/" className="inline-block group">
+            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center mx-auto mb-2 transition-colors group-hover:bg-muted-foreground/20">
+              <Building2 className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <h1 className="text-lg font-semibold tracking-tight">Portfolio Reporting</h1>
+          </Link>
         </div>
 
         <Card>

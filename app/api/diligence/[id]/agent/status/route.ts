@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buildStages, countChecklist, countDocuments, assessedCount } from '@/lib/diligence/progress'
+import { buildStages, countChecklist, countDocuments, assessedCount, checklistCoverage, countAttention } from '@/lib/diligence/progress'
 
 /**
  * Polled by the deal detail UI while a memo-agent job is in flight.
@@ -101,7 +101,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   // The three bars need checklist statuses and document parse states. Fetching them
   // here means one poll drives the whole progress view, instead of each tab doing its
   // own round trip and disagreeing with the others.
-  const [{ data: checklistRows }, { data: docRows }] = await Promise.all([
+  const [{ data: checklistRows }, { data: docRows }, { data: attentionRows }] = await Promise.all([
     (admin as any)
       .from('diligence_checklist_items')
       .select('status')
@@ -113,10 +113,21 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       .select('parse_status')
       .eq('deal_id', params.id)
       .eq('fund_id', fundId),
+    // The memo's partner-attention queue gates the memo stage: a draft with open
+    // must-address items is not a finished memo.
+    (admin as any)
+      .from('diligence_attention_items')
+      .select('urgency, status')
+      .eq('deal_id', params.id)
+      .eq('fund_id', fundId),
   ])
 
   const checklist = countChecklist(((checklistRows as any[]) ?? []).map(r => ({ status: r.status })))
   const dataRoom = countDocuments(((docRows as any[]) ?? []).map(r => ({ parse_status: r.parse_status })))
+  const coverage = checklistCoverage(checklist.counts)
+  const attention = countAttention(
+    ((attentionRows as any[]) ?? []).map(r => ({ urgency: r.urgency, status: r.status }))
+  )
 
   // Scoring lives inside the draft's memo_draft_output, not in its own column, so
   // there was no way to tell "has it been scored" without a separate /drafts fetch.
@@ -144,8 +155,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     documentsHandled,
     checklistAssessed: assessedCount(checklist.counts),
     checklistTotal: checklist.total,
+    checklistCovered: coverage.covered,
+    checklistApplicable: coverage.applicable,
+    checklistGaps: coverage.gaps,
     scoredDimensions,
     totalDimensions: scoreRows.length,
+    memoAttentionBlocking: attention.blocking,
+    memoAttentionOpen: attention.open,
+    memoAttentionTotal: attention.total,
     runningKind,
     failedKind,
   })
@@ -173,6 +190,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       checklist,
       data_room: dataRoom,
       checklist_assessed: assessedCount(checklist.counts),
+      // Assessment coverage and real completeness are different questions — the bar
+      // reports the latter, so both travel with it rather than being conflated.
+      checklist_coverage: coverage,
+      memo_attention: attention,
     },
   })
 }

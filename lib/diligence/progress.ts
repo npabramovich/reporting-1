@@ -115,9 +115,84 @@ export function countDocuments(docs: { parse_status: string | null }[]): Counts<
   return { counts, total: docs.length }
 }
 
-/** Items the agent has actually reached a view on — the signal that assessment ran. */
+/**
+ * Items the agent has reached a view on — the signal that ASSESSMENT ran.
+ *
+ * This is coverage of the agent's work, NOT completeness of the diligence: a
+ * `missing` item is assessed, and it is still a hole in the deal. Use
+ * `checklistCoverage` for "how complete is this checklist"; the two are different
+ * questions and conflating them overstates the deal.
+ */
 export function assessedCount(counts: Record<ChecklistStatus, number>): number {
   return counts.found + counts.partial + counts.missing + counts.not_applicable
+}
+
+export interface ChecklistCoverage {
+  /** Weighted count of applicable items we actually hold evidence for. */
+  covered: number
+  /** Applicable items — the denominator. Excludes N/A. */
+  applicable: number
+  /** Assessed items we do NOT hold — the gaps. */
+  gaps: number
+  /** 0–1. `applicable === 0` (everything N/A) reads as complete, not as zero. */
+  fraction: number
+}
+
+/**
+ * How complete the checklist ACTUALLY is — the share of applicable items backed by
+ * evidence we hold.
+ *
+ * The rules, and why:
+ *   • `missing`  — contributes NOTHING. An item the agent looked at and confirmed we
+ *     don't have is a gap, not progress. Counting it (as `assessedCount` does) is
+ *     what let a deal with most of its checklist missing still read ~90% complete.
+ *   • `unknown`  — contributes nothing either. Not yet judged is not yet obtained.
+ *   • `partial`  — half credit. Some evidence, not enough to call it satisfied.
+ *   • `not_applicable` — leaves the DENOMINATOR entirely. It can never be obtained,
+ *     so scoring it as either a gap or a win would distort the number.
+ */
+export function checklistCoverage(counts: Record<ChecklistStatus, number>): ChecklistCoverage {
+  const applicable = counts.found + counts.partial + counts.missing + counts.unknown
+  const covered = counts.found + counts.partial * 0.5
+  const gaps = counts.missing
+  return {
+    covered,
+    applicable,
+    gaps,
+    fraction: applicable === 0 ? 1 : covered / applicable,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Memo attention queue
+// ---------------------------------------------------------------------------
+
+export interface AttentionCounts {
+  /** Open `must_address` items. Any one of these keeps the memo off 'done'. */
+  blocking: number
+  /** Open `must_address` + `should_address`. */
+  open: number
+  /** All `must_address` + `should_address`, open or not. */
+  total: number
+}
+
+/**
+ * Bucket the partner-attention queue for the memo stage.
+ *
+ * `fyi` is excluded entirely — it is informational and gates nothing. `deferred` and
+ * `addressed` both count as HANDLED: a partner deliberately setting an item aside is
+ * a decision, not an outstanding gap. Only `open` items count against the memo.
+ */
+export function countAttention(items: { urgency: string | null; status: string | null }[]): AttentionCounts {
+  let blocking = 0, open = 0, total = 0
+  for (const i of items) {
+    if (i.urgency !== 'must_address' && i.urgency !== 'should_address') continue
+    total++
+    if (i.status !== 'open') continue
+    open++
+    if (i.urgency === 'must_address') blocking++
+  }
+  return { blocking, open, total }
 }
 
 // ---------------------------------------------------------------------------
@@ -135,9 +210,33 @@ export interface ProgressInput {
   documentsHandled: number
   checklistAssessed: number
   checklistTotal: number
+  /**
+   * Applicable items backed by evidence, and how many applicable items there are —
+   * from `checklistCoverage`. This, NOT `checklistAssessed`, drives the bar: a
+   * `missing` item is assessed but it is not done.
+   */
+  checklistCovered: number
+  checklistApplicable: number
+  /** Assessed items we don't hold. Any gap keeps the stage off 'done'. */
+  checklistGaps: number
   /** Rubric dimensions the scorer reached a view on, and how many exist. */
   scoredDimensions: number
   totalDimensions: number
+  /**
+   * The memo's partner-attention queue. `fyi` items are excluded throughout — they
+   * are informational and were never meant to gate anything.
+   *
+   * `memoAttentionBlocking` counts still-OPEN `must_address` items: any one of them
+   * keeps the memo off 'done'. A draft the agent flagged with a dozen unresolved
+   * must-addresses is not a finished memo, and reading as 'done' overstated it.
+   * `deferred` counts as handled — a partner deliberately setting an item aside is a
+   * decision, not an omission.
+   */
+  memoAttentionBlocking: number
+  /** Open must_address + should_address items. */
+  memoAttentionOpen: number
+  /** All must_address + should_address items, open or not — the denominator. */
+  memoAttentionTotal: number
   /** The in-flight job, if any. */
   runningKind: string | null
   failedKind: string | null
@@ -156,8 +255,16 @@ const KIND_TO_STAGE: Record<string, StageKey> = {
   score: 'scoring',
 }
 
-/** A stage that isn't finished never reads as full — partial fill is capped below 100%. */
-const PARTIAL_CEILING = 0.9
+/**
+ * A stage that isn't finished must never READ as full, so partial fill is capped just
+ * below 100%.
+ *
+ * This used to be 0.9, which was its own small lie: it flattened every partial stage
+ * from 90% upward onto exactly "90%", so a barely-started stage and an almost-finished
+ * one could print the same number. 0.99 keeps the guarantee (nothing rounds to 100
+ * unless it's genuinely done) without distorting the measurement underneath.
+ */
+const PARTIAL_CEILING = 0.99
 
 export function buildStages(p: ProgressInput): StageInfo[] {
   const running = p.runningKind ? KIND_TO_STAGE[p.runningKind] ?? null : null
@@ -203,11 +310,23 @@ export function buildStages(p: ProgressInput): StageInfo[] {
     actionLabel: p.hasIngestion ? 'Re-analyze data room' : 'Analyze data room',
   }
 
+  // The checklist is done when every item has been assessed AND nothing applicable is
+  // still missing. Assessment coverage alone is NOT completion: an item the agent
+  // judged and found absent is a hole in the deal, and a bar that counts it as
+  // progress overstates how far along the diligence is. So the fill tracks evidence
+  // we hold (`checklistCoverage`), and any gap keeps the stage amber no matter how
+  // thoroughly it was assessed.
+  const fullyAssessed = p.checklistTotal > 0 && p.checklistAssessed === p.checklistTotal
   const checklist = {
     ...state(
-      'checklist', p.checklistTotal > 0 && p.checklistAssessed === p.checklistTotal, !p.hasIngestion,
-      'Analyze the data room first', 'Judge each checklist item against the evidence',
-      share(p.checklistAssessed, p.checklistTotal),
+      'checklist',
+      fullyAssessed && p.checklistGaps === 0,
+      !p.hasIngestion,
+      'Analyze the data room first',
+      fullyAssessed && p.checklistGaps > 0
+        ? `${p.checklistGaps} item${p.checklistGaps === 1 ? '' : 's'} still missing — request them from the company`
+        : 'Judge each checklist item against the evidence',
+      share(p.checklistCovered, p.checklistApplicable),
     ),
     label: 'Checklist',
     tab: 'Checklist',
@@ -241,8 +360,31 @@ export function buildStages(p: ProgressInput): StageInfo[] {
     actionLabel: p.hasScores ? 'Re-run scoring' : 'Run scoring',
   }
 
+  // The memo is done when it is FINALIZED and no must-address item is still open —
+  // not merely when a draft row exists, which is all this used to check (and which
+  // meant a raw first draft, flagged by the agent with a dozen unresolved issues,
+  // reported as a completed stage). The fill tracks the attention queue being worked
+  // down; `finalized` is the last gate, so a fully-addressed but unfinalized memo
+  // sits just short of the end rather than jumping to done.
+  const memoHint =
+    !p.hasMemoDraft ? 'Assemble the investment memo from everything gathered'
+    : p.memoAttentionBlocking > 0 ? `${p.memoAttentionBlocking} must-address item${p.memoAttentionBlocking === 1 ? '' : 's'} still open`
+    : p.memoAttentionOpen > 0 ? `${p.memoAttentionOpen} open item${p.memoAttentionOpen === 1 ? '' : 's'} to work through`
+    : !p.finalized ? 'Every item addressed — finalize the memo'
+    : 'Assemble the investment memo from everything gathered'
+
   const memo = {
-    ...state('memo', p.hasMemoDraft, !p.hasIngestion, 'Analyze the data room first', 'Assemble the investment memo from everything gathered'),
+    ...state(
+      'memo',
+      p.hasMemoDraft && p.finalized && p.memoAttentionBlocking === 0,
+      !p.hasIngestion,
+      'Analyze the data room first',
+      memoHint,
+      !p.hasMemoDraft ? 0
+        : p.memoAttentionTotal > 0
+          ? share(p.memoAttentionTotal - p.memoAttentionOpen, p.memoAttentionTotal)
+          : 1,
+    ),
     label: 'Memo',
     tab: 'Memo',
     action: 'draft',

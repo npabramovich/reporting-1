@@ -2859,9 +2859,16 @@ function QATab({ dealId }: { dealId: string }) {
     return () => { cancelled = true }
   }, [dealId])
 
+  // Auto-scroll to the newest message — but NOT when the history first loads. Opening
+  // the Research tab hydrates this chat, which used to fire this effect (messages 0→N)
+  // and scroll the whole page down to the bottom of the conversation, past everything
+  // above it. Only a message arriving after the initial load should move the view.
+  const hydrated = useRef(false)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length, sending])
+    if (loading) return
+    if (!hydrated.current) { hydrated.current = true; return }
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [messages.length, sending, loading])
 
   async function send() {
     const q = input.trim()

@@ -1,6 +1,7 @@
 import yaml from 'js-yaml'
 import type { MemoDraftOutput } from '@/lib/memo-agent/stages/draft'
 import type { DimensionScore } from '@/lib/memo-agent/stages/score'
+import { buildSourceLabels, type SourceLabel, type SourceLabelInput } from './source-labels'
 
 export interface RenderInput {
   memo: MemoDraftOutput & { scores?: DimensionScore[] }
@@ -11,6 +12,11 @@ export interface RenderInput {
   draftVersion: string
   /** Partner-defined section order/titles (incl. custom sections). Overrides the schema order when set. */
   sectionConfig?: Array<{ id: string; title: string; included?: boolean }>
+  /**
+   * Resolves each citation to the data-room document (or research source) behind it.
+   * Omit and the appendix falls back to raw `type:id` — readable, but not checkable.
+   */
+  sources?: SourceLabelInput
 }
 
 const SECTION_FALLBACK_ORDER = [
@@ -84,6 +90,8 @@ export function renderMarkdown(input: RenderInput): string {
     paragraphsBySection.get(p.section_id)!.push(p)
   }
 
+  const sourceLabels = buildSourceLabels(input.sources ?? {})
+
   // Build a stable citation key list as we walk paragraphs in order.
   const citationKeys: string[] = []
   function citeNumber(sourceType: string, sourceId: string): number {
@@ -128,7 +136,7 @@ export function renderMarkdown(input: RenderInput): string {
     if (meta.kind === 'structured' && sectionId === 'appendix') {
       lines.push(`## ${meta.title}`)
       lines.push('')
-      lines.push(...renderCitations(citationKeys))
+      lines.push(...renderCitations(citationKeys, sourceLabels))
       lines.push('')
       continue
     }
@@ -184,13 +192,23 @@ function renderScoresMarkdown(scores: DimensionScore[]): string[] {
   return lines
 }
 
-function renderCitations(keys: string[]): string[] {
+function renderCitations(keys: string[], labels: Map<string, SourceLabel>): string[] {
   if (keys.length === 0) return ['*No citations.*']
   const lines: string[] = []
   keys.forEach((key, i) => {
     const [type, ...rest] = key.split(':')
     const id = rest.join(':')
-    lines.push(`${i + 1}. **${type}** — \`${id}\``)
+    const hit = labels.get(key)
+    // Name the data-room document the claim came from. A bare `claim:c_4f2a` is not a
+    // citation — a reader can't check it. The id still rides along in code font so a
+    // claim can be traced back to the ingestion output when someone needs to.
+    if (hit) {
+      const detail = hit.detail ? ` — ${hit.detail}` : ''
+      const link = hit.url ? ` (<${hit.url}>)` : ''
+      lines.push(`${i + 1}. **${hit.label}**${detail}${link} · \`${type}:${id}\``)
+    } else {
+      lines.push(`${i + 1}. **${type}** — \`${id}\``)
+    }
   })
   return lines
 }

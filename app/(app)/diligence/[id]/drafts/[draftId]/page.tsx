@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { MemoEditor } from './memo-editor'
+import { buildSourceLabels } from '@/lib/memo-agent/render/source-labels'
 
 export const metadata: Metadata = { title: 'Memo draft' }
 
@@ -38,12 +39,34 @@ export default async function DraftPage({ params }: { params: { id: string; draf
     .maybeSingle()
   if (!deal) notFound()
 
-  const { data: attention } = await admin
-    .from('diligence_attention_items')
-    .select('id, deal_id, draft_id, kind, urgency, body, links, status, created_at')
-    .eq('deal_id', params.id)
-    .eq('fund_id', fundId)
-    .order('created_at', { ascending: false })
+  const [{ data: attention }, { data: docs }] = await Promise.all([
+    admin
+      .from('diligence_attention_items')
+      .select('id, deal_id, draft_id, kind, urgency, body, links, status, created_at')
+      .eq('deal_id', params.id)
+      .eq('fund_id', fundId)
+      .order('created_at', { ascending: false }),
+    // Citations point at claims, and claims live under documents in the ingestion
+    // output. Pull the file names here so a citation can name the document it came
+    // from rather than printing a bare claim id.
+    admin
+      .from('diligence_documents')
+      .select('id, file_name')
+      .eq('deal_id', params.id)
+      .eq('fund_id', fundId),
+  ])
+
+  const documentNames = Object.fromEntries(
+    ((docs as any[]) ?? []).map(d => [d.id as string, (d.file_name ?? '') as string])
+  )
+  const sourceLabels = Object.fromEntries(
+    buildSourceLabels({
+      ingestion: (draft as any).ingestion_output ?? null,
+      research: (draft as any).research_output ?? null,
+      qa: (draft as any).qa_answers ?? null,
+      documentNames,
+    })
+  )
 
   return (
     <MemoEditor
@@ -51,6 +74,7 @@ export default async function DraftPage({ params }: { params: { id: string; draf
       dealName={(deal as any).name}
       draft={draft as any}
       initialAttention={(attention as any) ?? []}
+      sourceLabels={sourceLabels}
       isAdmin={isAdmin}
     />
   )
