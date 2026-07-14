@@ -12,6 +12,8 @@ export default function AccountingExplainerPage() {
     <ExplainerContent
       title="Accounting"
       icon={Calculator}
+      screenshotSrc="/screenshots/accounting.png"
+      screenshotLabel="Accounting — financial statements: balance sheet and statement of operations derived from the ledger"
     >
       <p className="text-muted-foreground">
         Accounting gives each of your vehicles &mdash; a fund, an SPV, a direct deal, a GP entity
