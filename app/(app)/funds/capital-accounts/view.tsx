@@ -381,7 +381,7 @@ export function CapitalAccountsView() {
               <tbody>
                 {rows.map(r => (
                   <tr key={r.lpEntityId} className="border-b last:border-b-0">
-                    <td className="px-3 py-2">{r.name}</td>
+                    <td className="px-3 py-2 max-w-[200px]"><div className="truncate" title={r.name}>{r.name}</div></td>
                     <td className="px-3 py-2 text-right font-mono text-muted-foreground">{fmt(r.commitment)}</td>
                     <td className="px-3 py-2 text-right font-mono text-muted-foreground">{fmt(r.outstanding)}</td>
                     <td className="px-3 py-2 text-right">
@@ -441,17 +441,19 @@ export function CapitalAccountsView() {
                 const a = acctOf(r)
                 return (
                   <tr key={r.lpEntityId} className="border-b last:border-b-0 hover:bg-muted/30">
-                    <td className="px-3 py-2">
-                      <Link href={`/funds/capital-accounts/${r.lpEntityId}`} className="hover:underline">{r.name}</Link>
+                    <td className="px-3 py-2 max-w-[200px]">
+                      <Link href={`/funds/capital-accounts/${r.lpEntityId}`} className="hover:underline truncate block" title={r.name}>{r.name}</Link>
                       {r.partnerClass === 'gp' && <span className="ml-1.5 text-[10px] uppercase tracking-wider px-1 py-0.5 rounded bg-muted text-muted-foreground">GP</span>}
                     </td>
                     {commitmentCols.map(c => (
-                      <td key={c.key} className={`px-3 py-2 text-right font-mono border-l ${c.key !== 'commitment' && Math.abs(r[c.key]) > 0.004 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                      <td key={c.key} className={`px-3 py-2 text-right font-mono border-l ${Math.abs(r[c.key]) > 0.004 ? '' : 'text-muted-foreground'}`}>
                         {fmt(r[c.key])}
                       </td>
                     ))}
                     {columns.map((c, i) => (
                       <td key={c.key} className={`px-3 py-2 text-right font-mono ${i === 0 ? 'border-l' : ''} ${c.key === 'ending' ? 'font-semibold' : ''} ${c.key === 'unclassified' && Math.abs(a[c.key]) > 0.004 ? 'text-amber-600' : ''}`}>
+                        {/* Roll-forward deltas are signed so the columns tie to Ending: contributions
+                            add, distributions (withdrawals) and fees subtract. */}
                         {fmt(a[c.key])}
                       </td>
                     ))}

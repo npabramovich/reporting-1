@@ -1,23 +1,30 @@
 'use client'
 
+// The LPs page — the LIVE cross-vehicle aggregate, and the working surface for LP reporting.
+//
+// It rolls every LP up to the investor, live, as of any date, and carries the report toolset
+// that used to live only on a frozen snapshot: search, per-vehicle filtering, Excel export,
+// report-card printing, per-investor rename / grouping / individual cards, notes, the AI
+// analyst, and a report header/footer. Sharing freezes a snapshot first (the portal is
+// document-based), then shares that.
+
 import Link from 'next/link'
-
-// The live LP capital report.
-//
-// The other way to produce this report is a SNAPSHOT: import a spreadsheet, freeze the rows.
-// This one derives the same figures from whatever the books say right now, as of any date,
-// for every vehicle — those with double-entry books and those with only lp_capital_events.
-//
-// It writes nothing and creates no snapshot. Reload it tomorrow and the numbers may differ,
-// because the books may have. That is the point.
-
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, ChevronRight, ChevronDown, Calendar } from 'lucide-react'
+import { Loader2, ChevronRight, ChevronDown, Calendar, Search, X, Download, FileText, Settings, Pencil, Users } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
+import { useConfirm } from '@/components/confirm-dialog'
+import { useFeatureVisibility, useIsAdmin } from '@/components/feature-visibility-context'
+import { PortfolioGroupFilter } from '@/components/lp-portfolio-group-filter'
+import { LpShareControl } from '@/components/lp-share-control'
+import { LpSendControl } from '@/components/lp-send-control'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
+import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
 
 interface LiveRow {
   entity_id: string
@@ -26,7 +33,6 @@ interface LiveRow {
   investor_name: string
   portfolio_group: string
   source: 'ledger' | 'events'
-  /** Set when this is a member's share of an associate/GP vehicle's position, not a direct one. */
   lookThroughVia?: string
   commitment: number
   called_capital: number
@@ -36,38 +42,23 @@ interface LiveRow {
   total_value: number
   outstanding_balance: number
 }
-
 interface Payload {
   asOf: string | null
-  vehicles: { group: string; source: 'ledger' | 'events'; lps: number }[]
   rows: LiveRow[]
 }
+interface InvestorMeta { id: string; name: string; parent_id: string | null }
 
 interface Totals {
-  commitment: number
-  paid_in_capital: number
-  distributions: number
-  nav: number
-  total_value: number
-  outstanding_balance: number
-  dpi: number | null
-  tvpi: number | null
+  commitment: number; paid_in_capital: number; distributions: number; nav: number
+  total_value: number; outstanding_balance: number; dpi: number | null; tvpi: number | null
 }
 
-/** Sum money, THEN derive ratios. Averaging per-row ratios would weight a $10k LP the same
- *  as a $10m one — which is why every existing read path does it in this order too. */
 function total(rows: LiveRow[]): Totals {
-  const t = rows.reduce(
-    (a, r) => ({
-      commitment: a.commitment + r.commitment,
-      paid_in_capital: a.paid_in_capital + r.paid_in_capital,
-      distributions: a.distributions + r.distributions,
-      nav: a.nav + r.nav,
-      total_value: a.total_value + r.total_value,
-      outstanding_balance: a.outstanding_balance + r.outstanding_balance,
-    }),
-    { commitment: 0, paid_in_capital: 0, distributions: 0, nav: 0, total_value: 0, outstanding_balance: 0 }
-  )
+  const t = rows.reduce((a, r) => ({
+    commitment: a.commitment + r.commitment, paid_in_capital: a.paid_in_capital + r.paid_in_capital,
+    distributions: a.distributions + r.distributions, nav: a.nav + r.nav,
+    total_value: a.total_value + r.total_value, outstanding_balance: a.outstanding_balance + r.outstanding_balance,
+  }), { commitment: 0, paid_in_capital: 0, distributions: 0, nav: 0, total_value: 0, outstanding_balance: 0 })
   const paid = t.paid_in_capital
   return {
     ...t,
@@ -76,114 +67,196 @@ function total(rows: LiveRow[]): Totals {
   }
 }
 
-export default function LiveCapitalReportPage() {
+export default function LpsPage() {
+  return (
+    <PortfolioNotesProvider pageContext="lps">
+      <LpsInner />
+    </PortfolioNotesProvider>
+  )
+}
+
+function LpsInner() {
   const currency = useCurrency()
   const fmt = (v: number) => formatCurrencyFull(v, currency)
+  const isAdmin = useIsAdmin()
+  const fv = useFeatureVisibility()
+  const confirm = useConfirm()
 
   const [asOf, setAsOf] = useState('')
   const [applied, setApplied] = useState('')
   const [data, setData] = useState<Payload | null>(null)
+  const [meta, setMeta] = useState<InvestorMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
+  const [search, setSearch] = useState('')
+  const [excludedGroups, setExcludedGroups] = useState<Set<string>>(new Set())
+  const [exporting, setExporting] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [rename, setRename] = useState<{ id: string; name: string } | null>(null)
+  const [grouping, setGrouping] = useState<{ id: string; name: string } | null>(null)
+  const [shareSnapshotId, setShareSnapshotId] = useState<string | null>(null)
+  const [freezing, setFreezing] = useState(false)
+
   const load = useCallback(async (date: string) => {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
-      const res = await fetch(`/api/lps/live-report${date ? `?asOf=${date}` : ''}`)
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error || 'Failed to build the report')
-      setData(j)
+      const [repRes, invRes] = await Promise.all([
+        fetch(`/api/lps/live-report${date ? `?asOf=${date}` : ''}`),
+        fetch('/api/lps/investors'),
+      ])
+      const rep = await repRes.json()
+      if (!repRes.ok) throw new Error(rep.error || 'Failed to build the report')
+      setData(rep)
+      if (invRes.ok) {
+        const inv = await invRes.json()
+        setMeta((Array.isArray(inv) ? inv : inv.investors ?? []).map((i: any) => ({ id: i.id, name: i.name, parent_id: i.parent_id ?? null })))
+      }
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setLoading(false)
     }
   }, [])
-
   useEffect(() => { load(applied) }, [load, applied])
 
-  // Roll up per investor: an LP holding through two entities across three vehicles is ONE
-  // line on this report, with the vehicle rows underneath.
+  const allGroups = useMemo(
+    () => Array.from(new Set((data?.rows ?? []).map(r => r.portfolio_group))).sort(),
+    [data],
+  )
+
+  // Rows after the vehicle filter.
+  const visibleRows = useMemo(
+    () => (data?.rows ?? []).filter(r => !excludedGroups.has(r.portfolio_group)),
+    [data, excludedGroups],
+  )
+
+  // Roll up to the investor, honoring parent grouping: a child investor's rows fold into its
+  // parent so a family/institution shows as one line. Then apply the search.
+  const parentOf = useMemo(() => new Map(meta.map(m => [m.id, m.parent_id])), [meta])
+  const nameOf = useMemo(() => new Map(meta.map(m => [m.id, m.name])), [meta])
+
   const investors = useMemo(() => {
-    const byInvestor = new Map<string, { id: string; name: string; rows: LiveRow[] }>()
-    for (const r of data?.rows ?? []) {
-      const cur = byInvestor.get(r.investor_id) ?? { id: r.investor_id, name: r.investor_name, rows: [] }
-      cur.rows.push(r)
-      byInvestor.set(r.investor_id, cur)
+    const roll = (id: string) => { // resolve to the topmost parent
+      let cur = id, guard = 0
+      while (parentOf.get(cur) && guard++ < 20) cur = parentOf.get(cur)!
+      return cur
     }
-    return Array.from(byInvestor.values())
-      .map(i => ({ ...i, totals: total(i.rows) }))
-      .sort((a, b) => b.totals.commitment - a.totals.commitment || a.name.localeCompare(b.name))
-  }, [data])
+    const byInvestor = new Map<string, { id: string; name: string; rows: LiveRow[] }>()
+    for (const r of visibleRows) {
+      const top = roll(r.investor_id)
+      const cur = byInvestor.get(top) ?? { id: top, name: nameOf.get(top) ?? r.investor_name, rows: [] }
+      cur.rows.push(r)
+      byInvestor.set(top, cur)
+    }
+    let list = Array.from(byInvestor.values()).map(i => ({ ...i, totals: total(i.rows) }))
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      list = list.filter(i => i.name.toLowerCase().includes(q) || i.rows.some(r => r.entity_name.toLowerCase().includes(q)))
+    }
+    return list.sort((a, b) => b.totals.commitment - a.totals.commitment || a.name.localeCompare(b.name))
+  }, [visibleRows, parentOf, nameOf, search])
 
-  const grand = useMemo(() => total(data?.rows ?? []), [data])
+  const grand = useMemo(() => total(visibleRows), [visibleRows])
 
-  const toggle = (id: string) =>
-    setExpanded(s => {
-      const next = new Set(s)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
+  const toggle = (id: string) => setExpanded(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  async function exportExcel() {
+    setExporting(true)
+    try {
+      const res = await fetch('/api/lps/export/excel', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ live: true, asOfDate: applied || undefined }),
+      })
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `LP Report${applied ? ` ${applied}` : ''}.xlsx`; a.click()
+      URL.revokeObjectURL(url)
+    } finally { setExporting(false) }
+  }
+
+  async function shareWithLps() {
+    // Freeze the current live report into a snapshot, then share THAT — the portal shares
+    // fixed statements, not a live view.
+    setFreezing(true)
+    const res = await fetch('/api/lps/snapshots/from-live', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asOfDate: applied || undefined }),
     })
+    const d = await res.json()
+    setFreezing(false)
+    if (res.ok) setShareSnapshotId(d.snapshotId)
+  }
 
   return (
     <div className="px-4 md:pl-8 md:pr-4 pt-3 pb-8 w-full space-y-6">
+      {/* Row 1 — title, notes, analyst. */}
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">LPs</h1>
           <p className="text-sm text-muted-foreground max-w-3xl">
-            Every LP&rsquo;s capital across every vehicle, derived live rather than from a stored
-            snapshot. Nothing here is saved — rebuild it as of any date.
+            Every LP&rsquo;s capital across every vehicle, derived live rather than from a stored snapshot —
+            rebuild it as of any date.
           </p>
         </div>
-        <div className="shrink-0 flex items-center gap-3">
-          {/* Print report cards from THIS live data — the everyday version of the frozen
-              snapshot cards. */}
-          <Link href="/lps/cards" className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4">
-            Report cards →
-          </Link>
-          {/* Snapshots are the frozen archive now; live is the default view. */}
-          <Link href="/lps/snapshots" className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4">
-            Snapshots archive →
-          </Link>
+        <div className="shrink-0 flex items-center gap-2">
+          <PortfolioNotesButton />
+          <AnalystToggleButton />
         </div>
       </div>
 
-      <div className="flex items-end gap-2 flex-wrap">
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground flex items-center gap-1">
-            <Calendar className="h-3 w-3" /> As of
-          </label>
-          <Input
-            type="date"
-            className="w-44"
-            value={asOf}
-            onChange={e => setAsOf(e.target.value)}
+      {/* Row 2 — search, filter, as-of, actions. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search investors..."
+            className="w-40 md:w-56 border border-input rounded pl-7 pr-6 py-1.5 text-sm bg-transparent placeholder:text-muted-foreground"
           />
+          {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /></button>}
         </div>
-        <Button size="sm" onClick={() => setApplied(asOf)} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-          {asOf ? 'Rebuild' : 'Latest'}
+        {allGroups.length > 1 && (
+          <PortfolioGroupFilter
+            allGroups={allGroups}
+            excludedGroups={excludedGroups}
+            onToggle={g => setExcludedGroups(prev => { const n = new Set(prev); n.has(g) ? n.delete(g) : n.add(g); return n })}
+            onToggleAll={() => setExcludedGroups(prev => prev.size === 0 ? new Set(allGroups) : new Set())}
+          />
+        )}
+        <label className="text-xs text-muted-foreground flex items-center gap-1 ml-1"><Calendar className="h-3 w-3" /> As of</label>
+        <Input type="date" value={asOf} onChange={e => setAsOf(e.target.value)} className="h-9 w-40" />
+        <Button size="sm" variant="outline" onClick={() => setApplied(asOf)} disabled={loading}>{asOf ? 'Rebuild' : 'Latest'}</Button>
+        {applied && <Button size="sm" variant="ghost" onClick={() => { setAsOf(''); setApplied('') }}>Clear</Button>}
+
+        <span className="flex-1" />
+
+        <Button size="sm" variant="outline" className="text-muted-foreground" onClick={exportExcel} disabled={exporting || investors.length === 0}>
+          <Download className="h-4 w-4 mr-1" />{exporting ? 'Exporting…' : 'Export Excel'}
         </Button>
-        {applied && (
-          <Button size="sm" variant="ghost" onClick={() => { setAsOf(''); setApplied('') }}>
-            Clear date
+        <Button size="sm" variant="outline" className="text-muted-foreground" asChild>
+          <Link href="/lps/cards"><FileText className="h-4 w-4 mr-1" /> Report cards</Link>
+        </Button>
+        {isAdmin && (
+          <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => setSettingsOpen(true)}>
+            <Settings className="h-4 w-4 mr-1" /> Settings
           </Button>
         )}
-        <span className="text-sm text-muted-foreground ml-2">
-          {applied ? <>as of <span className="font-medium text-foreground">{applied}</span></> : 'all activity to date'}
-        </span>
+        {isAdmin && (fv.lp_portal_access === 'everyone' || fv.lp_portal_access === 'admin') && (
+          <Button size="sm" variant="outline" className="text-muted-foreground" onClick={shareWithLps} disabled={freezing || investors.length === 0}>
+            {freezing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Users className="h-4 w-4 mr-1" />} Share with LPs
+          </Button>
+        )}
       </div>
 
-      {error && (
-        <Card><CardContent className="p-4 text-red-600 text-sm">{error}</CardContent></Card>
-      )}
+      {error && <Card><CardContent className="p-4 text-red-600 text-sm">{error}</CardContent></Card>}
 
       {loading && !data ? (
-        <div className="flex items-center py-16 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin mr-2" /> Deriving from the ledger…
-        </div>
+        <div className="flex items-center py-16 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin mr-2" /> Deriving from the ledger…</div>
       ) : data ? (
         <>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -207,6 +280,7 @@ export default function LiveCapitalReportPage() {
                     <th className="text-right font-medium px-3 py-2">NAV</th>
                     <th className="text-right font-medium px-3 py-2">DPI</th>
                     <th className="text-right font-medium px-3 py-2">TVPI</th>
+                    {isAdmin && <th className="px-3 py-2 w-0" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -215,23 +289,13 @@ export default function LiveCapitalReportPage() {
                     const multi = inv.rows.length > 1
                     return (
                       <Fragment key={inv.id}>
-                        <tr
-                          className={`border-b ${multi ? 'cursor-pointer hover:bg-muted/20' : ''}`}
-                          onClick={() => multi && toggle(inv.id)}
-                        >
-                          <td className="px-3 py-1.5 font-medium">
-                            <span className="flex items-center gap-1">
-                              {multi ? (
-                                open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
-                              ) : (
-                                <span className="w-3.5" />
-                              )}
-                              {inv.name}
-                              {multi && (
-                                <span className="text-xs text-muted-foreground font-normal ml-1">
-                                  ({inv.rows.length})
-                                </span>
-                              )}
+                        <tr className={`border-b group ${multi ? 'cursor-pointer hover:bg-muted/20' : 'hover:bg-muted/10'}`} onClick={() => multi && toggle(inv.id)}>
+                          <td className="px-3 py-1.5 font-medium max-w-0">
+                            <span className="flex items-center gap-1 min-w-0">
+                              {multi ? (open ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />) : <span className="w-3.5 shrink-0" />}
+                              {/* Long names truncate rather than wrap and steal column space. */}
+                              <span className="truncate" title={inv.name}>{inv.name}</span>
+                              {multi && <span className="text-xs text-muted-foreground font-normal ml-1 shrink-0">({inv.rows.length})</span>}
                             </span>
                           </td>
                           <Money v={inv.totals.commitment} fmt={fmt} />
@@ -239,42 +303,41 @@ export default function LiveCapitalReportPage() {
                           <Money v={inv.totals.outstanding_balance} fmt={fmt} />
                           <Money v={inv.totals.distributions} fmt={fmt} />
                           <Money v={inv.totals.nav} fmt={fmt} />
-                          <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                            {inv.totals.dpi != null ? `${inv.totals.dpi.toFixed(2)}x` : '—'}
-                          </td>
-                          <td className="px-3 py-1.5 text-right tabular-nums">
-                            {inv.totals.tvpi != null ? `${inv.totals.tvpi.toFixed(2)}x` : '—'}
-                          </td>
+                          <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{inv.totals.dpi != null ? `${inv.totals.dpi.toFixed(2)}x` : '—'}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums">{inv.totals.tvpi != null ? `${inv.totals.tvpi.toFixed(2)}x` : '—'}</td>
+                          {isAdmin && (
+                            <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground" onClick={e => e.stopPropagation()}>
+                              <span className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Link href={`/lps/cards/${inv.id}`} title="Report card" className="hover:text-foreground"><FileText className="h-3.5 w-3.5" /></Link>
+                                <button onClick={() => setRename({ id: inv.id, name: inv.name })} title="Rename" className="hover:text-foreground"><Pencil className="h-3.5 w-3.5" /></button>
+                                <button onClick={() => setGrouping({ id: inv.id, name: inv.name })} title="Group under another investor" className="hover:text-foreground"><Users className="h-3.5 w-3.5" /></button>
+                              </span>
+                            </td>
+                          )}
                         </tr>
                         {open && inv.rows.map(r => (
                           <tr key={`${inv.id}-${r.entity_id}-${r.portfolio_group}`} className="border-b bg-muted/10 text-muted-foreground">
-                            <td className="px-3 py-1.5 pl-10 text-xs">
-                              {r.portfolio_group}
-                              {r.entity_name !== inv.name && <span className="ml-1">· {r.entity_name}</span>}
-                              {/* A look-through row is the member's share of an associate's
-                                  position, not a direct holding. Say so — otherwise it reads as
-                                  though they invested in the fund directly, and nobody can tell
-                                  the look-through from double-counting. */}
-                              {r.lookThroughVia && (
-                                <Badge variant="secondary" className="ml-1 text-[10px] py-0 px-1">
-                                  via {r.lookThroughVia}
-                                </Badge>
-                              )}
+                            <td className="px-3 py-1.5 pl-10 text-xs max-w-0">
+                              <span className="truncate block" title={`${r.portfolio_group}${r.entity_name !== inv.name ? ` · ${r.entity_name}` : ''}`}>
+                                {r.portfolio_group}
+                                {r.entity_name !== inv.name && <span className="ml-1">· {r.entity_name}</span>}
+                                {r.lookThroughVia && <Badge variant="secondary" className="ml-1 text-[10px] py-0 px-1">via {r.lookThroughVia}</Badge>}
+                              </span>
                             </td>
                             <Money v={r.commitment} fmt={fmt} small />
                             <Money v={r.paid_in_capital} fmt={fmt} small />
                             <Money v={r.outstanding_balance} fmt={fmt} small />
                             <Money v={r.distributions} fmt={fmt} small />
                             <Money v={r.nav} fmt={fmt} small />
-                            <td colSpan={2} />
+                            <td colSpan={isAdmin ? 3 : 2} />
                           </tr>
                         ))}
                       </Fragment>
                     )
                   })}
                   {investors.length === 0 && (
-                    <tr><td colSpan={8} className="p-8 text-center text-muted-foreground">
-                      No LP capital found. Book a vehicle&rsquo;s history, or add capital events for one.
+                    <tr><td colSpan={isAdmin ? 9 : 8} className="p-8 text-center text-muted-foreground">
+                      {search ? 'No investors match your search.' : 'No LP capital found. Track a vehicle’s positions or book its history.'}
                     </td></tr>
                   )}
                 </tbody>
@@ -287,12 +350,9 @@ export default function LiveCapitalReportPage() {
                       <Money v={grand.outstanding_balance} fmt={fmt} />
                       <Money v={grand.distributions} fmt={fmt} />
                       <Money v={grand.nav} fmt={fmt} />
-                      <td className="px-3 py-1.5 text-right tabular-nums">
-                        {grand.dpi != null ? `${grand.dpi.toFixed(2)}x` : '—'}
-                      </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">
-                        {grand.tvpi != null ? `${grand.tvpi.toFixed(2)}x` : '—'}
-                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{grand.dpi != null ? `${grand.dpi.toFixed(2)}x` : '—'}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{grand.tvpi != null ? `${grand.tvpi.toFixed(2)}x` : '—'}</td>
+                      {isAdmin && <td />}
                     </tr>
                   </tfoot>
                 )}
@@ -301,25 +361,162 @@ export default function LiveCapitalReportPage() {
           </Card>
         </>
       ) : null}
+
+      {settingsOpen && <ReportSettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {rename && <RenameDialog investor={rename} onClose={() => setRename(null)} onSaved={() => { setRename(null); load(applied) }} />}
+      {grouping && <GroupDialog investor={grouping} candidates={investors.map(i => ({ id: i.id, name: i.name }))} onClose={() => setGrouping(null)} onSaved={() => { setGrouping(null); load(applied) }} />}
+
+      {/* Share freezes a snapshot, then shares it through the normal snapshot controls. */}
+      <Dialog open={!!shareSnapshotId} onOpenChange={o => { if (!o) setShareSnapshotId(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Share this report with LPs</DialogTitle>
+            <DialogDescription>
+              A snapshot was frozen from the current live data — LPs see a fixed statement, not a moving view. Choose who
+              can see it, and optionally email it.
+            </DialogDescription>
+          </DialogHeader>
+          {shareSnapshotId && (
+            <div className="flex flex-wrap gap-2">
+              <LpShareControl shareEndpoint={`/api/lps/snapshots/${shareSnapshotId}/share`} />
+              <LpSendControl kind="snapshot" id={shareSnapshotId} />
+              <Button variant="ghost" size="sm" asChild><Link href="/lps/snapshots">Open in archive</Link></Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <PortfolioNotesPanel />
+      <AnalystPanel />
     </div>
   )
 }
 
 function Money({ v, fmt, small }: { v: number; fmt: (n: number) => string; small?: boolean }) {
-  return (
-    <td className={`px-3 py-1.5 text-right tabular-nums whitespace-nowrap ${small ? 'text-xs' : ''}`}>
-      {fmt(v)}
-    </td>
-  )
+  return <td className={`px-3 py-1.5 text-right tabular-nums whitespace-nowrap ${small ? 'text-xs' : ''}`}>{fmt(v)}</td>
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <Card>
-      <CardContent className="pt-4 pb-3 px-4">
-        <p className="text-xs text-muted-foreground mb-1">{label}</p>
-        <p className="text-xl font-semibold tabular-nums">{value}</p>
-      </CardContent>
-    </Card>
+    <Card><CardContent className="pt-4 pb-3 px-4">
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+      <p className="text-xl font-semibold tabular-nums">{value}</p>
+    </CardContent></Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Dialogs — report settings (fund-level header/footer), rename, group.
+// ---------------------------------------------------------------------------
+
+function ReportSettingsDialog({ onClose }: { onClose: () => void }) {
+  const [description, setDescription] = useState('')
+  const [footer, setFooter] = useState('')
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/lps/live-settings').then(r => r.json()).then(d => { setDescription(d.description ?? ''); setFooter(d.footer ?? ''); setLoaded(true) })
+  }, [])
+
+  async function save() {
+    setSaving(true)
+    await fetch('/api/lps/live-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description, footer }) })
+    setSaving(false); onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Report settings</DialogTitle>
+          <DialogDescription>The header paragraph and footer note printed on every live report card.</DialogDescription>
+        </DialogHeader>
+        {!loaded ? <div className="py-8 flex justify-center"><Loader2 className="h-4 w-4 animate-spin" /></div> : (
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Header paragraph</label>
+              <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4}
+                placeholder="A short introduction shown at the top of every investor report."
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Footer note</label>
+              <textarea value={footer} onChange={e => setFooter(e.target.value)} rows={3}
+                placeholder="Leave blank for the default metric definitions."
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} disabled={saving || !loaded}>{saving ? 'Saving…' : 'Save'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function RenameDialog({ investor, onClose, onSaved }: { investor: { id: string; name: string }; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(investor.name)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  async function save() {
+    if (!name.trim()) return
+    setSaving(true); setErr(null)
+    const res = await fetch('/api/lps/investors', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: investor.id, name: name.trim() }) })
+    setSaving(false)
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error === 'duplicate_name' ? 'An investor with that name already exists.' : (d.error ?? 'Could not rename')); return }
+    onSaved()
+  }
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader><DialogTitle>Rename investor</DialogTitle></DialogHeader>
+        <Input value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()} autoFocus />
+        {err && <p className="text-xs text-destructive">{err}</p>}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} disabled={saving || !name.trim()}>{saving ? 'Saving…' : 'Save'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function GroupDialog({ investor, candidates, onClose, onSaved }: {
+  investor: { id: string; name: string }
+  candidates: { id: string; name: string }[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [parentId, setParentId] = useState<string>('')
+  const [saving, setSaving] = useState(false)
+  const options = candidates.filter(c => c.id !== investor.id)
+
+  async function save(id: string | null) {
+    setSaving(true)
+    await fetch('/api/lps/investors', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: investor.id, parentId: id }) })
+    setSaving(false); onSaved()
+  }
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Group &ldquo;{investor.name}&rdquo;</DialogTitle>
+          <DialogDescription>Roll this investor&rsquo;s positions up under another investor on the report.</DialogDescription>
+        </DialogHeader>
+        <select value={parentId} onChange={e => setParentId(e.target.value)} className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm">
+          <option value="">Choose an investor…</option>
+          {options.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
+        <DialogFooter className="flex-wrap gap-2">
+          <Button variant="ghost" size="sm" onClick={() => save(null)} disabled={saving}>Ungroup</Button>
+          <span className="flex-1" />
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => save(parentId || null)} disabled={saving || !parentId}>{saving ? 'Saving…' : 'Group'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

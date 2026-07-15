@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   const [report, { data: fund }, { data: settings }, { data: ents }] = await Promise.all([
     generateLiveReport(admin, gate.fundId, asOf),
     admin.from('funds' as any).select('name, logo_url, address').eq('id', gate.fundId).maybeSingle(),
-    admin.from('fund_settings' as any).select('currency').eq('fund_id', gate.fundId).maybeSingle(),
+    admin.from('fund_settings' as any).select('currency, lp_report_description, lp_report_footer').eq('fund_id', gate.fundId).maybeSingle(),
     admin.from('lp_entities' as any).select('id, entity_name, investor_id, lp_investors(id, name)').eq('fund_id', gate.fundId),
   ])
 
@@ -77,6 +77,8 @@ export async function GET(req: NextRequest) {
       address: (fund as any)?.address ?? null,
     },
     currency: (settings as any)?.currency ?? 'USD',
+    description: (settings as any)?.lp_report_description ?? null,
+    footer: (settings as any)?.lp_report_footer ?? null,
     asOf: report.asOf,
     investors,
     vehicleDates,

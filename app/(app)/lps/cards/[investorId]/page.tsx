@@ -14,6 +14,8 @@ interface Investor { investorId: string; investorName: string; rows: ReportCardR
 interface Payload {
   fund: { name: string; logo: string | null; address: string | null }
   currency: string
+  description: string | null
+  footer: string | null
   asOf: string | null
   investors: Investor[]
   vehicleDates: { vehicle: string; date: string | null }[]
@@ -67,6 +69,8 @@ export default function LiveCardPage() {
           investorName={investor.investorName}
           rows={investor.rows}
           totals={totalsOf(investor.rows)}
+          description={data.description}
+          footerNote={data.footer || undefined}
           asOfFormatted={data.asOf ?? undefined}
           vehicleDataDates={data.vehicleDates.filter(v => investor.rows.some(r => r.portfolioGroup === v.vehicle))}
         />

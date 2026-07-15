@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { generateLiveReport } from '@/lib/accounting/live-report'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { rateLimit } from '@/lib/rate-limit'
@@ -53,13 +54,38 @@ export async function POST(req: NextRequest) {
     investmentsQuery = investmentsQuery.eq('snapshot_id', snapshotId)
   }
 
-  const [investorsRes, investmentsRes] = await Promise.all([
-    admin.from('lp_investors' as any).select('id, name').eq('fund_id', membership.fund_id).order('name') as any,
-    investmentsQuery.order('portfolio_group') as any,
-  ])
+  const { data: investorsData } = await admin.from('lp_investors' as any).select('id, name').eq('fund_id', membership.fund_id).order('name') as any
+  const investors: { id: string; name: string }[] = investorsData ?? []
 
-  const investors: { id: string; name: string }[] = investorsRes.data ?? []
-  const investments: any[] = investmentsRes.data ?? []
+  let investments: any[]
+  if (body.live && !snapshotId) {
+    // LIVE export — build the same investment shape from the live report rather than a stored
+    // snapshot, so "Export Excel" on the live LPs page reflects the current numbers.
+    const [report, { data: ents }] = await Promise.all([
+      generateLiveReport(admin, membership.fund_id, snapshotId ? undefined : (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : undefined)),
+      admin.from('lp_entities' as any).select('id, entity_name, investor_id').eq('fund_id', membership.fund_id),
+    ])
+    const entInfo = new Map<string, { entity_name: string; investor_id: string }>(
+      ((ents as any[]) ?? []).map(e => [e.id, { entity_name: e.entity_name, investor_id: e.investor_id }])
+    )
+    investments = report.rows.map(r => {
+      const info = entInfo.get(r.entity_id)
+      return {
+        portfolio_group: r.portfolio_group,
+        commitment: r.commitment,
+        paid_in_capital: r.paid_in_capital,
+        called_capital: r.called_capital,
+        distributions: r.distributions,
+        nav: r.nav,
+        total_value: r.total_value,
+        irr: r.irr,
+        lp_entities: { entity_name: info?.entity_name ?? r.entity_id, lp_investors: { id: info?.investor_id ?? r.entity_id } },
+      }
+    })
+  } else {
+    const { data } = await investmentsQuery.order('portfolio_group') as any
+    investments = data ?? []
+  }
 
   // Group investments by investor
   const byInvestor = new Map<string, any[]>()
