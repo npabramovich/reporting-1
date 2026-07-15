@@ -56,7 +56,10 @@ export interface SnapshotRow {
   /** The snapshot's own `called_capital`. Should equal paidInCapital. */
   calledCapital: number | null
   distributions: number
-  nav: number
+  /** Net asset value. May be null when the snapshot recorded `total_value` instead. */
+  nav: number | null
+  /** Total value = distributions + NAV. Lets NAV be recovered when `nav` itself is empty. */
+  totalValue: number | null
   /** The snapshot's own uncalled figure, for cross-checking. */
   outstandingBalance: number | null
 }
@@ -100,32 +103,61 @@ const TOLERANCE = 0.01
  */
 export function planRow(row: SnapshotRow, asOf: string): RowPlan {
   const commitment = roundCents(row.commitment)
-  const paidIn = roundCents(row.paidInCapital)
+
+  // Paid-in IS called capital, and a snapshot may carry the figure in EITHER column — the AI
+  // import maps them separately, and a source spreadsheet often has only one. So fall back
+  // exactly the way the existing read path does (lp-report-pdf.ts computeRow:
+  // `paid_in_capital || called_capital || 0`). Without this fallback, every row that recorded
+  // the number only under `called_capital` copied over with ZERO paid-in — which is exactly
+  // how a lot of capital failed to make the crossing.
+  const paidInRaw = roundCents(row.paidInCapital)
+  const called = row.calledCapital == null ? null : roundCents(row.calledCapital)
+  const paidIn = paidInRaw !== 0 ? paidInRaw : (called ?? 0)
+
   const distributions = roundCents(row.distributions)
-  const nav = roundCents(row.nav)
+
+  // NAV. `nav` is the RELIABLE primitive — including a stored 0, which is a normal state (a
+  // fully-realized position). `total_value` is NOT reliable: the snapshot UI derives it as
+  // distributions + NAV at display time, so the stored column is often 0 even when the shown
+  // total is not. So: trust `nav` whenever it is present (0 included), and fall back to
+  // `total_value − distributions` ONLY when `nav` is genuinely null — and even then only if
+  // total_value is sane (≥ distributions, since total_value = distributions + NAV and NAV is
+  // normally ≥ 0). An earlier version treated `nav = 0` as "missing" and derived from the
+  // garbage total_value, turning every realized position into a large NEGATIVE NAV.
+  const nav = row.nav != null
+    ? roundCents(row.nav)
+    : (row.totalValue != null && row.totalValue >= distributions - TOLERANCE
+        ? roundCents(row.totalValue - distributions)
+        : 0)
+
   const gain = roundCents(nav - paidIn + distributions)
 
   const warnings: string[] = []
 
-  // The snapshot's two names for the same number. If they differ, the source spreadsheet
-  // meant something by it, and picking one silently would bury that.
-  if (row.calledCapital != null && Math.abs(roundCents(row.calledCapital) - paidIn) > TOLERANCE) {
+  // Warn only when BOTH columns are genuinely populated and disagree — a real data ambiguity
+  // worth a human's eyes. A stored ZERO counts as unpopulated, not as a disagreement: a
+  // snapshot that filled in paid-in but left called at 0 (or vice versa) is the normal case
+  // the fallback already handles, and flagging it buried the handful of real conflicts under
+  // a hundred false ones.
+  if (paidInRaw !== 0 && called !== null && called !== 0 && Math.abs(called - paidInRaw) > TOLERANCE) {
     warnings.push(
-      `called (${roundCents(row.calledCapital)}) and paid-in (${paidIn}) differ — they are the same figure in a snapshot. Using paid-in.`
+      `called (${called}) and paid-in (${paidInRaw}) differ — they are the same figure in a snapshot. Using paid-in.`
     )
   }
 
-  // The snapshot's own arithmetic. If it doesn't tie, copying it imports the disagreement.
-  if (row.outstandingBalance != null) {
-    const implied = roundCents(commitment - paidIn)
-    if (Math.abs(implied - roundCents(row.outstandingBalance)) > TOLERANCE) {
-      warnings.push(
-        `snapshot says uncalled = ${roundCents(row.outstandingBalance)}, but commitment − paid-in = ${implied}`
-      )
-    }
-  }
+  // NOTE: we deliberately do NOT cross-check the snapshot's `outstanding_balance`. The
+  // cutover derives uncalled capital from commitment − called, not from that field, so a
+  // stored `outstanding_balance` that disagrees changes nothing we write — and it disagrees
+  // systematically (often a uniform 0), which buried the real warnings under hundreds of
+  // inert ones. `outstandingBalance` stays on the row for future use, unread here.
 
   if (paidIn < 0) warnings.push(`negative paid-in (${paidIn})`)
+
+  // A negative NAV almost always means the snapshot recorded a `total_value` below the
+  // distributions (total value = distributions + NAV, so it can't be less) — a data-entry
+  // slip on a realized position. Surface it; the number still ties, it's just wrong at the
+  // source.
+  if (nav < 0) warnings.push(`derived NAV is negative (${nav}) — check nav / total_value on this row`)
   if (commitment > 0 && paidIn > commitment + TOLERANCE) {
     warnings.push(`paid-in (${paidIn}) exceeds commitment (${commitment})`)
   }
@@ -305,7 +337,8 @@ export async function previewCutover(
         paidInCapital: Number(r.paid_in_capital ?? 0),
         calledCapital: r.called_capital == null ? null : Number(r.called_capital),
         distributions: Number(r.distributions ?? 0),
-        nav: Number(r.nav ?? 0),
+        nav: r.nav == null ? null : Number(r.nav),
+        totalValue: r.total_value == null ? null : Number(r.total_value),
         outstandingBalance: r.outstanding_balance == null ? null : Number(r.outstanding_balance),
       }, asOf)
 
@@ -313,7 +346,10 @@ export async function previewCutover(
         lpEntityId: r.entity_id,
         name: nameByEntity.get(r.entity_id) ?? r.entity_id,
         commitment: roundCents(Number(r.commitment ?? 0)),
-        snapshotNav: roundCents(Number(r.nav ?? 0)),
+        // The ending capital the events reconstruct IS the effective NAV — the same value
+        // shown as "Snapshot NAV" — so the tie-out column compares like with like, whether
+        // the snapshot stored `nav` or only `total_value`.
+        snapshotNav: plan.endingCapital,
         endingCapital: plan.endingCapital,
         events: plan.events,
         hasCommitment: hasCommitment.has(r.entity_id),
@@ -392,11 +428,22 @@ export async function applyCutover(
     )
 
     if (eventRows.length > 0) {
-      const { error } = await (admin as any)
+      // Idempotent by DELETE-then-INSERT on this vehicle's rows from THIS snapshot, rather
+      // than upsert-on-conflict. Two reasons: the origin unique index is partial (it excludes
+      // hand-entered null-origin rows), and Postgres ON CONFLICT cannot target a partial
+      // index; and a clean replace leaves no straggler from a prior run — e.g. a `valuation`
+      // event a buggy run wrote that the corrected run no longer produces (the exact edge
+      // case an upsert would have left behind). It only ever touches rows tagged to this
+      // snapshot and vehicle — never hand-entered events, never another snapshot's.
+      const del = await (admin as any)
         .from('lp_capital_events')
-        .upsert(eventRows, {
-          onConflict: 'fund_id,vehicle_id,lp_entity_id,source_type,origin_snapshot_id',
-        })
+        .delete()
+        .eq('fund_id', fundId)
+        .eq('vehicle_id', v.vehicleId)
+        .eq('origin_snapshot_id', preview.snapshot.id)
+      if (del.error) { errors.push(`${v.vehicle}: ${del.error.message}`); continue }
+
+      const { error } = await (admin as any).from('lp_capital_events').insert(eventRows)
       if (error) { errors.push(`${v.vehicle}: ${error.message}`); continue }
       eventsWritten += eventRows.length
     }

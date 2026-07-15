@@ -58,6 +58,9 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/investments',  label: 'Investments',  featureKey: 'investments' },
       { href: '/requests',     label: 'Asks',         featureKey: 'asks' },
       { href: '/interactions', label: 'Interactions', featureKey: 'interactions' },
+      // Letters are generated from PORTFOLIO data (the companies) and can be produced without
+      // any LP tracking, so they live under Portfolio, not LPs.
+      { href: '/letters',      label: 'Letters',      featureKey: 'lp_letters' },
       // Notes are about companies, so they belong under the portfolio rather than as a
       // top-level peer of it.
       { href: '/notes',        label: 'Notes',        featureKey: 'notes', badgeKey: 'notes' },
@@ -67,11 +70,11 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: '/lps', label: 'LPs', icon: Crown, featureKey: 'lps',
     children: [
-      // Letters are written TO LPs — they sat under Portfolio, next to the companies they
-      // are about rather than the people they are for.
-      { href: '/letters',     label: 'Letters',   featureKey: 'lp_letters' },
-      { href: '/lp-portal',   label: 'Documents', featureKey: 'lp_portal' },
-      { href: '/lp-activity', label: 'Activity',  featureKey: 'lp_activity' },
+      { href: '/lps/capital',   label: 'Capital accounts', featureKey: 'lp_tracking' },
+      // The snapshot archive: frozen historical position sets + bulk PDF printing. Admin-only.
+      { href: '/lps/snapshots', label: 'Snapshots',        adminOnly: true },
+      { href: '/lp-portal',     label: 'Documents',        featureKey: 'lp_portal' },
+      { href: '/lp-activity',   label: 'Activity',         featureKey: 'lp_activity' },
     ],
   },
   {
@@ -126,7 +129,14 @@ export function AppSidebar({ reviewBadge, settingsBadge, notesBadge, isAdmin, up
           return true
         }).map((item) => {
           const { href, label, icon: Icon, badgeKey, adminOnly, featureKey, beta, children } = item
-          const isActive = pathname === href || pathname.startsWith(href + '/')
+          // The parent row is highlighted ONLY when it is the exact current page — never
+          // merely because a child is open. Otherwise the highlight was inconsistent: Funds
+          // (/funds) and Diligence (/diligence) nest their children under their own path, so a
+          // prefix match lit the parent AND the child (two "you are here" pills at once),
+          // while Portfolio — whose children live at unrelated paths like /investments — never
+          // lit the parent. Exact-match makes every section behave the same: one pill, on the
+          // page you're actually on, with section context coming from the expanded children.
+          const isActive = pathname === href
           const badgeCount = badgeKey === 'review' ? reviewBadge
             : badgeKey === 'settings' ? (settingsBadge ?? 0)
             : badgeKey === 'notes' ? (notesBadge ?? 0)

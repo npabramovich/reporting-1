@@ -6,7 +6,6 @@ import { Loader2, ChevronUp, ChevronDown, Lock } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { useCurrency, formatCurrency, formatCurrencyFull } from '@/components/currency-context'
 import type { CompanyStatus } from '@/lib/types/database'
-import { xirr, type CashFlow } from '@/lib/xirr'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
@@ -40,73 +39,6 @@ interface GroupSummary {
   irr: number | null
 }
 
-interface FundCashFlow {
-  id: string
-  portfolio_group: string
-  flow_date: string
-  flow_type: 'commitment' | 'called_capital' | 'distribution'
-  amount: number
-}
-
-interface FundGroupMetrics {
-  tvpi: number | null
-  dpi: number | null
-  rvpi: number | null
-  netIrr: number | null
-}
-
-function computeFundMetricsByGroup(
-  cashFlows: FundCashFlow[],
-  grossResidualByGroup: Map<string, number>,
-  configsByGroup: Record<string, { cashOnHand: number; carryRate: number; gpCommitPct: number }>
-): Map<string, FundGroupMetrics> {
-  // Group cash flows by portfolio_group
-  const byGroup = new Map<string, FundCashFlow[]>()
-  for (const cf of cashFlows) {
-    const list = byGroup.get(cf.portfolio_group) ?? []
-    list.push(cf)
-    byGroup.set(cf.portfolio_group, list)
-  }
-
-  const result = new Map<string, FundGroupMetrics>()
-  for (const [group, flows] of Array.from(byGroup.entries())) {
-    let called = 0
-    let distributions = 0
-    for (const cf of flows) {
-      if (cf.flow_type === 'called_capital') called += cf.amount
-      if (cf.flow_type === 'distribution') distributions += cf.amount
-    }
-
-    const grossResidual = grossResidualByGroup.get(group) ?? 0
-    const config = configsByGroup[group] ?? { cashOnHand: 0, carryRate: 0.20, gpCommitPct: 0 }
-    const grossAssets = grossResidual + config.cashOnHand
-
-    // GP commit portion of called capital is not subject to carry
-    const gpCapital = called * config.gpCommitPct
-    const lpCapital = called - gpCapital
-    const lpDistributions = distributions * (1 - config.gpCommitPct)
-    const lpRemainingCapital = lpCapital - lpDistributions
-    const estimatedCarry = Math.max(0, config.carryRate * (grossAssets * (1 - config.gpCommitPct) - lpRemainingCapital))
-    const netResidual = grossAssets - estimatedCarry
-    const totalValue = distributions + netResidual
-
-    const tvpi = called > 0 ? totalValue / called : null
-    const dpi = called > 0 ? distributions / called : null
-    const rvpi = called > 0 ? netResidual / called : null
-
-    // Net IRR
-    const xirrFlows: CashFlow[] = []
-    for (const cf of flows) {
-      if (cf.flow_type === 'called_capital') xirrFlows.push({ date: new Date(cf.flow_date), amount: -cf.amount })
-      if (cf.flow_type === 'distribution') xirrFlows.push({ date: new Date(cf.flow_date), amount: cf.amount })
-    }
-    if (netResidual > 0) xirrFlows.push({ date: new Date(), amount: netResidual })
-    const netIrr = xirrFlows.length >= 2 ? xirr(xirrFlows) : null
-
-    result.set(group, { tvpi, dpi, rvpi, netIrr })
-  }
-  return result
-}
 
 interface PortfolioData {
   totalInvested: number
@@ -226,33 +158,28 @@ export default function InvestmentsPage() {
   const [groupSortKey, setGroupSortKey] = useState<GroupSortKey>('totalInvested')
   const [groupSortDir, setGroupSortDir] = useState<SortDir>('desc')
 
-  // Fund cash flows for computed LP metrics
-  const [fundCashFlows, setFundCashFlows] = useState<FundCashFlow[]>([])
-  const [groupConfigs, setGroupConfigs] = useState<Record<string, { cashOnHand: number; carryRate: number; gpCommitPct: number; vintage: number | null }>>({})
+  // Vintage year per vehicle. That is ALL this page takes from outside the investment data.
+  //
+  // It used to also show TVPI / DPI / RVPI / Net IRR here, computed client-side from hand-typed
+  // cash flows with an ESTIMATED carry haircut. Those are NET, fund-level metrics and they do
+  // not belong on a gross-investments sheet: this page reports what the portfolio did, before
+  // fund economics. The net numbers live on /funds, derived from the ledger, where carry is a
+  // real accrual rather than a guess — which is also how the carry estimate stopped being a
+  // problem on this page: it was deleted, not fixed.
+  const [vintages, setVintages] = useState<Map<string, number | null>>(new Map())
 
   useEffect(() => {
     async function load() {
       setLoading(true)
       try {
-        const [invRes, cfRes, gcRes] = await Promise.all([
+        const [invRes, vehRes] = await Promise.all([
           fetch(`/api/portfolio/investments?asOf=${asOfDate}`),
-          fetch('/api/portfolio/fund-cash-flows'),
-          fetch('/api/portfolio/fund-group-config'),
+          fetch('/api/vehicles'),
         ])
         if (invRes.ok) setData(await invRes.json())
-        if (cfRes.ok) setFundCashFlows(await cfRes.json())
-        if (gcRes.ok) {
-          const configs = await gcRes.json()
-          const map: Record<string, { cashOnHand: number; carryRate: number; gpCommitPct: number; vintage: number | null }> = {}
-          for (const c of configs) {
-            map[c.portfolio_group] = {
-              cashOnHand: Number(c.cash_on_hand) || 0,
-              carryRate: c.carry_rate != null ? Number(c.carry_rate) : 0.20,
-              gpCommitPct: Number(c.gp_commit_pct) || 0,
-              vintage: c.vintage != null ? Number(c.vintage) : null,
-            }
-          }
-          setGroupConfigs(map)
+        if (vehRes.ok) {
+          const vs = await vehRes.json()
+          setVintages(new Map((vs ?? []).map((v: { name: string; vintage_year: number | null }) => [v.name, v.vintage_year ?? null])))
         }
       } finally {
         setLoading(false)
@@ -271,15 +198,7 @@ export default function InvestmentsPage() {
     return Array.from(groups).sort()
   }, [data])
 
-  // Compute LP metrics (TVPI/DPI/RVPI/Net IRR) from fund cash flows
-  const fundMetricsByGroup = useMemo(() => {
-    if (!data) return new Map<string, FundGroupMetrics>()
-    const grossResidualByGroup = new Map<string, number>()
-    for (const g of data.groups ?? []) {
-      grossResidualByGroup.set(g.group, g.unrealizedValue)
-    }
-    return computeFundMetricsByGroup(fundCashFlows, grossResidualByGroup, groupConfigs)
-  }, [fundCashFlows, data, groupConfigs])
+
 
   // Group-level totals for percentage columns
   const groupTotalsMap = useMemo(() => {
@@ -341,15 +260,15 @@ export default function InvestmentsPage() {
     return [...data.groups].sort((a, b) => {
       if (groupSortKey === 'group') return dir * a.group.localeCompare(b.group)
       if (groupSortKey === 'vintage') {
-        const av = groupConfigs[a.group]?.vintage ?? 0
-        const bv = groupConfigs[b.group]?.vintage ?? 0
+        const av = vintages.get(a.group) ?? 0
+        const bv = vintages.get(b.group) ?? 0
         return dir * (av - bv)
       }
       const av = getGroupDerivedValue(a, groupSortKey)
       const bv = getGroupDerivedValue(b, groupSortKey)
       return dir * (av - bv)
     })
-  }, [data, groupSortKey, groupSortDir, groupConfigs])
+  }, [data, groupSortKey, groupSortDir, vintages])
 
   // Group totals for footer
   const groupTotals = useMemo(() => {
@@ -575,26 +494,17 @@ export default function InvestmentsPage() {
                       </button>
                     </th>
                   ))}
-                  <th className="text-right px-3 py-2 font-medium">TVPI</th>
-                  <th className="text-right px-3 py-2 font-medium">DPI</th>
-                  <th className="text-right px-3 py-2 font-medium">RVPI</th>
-                  <th className="text-right px-3 py-2 font-medium">Net IRR</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedGroups.map(g => {
-                  const fm = fundMetricsByGroup.get(g.group)
                   return (
                     <tr key={g.group} className="border-b last:border-b-0 hover:bg-muted/30">
                       <td className="px-3 py-2 font-medium sticky left-0 bg-background z-10">{g.group || '(none)'}</td>
-                      <td className="px-3 py-2 text-center text-xs text-muted-foreground">{groupConfigs[g.group]?.vintage ?? '-'}</td>
+                      <td className="px-3 py-2 text-center text-xs text-muted-foreground">{vintages.get(g.group) ?? '-'}</td>
                       {numericColumns.map(col => (
                         <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtVal(col.getValue(g), col.format)}</td>
                       ))}
-                      <td className="px-3 py-2 text-right font-mono">{fmtMoic(fm?.tvpi ?? null)}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmtMoic(fm?.dpi ?? null)}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmtMoic(fm?.rvpi ?? null)}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmtIrr(fm?.netIrr ?? null)}</td>
                     </tr>
                   )
                 })}
@@ -611,10 +521,6 @@ export default function InvestmentsPage() {
                     if (col.sortKey === 'unrealizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(unrealizedMoic(groupTotals))}</td>
                     return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtVal(col.getValue(groupTotals), col.format)}</td>
                   })}
-                  <td className="px-3 py-2" />
-                  <td className="px-3 py-2" />
-                  <td className="px-3 py-2" />
-                  <td className="px-3 py-2" />
                 </tr>
               </tfoot>
               )}

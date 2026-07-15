@@ -6,7 +6,7 @@
 // that is on the ledger would then have no way back, and a vehicle's source is the one
 // setting that decides what every other control on this page even means.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BookOpen, ListTree } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -16,16 +16,31 @@ import { useLedgerFetch } from '@/components/accounting-vehicle'
 export type CapitalSource = 'ledger' | 'events'
 
 export function CapitalSourceCard({
-  source,
+  source: sourceProp,
   onChange,
 }: {
-  source: CapitalSource
-  onChange: (next: CapitalSource) => void
-}) {
+  /** Omit to have the card fetch (and own) the vehicle's source itself — how it renders on
+   *  the Admin page, which has no capital data of its own to hand it. */
+  source?: CapitalSource
+  onChange?: (next: CapitalSource) => void
+} = {}) {
   const lf = useLedgerFetch()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fetched, setFetched] = useState<CapitalSource | null>(null)
 
+  // Self-fetch only when no source was passed in. The capital-accounts page already knows it
+  // and passes it; the Admin page does not.
+  useEffect(() => {
+    if (sourceProp !== undefined) return
+    lf('/api/accounting/capital-accounts')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setFetched(d?.source === 'ledger' ? 'ledger' : 'events'))
+      .catch(() => setFetched('events'))
+  }, [lf, sourceProp])
+
+  const source = sourceProp ?? fetched
+  if (!source) return null
   const isLedger = source === 'ledger'
 
   async function switchTo(next: CapitalSource) {
@@ -42,7 +57,8 @@ export function CapitalSourceCard({
       setError((await res.json().catch(() => ({}))).error ?? 'Could not change the capital source')
       return
     }
-    onChange(next)
+    if (sourceProp === undefined) setFetched(next)
+    onChange?.(next)
   }
 
   return (
@@ -52,15 +68,15 @@ export function CapitalSourceCard({
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-sm font-medium">
               {isLedger ? <BookOpen className="h-4 w-4" /> : <ListTree className="h-4 w-4" />}
-              These capital accounts come from{' '}
+              Capital accounts come from{' '}
               <Badge variant={isLedger ? 'default' : 'secondary'}>
                 {isLedger ? 'the ledger' : 'capital events'}
               </Badge>
             </div>
             <p className="max-w-2xl text-sm text-muted-foreground">
               {isLedger
-                ? 'Full double-entry books: the roll-forward below is derived from posted journal entries, and this vehicle produces financial statements.'
-                : 'Capital tracking only — no double-entry books, no financial statements. Record what moved each LP’s capital below and the roll-forward, statements and LP report all follow from it, exactly as they would from a ledger.'}
+                ? 'Double-entry books to produce full financial statements.'
+                : 'Limited partner capital tracking only.'}
             </p>
           </div>
           <Button variant="outline" size="sm" disabled={busy} onClick={() => switchTo(isLedger ? 'events' : 'ledger')}>

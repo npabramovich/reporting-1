@@ -679,12 +679,12 @@ function CurrencySection({ currency, onSaved }: { currency: string; onSaved: () 
 const FEATURE_META: Record<FeatureKey, { label: string; description: string; href: string }> = {
   interactions: { label: 'Interactions', description: 'Track emails, intros, and meetings with portfolio companies', href: '/support#interactions' },
   investments: { label: 'Investments', description: 'Fund investments, ownership, and round details per company', href: '/support#investments' },
-  funds: { label: 'Funds', description: 'Fund-level cash flows, LP metrics (TVPI/DPI/RVPI/Net IRR) computed from capital calls and distributions', href: '/support#funds' },
   notes: { label: 'Notes', description: 'Internal team notes and comments on companies', href: '/support#notes' },
   lp_letters: { label: 'LP Letters', description: 'Generate and manage quarterly LP update letters', href: '/support#lp-letters' },
   imports: { label: 'Imports', description: 'Bulk import companies and metrics from CSV files', href: '/support#import' },
   asks: { label: 'Asks', description: 'Track and send portfolio company requests to your network', href: '/support#asks' },
   lps: { label: 'LPs', description: 'Investor-level report cards with consolidated performance across fund vehicles', href: '/support#lps' },
+  lp_tracking: { label: 'LP capital tracking', description: 'Per-vehicle LP capital accounts from pasted or manually-entered dated positions (or from the ledger when accounting is on). The input surface for capital tracking without full fund accounting.', href: '/support#lps' },
   lp_associates: { label: 'GP Entities', description: 'Entity ownership mappings and pro-rata associates calculations for LP reporting', href: '/support#lps' },
   lp_portal_access: { label: 'LP portal controls', description: 'Admin controls for the LP portal: the "Share with LPs" panels on snapshots and letters, and managing authorized users', href: '/support#lps' },
   lp_portal: { label: 'LPs Documents', description: 'Who can see the LPs Documents page (invite LPs, upload documents, read LP messages). Only takes effect while the LP portal is enabled below.', href: '/support#lps' },

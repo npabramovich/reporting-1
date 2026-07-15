@@ -1,6 +1,8 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
+import { Plus } from 'lucide-react'
 
 interface VehicleCtx {
   group: string | null
@@ -54,6 +56,11 @@ export function useLedgerFetch() {
 
 /** Vehicle selector (+ quick create) shown across the Accounting section. */
 export function VehicleBar() {
+  // The /funds landing page is the fund overview — it spans every vehicle and the selector
+  // drives nothing on it, so it would just be a confusing no-op control. The subpages
+  // (capital accounts, journal, statements) DO operate one vehicle at a time, so the bar
+  // stays for them.
+  const pathname = usePathname()
   const { group, setGroup } = useVehicle()
   const [vehicles, setVehicles] = useState<string[]>([])
   const [creating, setCreating] = useState(false)
@@ -89,6 +96,8 @@ export function VehicleBar() {
 
   const current = group ?? (vehicles[0] ?? '')
 
+  if (pathname === '/funds') return null
+
   return (
     <div className="mb-4 text-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -103,7 +112,7 @@ export function VehicleBar() {
           </select>
         )}
         {!creating && (
-          <button onClick={() => setCreating(true)} className="text-xs text-muted-foreground transition-colors hover:text-foreground">+ New vehicle</button>
+          <button onClick={() => setCreating(true)} className="inline-flex items-center gap-1 rounded-md border border-input px-2.5 py-1 text-xs hover:bg-accent transition-colors"><Plus className="h-3 w-3" />New vehicle</button>
         )}
       </div>
 

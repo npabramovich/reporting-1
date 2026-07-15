@@ -27,6 +27,7 @@ import { roundCents } from './ledger'
 import { loadCapitalPostings } from './capital-source'
 import { computeCapitalAccounts, bucketForSourceType, type CapitalAccount } from './capital-account'
 import { loadCommitmentEvents, commitmentsAsOf } from './terms'
+import { commitmentsFromPositions } from './lp-positions'
 import { loadEntityNames, loadOwnership, listVehicles } from './load'
 import { xirr, type CashFlow } from '@/lib/xirr'
 
@@ -134,11 +135,19 @@ export async function vehicleEconomics(
 
   const accounts = computeCapitalAccounts(postings)
 
-  // Commitments from the effective-dated events, falling back to the legacy scalar — the
-  // same precedence the live report uses.
-  let commitmentByLp = commitmentsAsOf(commitmentEvents, asOf)
-  if (!Array.from(commitmentByLp.values()).some(v => v > 0)) {
-    commitmentByLp = new Map(owners.map(o => [o.lpEntityId, o.commitment]))
+  // Commitments. For a tracking vehicle, from its latest dated positions; otherwise from the
+  // effective-dated commitment events, falling back to the legacy scalar.
+  let commitmentByLp: Map<string, number>
+  if (source !== 'ledger') {
+    commitmentByLp = await commitmentsFromPositions(admin, fundId, group, asOf)
+    if (!Array.from(commitmentByLp.values()).some(v => v > 0)) {
+      commitmentByLp = new Map(owners.map(o => [o.lpEntityId, o.commitment]))
+    }
+  } else {
+    commitmentByLp = commitmentsAsOf(commitmentEvents, asOf)
+    if (!Array.from(commitmentByLp.values()).some(v => v > 0)) {
+      commitmentByLp = new Map(owners.map(o => [o.lpEntityId, o.commitment]))
+    }
   }
 
   const asOfDate = asOf ? new Date(asOf) : new Date()

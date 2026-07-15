@@ -7,12 +7,18 @@
 // a fully-booked fund and for an SPV nobody keeps books on.
 //
 // Two producers, and a vehicle uses exactly ONE:
-//   'ledger' — posted journal_postings on LP capital accounts. The existing path.
-//   'events' — lp_capital_events, the lightweight LP-facing leg (see migration 20260714000003).
+//   'ledger' — posted journal_postings on LP capital accounts. The double-entry path.
+//   'events' — CAPITAL TRACKING. Reads dated cumulative positions (lp_positions) and derives
+//              movements from them at read time (lib/accounting/lp-positions.ts). The name
+//              'events' is kept for the stored capital_source value, but a tracking vehicle's
+//              truth is its positions, not a movement log.
 //
 // Reading both and merging would double every LP's capital the moment a vehicle had any of
 // each, so the source is stored explicitly on vehicle_accounting_settings rather than
 // inferred from "does a chart exist?".
+//
+// (The legacy lp_capital_events table is no longer read here — positions superseded it. Its
+// data was itself derived from the same snapshots the positions were backfilled from.)
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CapitalPosting } from './capital-account'
@@ -20,6 +26,7 @@ import { loadPostedLedger } from './load'
 import { vehicleIdByName } from './vehicle-id'
 import { RECEIVABLE_CODE } from './chart'
 import { roundCents } from './ledger'
+import { loadPositionPostings } from './lp-positions'
 
 export type CapitalSource = 'ledger' | 'events'
 
@@ -44,34 +51,6 @@ export async function loadCapitalSource(
     .eq('vehicle_id', vehicleId)
     .maybeSingle()
   return (data as any)?.capital_source === 'ledger' ? 'ledger' : 'events'
-}
-
-/** The LP-facing capital movements recorded against an unbooked vehicle. */
-export async function loadCapitalEvents(
-  admin: SupabaseClient,
-  fundId: string,
-  group: string,
-  asOf?: string
-): Promise<CapitalPosting[]> {
-  const vehicleId = await vehicleIdByName(admin, fundId, group)
-  if (!vehicleId) return []
-
-  let q = admin
-    .from('lp_capital_events' as any)
-    .select('lp_entity_id, event_date, amount, source_type')
-    .eq('fund_id', fundId)
-    .eq('vehicle_id', vehicleId)
-  if (asOf) q = q.lte('event_date', asOf)
-  const { data } = await q
-
-  // The identity adapter this whole design is built around: an event row IS a capital
-  // posting. Same debit-positive amount convention, same source_type vocabulary.
-  return ((data as any[]) ?? []).map(r => ({
-    lpEntityId: r.lp_entity_id as string,
-    entryDate: r.event_date as string,
-    amount: Number(r.amount ?? 0),
-    sourceType: (r.source_type as string) ?? null,
-  }))
 }
 
 export interface VehicleCapital {
@@ -123,9 +102,10 @@ export async function loadCapitalPostings(
     const { accounts, postings, capitalPostings } = await loadPostedLedger(admin, fundId, group, asOf)
     return { source, postings: capitalPostings, receivableByLp: receivablesFromLedger(accounts, postings) }
   }
+  // Capital tracking: derive movements from the vehicle's dated positions.
   return {
     source,
-    postings: await loadCapitalEvents(admin, fundId, group, asOf),
+    postings: await loadPositionPostings(admin, fundId, group, asOf),
     receivableByLp: new Map(),
   }
 }

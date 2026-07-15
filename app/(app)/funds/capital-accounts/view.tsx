@@ -10,8 +10,7 @@ import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 import { PERIOD_PRESETS, type PeriodPreset } from '@/lib/accounting/statement-period'
 import { ReconciliationPanel } from './reconciliation-panel'
-import { CapitalSourceCard, type CapitalSource } from './capital-source-card'
-import { EventsPanel } from './events-panel'
+import { type CapitalSource } from './capital-source-card'
 import { GpPanel } from './gp-panel'
 
 interface Account {
@@ -251,38 +250,10 @@ export function CapitalAccountsView() {
 
   return (
     <div className="space-y-3">
-      {/* Switching the source changes every number below it, so reload the roll-forward too. */}
-      {source && <CapitalSourceCard source={source} onChange={next => { setSource(next); load() }} />}
-
-      <div className="flex flex-wrap items-end gap-3 border rounded-lg p-3">
-        <label className="text-xs text-muted-foreground">Statement period
-          <select
-            value={preset}
-            onChange={e => setPreset(e.target.value as PeriodPreset)}
-            className="mt-1 block h-9 px-3 rounded-md border border-input bg-background text-sm"
-          >
-            {PERIOD_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-          </select>
-        </label>
-        {preset === 'custom' && (
-          <>
-            <label className="text-xs text-muted-foreground">From
-              <Input type="date" value={start} onChange={e => setStart(e.target.value)} className="mt-1 h-9 w-40" />
-            </label>
-            <label className="text-xs text-muted-foreground">To
-              <Input type="date" value={end} onChange={e => setEnd(e.target.value)} className="mt-1 h-9 w-40" />
-            </label>
-          </>
-        )}
-        {period && (
-          <span className="text-xs text-muted-foreground pb-2">
-            {period.preset === 'itd'
-              ? 'Showing all activity since inception.'
-              : <>Showing <strong>{period.label}</strong>. Beginning capital is the balance carried in{period.start ? ` before ${period.start}` : ''}.</>}
-          </span>
-        )}
-      </div>
-
+      {/* The action row. The statement-period select sits on the RIGHT of the same row (via
+          ml-auto) rather than in its own box — one control strip instead of two stacked
+          panels. Choosing the capital source (ledger vs capital tracking) lives on the Admin
+          page now; it is a fund-setup decision, not something to re-confront on every visit. */}
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" onClick={() => setShowAdd(v => !v)}><Plus className="h-4 w-4 mr-1" />Add LP</Button>
         {!isEvents && (
@@ -300,6 +271,24 @@ export function CapitalAccountsView() {
           </Button>
         )}
         {err && <span className="text-xs text-amber-600">{err}</span>}
+
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {preset === 'custom' && (
+            <>
+              <Input type="date" value={start} onChange={e => setStart(e.target.value)} className="h-9 w-36" aria-label="From" />
+              <Input type="date" value={end} onChange={e => setEnd(e.target.value)} className="h-9 w-36" aria-label="To" />
+            </>
+          )}
+          <select
+            value={preset}
+            onChange={e => setPreset(e.target.value as PeriodPreset)}
+            aria-label="Statement period"
+            className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+            title={period && period.preset !== 'itd' && period.start ? `Beginning capital is the balance carried in before ${period.start}` : 'All activity since inception'}
+          >
+            {PERIOD_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
+        </div>
       </div>
 
       {publishResult && (
@@ -504,9 +493,16 @@ export function CapitalAccountsView() {
       {/* The entry surface for a capital-tracking-only vehicle. It sits BELOW the
           roll-forward because the roll-forward is what it produces — the same order the
           Journal has to the statements it feeds. */}
+      {/* A capital-tracking vehicle is now EDITED as dated positions, in the LPs section —
+          not as capital events here (that store is no longer read). Point there rather than
+          showing a panel whose writes would go nowhere. */}
       {isEvents && (
         <div className="pt-6">
-          <EventsPanel onChange={load} />
+          <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+            This vehicle is capital-tracked. Add or edit its LP positions on the{' '}
+            <Link href="/lps/capital" className="text-foreground underline underline-offset-4">LP capital accounts</Link>{' '}
+            page — its capital here is derived from those dated positions.
+          </div>
         </div>
       )}
 

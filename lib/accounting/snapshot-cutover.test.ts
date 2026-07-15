@@ -5,7 +5,7 @@ const ASOF = '2026-06-30'
 
 const row = (p: Partial<SnapshotRow>): SnapshotRow => ({
   commitment: 0, paidInCapital: 0, calledCapital: null,
-  distributions: 0, nav: 0, outstandingBalance: null, ...p,
+  distributions: 0, nav: 0, totalValue: null, outstandingBalance: null, ...p,
 })
 
 // The whole cutover turns on this function. If it is wrong, every LP's capital account is
@@ -60,6 +60,57 @@ describe('planRow', () => {
   })
 })
 
+describe('planRow — paid-in / called fallback (the data-loss bug)', () => {
+  it('falls back to called_capital when paid_in_capital is null', () => {
+    // The row that used to cross over with ZERO paid-in: value lives only in called_capital.
+    const p = planRow(row({ commitment: 1_000_000, paidInCapital: 0, calledCapital: 500_000, nav: 500_000 }), ASOF)
+    expect(p.events.find(e => e.sourceType === 'capital_call')!.amount).toBe(-500_000)
+    expect(p.endingCapital).toBe(500_000)
+    expect(p.warnings).toEqual([])   // one column empty is normal, not a warning
+  })
+
+  it('prefers paid_in_capital when it is the populated one', () => {
+    const p = planRow(row({ commitment: 1_000_000, paidInCapital: 400_000, calledCapital: null, nav: 400_000 }), ASOF)
+    expect(p.events.find(e => e.sourceType === 'capital_call')!.amount).toBe(-400_000)
+  })
+
+  it('a row with neither column still produces no phantom capital', () => {
+    const p = planRow(row({ commitment: 1_000_000, paidInCapital: 0, calledCapital: null }), ASOF)
+    expect(p.events.find(e => e.sourceType === 'capital_call')).toBeUndefined()
+  })
+})
+
+describe('planRow — NAV / total_value fallback (the NAV didn\'t carry bug)', () => {
+  it('recovers NAV from total_value when nav is null', () => {
+    // The row that came over with ZERO nav: only total_value (= dist + NAV) was recorded.
+    const p = planRow(row({ commitment: 1_000_000, paidInCapital: 400_000, distributions: 100_000, nav: null, totalValue: 700_000 }), ASOF)
+    expect(p.endingCapital).toBe(600_000)   // total_value 700k − distributions 100k
+    // Gain = nav − paid_in + dist = 600k − 400k + 100k = 300k → valuation event −300k.
+    expect(p.events.find(e => e.sourceType === 'valuation')!.amount).toBe(-300_000)
+  })
+
+  it('trusts a stored nav of 0 (a realized position) — does NOT derive from total_value', () => {
+    // The Alice bug: nav=0 correctly (fully realized), total_value stored as 0 (garbage — the
+    // UI derives the shown total). The old logic saw nav=0 as "missing", derived from the
+    // 0 total_value, and produced a large negative NAV. nav=0 must win.
+    const p = planRow(row({ commitment: 37_500, paidInCapital: 37_500, distributions: 140_000, nav: 0, totalValue: 0 }), ASOF)
+    expect(p.endingCapital).toBe(0)
+    expect(p.warnings).toEqual([])
+  })
+
+  it('prefers an explicit nav over total_value', () => {
+    const p = planRow(row({ commitment: 1_000_000, paidInCapital: 400_000, distributions: 100_000, nav: 550_000, totalValue: 999_999 }), ASOF)
+    expect(p.endingCapital).toBe(550_000)
+  })
+
+  it('a fully-called LP with no gain still carries its NAV', () => {
+    // paid-in only in called_capital, NAV only in total_value — both fallbacks at once.
+    const p = planRow(row({ commitment: 500_000, paidInCapital: 0, calledCapital: 500_000, distributions: 0, nav: null, totalValue: 500_000 }), ASOF)
+    expect(p.endingCapital).toBe(500_000)
+    expect(p.events.find(e => e.sourceType === 'capital_call')!.amount).toBe(-500_000)
+  })
+})
+
 describe('planRow — cross-checks on the source data', () => {
   it('flags called != paid-in, and uses paid-in', () => {
     // In a snapshot these are the same figure. If they differ, the spreadsheet meant
@@ -69,12 +120,22 @@ describe('planRow — cross-checks on the source data', () => {
     expect(p.events.find(e => e.sourceType === 'capital_call')!.amount).toBe(-400_000)
   })
 
-  it("flags a snapshot whose own arithmetic doesn't tie", () => {
-    // commitment - paid_in = 600k, but the snapshot claims 700k uncalled.
+  it('does NOT warn on an outstanding_balance mismatch — the cutover ignores that field', () => {
+    // A stored outstanding_balance that disagrees with commitment − paid-in changes nothing
+    // the cutover writes (uncalled is derived from commitment − called), and it disagreed
+    // systematically in real data — so it is deliberately not flagged.
     const p = planRow(row({
-      commitment: 1_000_000, paidInCapital: 400_000, nav: 400_000, outstandingBalance: 700_000,
+      commitment: 1_000_000, paidInCapital: 400_000, calledCapital: 400_000, nav: 400_000, outstandingBalance: 700_000,
     }), ASOF)
-    expect(p.warnings.join()).toContain('uncalled')
+    expect(p.warnings).toEqual([])
+  })
+
+  it('a stored 0 in the other column is not treated as a disagreement', () => {
+    // paid-in populated, called left at 0 (not filled in). The old logic flagged this as
+    // "called (0) and paid-in differ" — a hundred false positives in real data.
+    const p = planRow(row({ commitment: 500_000, paidInCapital: 25_000, calledCapital: 0, nav: 25_000 }), ASOF)
+    expect(p.warnings).toEqual([])
+    expect(p.events.find(e => e.sourceType === 'capital_call')!.amount).toBe(-25_000)
   })
 
   it('accepts a snapshot that ties', () => {

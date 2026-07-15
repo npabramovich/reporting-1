@@ -21,7 +21,10 @@ export async function GET() {
     admin.from('fund_compliance_profile').select('*').eq('fund_id', membership.fund_id).maybeSingle(),
     admin.from('compliance_fund_settings').select('*').eq('fund_id', membership.fund_id),
     admin.from('compliance_deadlines').select('*').eq('fund_id', membership.fund_id).order('due_date'),
-    admin.from('fund_group_config' as any).select('portfolio_group, vintage').eq('fund_id', membership.fund_id) as unknown as { data: { portfolio_group: string; vintage: number | null }[] | null; error: any },
+    // Vintage comes from the VEHICLE now, not fund_group_config — that table was keyed by the
+    // free-text group name and also carried carry_rate / gp_commit_pct, both obsolete. Reading
+    // vintage from two places is how the two start disagreeing.
+    admin.from('fund_vehicles' as any).select('name, vintage_year').eq('fund_id', membership.fund_id) as unknown as { data: { name: string; vintage_year: number | null }[] | null; error: any },
     // Commitment entries = closes — get dates for current year to place event-driven items
     admin.from('fund_cash_flows')
       .select('portfolio_group, flow_date')
@@ -32,7 +35,8 @@ export async function GET() {
       .order('flow_date'),
   ])
 
-  const groups = (groupsRes.data ?? []) as { portfolio_group: string; vintage: number | null }[]
+  const groups = ((groupsRes.data ?? []) as unknown as { name: string; vintage_year: number | null }[])
+    .map(v => ({ portfolio_group: v.name, vintage: v.vintage_year }))
 
   // Build a map of portfolio_group -> months with closes
   const closeMonths: Record<string, number[]> = {}

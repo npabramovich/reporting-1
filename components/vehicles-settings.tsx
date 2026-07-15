@@ -160,7 +160,7 @@ export function VehiclesSettings() {
         <select value={newKind} onChange={e => setNewKind(e.target.value)} className="h-8 rounded border border-input bg-background px-2 text-sm">
           {KINDS.map(k => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
         </select>
-        <Button size="sm" onClick={create} disabled={busy || !newName.trim()}>
+        <Button variant="outline" size="sm" onClick={create} disabled={busy || !newName.trim()}>
           {busy ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}Add vehicle
         </Button>
         {error && <span className="text-xs text-destructive">{error}</span>}

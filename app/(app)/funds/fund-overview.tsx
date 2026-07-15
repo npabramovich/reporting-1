@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, ChevronRight } from 'lucide-react'
+import { Loader2, Landmark, ClipboardList, ArrowRight } from 'lucide-react'
 import { useCurrency, formatCurrency, formatCurrencyFull } from '@/components/currency-context'
+import { Card, CardContent } from '@/components/ui/card'
 
 // The fund overview: performance per vehicle, DERIVED FROM THE LEDGER.
 //
@@ -68,10 +69,14 @@ export function FundOverview() {
       </div>
     )
   }
-  if (vehicles.length === 0) return null
 
-  const live = vehicles.filter(v => v.fund.committed > 0 || v.fund.paidIn > 0)
-  if (live.length === 0) return null
+  // A vehicle with no capital of any kind — commitment, paid-in, distributions or NAV all
+  // zero — has nothing to report yet (it exists, but no LP capital has been recorded against
+  // it). Showing it is a row of dashes that adds noise, so it is left out.
+  const live = vehicles.filter(v =>
+    v.fund.committed !== 0 || v.fund.paidIn !== 0 || v.fund.distributions !== 0 || v.fund.nav !== 0
+  )
+  if (live.length === 0) return <OnboardingEmptyState />
 
   const m = (v: Vehicle) => (lens === 'lp' ? v.lp : v.fund)
 
@@ -89,17 +94,8 @@ export function FundOverview() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex gap-4">
-          <Headline label="Committed" value={fmt(totals.committed)} />
-          <Headline label="Paid in" value={fmt(totals.paidIn)} />
-          <Headline label="Distributed" value={fmt(totals.distributions)} />
-          <Headline label="NAV" value={fmt(totals.nav)} />
-          <Headline label="TVPI" value={moic(tTvpi)} strong />
-          <Headline label="DPI" value={moic(tDpi)} />
-        </div>
-
-        <div className="flex items-end gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
           {/* Net to LP is the honest default: it is what an LP would actually receive, and
               it is now exact rather than a carry estimate. */}
           <div className="inline-flex rounded-md border p-0.5 text-xs">
@@ -113,16 +109,28 @@ export function FundOverview() {
               </button>
             ))}
           </div>
-          <label className="text-xs text-muted-foreground">
-            As of
-            <input
-              type="date"
-              value={asOf}
-              onChange={e => setAsOf(e.target.value)}
-              className="mt-1 block h-8 px-2 rounded-md border border-input bg-background text-sm"
-            />
-          </label>
         </div>
+
+        {/* Label to the LEFT of the input, on one line. */}
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          As of
+          <input
+            type="date"
+            value={asOf}
+            onChange={e => setAsOf(e.target.value)}
+            className="h-8 px-2 rounded-md border border-input bg-background text-sm"
+          />
+        </label>
+      </div>
+
+      {/* Metric boxes — same Card treatment as an LP snapshot, so the two pages read as one. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <MetricBox label="Committed" value={fmt(totals.committed)} />
+        <MetricBox label="Paid in" value={fmt(totals.paidIn)} />
+        <MetricBox label="Distributed" value={fmt(totals.distributions)} />
+        <MetricBox label="NAV" value={fmt(totals.nav)} />
+        <MetricBox label="TVPI" value={moic(tTvpi)} />
+        <MetricBox label="DPI" value={moic(tDpi)} />
       </div>
 
       <div className="overflow-x-auto rounded-lg border">
@@ -147,15 +155,7 @@ export function FundOverview() {
               const x = m(v)
               return (
                 <tr key={v.vehicle} className="border-t hover:bg-muted/30">
-                  <td className="px-3 py-2">
-                    <Link href="/funds/capital-accounts" className="inline-flex items-center gap-1 hover:underline">
-                      {v.vehicle}
-                      <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                    </Link>
-                    <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {v.source === 'ledger' ? 'ledger' : 'capital tracking'}
-                    </span>
-                  </td>
+                  <td className="px-3 py-2 font-medium">{v.vehicle}</td>
                   <td className="px-3 py-2 text-muted-foreground tabular-nums">{v.vintageYear ?? '—'}</td>
                   <td className="px-3 py-2 text-right font-mono">{fmtFull(x.committed)}</td>
                   <td className="px-3 py-2 text-right font-mono">{fmtFull(x.paidIn)}</td>
@@ -192,11 +192,85 @@ export function FundOverview() {
   )
 }
 
-function Headline({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+/** Same card treatment as the LP snapshot metric boxes, so the two pages read as one. */
+function MetricBox({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`font-mono ${strong ? 'text-lg font-semibold' : 'text-base'}`}>{value}</p>
+    <Card>
+      <CardContent className="pt-4 pb-3 px-4">
+        <p className="text-xs text-muted-foreground mb-1">{label}</p>
+        <p className="text-xl font-semibold">{value}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * Shown when no vehicle carries any capital yet — so instead of an empty table, explain the
+ * two ways to onboard one. They are the same two producers the whole section is built on:
+ * capital tracking (events, no books) and the full ledger. Both land in the same capital
+ * accounts and feed this overview identically.
+ */
+function OnboardingEmptyState() {
+  return (
+    <div className="rounded-lg border p-6 max-w-2xl space-y-5">
+      <div className="space-y-1">
+        <h2 className="text-sm font-medium">No fund capital recorded yet</h2>
+        <p className="text-sm text-muted-foreground">
+          This overview is derived from the capital accounts, so it fills in once a vehicle has capital against it.
+          There are two ways to get there — pick per vehicle, and both feed this page the same way.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-md border p-3 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-medium">Capital tracking</p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            No double-entry books. Record what moved each LP&rsquo;s capital — contributions, distributions, marks — and
+            the roll-forward, statements and LP report all follow. The quickest way to start, and enough for an SPV or a
+            fund whose admin sends a quarterly statement.
+          </p>
+        </div>
+        <div className="rounded-md border p-3 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Landmark className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-medium">Full ledger</p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Double-entry books: a chart of accounts, journal entries, capital calls against a receivable, period closes
+            that accrue carry, and financial statements. More to set up, and the complete record.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">Two ways in:</p>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/funds/status"
+            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
+          >
+            Set up a vehicle
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+          <Link
+            href="/funds/capital-accounts"
+            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
+          >
+            Add LPs &amp; capital
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+          <Link
+            href="/funds/opening-balances"
+            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
+          >
+            Import an existing snapshot
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      </div>
     </div>
   )
 }

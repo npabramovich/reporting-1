@@ -1,497 +1,325 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Loader2, Plus, ChevronRight, Trash2, Lock, X, Check, Pencil, Activity } from 'lucide-react'
-import { useFeatureVisibility } from '@/components/feature-visibility-context'
+import Link from 'next/link'
+
+// The live LP capital report.
+//
+// The other way to produce this report is a SNAPSHOT: import a spreadsheet, freeze the rows.
+// This one derives the same figures from whatever the books say right now, as of any date,
+// for every vehicle — those with double-entry books and those with only lp_capital_events.
+//
+// It writes nothing and creates no snapshot. Reload it tomorrow and the numbers may differ,
+// because the books may have. That is the point.
+
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Loader2, ChevronRight, ChevronDown, Calendar } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
-import { AnalystToggleButton } from '@/components/analyst-button'
-import { AnalystPanel } from '@/components/analyst-panel'
-import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface Snapshot {
-  id: string
-  name: string
-  as_of_date: string | null
-  created_at: string
+interface LiveRow {
+  entity_id: string
+  entity_name: string
+  investor_id: string
+  investor_name: string
+  portfolio_group: string
+  source: 'ledger' | 'events'
+  /** Set when this is a member's share of an associate/GP vehicle's position, not a direct one. */
+  lookThroughVia?: string
+  commitment: number
+  called_capital: number
+  paid_in_capital: number
+  distributions: number
+  nav: number
+  total_value: number
+  outstanding_balance: number
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function fmtDate(dateStr: string | null): string {
-  if (!dateStr) return '-'
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+interface Payload {
+  asOf: string | null
+  vehicles: { group: string; source: 'ledger' | 'events'; lps: number }[]
+  rows: LiveRow[]
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
+interface Totals {
+  commitment: number
+  paid_in_capital: number
+  distributions: number
+  nav: number
+  total_value: number
+  outstanding_balance: number
+  dpi: number | null
+  tvpi: number | null
+}
 
-export default function LPsPage() {
-  const router = useRouter()
-  const fv = useFeatureVisibility()
+/** Sum money, THEN derive ratios. Averaging per-row ratios would weight a $10k LP the same
+ *  as a $10m one — which is why every existing read path does it in this order too. */
+function total(rows: LiveRow[]): Totals {
+  const t = rows.reduce(
+    (a, r) => ({
+      commitment: a.commitment + r.commitment,
+      paid_in_capital: a.paid_in_capital + r.paid_in_capital,
+      distributions: a.distributions + r.distributions,
+      nav: a.nav + r.nav,
+      total_value: a.total_value + r.total_value,
+      outstanding_balance: a.outstanding_balance + r.outstanding_balance,
+    }),
+    { commitment: 0, paid_in_capital: 0, distributions: 0, nav: 0, total_value: 0, outstanding_balance: 0 }
+  )
+  const paid = t.paid_in_capital
+  return {
+    ...t,
+    dpi: paid > 0 ? Math.round((t.distributions / paid) * 10000) / 10000 : null,
+    tvpi: paid > 0 ? Math.round(((t.distributions + t.nav) / paid) * 10000) / 10000 : null,
+  }
+}
 
-  // Snapshot index state
-  const [snapshots, setSnapshots] = useState<Snapshot[]>([])
-  const [loadingSnapshots, setLoadingSnapshots] = useState(true)
-  const [isAdmin, setIsAdmin] = useState(false)
+export default function LiveCapitalReportPage() {
+  const currency = useCurrency()
+  const fmt = (v: number) => formatCurrencyFull(v, currency)
 
-  // Create snapshot dialog
-  const [createOpen, setCreateOpen] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newDate, setNewDate] = useState('')
-  const [creating, setCreating] = useState(false)
+  const [asOf, setAsOf] = useState('')
+  const [applied, setApplied] = useState('')
+  const [data, setData] = useState<Payload | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-  // Delete snapshot confirmation
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
-  const [deleteConfirmText, setDeleteConfirmText] = useState('')
-  const [deleting, setDeleting] = useState(false)
-
-  // Snapshot name editing
-  const [editingSnapshotListId, setEditingSnapshotListId] = useState<string | null>(null)
-  const [editingSnapshotName, setEditingSnapshotName] = useState(false)
-  const [snapshotNameDraft, setSnapshotNameDraft] = useState('')
-
-  // Associates overrides (fund-level)
-  const [assocOverrides, setAssocOverrides] = useState<any[]>([])
-  const [assocNewInvestorEntity, setAssocNewInvestorEntity] = useState('')
-  const [assocNewAssocEntity, setAssocNewAssocEntity] = useState('')
-  const [assocNewOwnership, setAssocNewOwnership] = useState('')
-  const [assocNewCarry, setAssocNewCarry] = useState('')
-
-  // Autocomplete data for GP Entity Ownership inputs
-  const [allInvestors, setAllInvestors] = useState<{ id: string; name: string }[]>([])
-  const [allEntities, setAllEntities] = useState<{ id: string; entity_name: string }[]>([])
-
-  // ----- Load snapshots -----
-  async function loadSnapshots() {
-    setLoadingSnapshots(true)
+  const load = useCallback(async (date: string) => {
+    setLoading(true)
+    setError(null)
     try {
-      const res = await fetch('/api/lps/snapshots')
-      if (res.ok) {
-        const body = await res.json()
-        setSnapshots(body.snapshots ?? [])
-        setIsAdmin(body.role === 'admin')
-      }
+      const res = await fetch(`/api/lps/live-report${date ? `?asOf=${date}` : ''}`)
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error || 'Failed to build the report')
+      setData(j)
+    } catch (e) {
+      setError((e as Error).message)
     } finally {
-      setLoadingSnapshots(false)
+      setLoading(false)
     }
-  }
-
-  async function loadOverrides() {
-    try {
-      const res = await fetch('/api/lps/associates-overrides')
-      if (res.ok) setAssocOverrides(await res.json())
-    } catch { /* ignore */ }
-  }
-
-  async function loadAutocompleteData() {
-    try {
-      const [invRes, entRes] = await Promise.all([
-        fetch('/api/lps/investors'),
-        fetch('/api/lps/entities'),
-      ])
-      if (invRes.ok) setAllInvestors(await invRes.json())
-      if (entRes.ok) setAllEntities(await entRes.json())
-    } catch { /* ignore */ }
-  }
-
-  useEffect(() => {
-    loadSnapshots()
-    loadOverrides()
-    loadAutocompleteData()
   }, [])
 
-  // ----- Handlers -----
+  useEffect(() => { load(applied) }, [load, applied])
 
-  async function handleCreateSnapshot() {
-    if (!newName.trim()) return
-    setCreating(true)
-    try {
-      const res = await fetch('/api/lps/snapshots', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim(), asOfDate: newDate || null }),
-      })
-      if (res.ok) {
-        const snapshot = await res.json()
-        setNewName('')
-        setNewDate('')
-        setCreateOpen(false)
-        router.push(`/lps/${snapshot.id}`)
-      }
-    } finally {
-      setCreating(false)
+  // Roll up per investor: an LP holding through two entities across three vehicles is ONE
+  // line on this report, with the vehicle rows underneath.
+  const investors = useMemo(() => {
+    const byInvestor = new Map<string, { id: string; name: string; rows: LiveRow[] }>()
+    for (const r of data?.rows ?? []) {
+      const cur = byInvestor.get(r.investor_id) ?? { id: r.investor_id, name: r.investor_name, rows: [] }
+      cur.rows.push(r)
+      byInvestor.set(r.investor_id, cur)
     }
-  }
+    return Array.from(byInvestor.values())
+      .map(i => ({ ...i, totals: total(i.rows) }))
+      .sort((a, b) => b.totals.commitment - a.totals.commitment || a.name.localeCompare(b.name))
+  }, [data])
 
-  async function handleDeleteSnapshot() {
-    if (!deleteConfirmId || deleteConfirmText !== 'delete') return
-    setDeleting(true)
-    try {
-      await fetch(`/api/lps/snapshots?id=${deleteConfirmId}`, { method: 'DELETE' })
-      setDeleteConfirmId(null)
-      setDeleteConfirmText('')
-      loadSnapshots()
-    } finally {
-      setDeleting(false)
-    }
-  }
+  const grand = useMemo(() => total(data?.rows ?? []), [data])
 
-  async function saveSnapshotListName(snapshotId: string) {
-    const name = snapshotNameDraft.trim()
-    if (!name) return
-    setEditingSnapshotName(false)
-    setEditingSnapshotListId(null)
-    await fetch('/api/lps/snapshots', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: snapshotId, name }),
+  const toggle = (id: string) =>
+    setExpanded(s => {
+      const next = new Set(s)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
     })
-    loadSnapshots()
-  }
-
-  // =========================================================================
-  // RENDER
-  // =========================================================================
 
   return (
-    <PortfolioNotesProvider pageContext="lps">
-    <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
-      <div className="mb-6 space-y-1">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            {fv.lps === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}LPs
-          </h1>
-          <div className="flex items-center gap-2">
-            <PortfolioNotesButton />
-            <AnalystToggleButton />
-          </div>
+    <div className="px-4 md:pl-8 md:pr-4 pt-3 pb-8 w-full space-y-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">LPs</h1>
+          <p className="text-sm text-muted-foreground max-w-3xl">
+            Every LP&rsquo;s capital across every vehicle, derived live rather than from a stored
+            snapshot. Nothing here is saved — rebuild it as of any date.
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">Track investments and returns for LPs across portfolios</p>
-        <div className="pt-2 flex items-center gap-2">
-          <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" />
-            New Snapshot
-          </Button>
-          {/* The other way to produce this report: derived from the books, as of any date,
-              instead of frozen at import time. */}
-          <Button size="sm" variant="outline" className="text-muted-foreground" asChild>
-            <a href="/lps/live">
-              <Activity className="h-4 w-4 mr-1" />
-              Live capital report
-            </a>
-          </Button>
+        <div className="shrink-0 flex items-center gap-3">
+          {/* Print report cards from THIS live data — the everyday version of the frozen
+              snapshot cards. */}
+          <Link href="/lps/cards" className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4">
+            Report cards →
+          </Link>
+          {/* Snapshots are the frozen archive now; live is the default view. */}
+          <Link href="/lps/snapshots" className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4">
+            Snapshots archive →
+          </Link>
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
-      <div className="flex-1 min-w-0 w-full">
-      {loadingSnapshots ? (
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading...
+      <div className="flex items-end gap-2 flex-wrap">
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground flex items-center gap-1">
+            <Calendar className="h-3 w-3" /> As of
+          </label>
+          <Input
+            type="date"
+            className="w-44"
+            value={asOf}
+            onChange={e => setAsOf(e.target.value)}
+          />
         </div>
-      ) : snapshots.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground mb-4">No snapshots yet. Create a snapshot to start tracking LP positions.</p>
-          <Button variant="outline" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" />
-            Create First Snapshot
+        <Button size="sm" onClick={() => setApplied(asOf)} disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+          {asOf ? 'Rebuild' : 'Latest'}
+        </Button>
+        {applied && (
+          <Button size="sm" variant="ghost" onClick={() => { setAsOf(''); setApplied('') }}>
+            Clear date
           </Button>
-        </div>
-      ) : (
-        <div className="grid gap-3">
-          {snapshots.map(s => (
-            <div
-              key={s.id}
-              className="border rounded-lg p-4 hover:bg-muted/30 cursor-pointer flex items-center gap-4 group"
-              onClick={() => router.push(`/lps/${s.id}`)}
-            >
-              <div className="flex-1 min-w-0">
-                {editingSnapshotName && editingSnapshotListId === s.id ? (
-                  <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                    <input
-                      type="text"
-                      value={snapshotNameDraft}
-                      onChange={e => setSnapshotNameDraft(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') saveSnapshotListName(s.id)
-                        if (e.key === 'Escape') { setEditingSnapshotName(false); setEditingSnapshotListId(null) }
-                      }}
-                      className="font-medium border border-input rounded px-2 py-0.5 bg-transparent text-foreground text-sm"
-                      autoFocus
-                    />
-                    <button onClick={() => saveSnapshotListName(s.id)} className="text-muted-foreground hover:text-foreground"><Check className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => { setEditingSnapshotName(false); setEditingSnapshotListId(null) }} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
-                  </div>
-                ) : (
-                  <p className="font-medium truncate">{s.name}</p>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  {s.as_of_date ? fmtDate(s.as_of_date) : 'No date'}
-                  <span className="mx-2">&middot;</span>
-                  Created {fmtDate(s.created_at?.split('T')[0] ?? null)}
-                </p>
-              </div>
-              {isAdmin && <button
-                onClick={e => {
-                  e.stopPropagation()
-                  setSnapshotNameDraft(s.name)
-                  setEditingSnapshotName(true)
-                  setEditingSnapshotListId(s.id)
-                }}
-                className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Rename snapshot"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>}
-              {isAdmin && <button
-                onClick={e => { e.stopPropagation(); setDeleteConfirmId(s.id); setDeleteConfirmText('') }}
-                className="text-muted-foreground hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Delete snapshot"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>}
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Entity Ownership Detail (fund-level, optional), gated by lp_associates feature visibility */}
-      {isAdmin && (fv.lp_associates === 'everyone' || fv.lp_associates === 'admin') && (
-      <div className="mt-8">
-        <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-base font-medium text-muted-foreground">GP Entity Ownership</h3>
-          {fv.lp_associates === 'admin' && <Lock className="h-3.5 w-3.5 text-amber-500" />}
-        </div>
-        <p className="text-xs text-muted-foreground mb-3">
-          Map investor entities to their ownership in GP-managed entities (e.g. associates or co-invest vehicles). GP entity investments are excluded from totals to avoid double-counting.
-        </p>
-        <div>
-
-        {assocOverrides.length > 0 && (
-          <div className="border rounded-lg mb-3 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-left px-3 py-1.5 font-medium">Investor Entity</th>
-                  <th className="text-left px-3 py-1.5 font-medium">GP Entity</th>
-                  <th className="text-right px-3 py-1.5 font-medium">Ownership %</th>
-                  <th className="text-right px-3 py-1.5 font-medium">Carried Interest %</th>
-                  <th className="px-3 py-1.5 w-8"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {assocOverrides.map((ov: any) => (
-                  <tr key={ov.id} className="border-b last:border-b-0">
-                    <td className="px-3 py-1.5">{ov.investor_entity}</td>
-                    <td className="px-3 py-1.5">{ov.associates_entity}</td>
-                    <td className="px-3 py-1.5 text-right font-mono">
-                      {ov.ownership_pct != null ? `${Number(ov.ownership_pct).toFixed(2)}%` : 'auto'}
-                    </td>
-                    <td className="px-3 py-1.5 text-right font-mono">
-                      {ov.carried_interest_pct != null ? `${Number(ov.carried_interest_pct).toFixed(2)}%` : '\u2014'}
-                    </td>
-                    <td className="px-3 py-1.5 text-center">
-                      <button
-                        className="text-muted-foreground hover:text-destructive"
-                        onClick={async () => {
-                          await fetch(`/api/lps/associates-overrides?id=${ov.id}`, { method: 'DELETE' })
-                          loadOverrides()
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         )}
-
-        <div className="flex items-end gap-2 flex-wrap">
-          <div>
-            <label className="text-xs text-muted-foreground">Investor Entity</label>
-            <input
-              type="text"
-              list="investor-entity-options"
-              value={assocNewInvestorEntity}
-              onChange={e => setAssocNewInvestorEntity(e.target.value)}
-              placeholder="e.g. Investor"
-              className="block w-56 border border-input rounded px-2 py-1 text-sm bg-transparent text-foreground placeholder:text-muted-foreground"
-            />
-            <datalist id="investor-entity-options">
-              {allEntities.map(e => (
-                <option key={e.id} value={e.entity_name} />
-              ))}
-            </datalist>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">GP Entity</label>
-            <input
-              type="text"
-              list="gp-entity-options"
-              value={assocNewAssocEntity}
-              onChange={e => setAssocNewAssocEntity(e.target.value)}
-              placeholder="e.g. Fund GP Entity LLC"
-              className="block w-56 border border-input rounded px-2 py-1 text-sm bg-transparent text-foreground placeholder:text-muted-foreground"
-            />
-            <datalist id="gp-entity-options">
-              {allInvestors.map(inv => (
-                <option key={inv.id} value={inv.name} />
-              ))}
-            </datalist>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Ownership %</label>
-            <input
-              type="number"
-              value={assocNewOwnership}
-              onChange={e => setAssocNewOwnership(e.target.value)}
-              placeholder="auto"
-              className="block w-24 border border-input rounded px-2 py-1 text-sm bg-transparent text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Carried Interest %</label>
-            <input
-              type="number"
-              value={assocNewCarry}
-              onChange={e => setAssocNewCarry(e.target.value)}
-              placeholder="0"
-              className="block w-24 border border-input rounded px-2 py-1 text-sm bg-transparent text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!assocNewInvestorEntity.trim() || !assocNewAssocEntity.trim()}
-            onClick={async (e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              try {
-                const res = await fetch('/api/lps/associates-overrides', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    investorEntity: assocNewInvestorEntity.trim(),
-                    associatesEntity: assocNewAssocEntity.trim(),
-                    ownershipPct: assocNewOwnership ? Number(assocNewOwnership) : null,
-                    carriedInterestPct: assocNewCarry ? Number(assocNewCarry) : null,
-                  }),
-                })
-                if (res.ok) {
-                  setAssocNewInvestorEntity('')
-                  setAssocNewAssocEntity('')
-                  setAssocNewOwnership('')
-                  setAssocNewCarry('')
-                  loadOverrides()
-                } else {
-                  const err = await res.json().catch(() => ({ error: 'Failed to save' }))
-                  alert(err.error || 'Failed to save override')
-                }
-              } catch {
-                alert('Network error saving override')
-              }
-            }}
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            Add
-          </Button>
-        </div>
-        </div>
+        <span className="text-sm text-muted-foreground ml-2">
+          {applied ? <>as of <span className="font-medium text-foreground">{applied}</span></> : 'all activity to date'}
+        </span>
       </div>
+
+      {error && (
+        <Card><CardContent className="p-4 text-red-600 text-sm">{error}</CardContent></Card>
       )}
 
-      {/* Delete Snapshot Confirmation */}
-      <Dialog open={!!deleteConfirmId} onOpenChange={open => { if (!open) { setDeleteConfirmId(null); setDeleteConfirmText('') } }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete Snapshot</DialogTitle>
-            <DialogDescription>
-              This will permanently delete this snapshot and all its investor data. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div>
-            <label className="text-sm text-muted-foreground">
-              Type <strong>delete</strong> to confirm
-            </label>
-            <input
-              type="text"
-              value={deleteConfirmText}
-              onChange={e => setDeleteConfirmText(e.target.value)}
-              className="w-full border border-input rounded px-2 py-1.5 text-sm bg-transparent text-foreground mt-1"
-              placeholder="delete"
-              onKeyDown={e => e.key === 'Enter' && handleDeleteSnapshot()}
-              autoFocus
-            />
+      {loading && !data ? (
+        <div className="flex items-center py-16 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin mr-2" /> Deriving from the ledger…
+        </div>
+      ) : data ? (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <Stat label="Commitment" value={fmt(grand.commitment)} />
+            <Stat label="Paid in" value={fmt(grand.paid_in_capital)} />
+            <Stat label="Distributions" value={fmt(grand.distributions)} />
+            <Stat label="NAV" value={fmt(grand.nav)} />
+            <Stat label="TVPI" value={grand.tvpi != null ? `${grand.tvpi.toFixed(2)}x` : '—'} />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setDeleteConfirmId(null); setDeleteConfirmText('') }}>Cancel</Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteSnapshot}
-              disabled={deleting || deleteConfirmText !== 'delete'}
-            >
-              {deleting ? 'Deleting...' : 'Delete Snapshot'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Create Snapshot Dialog */}
-      <Dialog open={createOpen} onOpenChange={open => { if (!open) setCreateOpen(false) }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New Snapshot</DialogTitle>
-            <DialogDescription>Create a snapshot to track LP positions for a reporting period.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium">Name</label>
-              <input
-                type="text"
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                className="w-full border border-input rounded px-2 py-1.5 text-sm bg-transparent text-foreground placeholder:text-muted-foreground mt-1"
-                placeholder="e.g. Q4 2025"
-                onKeyDown={e => e.key === 'Enter' && handleCreateSnapshot()}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">As-of Date <span className="text-muted-foreground font-normal">(optional)</span></label>
-              <input
-                type="date"
-                value={newDate}
-                onChange={e => setNewDate(e.target.value)}
-                className="w-full border border-input rounded px-2 py-1.5 text-sm bg-transparent text-foreground mt-1"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreateSnapshot} disabled={creating || !newName.trim()}>
-              {creating ? 'Creating...' : 'Create Snapshot'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      </div>
-      <PortfolioNotesPanel />
-      <AnalystPanel />
-      </div>
+          <Card>
+            <CardContent className="p-0 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/40">
+                    <th className="text-left font-medium px-3 py-2">Investor</th>
+                    <th className="text-right font-medium px-3 py-2">Commitment</th>
+                    <th className="text-right font-medium px-3 py-2">Paid in</th>
+                    <th className="text-right font-medium px-3 py-2">Unfunded</th>
+                    <th className="text-right font-medium px-3 py-2">Distributions</th>
+                    <th className="text-right font-medium px-3 py-2">NAV</th>
+                    <th className="text-right font-medium px-3 py-2">DPI</th>
+                    <th className="text-right font-medium px-3 py-2">TVPI</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {investors.map(inv => {
+                    const open = expanded.has(inv.id)
+                    const multi = inv.rows.length > 1
+                    return (
+                      <Fragment key={inv.id}>
+                        <tr
+                          className={`border-b ${multi ? 'cursor-pointer hover:bg-muted/20' : ''}`}
+                          onClick={() => multi && toggle(inv.id)}
+                        >
+                          <td className="px-3 py-1.5 font-medium">
+                            <span className="flex items-center gap-1">
+                              {multi ? (
+                                open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
+                              ) : (
+                                <span className="w-3.5" />
+                              )}
+                              {inv.name}
+                              {multi && (
+                                <span className="text-xs text-muted-foreground font-normal ml-1">
+                                  ({inv.rows.length})
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <Money v={inv.totals.commitment} fmt={fmt} />
+                          <Money v={inv.totals.paid_in_capital} fmt={fmt} />
+                          <Money v={inv.totals.outstanding_balance} fmt={fmt} />
+                          <Money v={inv.totals.distributions} fmt={fmt} />
+                          <Money v={inv.totals.nav} fmt={fmt} />
+                          <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                            {inv.totals.dpi != null ? `${inv.totals.dpi.toFixed(2)}x` : '—'}
+                          </td>
+                          <td className="px-3 py-1.5 text-right tabular-nums">
+                            {inv.totals.tvpi != null ? `${inv.totals.tvpi.toFixed(2)}x` : '—'}
+                          </td>
+                        </tr>
+                        {open && inv.rows.map(r => (
+                          <tr key={`${inv.id}-${r.entity_id}-${r.portfolio_group}`} className="border-b bg-muted/10 text-muted-foreground">
+                            <td className="px-3 py-1.5 pl-10 text-xs">
+                              {r.portfolio_group}
+                              {r.entity_name !== inv.name && <span className="ml-1">· {r.entity_name}</span>}
+                              {/* A look-through row is the member's share of an associate's
+                                  position, not a direct holding. Say so — otherwise it reads as
+                                  though they invested in the fund directly, and nobody can tell
+                                  the look-through from double-counting. */}
+                              {r.lookThroughVia && (
+                                <Badge variant="secondary" className="ml-1 text-[10px] py-0 px-1">
+                                  via {r.lookThroughVia}
+                                </Badge>
+                              )}
+                            </td>
+                            <Money v={r.commitment} fmt={fmt} small />
+                            <Money v={r.paid_in_capital} fmt={fmt} small />
+                            <Money v={r.outstanding_balance} fmt={fmt} small />
+                            <Money v={r.distributions} fmt={fmt} small />
+                            <Money v={r.nav} fmt={fmt} small />
+                            <td colSpan={2} />
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
+                  {investors.length === 0 && (
+                    <tr><td colSpan={8} className="p-8 text-center text-muted-foreground">
+                      No LP capital found. Book a vehicle&rsquo;s history, or add capital events for one.
+                    </td></tr>
+                  )}
+                </tbody>
+                {investors.length > 0 && (
+                  <tfoot>
+                    <tr className="border-t-2 font-medium bg-muted/30">
+                      <td className="px-3 py-1.5">Total</td>
+                      <Money v={grand.commitment} fmt={fmt} />
+                      <Money v={grand.paid_in_capital} fmt={fmt} />
+                      <Money v={grand.outstanding_balance} fmt={fmt} />
+                      <Money v={grand.distributions} fmt={fmt} />
+                      <Money v={grand.nav} fmt={fmt} />
+                      <td className="px-3 py-1.5 text-right tabular-nums">
+                        {grand.dpi != null ? `${grand.dpi.toFixed(2)}x` : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">
+                        {grand.tvpi != null ? `${grand.tvpi.toFixed(2)}x` : '—'}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
     </div>
-    </PortfolioNotesProvider>
+  )
+}
+
+function Money({ v, fmt, small }: { v: number; fmt: (n: number) => string; small?: boolean }) {
+  return (
+    <td className={`px-3 py-1.5 text-right tabular-nums whitespace-nowrap ${small ? 'text-xs' : ''}`}>
+      {fmt(v)}
+    </td>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <Card>
+      <CardContent className="pt-4 pb-3 px-4">
+        <p className="text-xs text-muted-foreground mb-1">{label}</p>
+        <p className="text-xl font-semibold tabular-nums">{value}</p>
+      </CardContent>
+    </Card>
   )
 }

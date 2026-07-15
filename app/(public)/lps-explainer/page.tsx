@@ -4,7 +4,7 @@ import { ExplainerContent } from '../explainer-content'
 
 export const metadata = ogMetadata({
   title: 'LPs',
-  description: 'Track limited partner positions across snapshots, generate individual investor PDFs, and export to Excel.',
+  description: 'Track LP capital across your vehicles from pasted statements or the ledger, view a live cross-vehicle aggregate as of any date, and print investor report cards.',
 })
 
 export default function LPsExplainerPage() {
@@ -16,39 +16,37 @@ export default function LPsExplainerPage() {
       screenshotLabel="LPs snapshot - investor table with metrics, PDF export, and Excel download"
     >
       <p className="text-muted-foreground">
-        LPs helps you track and report on your limited partner positions across snapshots.
-        Import LP data from spreadsheets using AI-powered parsing, view aggregated metrics per
-        investor, generate individual investor reports as PDFs, and export the full dataset to Excel.
+        LPs is where you track and report on your limited partner positions across every vehicle.
+        It&apos;s a layered capability, off by default: turn on LP capital tracking to track LP
+        capital, and optionally the LP portal and documents on top of it — independent of whether
+        you keep full fund accounting.
       </p>
       <p className="text-muted-foreground">
-        <strong>Snapshots</strong> - each snapshot represents LP positions at a point in time,
-        typically a quarter-end. Create a new snapshot, then import data by pasting spreadsheet content.
-        AI automatically matches columns to fields like investor name, entity, commitment, paid-in
-        capital, distributions, NAV, DPI, RVPI, TVPI, and IRR.
+        <strong>Live aggregate</strong> - the LPs page shows every LP across every vehicle, rolled
+        up to the investor, as of any date: commitment, paid-in, distributions, NAV, DPI, TVPI, IRR.
+        It reads live from the underlying data rather than a frozen snapshot, so it&apos;s never stale.
+        Expand an investor to see their per-vehicle lines.
       </p>
       <p className="text-muted-foreground">
-        <strong>Investor table</strong> - the snapshot detail page shows all investors with
-        aggregated metrics. Expand an investor to see individual entity and portfolio group line items.
-        All values are inline-editable: click a row to edit metrics, or click an investor name to rename.
-        Investors can be grouped under a parent for consolidated reporting, and duplicate investors
-        can be merged together.
+        <strong>Capital tracking</strong> - for a vehicle you don&apos;t keep books on, feed it by
+        pasting a statement (commitment, called/paid-in, distributions, NAV) — AI maps the columns
+        into a dated position, stamped with its as-of date. The set of dates is your history over
+        time; the capital account as of any date is the latest position on or before it. Type in or
+        edit figures by hand too. When a vehicle is on the ledger, the same page shows the same
+        accounts from the books.
       </p>
       <p className="text-muted-foreground">
-        <strong>Portfolio group filter</strong> - when a snapshot has multiple portfolio groups,
-        a filter appears in the header to include or exclude specific groups from the view and totals.
+        <strong>Report cards</strong> - print investor report cards — the per-investor summary
+        aggregated across vehicles — straight from the live data, one at a time or the whole list at
+        once. Each footnotes when its data was last updated, per vehicle, because vehicles report on
+        irregular cadences.
       </p>
       <p className="text-muted-foreground">
-        <strong>Report settings</strong> - configure a header and footer for the snapshot&apos;s
-        PDF reports via the Settings button. These appear on individual investor PDFs and batch exports.
-      </p>
-      <p className="text-muted-foreground">
-        <strong>Investor PDFs</strong> - click the document icon on any investor row to view their
-        individual report, or use &ldquo;Batch PDFs&rdquo; to generate all investor reports at once.
-        PDFs include the header, a metrics summary table, and the footer.
-      </p>
-      <p className="text-muted-foreground">
-        <strong>Excel export</strong> - export the full snapshot dataset to an Excel file with
-        all investors, entities, portfolio groups, and metrics.
+        <strong>Snapshots archive</strong> - freeze a point-in-time set of positions and keep it
+        exactly as it was, in an admin-only archive with its own bulk PDF printing and Excel export.
+        Snapshots stop driving the live numbers but remain the record for anything you&apos;ve already
+        sent. Paste-import, inline edit, group investors under a parent, merge duplicates, filter
+        portfolio groups, and configure a report header/footer — all still there.
       </p>
     </ExplainerContent>
   )

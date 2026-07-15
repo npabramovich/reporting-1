@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Loader2, Check, AlertTriangle, Ban, Info, ChevronRight, SlidersHorizontal, Lock } from 'lucide-react'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
+import { CapitalSourceCard } from '../capital-accounts/capital-source-card'
 import { AccountingSetup } from '../setup'
 import { AssistantPanel } from './assistant-panel'
 
@@ -76,6 +77,11 @@ export function StatusView() {
 
   return (
     <div className="space-y-6">
+      {/* Choosing whether this vehicle's capital comes from the ledger or from capital
+          tracking is a fund-setup decision, so it lives here rather than confronting you on
+          the capital-accounts page every visit. Self-fetches its own source. */}
+      <CapitalSourceCard />
+
       {/* Onboarding only shows while it's actually unfinished. */}
       {!s.onboarded ? (
         <AccountingSetup alwaysShow />

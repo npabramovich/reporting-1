@@ -156,7 +156,7 @@ export default function LpPortalPreviewPage() {
             {investors.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
           </select>
           {investorId && data && !data.portal_enabled && <span className="text-xs shrink-0 truncate hidden md:inline">Portal is OFF — LPs can’t see this yet</span>}
-          <Link href="/lps" className="ml-auto shrink-0 inline-flex items-center gap-1 whitespace-nowrap opacity-80 hover:opacity-100">
+          <Link href="/lps/snapshots" className="ml-auto shrink-0 inline-flex items-center gap-1 whitespace-nowrap opacity-80 hover:opacity-100">
             <ArrowLeft className="h-3.5 w-3.5" /> Exit preview
           </Link>
         </div>

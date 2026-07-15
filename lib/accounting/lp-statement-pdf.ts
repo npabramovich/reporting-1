@@ -16,6 +16,7 @@ import { renderHtmlToPdf } from '@/lib/lp-report-pdf'
 import { PDF_FONT_CSS, PDF_SANS, PDF_MONO } from '@/lib/pdf-fonts'
 import { getCurrencySymbol } from '@/lib/currency'
 import { lpStatement } from './capital-calls'
+import { lastDataDate } from './lp-positions'
 import { CAPITAL_ACCOUNT_LABELS, ACTIVITY_FIELDS, type CapitalAccount } from './capital-account'
 import type { CapitalPeriod } from './capital-account'
 import type { StatementPeriod } from './statement-period'
@@ -62,6 +63,9 @@ export interface StatementPdfData {
   rollForward: CapitalAccount
   transactions: { date: string; memo: string | null; sourceType: string | null; amount: number }[]
   ownership: number
+  /** When this vehicle's underlying data was last updated (footnote). Vehicles report on
+   *  irregular cadences, so the reporting PERIOD and the last-updated date are not the same. */
+  dataAsOf?: string | null
 }
 
 export function buildStatementHtml(d: StatementPdfData): string {
@@ -185,7 +189,7 @@ export function buildStatementHtml(d: StatementPdfData): string {
 
   <div style="position:fixed;bottom:0;left:0;right:0;padding:8px 0;border-top:1px solid #e5e5e5;background:white;font-size:9px;color:#888;">
     Capital account statement for ${esc(d.partnerName)} in ${esc(d.vehicle)}. Prepared from the fund's books of account.
-    Figures are stated in ${esc(currency)} and reflect the period shown. This statement is provided to limited partners for informational purposes.
+    Figures are stated in ${esc(currency)} and reflect the period shown.${d.dataAsOf ? ` Underlying data for ${esc(d.vehicle)} was last updated ${esc(d.dataAsOf)}.` : ''} This statement is provided to limited partners for informational purposes.
   </div>
 </body></html>`
 }
@@ -226,6 +230,8 @@ export async function generateLpStatementPdf(
   const totalCommitment = ((allInv as any[]) ?? []).reduce((s, r) => s + Number(r.commitment ?? 0), 0)
   const ownership = totalCommitment > 0 ? statement.row.commitment / totalCommitment : 0
 
+  const dataAsOf = await lastDataDate(admin, fundId, group)
+
   const html = buildStatementHtml({
     fundName: fund?.name || '',
     fundLogo,
@@ -239,6 +245,7 @@ export async function generateLpStatementPdf(
     rollForward: statement.rollForward,
     transactions: statement.transactions,
     ownership,
+    dataAsOf,
   })
 
   const pdf = await renderHtmlToPdf(html)
