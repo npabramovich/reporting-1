@@ -275,17 +275,41 @@ export function buildCarryEntry(
 }
 
 /**
- * The GP/associate side of a carry accrual: book, on the associate's OWN books, the carry the
- * fund just accrued to it — allocated to its members by carry ownership.
+ * The GP/associate side of an equity-method markup: book, on the associate's OWN books, its share
+ * of ONE line of the fund's performance (an unrealized gain, a realized gain, carried interest,
+ * fees, …) — allocated to its members and marked onto its stake in the fund (Investment in Fund,
+ * 1500). The `sourceType` sets which roll-forward bucket the members' capital lands in, so the
+ * associate's books mirror the fund-book position line for line.
  *
- * The fund's `buildCarryEntry` is a zero-sum reallocation between the fund's partners (LPs pay,
- * the GP entity receives). For the associate this same event is INCOME: its stake in the fund
- * (Investment in Fund, 1500) marks up, and that markup is allocated to its members' capital as
- * carried interest earned. So this debits the investment asset and credits each member's capital.
+ * For the associate, the fund's performance is INCOME: its 1500 marks up (or down), and that
+ * change is allocated to its members' capital. So this debits the investment asset and credits
+ * each member's capital (a credit is a negative debit-amount).
  *
- * `perMemberCarry` is each member's share of the accrual (already split by carry ownership).
- * Amounts may be negative — the accrual reverses when NAV falls, and the entry runs the other way.
+ * `perMember` is each member's share of this line (already split — by ownership for capital lines,
+ * by carry points for carried interest). Amounts may be negative — the mark reverses when the
+ * fund's value falls (or a fee is borne), and the entry simply runs the other way.
  */
+export function buildAssociateMarkupEntry(
+  base: Base,
+  perMember: Map<string, number>,
+  capMap: CapitalAccountMap,
+  investmentAccountId: string,
+  sourceType: string,
+  currency = 'USD',
+): JournalEntry {
+  let total = 0
+  const postings: Posting[] = []
+  for (const [lpEntityId, amt] of Array.from(perMember.entries())) {
+    if (amt === 0) continue
+    total = roundCents(total + amt)
+    postings.push(lpDebit(capMap, lpEntityId, roundCents(-amt), currency))
+  }
+  // Debit Investment in Fund by the same total — the associate's stake marked up by this line.
+  postings.push({ accountId: investmentAccountId, amount: roundCents(total), currency, lpEntityId: null })
+  return finalize(base, sourceType, postings)
+}
+
+/** Back-compat: the carried-interest line specifically. Prefer `buildAssociateMarkupEntry`. */
 export function buildAssociateCarryAccrualEntry(
   base: Base,
   perMemberCarry: Map<string, number>,
@@ -293,15 +317,5 @@ export function buildAssociateCarryAccrualEntry(
   investmentAccountId: string,
   currency = 'USD',
 ): JournalEntry {
-  let total = 0
-  const postings: Posting[] = []
-  for (const [lpEntityId, amt] of Array.from(perMemberCarry.entries())) {
-    if (amt === 0) continue
-    total = roundCents(total + amt)
-    // Credit the member's capital by the carry they earned (a credit is a negative debit-amount).
-    postings.push(lpDebit(capMap, lpEntityId, roundCents(-amt), currency))
-  }
-  // Debit Investment in Fund by the same total — the associate's stake marked up by the carry.
-  postings.push({ accountId: investmentAccountId, amount: roundCents(total), currency, lpEntityId: null })
-  return finalize(base, 'carried_interest', postings)
+  return buildAssociateMarkupEntry(base, perMemberCarry, capMap, investmentAccountId, 'carried_interest', currency)
 }

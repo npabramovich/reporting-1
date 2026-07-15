@@ -1,12 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Lock, Unlock, AlertTriangle } from 'lucide-react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Loader2, Lock, Unlock, AlertTriangle, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 
 interface Period { id: string; period_start: string; period_end: string; label: string | null; status: string; closed_at: string | null }
+interface CloseEntryLine { accountCode: string; accountName: string; lpName: string | null; amount: number }
+interface CloseEntry { id: string; entryDate: string; memo: string | null; sourceType: string | null; lines: CloseEntryLine[] }
 interface CloseLine { lpEntityId: string; name: string; amount: number }
 interface CloseCategory {
   sourceType: string
@@ -62,6 +64,9 @@ export function PeriodsView() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
+  // Which closed period's allocated transactions are expanded, and their (cached) entries.
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [entriesById, setEntriesById] = useState<Record<string, CloseEntry[] | 'loading'>>({})
   const lf = useLedgerFetch()
 
   const load = useCallback(() => {
@@ -93,6 +98,18 @@ export function PeriodsView() {
     if (!ok) { setError(data.error ?? 'Could not close'); return }
     setPreview(null)
     load()
+  }
+
+  // Expand a closed period to show the transactions its close posted (fetched once, then cached).
+  async function toggleEntries(id: string) {
+    if (openId === id) { setOpenId(null); return }
+    setOpenId(id)
+    if (!entriesById[id]) {
+      setEntriesById(s => ({ ...s, [id]: 'loading' }))
+      const res = await lf(`/api/accounting/periods?entriesFor=${id}`)
+      const data = res.ok ? await res.json() : []
+      setEntriesById(s => ({ ...s, [id]: Array.isArray(data) ? data : [] }))
+    }
   }
 
   async function reopen(id: string) {
@@ -222,41 +239,94 @@ export function PeriodsView() {
               </tr>
             </thead>
             <tbody>
-              {periods.map(p => (
-                <tr key={p.id} className="border-b last:border-b-0">
-                  <td className="px-3 py-2 font-mono text-xs">{p.period_start} → {p.period_end}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{p.label ?? '—'}</td>
-                  <td className="px-3 py-2">
-                    <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded inline-flex items-center gap-1 ${p.status === 'closed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
-                      {p.status === 'closed' ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}{p.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {p.status === 'closed' ? (
-                      <button
-                        onClick={() => reopen(p.id)}
-                        disabled={busy}
-                        title="Void this period's allocation entries and unlock it. Periods reopen newest-first."
-                        className="text-xs text-muted-foreground hover:underline disabled:opacity-50"
-                      >
-                        Reopen &amp; reverse
-                      </button>
-                    ) : (
-                      // Closing runs THROUGH a date, so this previews everything from the
-                      // last close up to this period's end — which, for the oldest open
-                      // period, is exactly this period alone.
-                      <button
-                        onClick={() => { setEndDate(p.period_end); setPreview(null); previewThrough(p.period_end) }}
-                        disabled={busy}
-                        title={`Preview closing through ${p.period_end}`}
-                        className="text-xs text-muted-foreground hover:underline disabled:opacity-50"
-                      >
-                        Close through {p.period_end}
-                      </button>
+              {periods.map(p => {
+                const isClosed = p.status === 'closed'
+                const open = openId === p.id
+                const entries = entriesById[p.id]
+                return (
+                  <Fragment key={p.id}>
+                    <tr
+                      className={`border-b ${open ? '' : 'last:border-b-0'} ${isClosed ? 'cursor-pointer hover:bg-muted/20' : ''}`}
+                      onClick={isClosed ? () => toggleEntries(p.id) : undefined}
+                    >
+                      <td className="px-3 py-2 font-mono text-xs">
+                        <span className="flex items-center gap-1.5">
+                          {/* Closed periods expand to show the transactions the close posted. */}
+                          {isClosed
+                            ? <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} />
+                            : <span className="w-3.5 shrink-0" />}
+                          {p.period_start} → {p.period_end}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">{p.label ?? '—'}</td>
+                      <td className="px-3 py-2">
+                        <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded inline-flex items-center gap-1 ${isClosed ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
+                          {isClosed ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}{p.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {isClosed ? (
+                          <button
+                            onClick={e => { e.stopPropagation(); reopen(p.id) }}
+                            disabled={busy}
+                            title="Void this period's allocation entries and unlock it. Periods reopen newest-first."
+                            className="text-xs text-muted-foreground hover:underline disabled:opacity-50"
+                          >
+                            Reopen &amp; reverse
+                          </button>
+                        ) : (
+                          // Closing runs THROUGH a date, so this previews everything from the
+                          // last close up to this period's end — which, for the oldest open
+                          // period, is exactly this period alone.
+                          <button
+                            onClick={e => { e.stopPropagation(); setEndDate(p.period_end); setPreview(null); previewThrough(p.period_end) }}
+                            disabled={busy}
+                            title={`Preview closing through ${p.period_end}`}
+                            className="text-xs text-muted-foreground hover:underline disabled:opacity-50"
+                          >
+                            Close through {p.period_end}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+
+                    {isClosed && open && (
+                      <tr className="border-b last:border-b-0 bg-muted/10">
+                        <td colSpan={4} className="px-3 py-2.5">
+                          {entries === undefined || entries === 'loading' ? (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Loading transactions…</div>
+                          ) : entries.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No allocation transactions were posted for this period (nothing to allocate).</p>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="text-[11px] text-muted-foreground">The transactions this close posted — the same allocation the preview showed, read back from the ledger.</p>
+                              {entries.map(en => (
+                                <div key={en.id} className="rounded border bg-background overflow-hidden">
+                                  <div className="flex items-center justify-between px-2.5 py-1.5 border-b bg-muted/30">
+                                    <span className="text-xs font-medium">{en.memo ?? en.sourceType ?? 'Transaction'}</span>
+                                    <span className="text-[11px] text-muted-foreground font-mono">{en.entryDate}</span>
+                                  </div>
+                                  <table className="w-full text-xs">
+                                    <tbody>
+                                      {en.lines.map((l, i) => (
+                                        <tr key={i} className="border-t first:border-t-0">
+                                          <td className="px-2.5 py-1 text-muted-foreground whitespace-nowrap">{[l.accountCode, l.accountName].filter(Boolean).join(' ')}</td>
+                                          <td className="px-2.5 py-1">{l.lpName ?? ''}</td>
+                                          <td className="px-2.5 py-1 text-right font-mono">{fmt(l.amount)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                </tr>
-              ))}
+                  </Fragment>
+                )
+              })}
             </tbody>
           </table>
         </div>

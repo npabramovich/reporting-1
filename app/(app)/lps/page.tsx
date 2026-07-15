@@ -277,7 +277,7 @@ function LpsInner() {
           <Card>
             <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
+                <thead className="text-xs text-muted-foreground">
                   <tr className="border-b bg-muted/40">
                     <SortTh label="Investor" sortKey="name" sort={sort} onSort={onSort} />
                     <SortTh label="Commitment" sortKey="commitment" sort={sort} onSort={onSort} align="right" />

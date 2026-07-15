@@ -282,9 +282,9 @@ export function CapitalAccountsView() {
           panels. Choosing the capital source (ledger vs capital tracking) lives on the Admin
           page now; it is a fund-setup decision, not something to re-confront on every visit. */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" onClick={() => setShowAdd(v => !v)}><Plus className="h-4 w-4 mr-1" />Add LP</Button>
+        <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => setShowAdd(v => !v)}><Plus className="h-4 w-4 mr-1" />Add LP</Button>
         {!isEvents && (
-          <Button size="sm" variant="outline" onClick={() => setShowCall(v => !v)} disabled={rows.length === 0}>
+          <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => setShowCall(v => !v)} disabled={rows.length === 0}>
             <Landmark className="h-4 w-4 mr-1" />Issue a capital call
           </Button>
         )}
@@ -292,7 +292,7 @@ export function CapitalAccountsView() {
             portal, no email. Only offered when the portal is on — publishing statements nobody
             can open is a no-op that looks like success. */}
         {lpPortalEnabled && (
-          <Button size="sm" variant="outline" onClick={openShare} disabled={rows.length === 0}>
+          <Button size="sm" variant="outline" className="text-muted-foreground" onClick={openShare} disabled={rows.length === 0}>
             <Share2 className="h-4 w-4 mr-1" />
             Share with LPs
           </Button>

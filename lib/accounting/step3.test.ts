@@ -11,6 +11,7 @@ import {
   buildDistributionEntry,
   buildCarryEntry,
   buildAssociateCarryAccrualEntry,
+  buildAssociateMarkupEntry,
   type CapitalAccountMap,
 } from './entries'
 import { isBalanced, accountBalances } from './ledger'
@@ -190,5 +191,20 @@ describe('entry builders', () => {
       e.postings.filter(p => p.lpEntityId).map(p => ({ lpEntityId: p.lpEntityId!, amount: p.amount, sourceType: e.sourceType }))
     )
     expect(caps.get('a')!.carriedInterest).toBe(-30_000)
+  })
+
+  it('associate markup files the credit into the bucket named by its source type (equity method)', () => {
+    // The GP entity's committed capital appreciates: mark 1500 up by its members' share of the
+    // fund's unrealized gain, credited to the members' UNREALIZED-GAIN bucket (not carry).
+    const e = buildAssociateMarkupEntry(base, new Map([['a', 45_000], ['b', 30_000]]), capMap, 'inv-1500', 'valuation')
+    expect(isBalanced(e)).toBe(true)
+    expect(e.sourceType).toBe('valuation')
+    expect(accountBalances(e.postings).get('inv-1500')).toBe(75_000)
+    const caps = computeCapitalAccounts(
+      e.postings.filter(p => p.lpEntityId).map(p => ({ lpEntityId: p.lpEntityId!, amount: p.amount, sourceType: e.sourceType }))
+    )
+    expect(caps.get('a')!.unrealizedGains).toBe(45_000)
+    expect(caps.get('a')!.carriedInterest).toBe(0) // capital gain, not carry
+    expect(caps.get('b')!.unrealizedGains).toBe(30_000)
   })
 })

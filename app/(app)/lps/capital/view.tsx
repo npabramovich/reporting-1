@@ -64,6 +64,7 @@ export function LpCapitalView({ isAdmin }: { isAdmin: boolean }) {
   const [positions, setPositions] = useState<Position[]>([])
   const [dates, setDates] = useState<string[]>([]) // most-recent first
   const [selectedDate, setSelectedDate] = useState<string>('') // '' = Latest (free 'as of' picker)
+  const [ledgerAsOf, setLedgerAsOf] = useState<string>('') // ledger view: arbitrary report date, '' = today
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -76,19 +77,22 @@ export function LpCapitalView({ isAdmin }: { isAdmin: boolean }) {
   const load = useCallback(() => {
     if (!group) return
     setLoading(true)
+    // The ledger view honours an arbitrary "as of" report date (the API re-derives the accounts
+    // to that date); the tracking view's date is a stored position date, filtered client-side.
+    const acctUrl = `/api/accounting/capital-accounts?group=${encodeURIComponent(group)}${ledgerAsOf ? `&asOf=${ledgerAsOf}` : ''}`
     Promise.all([
-      fetch(`/api/accounting/capital-accounts?group=${encodeURIComponent(group)}`).then(r => (r.ok ? r.json() : null)),
+      fetch(acctUrl).then(r => (r.ok ? r.json() : null)),
       fetch(`/api/accounting/positions?group=${encodeURIComponent(group)}`).then(r => (r.ok ? r.json() : null)),
     ]).then(([a, p]) => {
       setAcct(a)
       setPositions(p?.positions ?? [])
       setDates(p?.dates ?? [])
     }).finally(() => setLoading(false))
-  }, [group])
+  }, [group, ledgerAsOf])
   useEffect(() => { load() }, [load])
 
-  // Switching vehicles resets the date back to Latest.
-  useEffect(() => { setSelectedDate('') }, [group])
+  // Switching vehicles resets both date pickers back to Latest.
+  useEffect(() => { setSelectedDate(''); setLedgerAsOf('') }, [group])
 
   const isTracking = acct?.source !== 'ledger'
   // Free "as of" picker: resolve to the latest stored position on-or-before the picked date
@@ -130,41 +134,48 @@ export function LpCapitalView({ isAdmin }: { isAdmin: boolean }) {
         </p>
       </div>
 
-      {/* Action bar — search on the left, the "As of" date select right-aligned. */}
-      {isTracking && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="relative max-w-xs w-full sm:w-64">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <input
-              type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search LPs…"
-              className="w-full pl-8 pr-8 py-1.5 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-            {search && (
-              <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {dates.length > 0 && (
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted-foreground">As of</label>
-              <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="h-9 w-40" />
-              {selectedDate && <Button size="sm" variant="ghost" onClick={() => setSelectedDate('')}>Latest</Button>}
-              {selectedDate && resolvedDate && resolvedDate !== selectedDate && (
-                <span className="text-xs text-muted-foreground">showing {resolvedDate}</span>
-              )}
-            </div>
+      {/* Action bar — search on the left (both sources), the "As of" date select right-aligned.
+          The date picker is tracking-only: a ledger vehicle's capital isn't dated on this page
+          (it's viewed/edited as-of a date in the Funds section), but LP search applies to both. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative max-w-xs w-full sm:w-64">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search LPs…"
+            className="w-full pl-8 pr-8 py-1.5 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="h-3.5 w-3.5" />
+            </button>
           )}
         </div>
-      )}
+
+        {isTracking && dates.length > 0 && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground">As of</label>
+            <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="h-9 w-40" />
+            {selectedDate && <Button size="sm" variant="ghost" onClick={() => setSelectedDate('')}>Latest</Button>}
+            {selectedDate && resolvedDate && resolvedDate !== selectedDate && (
+              <span className="text-xs text-muted-foreground">showing {resolvedDate}</span>
+            )}
+          </div>
+        )}
+        {!isTracking && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground">As of</label>
+            <Input type="date" value={ledgerAsOf} onChange={e => setLedgerAsOf(e.target.value)} className="h-9 w-40" />
+            {ledgerAsOf && <Button size="sm" variant="ghost" onClick={() => setLedgerAsOf('')}>Latest</Button>}
+          </div>
+        )}
+      </div>
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>
       ) : !isTracking ? (
         /* Ledger vehicle — the statement comes from posted entries; edit it in the Funds section. */
         <>
-          <LedgerTable rows={acct?.rows ?? []} fmt={fmt} />
+          <LedgerTable rows={acct?.rows ?? []} search={search} fmt={fmt} />
           <p className="text-xs text-muted-foreground">
             This vehicle is on the ledger — its capital accounts come from posted entries. Edit them in the Funds section.
           </p>
@@ -213,7 +224,9 @@ export function LpCapitalView({ isAdmin }: { isAdmin: boolean }) {
 // Ledger view (read-only)
 // ---------------------------------------------------------------------------
 
-function LedgerTable({ rows, fmt }: { rows: AcctRow[]; fmt: (v: number) => string }) {
+function LedgerTable({ rows, search, fmt }: { rows: AcctRow[]; search: string; fmt: (v: number) => string }) {
+  const q = search.trim().toLowerCase()
+  const shown = q ? rows.filter(r => r.name.toLowerCase().includes(q)) : rows
   return (
     <div className="overflow-x-auto rounded-lg border">
       <table className="w-full text-sm">
@@ -231,7 +244,7 @@ function LedgerTable({ rows, fmt }: { rows: AcctRow[]; fmt: (v: number) => strin
           </tr>
         </thead>
         <tbody>
-          {rows.map(r => {
+          {shown.map(r => {
             const nav = r.itd.ending
             const dist = r.itd.distributions
             return (
@@ -248,8 +261,10 @@ function LedgerTable({ rows, fmt }: { rows: AcctRow[]; fmt: (v: number) => strin
               </tr>
             )
           })}
-          {rows.length === 0 && (
-            <tr><td colSpan={9} className="px-3 py-8 text-center text-muted-foreground text-sm">This ledger has no capital postings yet.</td></tr>
+          {shown.length === 0 && (
+            <tr><td colSpan={9} className="px-3 py-8 text-center text-muted-foreground text-sm">
+              {q ? 'No LPs match your search.' : 'This ledger has no capital postings yet.'}
+            </td></tr>
           )}
         </tbody>
       </table>

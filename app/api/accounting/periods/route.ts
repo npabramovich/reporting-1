@@ -4,9 +4,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { assertAdminAccess, assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { listPeriods } from '@/lib/accounting/periods'
-import { previewCloseThrough, closeThrough, reopenPeriodWithReversal } from '@/lib/accounting/close'
+import { previewCloseThrough, closeThrough, reopenPeriodWithReversal, loadCloseEntries } from '@/lib/accounting/close'
 
-// GET — list a vehicle's fiscal periods.
+// GET — list a vehicle's fiscal periods, or (?entriesFor=<periodId>) the allocation
+// transactions a specific closed period posted.
 export async function GET(req: NextRequest) {
   const supabase = createClient()
   const admin = createAdminClient()
@@ -16,6 +17,10 @@ export async function GET(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
   const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
+
+  const entriesFor = req.nextUrl.searchParams.get('entriesFor')
+  if (entriesFor) return NextResponse.json(await loadCloseEntries(admin, gate.fundId, group, entriesFor))
+
   return NextResponse.json(await listPeriods(admin, gate.fundId, group))
 }
 

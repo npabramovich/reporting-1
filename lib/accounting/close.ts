@@ -27,9 +27,9 @@ import { loadPostedLedger, loadOwnership, loadEntityNames } from './load'
 import { accountIdByCode, ensureCapitalAccounts, persistEntry } from './persist'
 import { allocateAmount } from './allocation'
 import { postingsInPeriod } from './statements'
-import { computeCapitalAccounts, bucketForSourceType, emptyAccount } from './capital-account'
+import { computeCapitalAccounts, bucketForSourceType, emptyAccount, type CapitalAccount } from './capital-account'
 import { closedPeriodRanges } from './periods'
-import { buildCarryEntry, buildAssociateCarryAccrualEntry } from './entries'
+import { buildCarryEntry, buildAssociateMarkupEntry } from './entries'
 import { associateMembers, lookThroughAccount } from './look-through'
 import { loadCapitalSource, loadCapitalPostings } from './capital-source'
 import { gpLinkFor, loadOwnershipBasis } from './gp-economics'
@@ -649,18 +649,19 @@ export async function closePeriodWithAllocation(
   }
   if (carryResult.entryId) entryIds.push(carryResult.entryId)
 
-  // 2d. ACCRUE CARRY EARNED — only if THIS vehicle is the GP/associate of another fund. Books the
-  // carry it has earned (its mark on the served fund's books) onto its own books, allocated to
-  // members by carry ownership. Self-contained: uses this close's own source_ref, reconciles to
-  // the served-fund target, and reverses with the ordinary vehicle-scoped reopen. A no-op for a
-  // normal fund vehicle.
-  const earnedResult = await accrueAssociateCarry(admin, fundId, group, userId, periodEnd, sourceRef)
+  // 2d. ACCRUE FUND ECONOMICS EARNED — only if THIS vehicle is the GP/associate of another fund.
+  // Marks its Investment in Fund (1500) to its fund-book position on its own books: BOTH the carry
+  // it earned (carry points) AND the appreciation of its own GP capital commitment (ownership),
+  // each line filed into its matching capital-account bucket and allocated to members. Self-
+  // contained: uses this close's own source_ref, reconciles to the served-fund target per line, and
+  // reverses with the ordinary vehicle-scoped reopen. A no-op for a normal fund vehicle.
+  const earnedResult = await accrueAssociateEconomics(admin, fundId, group, userId, periodEnd, sourceRef)
   if ('error' in earnedResult) {
     await reopenPeriodWithReversal(admin, fundId, group, periodId)
     await admin.from('fiscal_periods' as any).delete().eq('id', periodId).eq('fund_id', fundId)
-    return { error: `Associate carry accrual failed: ${earnedResult.error}` }
+    return { error: `Associate economics accrual failed: ${earnedResult.error}` }
   }
-  if (earnedResult.entryId) entryIds.push(earnedResult.entryId)
+  entryIds.push(...earnedResult.entryIds)
 
   // 3. Snapshot and lock.
   const snapshot = await exportLedgerText(admin, fundId, group, periodEnd)
@@ -835,37 +836,57 @@ async function accrueCarry(
 }
 
 /**
- * Book, on a GP/associate entity's OWN books, the carry it has EARNED from the fund it is the GP
- * of — marking up its Investment in Fund (1500) and allocating it to members by carry ownership.
- *
- * Runs during the ASSOCIATE'S OWN close (not the served fund's), so it is fully self-contained:
- * it carries this close's own `source_ref`, and the ordinary vehicle-scoped reopen/re-close
- * reverses and replaces it — no cross-vehicle reversal.
- *
- * RECONCILES TO A TARGET, it does not mirror a delta. The target is the associate's carried-
- * interest mark on the SERVED fund's books at `periodEnd`, split among members by the SAME
- * `lookThroughAccount` the reports use. Each member's posting is `target − already-booked`, where
- * already-booked = their own-book carriedInterest bucket plus what they've been paid — so a
- * missed prior close self-corrects and a fall in NAV reverses on its own. No-op unless this
- * vehicle is a linked, ledger GP/associate with a 1500 account.
- *
- * NOTE: reads the served fund's CURRENT carry mark, so close the served fund first; if the
- * associate is closed before the fund accrues, re-closing the associate reconciles it.
+ * The fund-performance lines an associate marks onto its OWN books, each with the source_type that
+ * files it into the matching roll-forward bucket. Carried interest follows carry points; every
+ * other line follows ownership — the `lookThroughAccount` split handles both. Deliberately EXCLUDES
+ * contributions, distributions, transfers and the opening balance: those are cash/capital already
+ * on the associate's books (the GP commit is funded, distributions are received), not performance
+ * to mark.
  */
-async function accrueAssociateCarry(
+const ASSOCIATE_MARKUP_LINES: { bucket: keyof CapitalAccount; sourceType: string; label: string }[] = [
+  { bucket: 'operatingIncome', sourceType: 'income', label: 'Operating income' },
+  { bucket: 'realizedGains', sourceType: 'realized_gain', label: 'Realized gain / (loss)' },
+  { bucket: 'unrealizedGains', sourceType: 'valuation', label: 'Unrealized gain / (loss)' },
+  { bucket: 'managementFees', sourceType: 'management_fee', label: 'Management fees' },
+  { bucket: 'expenses', sourceType: 'partnership_expense', label: 'Partnership expenses' },
+  { bucket: 'fxTranslation', sourceType: 'fx_revaluation', label: 'FX translation' },
+  { bucket: 'carriedInterest', sourceType: 'carried_interest', label: 'Carried interest' },
+]
+
+/**
+ * Book, on a GP/associate entity's OWN books, its EQUITY-METHOD share of the fund it is the GP of —
+ * marking its Investment in Fund (1500) to the associate's fund-book position and allocating each
+ * line to members. This is BOTH the carried interest it earned (carry points) AND the appreciation
+ * of its own GP capital commitment (ownership) — a GP entity's committed capital is invested in the
+ * fund and moves with it, so both belong on its books.
+ *
+ * Runs during the ASSOCIATE'S OWN close (not the served fund's), so it is fully self-contained: it
+ * carries this close's own `source_ref`, and the ordinary vehicle-scoped reopen/re-close reverses
+ * and replaces it — no cross-vehicle reversal.
+ *
+ * RECONCILES TO A TARGET per line, it does not mirror a delta. The target is the associate's
+ * fund-book position at `periodEnd`, split among members by the SAME `lookThroughAccount` the
+ * reports use. Each posting is `target − already-booked` for that bucket — so a missed prior close
+ * self-corrects and a fall in NAV reverses on its own. Contributions/distributions are left alone
+ * (booked as cash). No-op unless this vehicle is a linked, ledger GP/associate with a 1500 account.
+ *
+ * NOTE: reads the served fund's CURRENT marks, so close the served fund first; if the associate is
+ * closed before the fund accrues, re-closing the associate reconciles it.
+ */
+async function accrueAssociateEconomics(
   admin: SupabaseClient,
   fundId: string,
   group: string,
   userId: string | null,
   periodEnd: string,
   sourceRef: string,
-): Promise<{ entryId?: string } | { error: string }> {
+): Promise<{ entryIds: string[] } | { error: string }> {
   const link = await gpLinkFor(admin, fundId, group)
-  if (!link) return {}
-  if ((await loadCapitalSource(admin, fundId, group)) !== 'ledger') return {}
+  if (!link) return { entryIds: [] }
+  if ((await loadCapitalSource(admin, fundId, group)) !== 'ledger') return { entryIds: [] }
   const codes = await accountIdByCode(admin, fundId, group)
   const investmentId = codes.get('1500')
-  if (!investmentId) return {}
+  if (!investmentId) return { entryIds: [] }
 
   const [served, own, ownership, terms] = await Promise.all([
     loadCapitalPostings(admin, fundId, link.servesVehicle, periodEnd),
@@ -874,7 +895,8 @@ async function accrueAssociateCarry(
     loadPartnerTerms(admin, fundId, group),
   ])
 
-  // Target: the associate's fund-book carry mark, split among members by carry ownership.
+  // Target: the associate's fund-book position, split among members (capital by ownership, carry
+  // by points). Booked: what its own books already carry for each line.
   const associateAccount = computeCapitalAccounts(served.postings).get(link.lpEntityId) ?? emptyAccount()
   const carryWeights = new Map<string, number>(
     terms
@@ -882,37 +904,114 @@ async function accrueAssociateCarry(
       .map((t: any) => [t.lpEntityId as string, Number(t.weightOverride)] as [string, number])
   )
   const members = associateMembers(ownership.weights, carryWeights)
+  if (members.length === 0) return { entryIds: [] }
   const split = lookThroughAccount(associateAccount, members)
-
-  // Already booked on own books, per member: carriedInterest bucket (= accrued − paid) + paid.
   const ownAccounts = computeCapitalAccounts(own.postings)
-  const paidByLp = new Map<string, number>()
+
+  // Carry PAID nets against the own-book carriedInterest bucket, so add it back to recover the
+  // amount already accrued (only the carry line has a paid-out counterpart).
+  const carryPaidByLp = new Map<string, number>()
   for (const p of own.postings) {
     if (p.lpEntityId && p.sourceType === 'carry_distribution') {
-      paidByLp.set(p.lpEntityId, roundCents((paidByLp.get(p.lpEntityId) ?? 0) + p.amount))
+      carryPaidByLp.set(p.lpEntityId, roundCents((carryPaidByLp.get(p.lpEntityId) ?? 0) + p.amount))
     }
   }
 
-  const perMember = new Map<string, number>()
-  for (const m of members) {
-    const target = roundCents(split.get(m.lpEntityId)?.carriedInterest ?? 0)
-    const bookedAccrued = roundCents((ownAccounts.get(m.lpEntityId)?.carriedInterest ?? 0) + (paidByLp.get(m.lpEntityId) ?? 0))
-    const delta = roundCents(target - bookedAccrued)
-    if (delta !== 0) perMember.set(m.lpEntityId, delta)
-  }
-  if (perMember.size === 0) return {}
+  const capMap = await ensureCapitalAccounts(admin, fundId, group, members.map(m => m.lpEntityId))
+  const entryIds: string[] = []
 
-  const capMap = await ensureCapitalAccounts(admin, fundId, group, Array.from(perMember.keys()))
-  const entry = buildAssociateCarryAccrualEntry(
-    { fundId, entryDate: periodEnd, memo: `Carried interest earned from ${link.servesVehicle} at ${periodEnd} NAV` },
-    perMember,
-    capMap,
-    investmentId,
-  )
-  entry.sourceRef = sourceRef
-  const result = await persistEntry(admin, fundId, group, userId, entry, 'posted')
-  if ('error' in result) return { error: result.error }
-  return { entryId: result.entryId }
+  for (const line of ASSOCIATE_MARKUP_LINES) {
+    const perMember = new Map<string, number>()
+    for (const m of members) {
+      const target = roundCents(split.get(m.lpEntityId)?.[line.bucket] ?? 0)
+      const paidBack = line.bucket === 'carriedInterest' ? (carryPaidByLp.get(m.lpEntityId) ?? 0) : 0
+      const booked = roundCents((ownAccounts.get(m.lpEntityId)?.[line.bucket] ?? 0) + paidBack)
+      const delta = roundCents(target - booked)
+      if (delta !== 0) perMember.set(m.lpEntityId, delta)
+    }
+    if (perMember.size === 0) continue
+
+    const entry = buildAssociateMarkupEntry(
+      { fundId, entryDate: periodEnd, memo: `${line.label} from ${link.servesVehicle} at ${periodEnd} NAV` },
+      perMember,
+      capMap,
+      investmentId,
+      line.sourceType,
+    )
+    entry.sourceRef = sourceRef
+    const result = await persistEntry(admin, fundId, group, userId, entry, 'posted')
+    if ('error' in result) return { error: result.error }
+    if (result.entryId) entryIds.push(result.entryId)
+  }
+  return { entryIds }
+}
+
+export interface CloseEntryLine {
+  accountCode: string
+  accountName: string
+  /** The LP/partner this posting hits, when it's a per-partner (capital-account) line. */
+  lpName: string | null
+  amount: number
+}
+export interface CloseEntry {
+  id: string
+  entryDate: string
+  memo: string | null
+  sourceType: string | null
+  lines: CloseEntryLine[]
+}
+
+/**
+ * The allocation transactions a close posted for one period — every journal entry it wrote,
+ * with its postings resolved to account and partner names. This is what the preview showed,
+ * but read back from the LEDGER after the fact (re-running the preview can't reproduce it: the
+ * close moves the period's P&L into capital, so a re-preview nets to zero). Found by the close's
+ * deterministic `source_ref = close:<periodId>`.
+ */
+export async function loadCloseEntries(
+  admin: SupabaseClient,
+  fundId: string,
+  group: string,
+  periodId: string,
+): Promise<CloseEntry[]> {
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  if (!vehicleId) return []
+  const { data: entries } = await admin
+    .from('journal_entries' as any)
+    .select('id, entry_date, memo, source_type')
+    .eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('source_ref', `close:${periodId}`).eq('status', 'posted')
+    .order('entry_date', { ascending: true })
+  const entryRows = (entries as any[]) ?? []
+  if (entryRows.length === 0) return []
+
+  const [{ data: postings }, { data: accts }, { data: ents }] = await Promise.all([
+    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, lp_entity_id').eq('fund_id', fundId).in('journal_entry_id', entryRows.map(e => e.id)),
+    admin.from('chart_of_accounts' as any).select('id, code, name').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
+    admin.from('lp_entities' as any).select('id, entity_name').eq('fund_id', fundId),
+  ])
+  const acctById = new Map(((accts as any[]) ?? []).map(a => [a.id as string, a]))
+  const nameById = new Map(((ents as any[]) ?? []).map(e => [e.id as string, e.entity_name as string]))
+
+  const linesByEntry = new Map<string, CloseEntryLine[]>()
+  for (const p of ((postings as any[]) ?? [])) {
+    const a = acctById.get(p.account_id)
+    const list = linesByEntry.get(p.journal_entry_id) ?? []
+    list.push({
+      accountCode: a?.code ?? '',
+      accountName: a?.name ?? '',
+      lpName: p.lp_entity_id ? (nameById.get(p.lp_entity_id) ?? null) : null,
+      amount: Number(p.amount),
+    })
+    linesByEntry.set(p.journal_entry_id, list)
+  }
+
+  return entryRows.map(e => ({
+    id: e.id as string,
+    entryDate: e.entry_date as string,
+    memo: (e.memo ?? null) as string | null,
+    sourceType: (e.source_type ?? null) as string | null,
+    lines: linesByEntry.get(e.id) ?? [],
+  }))
 }
 
 /**

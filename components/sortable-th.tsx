@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 
 // Small shared sortable-column-header helper, used by the /lps, /lps/capital and
 // /funds/capital-accounts tables so they sort consistently.
@@ -34,16 +34,17 @@ export function SortTh({
   className?: string
 }) {
   const active = sort?.key === sortKey
+  const Icon = active ? (sort!.dir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown
   return (
     <th
       onClick={() => onSort(sortKey)}
-      className={`px-3 py-2 font-medium cursor-pointer select-none hover:text-foreground ${align === 'right' ? 'text-right' : 'text-left'} ${className}`}
+      className={`group px-3 py-2 font-medium cursor-pointer select-none whitespace-nowrap hover:text-foreground ${align === 'right' ? 'text-right' : 'text-left'} ${className}`}
     >
       <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
         {label}
-        {active
-          ? (sort!.dir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)
-          : <span className="w-3" />}
+        {/* The icon lives in a fixed-width slot so the label never shifts. Idle: hidden. Hover:
+            a faint up/down hint that the column is sortable. Active: the solid sort direction. */}
+        <Icon className={`h-3 w-3 shrink-0 transition-opacity ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`} />
       </span>
     </th>
   )

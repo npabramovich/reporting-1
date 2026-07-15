@@ -97,7 +97,7 @@ export function VehiclesSettings() {
           {vehicles.length === 0 ? (
             <div className="px-3 py-4 text-xs text-muted-foreground">No vehicles yet. Add one below.</div>
           ) : vehicles.map(v => (
-            <div key={v.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+            <div key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 text-sm">
               {editingId === v.id ? (
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <Input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
@@ -108,46 +108,52 @@ export function VehiclesSettings() {
                 </div>
               ) : (
                 <>
-                  <div className="min-w-0 flex-1">
+                  {/* The name truncates on its own line rather than wrapping into the controls.
+                      `basis-[220px]` keeps it readable while `flex-1` lets it take slack; the
+                      control cluster is one shrink-0 group that drops to a second line as a unit
+                      when a row (esp. an associate, with two extra selects) runs out of width. */}
+                  <div className="min-w-[200px] grow truncate" title={v.name}>
                     <span className={v.active ? 'font-medium' : 'text-muted-foreground line-through'}>{v.name}</span>
                     {v.aliases?.length > 0 && <span className="ml-2 text-xs text-muted-foreground">aka {v.aliases.join(', ')}</span>}
                   </div>
-                  <select value={v.kind} onChange={e => patch(v.id, { kind: e.target.value })} className="h-7 rounded border border-input bg-transparent px-1.5 text-xs">
-                    {KINDS.map(k => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
-                  </select>
-                  {/* Vintage year. Nothing derives it, so it has to be stated — unlike carry
-                      rate and GP-commit %, which used to sit beside it on fund_group_config and
-                      are now obsolete (real waterfall terms; real accrued carry). */}
-                  <VintageInput
-                    value={v.vintage_year ?? null}
-                    onSave={y => setVintage(v.id, y)}
-                  />
-                  {v.kind === 'associate' && (
-                    <>
-                      <select value={v.serves_vehicle_id ?? ''} onChange={e => setServes(v.id, e.target.value || null)} title="The fund vehicle this GP/associate entity serves — links their books for the assistant" className="h-7 rounded border border-input bg-transparent px-1.5 text-xs max-w-[160px]">
-                        <option value="">GP of… (unset)</option>
-                        {vehicles.filter(o => o.kind !== 'associate' && o.id !== v.id).map(o => <option key={o.id} value={o.id}>GP of {o.name}</option>)}
-                      </select>
-                      {/* The second half of the link. Without it the look-through can't run: we
-                          know WHICH fund the associate invests in, but not AS WHOM — and so its
-                          members never appear in the LP report at all. */}
-                      <select
-                        value={v.lp_entity_id ?? ''}
-                        onChange={e => setLpEntity(v.id, e.target.value || null)}
-                        title="The partner on the fund's books through which this associate holds its position. Required for its members to appear in the LP report."
-                        className={`h-7 rounded border px-1.5 text-xs max-w-[170px] bg-transparent ${
-                          v.serves_vehicle_id && !v.lp_entity_id ? 'border-amber-500 text-amber-600' : 'border-input'
-                        }`}
-                      >
-                        <option value="">invests as… (unset)</option>
-                        {entities.map(e => <option key={e.id} value={e.id}>invests as {e.entity_name}</option>)}
-                      </select>
-                    </>
-                  )}
-                  <button onClick={() => { setEditingId(v.id); setEditName(v.name) }} className="text-xs text-muted-foreground hover:text-foreground">Rename</button>
-                  <button onClick={() => patch(v.id, { active: !v.active })} className="w-20 text-right text-xs text-muted-foreground hover:text-foreground">
-                    {v.active ? 'Deactivate' : 'Reactivate'}
-                  </button>
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    <select value={v.kind} onChange={e => patch(v.id, { kind: e.target.value })} className="h-7 rounded border border-input bg-transparent px-1.5 text-xs">
+                      {KINDS.map(k => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
+                    </select>
+                    {/* Vintage year. Nothing derives it, so it has to be stated — unlike carry
+                        rate and GP-commit %, which used to sit beside it on fund_group_config and
+                        are now obsolete (real waterfall terms; real accrued carry). */}
+                    <VintageInput
+                      value={v.vintage_year ?? null}
+                      onSave={y => setVintage(v.id, y)}
+                    />
+                    {v.kind === 'associate' && (
+                      <>
+                        <select value={v.serves_vehicle_id ?? ''} onChange={e => setServes(v.id, e.target.value || null)} title="The fund vehicle this GP/associate entity serves — links their books for the assistant" className="h-7 w-[160px] rounded border border-input bg-transparent px-1.5 text-xs">
+                          <option value="">GP of… (unset)</option>
+                          {vehicles.filter(o => o.kind !== 'associate' && o.id !== v.id).map(o => <option key={o.id} value={o.id}>GP of {o.name}</option>)}
+                        </select>
+                        {/* The second half of the link. Without it the look-through can't run: we
+                            know WHICH fund the associate invests in, but not AS WHOM — and so its
+                            members never appear in the LP report at all. */}
+                        <select
+                          value={v.lp_entity_id ?? ''}
+                          onChange={e => setLpEntity(v.id, e.target.value || null)}
+                          title="The partner on the fund's books through which this associate holds its position. Required for its members to appear in the LP report."
+                          className={`h-7 w-[170px] rounded border px-1.5 text-xs bg-transparent ${
+                            v.serves_vehicle_id && !v.lp_entity_id ? 'border-amber-500 text-amber-600' : 'border-input'
+                          }`}
+                        >
+                          <option value="">invests as… (unset)</option>
+                          {entities.map(e => <option key={e.id} value={e.id}>invests as {e.entity_name}</option>)}
+                        </select>
+                      </>
+                    )}
+                    <button onClick={() => { setEditingId(v.id); setEditName(v.name) }} className="text-xs text-muted-foreground hover:text-foreground">Rename</button>
+                    <button onClick={() => patch(v.id, { active: !v.active })} className="w-20 text-right text-xs text-muted-foreground hover:text-foreground">
+                      {v.active ? 'Deactivate' : 'Reactivate'}
+                    </button>
+                  </div>
                 </>
               )}
             </div>
