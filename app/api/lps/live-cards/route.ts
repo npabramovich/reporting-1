@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
       distributions: r.distributions,
       nav: r.nav,
       totalValue: r.total_value,
+      receivable: r.receivable,
       pctFunded: ratio(r.paid_in_capital, r.commitment),
       dpi: r.dpi, rvpi: r.rvpi, tvpi: r.tvpi, irr: r.irr,
     })

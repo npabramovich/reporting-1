@@ -5,6 +5,8 @@
  * (/api/portal/overview) and the GP "view as LP" preview so they stay identical.
  */
 
+import { lpRatios } from '@/lib/lp-metrics'
+
 export interface OverviewVehicle {
   name: string
   commitment: number
@@ -57,7 +59,16 @@ const ratio = (numerator: number, denominator: number): number | null =>
  * then sums each metric per vehicle (portfolio_group) and overall. Returns null
  * when there are no rows.
  */
-export function buildOverview(rows: OverviewInvestmentRow[]): OverviewMetrics | null {
+/**
+ * @param vehicleDates optional map of vehicle name → its last-updated date (last close for a
+ *   ledger vehicle, last position import for a tracked one). When given, the overview's "as of"
+ *   is the MOST RECENT of the vehicles THIS LP is actually in — so it reflects real data
+ *   freshness per partner rather than the snapshot's date, and differs partner-to-partner.
+ */
+export function buildOverview(
+  rows: OverviewInvestmentRow[],
+  vehicleDates?: Map<string, string | null>,
+): OverviewMetrics | null {
   if (!rows.length) return null
 
   // Group by snapshot, then choose the latest by as_of_date (null dates sort oldest).
@@ -104,5 +115,62 @@ export function buildOverview(rows: OverviewInvestmentRow[]): OverviewMetrics | 
   totals.tvpi = ratio(totals.distributed + totals.nav, totals.called)
 
   const vehicles = Array.from(vehicleMap.values()).sort((a, b) => b.commitment - a.commitment)
-  return { asOfDate: latest.asOf, snapshotName: latest.name, totals, vehicles }
+
+  // "As of" = the most recent data date across THIS LP's vehicles (per-partner), when we have
+  // the per-vehicle dates; otherwise fall back to the snapshot's own date.
+  let asOfDate = latest.asOf
+  if (vehicleDates) {
+    const ds = vehicles
+      .map(v => vehicleDates.get(v.name) ?? null)
+      .filter((d): d is string => !!d)
+    if (ds.length) asOfDate = ds.reduce((a, b) => (a > b ? a : b))
+  }
+
+  return { asOfDate, snapshotName: latest.name, totals, vehicles }
+}
+
+/** One LP's live investment row, as produced by the live report (paid-in ≡ called). */
+export interface LiveOverviewRow {
+  portfolio_group: string | null
+  commitment: number
+  paid_in_capital: number
+  distributions: number
+  nav: number
+}
+
+/**
+ * The same dashboard summary as buildOverview, but from LIVE report rows (derived, as-of-today)
+ * rather than a frozen snapshot — the portal reads exactly what /lps shows, sliced to this LP.
+ * `vehicleDates` sets the per-partner "as of" (last close / last import per vehicle).
+ */
+export function overviewFromLive(
+  rows: LiveOverviewRow[],
+  vehicleDates?: Map<string, string | null>,
+): OverviewMetrics | null {
+  if (!rows.length) return null
+
+  const vehicleMap = new Map<string, OverviewVehicle>()
+  const totals: OverviewTotals = { commitment: 0, called: 0, distributed: 0, nav: 0, dpi: null, tvpi: null }
+  for (const r of rows) {
+    const key = (r.portfolio_group ?? '').trim() || 'Investment'
+    let v = vehicleMap.get(key)
+    if (!v) { v = { name: key, commitment: 0, called: 0, distributed: 0, nav: 0, dpi: null, tvpi: null }; vehicleMap.set(key, v) }
+    const c = num(r.commitment), cl = num(r.paid_in_capital), d = num(r.distributions), n = num(r.nav)
+    v.commitment += c; v.called += cl; v.distributed += d; v.nav += n
+    totals.commitment += c; totals.called += cl; totals.distributed += d; totals.nav += n
+  }
+  for (const v of Array.from(vehicleMap.values())) {
+    const rr = lpRatios({ commitment: v.commitment, paidIn: v.called, distributions: v.distributed, nav: v.nav })
+    v.dpi = rr.dpi; v.tvpi = rr.tvpi
+  }
+  const tr = lpRatios({ commitment: totals.commitment, paidIn: totals.called, distributions: totals.distributed, nav: totals.nav })
+  totals.dpi = tr.dpi; totals.tvpi = tr.tvpi
+
+  const vehicles = Array.from(vehicleMap.values()).sort((a, b) => b.commitment - a.commitment)
+  let asOfDate: string | null = null
+  if (vehicleDates) {
+    const ds = vehicles.map(v => vehicleDates.get(v.name) ?? null).filter((d): d is string => !!d)
+    if (ds.length) asOfDate = ds.reduce((a, b) => (a > b ? a : b))
+  }
+  return { asOfDate, snapshotName: null, totals, vehicles }
 }

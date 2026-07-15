@@ -20,8 +20,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { computeCapitalAccounts, emptyAccount, bucketForSourceType, type CapitalAccount, type CapitalPosting } from './capital-account'
 import { xirr, type CashFlow } from '@/lib/xirr'
+import { lpRatios } from '@/lib/lp-metrics'
 import { loadCapitalPostings, type CapitalSource } from './capital-source'
-import { loadCommitmentEvents, commitmentsAsOf, loadPartnerTerms } from './terms'
+import { loadCommitmentEvents, commitmentsFrom, loadPartnerTerms } from './terms'
 import { listVehicles, loadOwnership, loadEntityNames } from './load'
 import { lookThroughAccount, associateMembers } from './look-through'
 import { latestPositionIrr } from './lp-positions'
@@ -36,6 +37,9 @@ export interface LiveMetrics {
   nav: number
   total_value: number
   outstanding_balance: number
+  /** Called capital NOT yet funded (the receivable): called − wired. Zero on an events-tracked
+   *  vehicle, where there is no call-vs-fund distinction. */
+  receivable: number
   dpi: number | null
   rvpi: number | null
   tvpi: number | null
@@ -70,8 +74,8 @@ export interface LiveInvestmentRow extends LiveMetrics {
   lookThroughVia?: string
 }
 
-const ratio = (num: number, den: number): number | null =>
-  den > 0 ? Math.round((num / den) * 10000) / 10000 : null
+// Round the shared ratio to 1e-4 to keep float noise out of the reconciliation compare.
+const round4 = (r: number | null): number | null => (r == null ? null : Math.round(r * 10000) / 10000)
 
 /**
  * Turn one LP's capital account into the metric columns.
@@ -151,6 +155,7 @@ export function deriveMetrics(
   const distributions = roundCents(-account.distributions)
   const nav = roundCents(account.ending)
   const totalValue = roundCents(nav + distributions)
+  const rr = lpRatios({ commitment, paidIn, distributions, nav })
 
   return {
     commitment: roundCents(commitment),
@@ -160,11 +165,12 @@ export function deriveMetrics(
     nav,
     total_value: totalValue,
     outstanding_balance: roundCents(commitment - paidIn),
+    receivable: roundCents(receivable),
     // Denominator is paid-in (cash the LP actually put in), matching how every existing
     // read path computes these — see lib/lp-report-pdf.ts computeRow.
-    dpi: ratio(distributions, paidIn),
-    rvpi: ratio(nav, paidIn),
-    tvpi: ratio(distributions + nav, paidIn),
+    dpi: round4(rr.dpi),
+    rvpi: round4(rr.rvpi),
+    tvpi: round4(rr.tvpi),
     irr,
   }
 }
@@ -185,10 +191,7 @@ export async function liveRowsForVehicle(
   // Commitment is not a ledger concept — it lives in commitment_events (effective-dated,
   // so it can be read as of the report date). Fall back to the lp_investments scalar when a
   // vehicle has no events yet, mirroring what the close does (close.ts:134-141).
-  const fromEvents = commitmentsAsOf(commitmentEvents, asOf)
-  const commitmentByLp = fromEvents.size > 0
-    ? fromEvents
-    : new Map(owners.map(o => [o.lpEntityId, o.commitment]))
+  const commitmentByLp = commitmentsFrom(commitmentEvents, owners, asOf)
 
   const accountByLp = computeCapitalAccounts(postings)
 
@@ -333,10 +336,7 @@ async function applyLookThrough(
       loadOwnership(admin, fundId, link.associateGroup),
     ])
 
-    const fromEvents = commitmentsAsOf(commitmentEvents, asOf)
-    const basis = fromEvents.size > 0
-      ? fromEvents
-      : new Map(owners.map(o => [o.lpEntityId, o.commitment]))
+    const basis = commitmentsFrom(commitmentEvents, owners, asOf)
 
     const carryWeights = new Map(
       terms

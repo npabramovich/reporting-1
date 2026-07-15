@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buildOverview } from '@/lib/lp-overview'
+import { overviewFromLive, type LiveOverviewRow } from '@/lib/lp-overview'
+import { lastDataDates } from '@/lib/accounting/lp-positions'
+import { generateLiveReport } from '@/lib/accounting/live-report'
 
-/** Portfolio overview for one investor in the admin's fund (for the preview). */
+/** Portfolio overview for one investor — LIVE (the same data /lps shows, sliced to this LP). */
 async function computeOverview(admin: any, fundId: string, investorId: string) {
   const { data: entities } = await admin
     .from('lp_entities').select('id').eq('fund_id', fundId).eq('investor_id', investorId)
-  const entityIds = ((entities ?? []) as any[]).map(e => e.id as string)
-  if (entityIds.length === 0) return null
-  const { data: rows } = await admin
-    .from('lp_investments')
-    .select('portfolio_group, commitment, paid_in_capital, called_capital, distributions, nav, total_value, snapshot_id, lp_snapshots(id, name, as_of_date)')
-    .eq('fund_id', fundId)
-    .in('entity_id', entityIds)
-  return buildOverview((rows ?? []) as any[])
+  const entityIds = new Set(((entities ?? []) as any[]).map(e => e.id as string))
+  if (entityIds.size === 0) return null
+  const report = await generateLiveReport(admin, fundId)
+  const mine = report.rows.filter((r: any) => entityIds.has(r.entity_id))
+  const rows: LiveOverviewRow[] = mine.map((r: any) => ({
+    portfolio_group: r.portfolio_group, commitment: r.commitment, paid_in_capital: r.paid_in_capital, distributions: r.distributions, nav: r.nav,
+  }))
+  const groups = Array.from(new Set(mine.map((r: any) => r.portfolio_group as string)))
+  const vehicleDates = await lastDataDates(admin, fundId, groups)
+  return overviewFromLive(rows, vehicleDates)
 }
 
 /**

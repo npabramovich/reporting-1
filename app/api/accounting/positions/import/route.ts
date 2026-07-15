@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 import { assertAdminAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
     .delete().eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId).eq('as_of_date', asOfDate)
     .in('lp_entity_id', entityIds)
   const { error: insErr } = await (admin as any).from('lp_positions').insert(positionRows)
-  if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
+  if (insErr) return dbError(insErr, 'accounting-positions-import')
 
   // Keep commitment_events in step with the pasted commitments, so the ledger side and the
   // reports don't lag a paste. Only creates an `initial` delta where none exists — commitment

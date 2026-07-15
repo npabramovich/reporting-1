@@ -177,6 +177,13 @@ export function GpPanel({ isAdmin }: { isAdmin: boolean }) {
         </table>
       </div>
 
+      {gp.partners.some(p => p.carryUnpaid < -0.005) && (
+        <p className="text-xs text-amber-600">
+          A negative <strong>carry unpaid</strong> means more carry has been paid than is currently accrued (NAV fell
+          after a payment) — an over-distribution to claw back, not an amount owed.
+        </p>
+      )}
+
       {/* Carry paid, sourced by mode. Ledger: rolled up per partner from the associate's own
           books, read-only. LP tracking: an explicit register of (partner, date, amount). */}
       {gp.source === 'ledger' ? (

@@ -116,7 +116,7 @@ export function LpCapitalView({ isAdmin }: { isAdmin: boolean }) {
         {acct && (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground ml-1">
             {acct.source === 'ledger' ? <BookOpen className="h-3.5 w-3.5" /> : <ListTree className="h-3.5 w-3.5" />}
-            {acct.source === 'ledger' ? 'from the ledger' : 'from tracked positions'}
+            {acct.source === 'ledger' ? 'Fund Accounting' : 'LP only tracking'}
           </span>
         )}
       </div>
@@ -125,7 +125,7 @@ export function LpCapitalView({ isAdmin }: { isAdmin: boolean }) {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">LP capital accounts</h1>
         <p className="text-sm text-muted-foreground">
-          Per-vehicle LP capital, from the ledger where you keep books, or from pasted positions where you don&rsquo;t.
+          Per-vehicle LP capital — from <strong>Fund Accounting</strong> where you keep books, or <strong>LP only tracking</strong> (pasted positions) where you don&rsquo;t.
         </p>
       </div>
 
@@ -220,7 +220,7 @@ function LedgerTable({ rows, fmt }: { rows: AcctRow[]; fmt: (v: number) => strin
           <tr>
             <th className="text-left px-3 py-2 font-medium">LP</th>
             <th className="text-right px-3 py-2 font-medium">Committed</th>
-            <th className="text-right px-3 py-2 font-medium">Called / paid-in</th>
+            <th className="text-right px-3 py-2 font-medium">Called</th>
             <th className="text-right px-3 py-2 font-medium">Distributions</th>
             <th className="text-right px-3 py-2 font-medium">NAV</th>
             <th className="text-right px-3 py-2 font-medium">% Funded</th>
@@ -307,7 +307,7 @@ function PositionsTable({
           <tr>
             <th className="text-left px-3 py-2 font-medium">LP</th>
             <th className="text-right px-3 py-2 font-medium">Committed</th>
-            <th className="text-right px-3 py-2 font-medium">Called / paid-in</th>
+            <th className="text-right px-3 py-2 font-medium">Called</th>
             <th className="text-right px-3 py-2 font-medium">Distributions</th>
             <th className="text-right px-3 py-2 font-medium">NAV</th>
             <th className="text-right px-3 py-2 font-medium">% Funded</th>
@@ -379,7 +379,12 @@ function PositionRow({
     return (
       <tr className="border-t group">
         <td className="px-3 py-1.5 font-medium">
-          <button onClick={openLp} className="text-left hover:underline hover:text-foreground">{pos.name}</button>
+          <span className="flex items-center gap-2">
+            <button onClick={openLp} className="text-left hover:underline hover:text-foreground truncate max-w-[220px]" title={pos.name}>{pos.name}</button>
+            {editable && (
+              <button onClick={() => setEditing(true)} title="Edit" className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground shrink-0"><Pencil className="h-3.5 w-3.5" /></button>
+            )}
+          </span>
         </td>
         <td className="px-3 py-1.5 text-right font-mono">{cell(pos.commitment)}</td>
         <td className="px-3 py-1.5 text-right font-mono">{cell(pos.calledCapital)}</td>
@@ -390,11 +395,7 @@ function PositionRow({
         <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{moicX(ratio(nav, called))}</td>
         <td className="px-3 py-1.5 text-right font-mono">{moicX(ratio(dist + nav, called))}</td>
         <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{pctX(irr)}</td>
-        {editable && (
-          <td className="px-3 py-1.5 text-right">
-            <button onClick={() => setEditing(true)} className="text-muted-foreground opacity-0 group-hover:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
-          </td>
-        )}
+        {editable && <td />}
       </tr>
     )
   }
@@ -458,7 +459,7 @@ function HistoryTable({
               <th className="text-left px-3 py-2 font-medium">As of</th>
               <th className="text-right px-3 py-2 font-medium">LPs</th>
               <th className="text-right px-3 py-2 font-medium">Committed</th>
-              <th className="text-right px-3 py-2 font-medium">Called / paid-in</th>
+              <th className="text-right px-3 py-2 font-medium">Called</th>
               <th className="text-right px-3 py-2 font-medium">Distributions</th>
               <th className="text-right px-3 py-2 font-medium">NAV</th>
               {onDelete && <th className="px-3 py-2" />}

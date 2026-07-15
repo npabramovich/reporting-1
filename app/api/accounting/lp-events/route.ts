@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 import { assertAdminAccess, assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { loadEntityNames } from '@/lib/accounting/load'
@@ -171,7 +172,7 @@ export async function PATCH(req: NextRequest) {
       { fund_id: gate.fundId, vehicle_id: vehicleId, capital_source: next, updated_at: new Date().toISOString() },
       { onConflict: 'fund_id,vehicle_id' }
     )
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  if (error) return dbError(error, 'accounting-lp-events')
 
   return NextResponse.json({ ok: true, capitalSource: next })
 }

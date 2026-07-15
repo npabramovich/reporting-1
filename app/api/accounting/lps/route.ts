@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 import { assertAdminAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { loadCommitmentEvents, recordCommitmentChange, savePartnerTerm } from '@/lib/accounting/terms'
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
   let investorId = (existingInv as any)?.id
   if (!investorId) {
     const { data: inv, error } = await admin.from('lp_investors' as any).insert({ fund_id: gate.fundId, name }).select('id').single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    if (error) return dbError(error, 'accounting-lps')
     investorId = (inv as any).id
   }
 
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
     const { data: ent, error } = await admin.from('lp_entities' as any)
       .insert({ fund_id: gate.fundId, investor_id: investorId, entity_name: name, partner_class: partnerClass })
       .select('id').single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    if (error) return dbError(error, 'accounting-lps')
     entityId = (ent as any).id
   }
 
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
       commitment,
       snapshot_id: snapshotId,
     })
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    if (error) return dbError(error, 'accounting-lps')
   }
 
   // ALSO RECORD THE COMMITMENT AS AN EVENT.

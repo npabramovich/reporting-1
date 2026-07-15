@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 import { assertReadAccess, assertAdminAccess } from '@/lib/api-helpers'
 
 // Fund-level header + footer for the LIVE LP report cards (the snapshot equivalent lives on
@@ -37,6 +38,6 @@ export async function PUT(req: NextRequest) {
 
   const { error } = await (admin as any)
     .from('fund_settings').update(patch).eq('fund_id', gate.fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'lp-live-settings')
   return NextResponse.json({ ok: true })
 }

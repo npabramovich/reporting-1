@@ -135,12 +135,14 @@ export default function LiveCardsPage() {
 
       {/* Toolbar (hidden in print) */}
       <div className="no-print">
+        {/* Back link above the title, matching the other LP sub-pages. */}
+        <Link href="/lps" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-2">
+          <ArrowLeft className="h-3.5 w-3.5" /> LPs
+        </Link>
+        <h1 className="text-2xl font-semibold tracking-tight mb-4">LP Reports</h1>
+
         <div className="flex items-center gap-3 mb-4 flex-wrap">
-          <Button variant="outline" size="sm" className="text-muted-foreground" asChild>
-            <Link href="/lps"><ArrowLeft className="h-4 w-4 mr-1" /> Back</Link>
-          </Button>
-          <h1 className="text-lg font-semibold">Report cards</h1>
-          <label className="text-xs text-muted-foreground flex items-center gap-1 ml-2"><Calendar className="h-3 w-3" /> As of</label>
+          <label className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> As of</label>
           <Input type="date" value={asOf} onChange={e => { setAsOf(e.target.value); setApplied(e.target.value) }} className="h-9 w-40" />
           {applied && <Button size="sm" variant="ghost" onClick={() => { setAsOf(''); setApplied('') }}>Latest</Button>}
           <span className="flex-1" />
@@ -155,7 +157,7 @@ export default function LiveCardsPage() {
           <Button size="sm" variant="outline" onClick={printCombined} disabled={selected.size === 0 || printing || zipping}>
             {printing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Printer className="h-4 w-4 mr-1" />} Combined PDF
           </Button>
-          <Button size="sm" onClick={downloadIndividual} disabled={selected.size === 0 || printing || zipping}>
+          <Button size="sm" variant="outline" onClick={downloadIndividual} disabled={selected.size === 0 || printing || zipping}>
             {zipping ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileDown className="h-4 w-4 mr-1" />}
             {zipping ? 'Generating…' : `Individual PDFs (${selected.size})`}
           </Button>

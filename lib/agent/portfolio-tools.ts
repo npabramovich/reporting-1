@@ -8,6 +8,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { PORTFOLIO_TOOL_MANIFEST } from './portfolio-tools-manifest'
 import { computeSummary } from '@/lib/investments'
+import { lpRatios } from '@/lib/lp-metrics'
 import { draftEntryForTransaction } from '@/lib/accounting/from-portfolio'
 import type { AgentToolContext, AgentToolHandler } from '@/lib/accounting/agent-tools'
 
@@ -199,11 +200,12 @@ export const PORTFOLIO_HANDLERS: Record<string, AgentToolHandler> = {
         unfunded: r2(t.committed - called),
         distributed: r2(t.distributed),
         nav: r2(t.nav),
-        // The standard three. Null rather than Infinity when nothing has been called —
-        // a divide-by-zero dressed up as a multiple is worse than an honest gap.
-        dpi: called > 0 ? r2(t.distributed / called) : null,
-        rvpi: called > 0 ? r2(t.nav / called) : null,
-        tvpi: called > 0 ? r2((t.nav + t.distributed) / called) : null,
+        // The standard three, via the shared definition. Denominator is paid-in ≡ called (they
+        // are the same figure); null rather than Infinity when nothing has been called.
+        ...(() => {
+          const rr = lpRatios({ commitment: t.committed, paidIn: called, distributions: t.distributed, nav: t.nav })
+          return { dpi: rr.dpi == null ? null : r2(rr.dpi), rvpi: rr.rvpi == null ? null : r2(rr.rvpi), tvpi: rr.tvpi == null ? null : r2(rr.tvpi) }
+        })(),
       })
     }
     return out.sort((a, b) => String(a.vehicle).localeCompare(String(b.vehicle)))

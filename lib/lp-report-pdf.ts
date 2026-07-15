@@ -1,6 +1,9 @@
 import puppeteer from 'puppeteer-core'
 import { PDF_FONT_CSS, PDF_SANS, PDF_MONO } from '@/lib/pdf-fonts'
 import { sanitizeBasicHtml } from '@/lib/sanitize'
+import { lpRatios } from '@/lib/lp-metrics'
+import { generateLiveReport } from '@/lib/accounting/live-report'
+import { lastDataDates } from '@/lib/accounting/lp-positions'
 
 // Shared LP investor-report rendering: HTML template + PDF rendering, used by the
 // GP batch export (zip of PDFs), the LP portal (single download), and the admin
@@ -92,6 +95,8 @@ export interface InvestmentRow {
   called_capital: number | null
   paid_in_capital: number | null
   distributions: number | null
+  /** Called but not yet funded (receivable). Present only on live-sourced rows; snapshots omit it. */
+  receivable?: number | null
   irr: number | null
   lp_entities: {
     id: string
@@ -110,6 +115,7 @@ export interface ComputedRow {
   distributions: number
   nav: number
   totalValue: number
+  receivable: number
   pctFunded: number | null
   dpi: number | null
   rvpi: number | null
@@ -123,15 +129,13 @@ export function computeRow(inv: InvestmentRow): ComputedRow {
   const distributions = Number(inv.distributions) || 0
   const nav = Number(inv.nav) || 0
   const totalValue = Number(inv.total_value) || (distributions + nav)
-  const pctFunded = commitment > 0 ? paidInCapital / commitment : null
-  const dpi = paidInCapital > 0 ? distributions / paidInCapital : null
-  const rvpi = paidInCapital > 0 ? nav / paidInCapital : null
-  const tvpi = dpi != null && rvpi != null ? dpi + rvpi : null
+  const { pctFunded, dpi, rvpi, tvpi } = lpRatios({ commitment, paidIn: paidInCapital, distributions, nav })
   return {
     id: inv.id,
     entityName: inv.lp_entities?.entity_name ?? '',
     portfolioGroup: inv.portfolio_group,
     commitment, paidInCapital, distributions, nav, totalValue,
+    receivable: Number(inv.receivable) || 0,
     pctFunded, dpi, rvpi, tvpi,
     irr: inv.irr != null ? Number(inv.irr) : null,
   }
@@ -140,12 +144,8 @@ export function computeRow(inv: InvestmentRow): ComputedRow {
 export function computeTotals(rows: ComputedRow[]) {
   let c = 0, p = 0, d = 0, n = 0
   for (const r of rows) { c += r.commitment; p += r.paidInCapital; d += r.distributions; n += r.nav }
-  const tv = d + n
-  const pf = c > 0 ? p / c : null
-  const dpi = p > 0 ? d / p : null
-  const rvpi = p > 0 ? n / p : null
-  const tvpi = dpi != null && rvpi != null ? dpi + rvpi : null
-  return { commitment: c, paidInCapital: p, distributions: d, nav: n, totalValue: tv, pctFunded: pf, dpi, rvpi, tvpi }
+  const { pctFunded, dpi, rvpi, tvpi } = lpRatios({ commitment: c, paidIn: p, distributions: d, nav: n })
+  return { commitment: c, paidInCapital: p, distributions: d, nav: n, totalValue: d + n, pctFunded, dpi, rvpi, tvpi }
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +196,35 @@ export function buildReportHtml(opts: {
       <td style="padding:5px;text-align:right;font-family:${PDF_MONO};">${esc(fmtMoic(r.tvpi))}</td>
       <td style="padding:5px;text-align:right;font-family:${PDF_MONO};">${esc(fmtPct(r.irr))}</td>
     </tr>`).join('')
+
+  // Called-but-unfunded (receivable) table — only when some vehicle has one. Its own table so it
+  // never muddles the paid-in figures above.
+  const unfundedList = rows.filter(r => (r.receivable ?? 0) > 0.005)
+  const unfundedTotal = unfundedList.reduce((s, r) => s + (r.receivable ?? 0), 0)
+  const unfundedTable = unfundedList.length === 0 ? '' : `
+    <h3 style="font-size:10px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Called, Not Yet Funded</h3>
+    <table style="margin-bottom:20px;">
+      <colgroup><col style="width:19.75%"><col style="width:50.25%"><col style="width:30%"></colgroup>
+      <thead>
+        <tr style="border-bottom:2px solid #ccc;">
+          <th style="text-align:left;padding:5px 8px 5px 5px;">Entity</th>
+          <th style="text-align:left;padding:5px 5px 5px 8px;">Investment</th>
+          <th style="text-align:right;padding:5px;">Unfunded (Called)</th>
+        </tr>
+      </thead>
+      <tbody>${unfundedList.map(r => `
+        <tr style="border-bottom:1px solid #e5e5e5;">
+          <td style="padding:5px 8px 5px 5px;max-width:0;overflow:hidden;text-overflow:ellipsis;">${esc(r.entityName)}</td>
+          <td style="padding:5px 5px 5px 8px;">${esc(r.portfolioGroup)}</td>
+          <td style="padding:5px;text-align:right;font-family:${PDF_MONO};">${fmt(r.receivable ?? 0)}</td>
+        </tr>`).join('')}</tbody>
+      <tfoot>
+        <tr style="border-top:2px solid #ccc;font-weight:600;">
+          <td style="padding:5px;" colspan="2">Total</td>
+          <td style="padding:5px;text-align:right;font-family:${PDF_MONO};">${fmt(unfundedTotal)}</td>
+        </tr>
+      </tfoot>
+    </table>`
 
   const excludedNote = excludedGroupNames.length > 0
     ? `<p style="font-size:9px;color:#888;margin-top:12px;">Note: ${esc(excludedGroupNames.join(', '))} ${excludedGroupNames.length === 1 ? 'is' : 'are'} excluded from this investor report.</p>`
@@ -292,6 +321,7 @@ export function buildReportHtml(opts: {
         </tr>
       </tfoot>
     </table>
+    ${unfundedTable}
     ` : '<p style="font-size:11px;color:#888;">No investments found for this investor in this snapshot.</p>'}
 
     ${excludedNote}
@@ -412,6 +442,74 @@ export async function generateInvestorReportPdf(
   const safeName = investorName.replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'Report'
   const safeSnap = String(snapshot.name || 'Report').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'Report'
   return { pdf, fileName: `${safeName} - ${safeSnap}.pdf` }
+}
+
+/**
+ * One investor's capital statement rendered from the LIVE report (derived, as-of-today) instead
+ * of a frozen snapshot — the portal's live statement. Same layout as generateInvestorReportPdf;
+ * only the data source differs. Header/footer come from the fund-level report settings, and the
+ * "as of" is the most recent data date across the investor's vehicles. Caller authorizes access.
+ */
+export async function generateLiveInvestorReportPdf(
+  admin: any,
+  opts: { fundId: string; investorIds: string[] },
+): Promise<{ pdf: Buffer; fileName: string } | null> {
+  const { fundId, investorIds } = opts
+  if (investorIds.length === 0) return null
+
+  const [report, fundRes, settingsRes, entsRes, investorsRes] = await Promise.all([
+    generateLiveReport(admin, fundId),
+    admin.from('funds').select('name, logo_url, address').eq('id', fundId).maybeSingle(),
+    admin.from('fund_settings').select('currency, lp_report_description, lp_report_footer').eq('fund_id', fundId).maybeSingle(),
+    admin.from('lp_entities').select('id, entity_name, investor_id').eq('fund_id', fundId),
+    admin.from('lp_investors').select('id, name').eq('fund_id', fundId).in('id', investorIds),
+  ])
+
+  const entInfo = new Map<string, { entity_name: string; investor_id: string }>(
+    ((entsRes.data as any[]) ?? []).map(e => [e.id, { entity_name: e.entity_name, investor_id: e.investor_id }])
+  )
+  const investorSet = new Set(investorIds)
+  const mine = report.rows.filter((r: any) => investorSet.has(entInfo.get(r.entity_id)?.investor_id ?? ''))
+  if (mine.length === 0) return null
+
+  const invRows: InvestmentRow[] = mine.map((r: any, i: number) => {
+    const info = entInfo.get(r.entity_id)
+    return {
+      id: `${r.entity_id}-${r.portfolio_group}-${i}`,
+      entity_id: r.entity_id,
+      portfolio_group: r.portfolio_group,
+      commitment: r.commitment, total_value: r.total_value, nav: r.nav,
+      called_capital: r.called_capital, paid_in_capital: r.paid_in_capital,
+      distributions: r.distributions, receivable: r.receivable, irr: r.irr,
+      lp_entities: { id: r.entity_id, entity_name: info?.entity_name ?? r.entity_id, investor_id: info?.investor_id ?? '', lp_investors: { id: info?.investor_id ?? '', name: '' } },
+    }
+  })
+  const rows = invRows.map(computeRow)
+  const totals = computeTotals(rows)
+
+  const investorsList = (investorsRes.data ?? []) as { id: string; name: string }[]
+  const investorName = investorsList[0]?.name ?? 'Investor Report'
+
+  const fund = fundRes.data
+  const fundLogo = (fund?.logo_url && typeof fund.logo_url === 'string' && fund.logo_url.startsWith('data:image/')) ? fund.logo_url : null
+  const currency = settingsRes.data?.currency || 'USD'
+
+  // "As of" = most recent data date across this investor's vehicles.
+  const groups = Array.from(new Set(mine.map((r: any) => r.portfolio_group as string)))
+  const dateMap = await lastDataDates(admin, fundId, groups)
+  const maxDate = Array.from(dateMap.values()).filter((d): d is string => !!d).sort().at(-1) ?? report.asOf ?? null
+  const asOfFormatted = maxDate ? new Date(maxDate + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : null
+
+  const html = buildReportHtml({
+    investorName, rows, totals, excludedGroupNames: [],
+    fundName: fund?.name || '', fundLogo, fundAddress: fund?.address || null,
+    description: settingsRes.data?.lp_report_description ?? null, footerNote: settingsRes.data?.lp_report_footer ?? null,
+    asOfFormatted, currency,
+  })
+
+  const pdf = await renderHtmlToPdf(html)
+  const safeName = investorName.replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'Report'
+  return { pdf, fileName: `${safeName} - Capital Statement.pdf` }
 }
 
 // ---------------------------------------------------------------------------

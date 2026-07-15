@@ -66,46 +66,12 @@ create policy "Fund admins manage their fund's LP positions"
     where fm.fund_id = lp_positions.fund_id and fm.user_id = auth.uid() and fm.role = 'admin'
   ));
 
--- ---------------------------------------------------------------------------
--- Backfill from every existing snapshot, so the live model has data on day one.
--- ---------------------------------------------------------------------------
--- Each snapshot is already a dated set of positions. Copy them all in, keyed by the
--- snapshot's as_of_date (falling back to its created date). This preserves the history the
--- fund already has — not just the latest snapshot — so the dated-history view is populated
--- from the start.
---
---   • calc_generated rows are EXCLUDED — they are derived associate-member rows (the
---     snapshot-side look-through), and the ledger/positions look-through re-derives them.
---   • A snapshot with no as_of_date falls back to the snapshot's created date.
---   • `total_value` is intentionally not copied — NAV is stored, total is derived.
---   • On a conflict (same entity+vehicle+date across two snapshots) the later import wins,
---     which is the safe default for overlapping snapshots.
---
--- The vehicle is matched by name (lp_investments.portfolio_group = fund_vehicles.name).
-
-insert into public.lp_positions
-  (fund_id, vehicle_id, lp_entity_id, as_of_date, commitment, called_capital, distributions, nav, source, imported_at)
-select
-  li.fund_id,
-  fv.id,
-  li.entity_id,
-  coalesce(s.as_of_date, s.created_at::date),
-  li.commitment,
-  -- paid-in IS called capital; take whichever column the snapshot populated.
-  coalesce(nullif(li.paid_in_capital, 0), li.called_capital, li.paid_in_capital),
-  li.distributions,
-  li.nav,
-  'migrated',
-  now()
-from public.lp_investments li
-join public.lp_snapshots s on s.id = li.snapshot_id
-join public.fund_vehicles fv on fv.fund_id = li.fund_id and fv.name = li.portfolio_group
-where coalesce(li.calc_generated, false) = false
-on conflict (fund_id, vehicle_id, lp_entity_id, as_of_date) do update
-  set commitment     = excluded.commitment,
-      called_capital = excluded.called_capital,
-      distributions  = excluded.distributions,
-      nav            = excluded.nav;
+-- NOTE: this migration originally carried a one-time backfill that copied every existing
+-- snapshot's lp_investments into lp_positions. That has already been applied where it was needed,
+-- and it is DELIBERATELY REMOVED here: a fresh install has no snapshots to copy, so the block was
+-- pure downside — it could abort the whole migration on a fund with two same-date snapshots
+-- (duplicate ON CONFLICT target in one statement). The live tracking model is populated by the
+-- paste/import flow, not by this migration.
 
 comment on table public.lp_positions is
   'Dated cumulative LP positions per vehicle — the source of truth for capital tracking without a ledger. Movements are derived by diffing consecutive dates at read time.';

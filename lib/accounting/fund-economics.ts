@@ -25,11 +25,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { roundCents } from './ledger'
 import { loadCapitalPostings } from './capital-source'
-import { computeCapitalAccounts, bucketForSourceType, type CapitalAccount } from './capital-account'
-import { loadCommitmentEvents, commitmentsAsOf } from './terms'
+import { computeCapitalAccounts, bucketForSourceType, emptyAccount, type CapitalAccount } from './capital-account'
+import { loadCommitmentEvents, commitmentsFrom } from './terms'
 import { commitmentsFromPositions } from './lp-positions'
 import { loadEntityNames, loadOwnership, listVehicles } from './load'
 import { xirr, type CashFlow } from '@/lib/xirr'
+import { lpRatios } from '@/lib/lp-metrics'
 
 export interface FundMetrics {
   committed: number
@@ -63,7 +64,6 @@ export interface VehicleEconomics {
   carryAccrued: number
 }
 
-const ratio = (n: number, d: number): number | null => (d > 0 ? n / d : null)
 
 const EMPTY: FundMetrics = {
   committed: 0, paidIn: 0, uncalled: 0, distributions: 0, nav: 0, totalValue: 0,
@@ -96,6 +96,7 @@ export function rollUp(
   const irrFlows = [...flows]
   if (asOf && Math.abs(nav) > 0.005) irrFlows.push({ date: asOf, amount: nav })
 
+  const rr = lpRatios({ commitment: committed, paidIn, distributions, nav })
   return {
     committed: roundCents(committed),
     paidIn,
@@ -103,9 +104,9 @@ export function rollUp(
     distributions,
     nav,
     totalValue,
-    dpi: ratio(distributions, paidIn),
-    rvpi: ratio(nav, paidIn),
-    tvpi: ratio(totalValue, paidIn),
+    dpi: rr.dpi,
+    rvpi: rr.rvpi,
+    tvpi: rr.tvpi,
     irr: irrFlows.length >= 2 ? xirr(irrFlows) : null,
   }
 }
@@ -144,10 +145,7 @@ export async function vehicleEconomics(
       commitmentByLp = new Map(owners.map(o => [o.lpEntityId, o.commitment]))
     }
   } else {
-    commitmentByLp = commitmentsAsOf(commitmentEvents, asOf)
-    if (!Array.from(commitmentByLp.values()).some(v => v > 0)) {
-      commitmentByLp = new Map(owners.map(o => [o.lpEntityId, o.commitment]))
-    }
+    commitmentByLp = commitmentsFrom(commitmentEvents, owners, asOf)
   }
 
   const asOfDate = asOf ? new Date(asOf) : new Date()
@@ -179,7 +177,11 @@ export async function vehicleEconomics(
     return out
   }
 
-  const ids = Array.from(accounts.keys())
+  // Union of everyone with a capital account OR a commitment. A partner who committed but was
+  // never called still belongs on the LP lens — otherwise `fund.committed` (which sums all
+  // commitments) would not equal `lp.committed + gp.committed`. (Mirrors the union live-report
+  // does for the same reason.)
+  const ids = Array.from(new Set([...Array.from(accounts.keys()), ...Array.from(commitmentByLp.keys())]))
   const lpIds = new Set(ids.filter(id => (classes.get(id) ?? 'lp') !== 'gp'))
   const gpIds = new Set(ids.filter(id => (classes.get(id) ?? 'lp') === 'gp'))
 
@@ -188,8 +190,9 @@ export async function vehicleEconomics(
       .filter(([id]) => !set || set.has(id))
       .reduce((s, [, v]) => s + v, 0)
 
+  // A commitment-only partner has no capital account yet — treat them as an empty (all-zero) one.
   const pick = (set: Set<string> | null) =>
-    ids.filter(id => !set || set.has(id)).map(id => accounts.get(id)!)
+    ids.filter(id => !set || set.has(id)).map(id => accounts.get(id) ?? emptyAccount())
 
   const carryAccrued = roundCents(
     Array.from(gpIds).reduce((s, id) => s + (accounts.get(id)?.carriedInterest ?? 0), 0)
@@ -214,10 +217,11 @@ export async function fundEconomics(
   asOf?: string,
 ): Promise<VehicleEconomics[]> {
   const vehicles = await listVehicles(admin, fundId)
-  const out: VehicleEconomics[] = []
-  for (const v of vehicles) {
-    out.push(await vehicleEconomics(admin, fundId, v, asOf))
-  }
+  // Vehicles are independent, so derive them concurrently rather than one-await-per-vehicle.
+  // This was the dominant source of /funds load lag: latency was ~(round-trips × vehicle count)
+  // because each vehicle's queries waited for the previous vehicle to finish. (Mirrors what
+  // generateLiveReport already does for /lps.)
+  const out = await Promise.all(vehicles.map(v => vehicleEconomics(admin, fundId, v, asOf)))
   return out.sort((a, b) => a.vehicle.localeCompare(b.vehicle))
 }
 

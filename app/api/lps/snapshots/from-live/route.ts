@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 import { assertAdminAccess } from '@/lib/api-helpers'
 import { generateLiveReport } from '@/lib/accounting/live-report'
 
@@ -32,16 +33,31 @@ export async function POST(req: NextRequest) {
   const { data: fs } = await (admin as any)
     .from('fund_settings').select('lp_report_description, lp_report_footer').eq('fund_id', gate.fundId).maybeSingle()
 
-  const { data: snap, error: snapErr } = await (admin as any)
-    .from('lp_snapshots')
-    .insert({
-      fund_id: gate.fundId, name, as_of_date: asOfDate,
-      description: (fs as any)?.lp_report_description ?? null,
-      footer_note: (fs as any)?.lp_report_footer ?? null,
-    })
-    .select('id, name')
-    .single()
-  if (snapErr || !snap) return NextResponse.json({ error: snapErr?.message ?? 'Could not create snapshot' }, { status: 500 })
+  // Reuse a single snapshot per name rather than minting a new one on every click. Freezing is a
+  // side effect of opening the Share dialog, so a GP who clicks Share (or cancels and re-clicks)
+  // must not litter the archive with duplicate "Live report — <date>" snapshots. lp_snapshots is
+  // UNIQUE (fund_id, name), so we upsert by name: refresh the existing one (keeping its id, and
+  // therefore its existing LP shares) and replace its rows, or insert if it's the first time.
+  const snapPayload = {
+    fund_id: gate.fundId, name, as_of_date: asOfDate,
+    description: (fs as any)?.lp_report_description ?? null,
+    footer_note: (fs as any)?.lp_report_footer ?? null,
+  }
+  const { data: existing } = await (admin as any)
+    .from('lp_snapshots').select('id').eq('fund_id', gate.fundId).eq('name', name).maybeSingle()
+
+  let snap: { id: string; name: string } | null = null
+  if (existing?.id) {
+    await (admin as any).from('lp_snapshots').update(snapPayload).eq('id', existing.id).eq('fund_id', gate.fundId)
+    await (admin as any).from('lp_investments').delete().eq('fund_id', gate.fundId).eq('snapshot_id', existing.id)
+    snap = { id: existing.id, name }
+  } else {
+    const { data: inserted, error: snapErr } = await (admin as any)
+      .from('lp_snapshots').insert(snapPayload).select('id, name').single()
+    if (snapErr || !inserted) return snapErr ? dbError(snapErr, 'from-live') : NextResponse.json({ error: 'Could not create snapshot' }, { status: 500 })
+    snap = inserted
+  }
+  if (!snap) return NextResponse.json({ error: 'Could not create snapshot' }, { status: 500 })
 
   // Write the live figures into the snapshot. Look-through member rows carry a synthetic
   // portfolio_group tag; store them as-is so the snapshot matches what the live report showed.
@@ -61,7 +77,7 @@ export async function POST(req: NextRequest) {
   }))
   if (rows.length > 0) {
     const { error: invErr } = await (admin as any).from('lp_investments').insert(rows)
-    if (invErr) return NextResponse.json({ error: invErr.message, snapshotId: snap.id }, { status: 500 })
+    if (invErr) { console.error('[from-live] rows insert', invErr.message); return NextResponse.json({ error: 'Could not write the report rows.', snapshotId: snap.id }, { status: 500 }) }
   }
 
   return NextResponse.json({ snapshotId: snap.id, name: snap.name })

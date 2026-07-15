@@ -18,12 +18,13 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
 import { useConfirm } from '@/components/confirm-dialog'
-import { useFeatureVisibility, useIsAdmin } from '@/components/feature-visibility-context'
+import { useFeatureVisibility, useIsAdmin, useLpPortalEnabled } from '@/components/feature-visibility-context'
 import { PortfolioGroupFilter } from '@/components/lp-portfolio-group-filter'
 import { LpSharePanel } from '@/components/lp-share-control'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
+import { lpRatios } from '@/lib/lp-metrics'
 
 interface LiveRow {
   entity_id: string
@@ -66,13 +67,10 @@ function total(rows: LiveRow[]): Totals {
     distributions: a.distributions + r.distributions, nav: a.nav + r.nav,
     total_value: a.total_value + r.total_value, outstanding_balance: a.outstanding_balance + r.outstanding_balance,
   }), { commitment: 0, paid_in_capital: 0, distributions: 0, nav: 0, total_value: 0, outstanding_balance: 0 })
-  const paid = t.paid_in_capital
+  const rr = lpRatios({ commitment: t.commitment, paidIn: t.paid_in_capital, distributions: t.distributions, nav: t.nav })
   return {
     ...t,
-    pctFunded: t.commitment > 0 ? t.paid_in_capital / t.commitment : null,
-    dpi: paid > 0 ? Math.round((t.distributions / paid) * 10000) / 10000 : null,
-    rvpi: paid > 0 ? Math.round((t.nav / paid) * 10000) / 10000 : null,
-    tvpi: paid > 0 ? Math.round(((t.distributions + t.nav) / paid) * 10000) / 10000 : null,
+    ...rr,
     // IRR is not additive across vehicles, so it is only shown when an investor has a single
     // vehicle position (then it is exactly that row's IRR). Multi-vehicle investors show "—".
     irr: rows.length === 1 ? rows[0].irr : null,
@@ -92,6 +90,7 @@ function LpsInner() {
   const fmt = (v: number) => formatCurrencyFull(v, currency)
   const isAdmin = useIsAdmin()
   const fv = useFeatureVisibility()
+  const lpPortalEnabled = useLpPortalEnabled()
   const confirm = useConfirm()
 
   const [asOf, setAsOf] = useState('')
@@ -108,8 +107,7 @@ function LpsInner() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [rename, setRename] = useState<{ id: string; name: string } | null>(null)
   const [grouping, setGrouping] = useState<{ id: string; name: string } | null>(null)
-  const [shareSnapshotId, setShareSnapshotId] = useState<string | null>(null)
-  const [freezing, setFreezing] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
 
   const load = useCallback(async (date: string) => {
     setLoading(true); setError(null)
@@ -190,24 +188,6 @@ function LpsInner() {
     } finally { setExporting(false) }
   }
 
-  async function shareWithLps() {
-    // Freeze the current live report into a snapshot, then share THAT — the portal shares
-    // fixed statements, not a live view.
-    setFreezing(true); setError(null)
-    try {
-      const res = await fetch('/api/lps/snapshots/from-live', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ asOfDate: applied || undefined }),
-      })
-      const d = await res.json().catch(() => ({}))
-      if (!res.ok || !d.snapshotId) { setError(d.error ?? 'Could not prepare the report to share.'); return }
-      setShareSnapshotId(d.snapshotId)
-    } catch {
-      setError('Could not prepare the report to share.')
-    } finally {
-      setFreezing(false)
-    }
-  }
 
   return (
     <div className="px-4 md:pl-8 md:pr-4 pt-3 pb-8 w-full space-y-6">
@@ -216,8 +196,7 @@ function LpsInner() {
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">LPs</h1>
           <p className="text-sm text-muted-foreground max-w-3xl">
-            Every LP&rsquo;s capital across every vehicle, derived live rather than from a stored snapshot —
-            rebuild it as of any date.
+            Partner capital across all vehicles.
           </p>
         </div>
         <div className="shrink-0 flex items-center gap-2">
@@ -246,30 +225,35 @@ function LpsInner() {
             onToggleAll={() => setExcludedGroups(prev => prev.size === 0 ? new Set(allGroups) : new Set())}
           />
         )}
-        <label className="text-xs text-muted-foreground flex items-center gap-1 ml-1"><Calendar className="h-3 w-3" /> As of</label>
-        {/* Changing the date rebuilds immediately — no separate apply button. Default (empty)
-            is the latest data; "Latest" resets back to it. */}
-        <Input type="date" value={asOf} onChange={e => { setAsOf(e.target.value); setApplied(e.target.value) }} className="h-9 w-40" />
-        {applied && <Button size="sm" variant="ghost" onClick={() => { setAsOf(''); setApplied('') }}>Latest</Button>}
-
-        <span className="flex-1" />
-
+        {/* Action buttons sit on the LEFT; the As-of date is pushed to the RIGHT to match the
+            other LP capital pages. */}
         <Button size="sm" variant="outline" className="text-muted-foreground" onClick={exportExcel} disabled={exporting || investors.length === 0}>
           <Download className="h-4 w-4 mr-1" />{exporting ? 'Exporting…' : 'Export Excel'}
         </Button>
         <Button size="sm" variant="outline" className="text-muted-foreground" asChild>
-          <Link href="/lps/cards"><FileText className="h-4 w-4 mr-1" /> Report cards</Link>
+          <Link href="/lps/cards"><FileText className="h-4 w-4 mr-1" /> PDFs</Link>
         </Button>
         {isAdmin && (
           <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => setSettingsOpen(true)}>
             <Settings className="h-4 w-4 mr-1" /> Settings
           </Button>
         )}
-        {isAdmin && (fv.lp_portal_access === 'everyone' || fv.lp_portal_access === 'admin') && (
-          <Button size="sm" variant="outline" className="text-muted-foreground" onClick={shareWithLps} disabled={freezing || investors.length === 0}>
-            {freezing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Users className="h-4 w-4 mr-1" />} Share with LPs
+        {/* Gate on the portal MASTER switch (like every other share/publish affordance), not on
+            lp_portal_access — sharing into a portal that's off is a no-op that mints an orphan
+            snapshot before the "portal is off" notice ever shows. */}
+        {isAdmin && lpPortalEnabled && (
+          <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => setShareOpen(true)} disabled={investors.length === 0}>
+            <Users className="h-4 w-4 mr-1" /> Share
           </Button>
         )}
+
+        <span className="flex-1" />
+
+        <label className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> As of</label>
+        {/* Changing the date rebuilds immediately — no separate apply button. Default (empty)
+            is the latest data; "Latest" resets back to it. */}
+        <Input type="date" value={asOf} onChange={e => { setAsOf(e.target.value); setApplied(e.target.value) }} className="h-9 w-40" />
+        {applied && <Button size="sm" variant="ghost" onClick={() => { setAsOf(''); setApplied('') }}>Latest</Button>}
       </div>
 
       {error && <Card><CardContent className="p-4 text-red-600 text-sm">{error}</CardContent></Card>}
@@ -302,7 +286,6 @@ function LpsInner() {
                     <th className="text-right font-medium px-3 py-2">RVPI</th>
                     <th className="text-right font-medium px-3 py-2">TVPI</th>
                     <th className="text-right font-medium px-3 py-2">IRR</th>
-                    {isAdmin && <th className="px-3 py-2 w-0" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -318,6 +301,14 @@ function LpsInner() {
                               {/* Long names truncate at a fixed cap rather than wrapping or collapsing the column. */}
                               <span className="truncate max-w-[240px]" title={inv.name}>{inv.name}</span>
                               {multi && <span className="text-xs text-muted-foreground font-normal ml-1 shrink-0">({inv.rows.length})</span>}
+                              {/* Edit actions sit right next to the name, revealed on row hover. */}
+                              {isAdmin && (
+                                <span className="flex items-center gap-1.5 ml-2 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                                  <Link href={`/lps/cards/${inv.id}`} title="Report card" className="hover:text-foreground"><FileText className="h-3.5 w-3.5" /></Link>
+                                  <button onClick={() => setRename({ id: inv.id, name: inv.name })} title="Rename" className="hover:text-foreground"><Pencil className="h-3.5 w-3.5" /></button>
+                                  <button onClick={() => setGrouping({ id: inv.id, name: inv.name })} title="Group under another investor" className="hover:text-foreground"><Users className="h-3.5 w-3.5" /></button>
+                                </span>
+                              )}
                             </span>
                           </td>
                           <Money v={inv.totals.commitment} fmt={fmt} />
@@ -330,15 +321,6 @@ function LpsInner() {
                           <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{moicX(inv.totals.rvpi)}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums">{moicX(inv.totals.tvpi)}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{pctX(inv.totals.irr)}</td>
-                          {isAdmin && (
-                            <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground" onClick={e => e.stopPropagation()}>
-                              <span className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Link href={`/lps/cards/${inv.id}`} title="Report card" className="hover:text-foreground"><FileText className="h-3.5 w-3.5" /></Link>
-                                <button onClick={() => setRename({ id: inv.id, name: inv.name })} title="Rename" className="hover:text-foreground"><Pencil className="h-3.5 w-3.5" /></button>
-                                <button onClick={() => setGrouping({ id: inv.id, name: inv.name })} title="Group under another investor" className="hover:text-foreground"><Users className="h-3.5 w-3.5" /></button>
-                              </span>
-                            </td>
-                          )}
                         </tr>
                         {open && inv.rows.map(r => (
                           <tr key={`${inv.id}-${r.entity_id}-${r.portfolio_group}`} className="border-b bg-muted/10 text-muted-foreground">
@@ -359,14 +341,13 @@ function LpsInner() {
                             <td className="px-3 py-1.5 text-right tabular-nums text-xs">{moicX(r.rvpi)}</td>
                             <td className="px-3 py-1.5 text-right tabular-nums text-xs">{moicX(r.tvpi)}</td>
                             <td className="px-3 py-1.5 text-right tabular-nums text-xs">{pctX(r.irr)}</td>
-                            {isAdmin && <td />}
                           </tr>
                         ))}
                       </Fragment>
                     )
                   })}
                   {investors.length === 0 && (
-                    <tr><td colSpan={isAdmin ? 12 : 11} className="p-8 text-center text-muted-foreground">
+                    <tr><td colSpan={11} className="p-8 text-center text-muted-foreground">
                       {search ? 'No investors match your search.' : 'No LP capital found. Track a vehicle’s positions or book its history.'}
                     </td></tr>
                   )}
@@ -385,7 +366,6 @@ function LpsInner() {
                       <td className="px-3 py-1.5 text-right tabular-nums">{moicX(grand.rvpi)}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums">{moicX(grand.tvpi)}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums">{grand.irr != null ? pctX(grand.irr) : '—'}</td>
-                      {isAdmin && <td />}
                     </tr>
                   </tfoot>
                 )}
@@ -402,23 +382,18 @@ function LpsInner() {
       {/* Share freezes the current live report into a fixed snapshot, then lets you pick which
           LPs can see it in their portal — the same picker the capital-accounts publish uses.
           No email is sent; LPs see it when they sign in. */}
-      <Dialog open={!!shareSnapshotId} onOpenChange={o => { if (!o) setShareSnapshotId(null) }}>
+      {/* Live publish: each checked LP sees their own slice of the LIVE report in their portal —
+          always current, no frozen snapshot. */}
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Share this report with LPs</DialogTitle>
+            <DialogTitle>Publish the live report to LPs</DialogTitle>
             <DialogDescription>
-              A snapshot was frozen from the current live data ({applied || 'latest'}), so LPs see a fixed statement
-              rather than a moving view. Check the LPs who should see it in their portal.
+              Check the LPs who should see their position in their portal. They see the live data — the same as this
+              page, always current — not a frozen statement.
             </DialogDescription>
           </DialogHeader>
-          {shareSnapshotId && (
-            <>
-              <LpSharePanel shareEndpoint={`/api/lps/snapshots/${shareSnapshotId}/share`} />
-              <div className="flex justify-end pt-1">
-                <Button variant="ghost" size="sm" asChild><Link href="/lps/snapshots">Open in archive</Link></Button>
-              </div>
-            </>
-          )}
+          {shareOpen && <LpSharePanel shareEndpoint="/api/lps/live-report/share" />}
         </DialogContent>
       </Dialog>
 

@@ -48,6 +48,23 @@ export async function GET() {
   }
   const sorted = Array.from(byId.values()).sort((a, b) => (b.as_of_date ?? '').localeCompare(a.as_of_date ?? ''))
   const readState = await getSelfReadState(admin, { lpAccountId, targetType: 'snapshot', targetIds: sorted.map(s => s.id) })
-  const snapshots = sorted.map(s => ({ ...s, last_viewed_at: readState[s.id] ?? null }))
-  return NextResponse.json({ snapshots })
+  const frozen = sorted.map(s => ({ ...s, last_viewed_at: readState[s.id] ?? null, viewHref: null as string | null, pdfUrl: null as string | null }))
+
+  // The LIVE statement: for each enabled fund whose live report is PUBLISHED to this LP, offer a
+  // single always-current capital statement (viewed on the overview, downloaded live). This is the
+  // replacement for frozen snapshots — new publishes create these, not snapshot shares.
+  const { data: liveShares } = await (admin as any)
+    .from('lp_live_report_shares').select('fund_id').in('lp_investor_id', investorIds)
+  const liveFundIds = Array.from(new Set(((liveShares ?? []) as any[]).map(s => s.fund_id as string))).filter(f => enabledFunds.has(f))
+  const live = liveFundIds.map(fundId => ({
+    id: `live:${fundId}`,
+    name: 'Capital Statement',
+    as_of_date: null as string | null,
+    shared_at: '',
+    last_viewed_at: null as string | null,
+    viewHref: '/portal/overview' as string | null,
+    pdfUrl: `/api/portal/statement/pdf?fund=${fundId}` as string | null,
+  }))
+
+  return NextResponse.json({ snapshots: [...live, ...frozen] })
 }

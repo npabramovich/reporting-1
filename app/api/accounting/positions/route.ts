@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 import { assertAdminAccess, assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
@@ -79,7 +80,7 @@ export async function PUT(req: NextRequest) {
   const { error } = await (admin as any)
     .from('lp_positions')
     .upsert(row, { onConflict: 'fund_id,vehicle_id,lp_entity_id,as_of_date' })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'accounting-positions')
   return NextResponse.json({ ok: true })
 }
 
@@ -101,6 +102,6 @@ export async function DELETE(req: NextRequest) {
   const { error } = await (admin as any)
     .from('lp_positions').delete()
     .eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId).eq('as_of_date', asOfDate)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'accounting-positions')
   return NextResponse.json({ ok: true })
 }

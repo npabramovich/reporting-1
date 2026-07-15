@@ -141,7 +141,7 @@ export async function gpLinkFor(
  *   3. The legacy `lp_investments` commitment scalar, which is the fallback the look-through
  *      already carries.
  */
-async function loadOwnershipBasis(
+export async function loadOwnershipBasis(
   admin: SupabaseClient,
   fundId: string,
   link: GpVehicleLink,

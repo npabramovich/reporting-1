@@ -104,8 +104,18 @@ export async function PATCH(req: NextRequest) {
       update.vintage_year = y
     }
   }
-  // Link a GP/associate entity to the fund vehicle it serves (or clear it).
-  if (body.servesVehicleId !== undefined) update.serves_vehicle_id = body.servesVehicleId || null
+  // Link a GP/associate entity to the fund vehicle it serves (or clear it). Verify the target
+  // vehicle is in THIS fund — same as lpEntityId below. A cross-fund id is inert downstream
+  // (loadGpLinks filters served vehicles by fund), but reject it here rather than store it.
+  if (body.servesVehicleId !== undefined) {
+    const sid = body.servesVehicleId || null
+    if (sid) {
+      const { data: sv } = await (admin as any)
+        .from('fund_vehicles').select('id').eq('id', sid).eq('fund_id', gate.fundId).maybeSingle()
+      if (!sv) return NextResponse.json({ error: 'That served vehicle is not in this fund.' }, { status: 400 })
+    }
+    update.serves_vehicle_id = sid
+  }
 
   // AND as WHOM it holds that position. The associates look-through needs both: which fund the
   // associate invests in, and which lp_entity on that fund's books represents it. Together

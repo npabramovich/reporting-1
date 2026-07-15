@@ -18,6 +18,8 @@ export interface ReportCardRow {
   distributions: number
   nav: number
   totalValue: number
+  /** Called capital not yet funded (the receivable). Optional — only ledger vehicles have one. */
+  receivable?: number
   pctFunded: number | null
   dpi: number | null
   rvpi: number | null
@@ -180,6 +182,49 @@ export function LpReportCard(props: ReportCardProps) {
                 </tr>
               </tfoot>
             </table>
+
+            {/* Called but unfunded — only when some vehicle has capital called that the LP has not
+                yet wired (the receivable). Shown as its own table so it never muddles the
+                paid-in figures above. */}
+            {(() => {
+              const unfunded = rows.filter(r => (r.receivable ?? 0) > 0.005)
+              if (unfunded.length === 0) return null
+              const total = unfunded.reduce((s, r) => s + (r.receivable ?? 0), 0)
+              return (
+                <>
+                  <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Called, Not Yet Funded</h3>
+                  <table className="w-full text-xs mb-5" style={{ tableLayout: 'fixed' }}>
+                    <colgroup>
+                      <col style={{ width: '17.5%' }} />
+                      <col style={{ width: '49.5%' }} />
+                      <col style={{ width: '33%' }} />
+                    </colgroup>
+                    <thead>
+                      <tr className="border-b-2 border-foreground/20">
+                        <th className="text-left pl-1.5 pr-2.5 py-1.5 font-semibold">Entity</th>
+                        <th className="text-left pl-2.5 pr-1.5 py-1.5 font-semibold">Investment</th>
+                        <th className="text-right px-1.5 py-1.5 font-semibold">Unfunded (Called)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unfunded.map(r => (
+                        <tr key={r.key} className="border-b border-foreground/10">
+                          <td className="pl-1.5 pr-2.5 py-1.5 max-w-0"><div className="line-clamp-2 break-words">{r.entityName}</div></td>
+                          <td className="pl-2.5 pr-1.5 py-1.5">{r.portfolioGroup}</td>
+                          <td className="px-1.5 py-1.5 text-right font-mono">{fmt(r.receivable ?? 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-foreground/20 font-semibold">
+                        <td className="px-1.5 py-1.5" colSpan={2}>Total</td>
+                        <td className="px-1.5 py-1.5 text-right font-mono">{fmt(total)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </>
+              )
+            })()}
           </>
         )}
       </div>

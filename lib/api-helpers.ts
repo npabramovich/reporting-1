@@ -2,6 +2,30 @@ import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
+ * Resolve the caller's fund WITHOUT any role gate — the single-fund-per-user lookup that ~100
+ * routes currently hand-roll inline as `getUser → fund_members.select('fund_id')`. Use this
+ * instead of copying that sequence: it keeps the tenancy resolution (the security boundary in
+ * this app) in one place, and never leaks a DB error to the client. Add an explicit role check
+ * after it when the route needs one, or prefer assertReadAccess / assertWriteAccess / assertAdminAccess.
+ */
+export async function resolveFund(
+  admin: SupabaseClient,
+  userId: string
+): Promise<{ fundId: string; role: string } | NextResponse> {
+  const { data: membership, error } = await admin
+    .from('fund_members')
+    .select('fund_id, role')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) {
+    console.error('[resolveFund] DB error:', error.message)
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+  }
+  if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 403 })
+  return { fundId: membership.fund_id, role: membership.role }
+}
+
+/**
  * Returns the user's fund membership, or a 403 response if the user
  * has a read-only (viewer) role and cannot perform mutations.
  */

@@ -59,6 +59,25 @@ export function commitmentsAsOf(events: CommitmentEvent[], asOf?: string | null)
   return out
 }
 
+/**
+ * The standard commitment fallback ladder for a LEDGER-side read: effective-dated
+ * commitment_events as of the report date, or — when a vehicle has no event history yet — the
+ * legacy per-partner `lp_investments` commitment scalar (`owners`). One definition so the read
+ * paths (live report, fund/GP economics) cannot drift on which source wins.
+ *
+ * (The close and capital-calls deliberately do NOT use this: the close adds a user-facing warning
+ * and a capital-balance basis, and capital-calls is source-aware for positions-tracked vehicles.)
+ */
+export function commitmentsFrom(
+  events: CommitmentEvent[],
+  owners: { lpEntityId: string; commitment: number }[],
+  asOf?: string | null,
+): Map<string, number> {
+  const fromEvents = commitmentsAsOf(events, asOf)
+  if (Array.from(fromEvents.values()).some(v => v > 0)) return fromEvents
+  return new Map(owners.map(o => [o.lpEntityId, o.commitment]))
+}
+
 export interface WeightInput {
   lpEntityId: string
   /** Committed capital, or capital-account balance — whichever the basis says. */

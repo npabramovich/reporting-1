@@ -22,11 +22,14 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient()
   const { data: membership } = await admin
     .from('fund_members')
-    .select('fund_id')
+    .select('fund_id, role')
     .eq('user_id', user.id)
     .maybeSingle()
 
   if (!membership) return NextResponse.json({ error: 'No fund' }, { status: 403 })
+  // Per-LP report PDFs carry each investor's commitments/NAV/IRR — admin only, matching the
+  // Excel export. Without this a non-admin member (or the demo viewer role) could pull them.
+  if (membership.role !== 'admin') return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
   const fundId = membership.fund_id
 
   const body = await req.json()
@@ -98,6 +101,7 @@ export async function POST(req: NextRequest) {
         called_capital: r.called_capital,
         paid_in_capital: r.paid_in_capital,
         distributions: r.distributions,
+        receivable: r.receivable,
         irr: r.irr,
         lp_entities: {
           id: r.entity_id,

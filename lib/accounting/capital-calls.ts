@@ -29,7 +29,7 @@ import { loadPostedLedger, loadOwnership, loadEntityNames, loadEntityClasses } f
 import { loadCapitalPostings } from './capital-source'
 import { commitmentsFromPositions } from './lp-positions'
 import { accountIdByCode, ensureCapitalAccounts, persistEntry } from './persist'
-import { computeCapitalAccounts, emptyAccount, type CapitalAccount, type CapitalPeriod } from './capital-account'
+import { computeCapitalAccounts, emptyAccount, type CapitalAccount, type CapitalPeriod, type CapitalPosting } from './capital-account'
 import { buildCapitalCallIssuanceEntry } from './entries'
 import { allocateAmount } from './allocation'
 import { vehicleIdByName } from './vehicle-id'
@@ -354,27 +354,21 @@ async function ledgerMovements(
     }))
 }
 
-/** Movements from lp_capital_events — a vehicle tracked at the capital-account level only. */
-async function eventMovements(
-  admin: SupabaseClient,
-  fundId: string,
-  vehicleId: string | null,
-  lpEntityId: string
-): Promise<Movement[]> {
-  if (!vehicleId) return []
-  const { data } = await admin
-    .from('lp_capital_events' as any)
-    .select('event_date, memo, source_type, amount')
-    .eq('fund_id', fundId)
-    .eq('vehicle_id', vehicleId)
-    .eq('lp_entity_id', lpEntityId)
-
-  return ((data as any[]) ?? []).map(r => ({
-    date: String(r.event_date ?? ''),
-    memo: (r.memo as string) ?? null,
-    sourceType: (r.source_type as string) ?? null,
-    delta: roundCents(-Number(r.amount ?? 0)),
-  }))
+/**
+ * Movements for a NON-ledger (positions-tracked) vehicle, derived from the SAME delta postings
+ * that produced the roll-forward — so the statement's activity list and its totals can never
+ * disagree. (Previously this read the legacy `lp_capital_events` table, which is empty for a
+ * vehicle tracked via `lp_positions`, so the activity list came up blank.)
+ */
+function positionMovements(capitalPostings: CapitalPosting[], lpEntityId: string): Movement[] {
+  return capitalPostings
+    .filter(p => p.lpEntityId === lpEntityId)
+    .map(p => ({
+      date: String(p.entryDate ?? ''),
+      memo: null,
+      sourceType: p.sourceType ?? null,
+      delta: roundCents(-p.amount), // debit-positive posting → capital delta is the negation
+    }))
 }
 
 /** A single LP's capital statement: summary, roll-forward, and every capital movement. */
@@ -402,7 +396,7 @@ export async function lpStatement(
   // either way.
   const movements = source === 'ledger'
     ? await ledgerMovements(admin, fundId, vehicleId, lpEntityId)
-    : await eventMovements(admin, fundId, vehicleId, lpEntityId)
+    : positionMovements(capitalPostings, lpEntityId)
   movements.sort((a, b) => a.date.localeCompare(b.date))
 
   // The statement lists activity IN THE PERIOD, under exactly that heading. This used to

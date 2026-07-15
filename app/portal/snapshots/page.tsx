@@ -6,7 +6,7 @@ import { Loader2, FileText, Download, Mail, ChevronRight } from 'lucide-react'
 import { LpAnalyst } from '@/components/portal/lp-analyst'
 import { DocumentViewer, isPreviewable, type ViewerDoc } from '@/components/portal/document-viewer'
 
-interface Snapshot { id: string; name: string; as_of_date: string | null; last_viewed_at: string | null }
+interface Snapshot { id: string; name: string; as_of_date: string | null; last_viewed_at: string | null; viewHref?: string | null; pdfUrl?: string | null }
 interface Letter { id: string; period_label: string; last_viewed_at: string | null }
 interface Doc {
   id: string; title: string; file_name: string; mime_type: string | null; size_bytes: number | null
@@ -111,12 +111,14 @@ export default function PortalLibraryPage() {
   }
 
   const isDocUnread = (d: Doc) => !d.sample && !d.last_viewed_at
+  // The live statement (viewHref set) is always current, so it has no "unread" state.
+  const isSnapUnread = (s: Snapshot) => !s.viewHref && !s.last_viewed_at
   const unreadCount =
-    snapshots.filter(s => !s.last_viewed_at).length +
+    snapshots.filter(isSnapUnread).length +
     letters.filter(l => !l.last_viewed_at).length +
     docs.filter(isDocUnread).length
 
-  const visSnapshots = unreadOnly ? snapshots.filter(s => !s.last_viewed_at) : snapshots
+  const visSnapshots = unreadOnly ? snapshots.filter(isSnapUnread) : snapshots
   const visLetters = unreadOnly ? letters.filter(l => !l.last_viewed_at) : letters
 
   // scope -> docs (flat, newest first); metadata is shown on each row.
@@ -264,15 +266,15 @@ export default function PortalLibraryPage() {
                 {visSnapshots.map(s => (
                   <ViewableRow
                     key={s.id}
-                    href={`/portal/snapshots/${s.id}`}
+                    href={s.viewHref ?? `/portal/snapshots/${s.id}`}
                     icon={<FileText className="h-4 w-4 text-muted-foreground shrink-0" />}
                     title={s.name}
-                    subtitle={s.as_of_date ? `As of ${s.as_of_date}` : null}
+                    subtitle={s.viewHref ? 'Current position' : (s.as_of_date ? `As of ${s.as_of_date}` : null)}
                     dlKey={`snap-${s.id}`}
-                    dlUrl={`/api/portal/snapshots/${s.id}/pdf`}
+                    dlUrl={s.pdfUrl ?? `/api/portal/snapshots/${s.id}/pdf`}
                     dlName={`${s.name}.pdf`}
-                    unread={!s.last_viewed_at}
-                    viewedAt={s.last_viewed_at}
+                    unread={isSnapUnread(s)}
+                    viewedAt={s.viewHref ? null : s.last_viewed_at}
                   />
                 ))}
               </div>
