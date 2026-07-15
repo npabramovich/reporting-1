@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runDealResearch } from '@/lib/deals/research'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Drains the deal-research queue: inbound deals that cleared the fund's interest
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: true })
     .limit(BATCH_SIZE)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'cron-deal-research')
 
   const deals = ((data as any[]) ?? [])
   if (deals.length === 0) return NextResponse.json({ ok: true, researched: 0 })

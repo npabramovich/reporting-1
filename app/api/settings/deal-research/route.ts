@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Settings for external web research on inbound deals.
@@ -52,7 +53,7 @@ export async function PUT(req: NextRequest) {
     .update(update)
     .eq('fund_id', fundId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'settings-deal-research')
   return NextResponse.json({ ok: true, ...update })
 }
 

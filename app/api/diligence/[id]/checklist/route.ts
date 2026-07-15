@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { parseChecklistText } from '@/lib/diligence/parse-checklist'
+import { dbError } from '@/lib/api-error'
 
 interface ChecklistRow {
   id: string
@@ -32,7 +33,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .eq('fund_id', fundId)
     .order('order_index', { ascending: true })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-checklist-list')
   return NextResponse.json({ items: (data ?? []) as unknown as ChecklistRow[] })
 }
 
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .eq('deal_id', params.id)
       .eq('fund_id', fundId)
       .in('id', itemIds)
-    if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
+    if (fetchErr) return dbError(fetchErr, 'diligence-checklist-reorder-fetch')
     const found = (rows ?? []) as Array<{ id: string; order_index: number }>
     if (found.length !== itemIds.length) {
       return NextResponse.json({ error: 'Some items were not found on this deal' }, { status: 400 })
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         .eq('id', itemIds[i])
         .eq('deal_id', params.id)
         .eq('fund_id', fundId)
-      if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 })
+      if (updErr) return dbError(updErr, 'diligence-checklist-reorder-update')
     }
     return NextResponse.json({ ok: true })
   }
@@ -121,7 +122,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       })
       .select('*')
       .single()
-    if (secErr) return NextResponse.json({ error: secErr.message }, { status: 500 })
+    if (secErr) return dbError(secErr, 'diligence-checklist-add-section')
     return NextResponse.json({ item: section })
   }
 
@@ -160,7 +161,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           } as any)
           .select('id, order_index')
           .single()
-        if (secErr) return NextResponse.json({ error: secErr.message }, { status: 500 })
+        if (secErr) return dbError(secErr, 'diligence-checklist-add-parent-section')
         parentId = (newSection as any).id as string
         maxOrder = (newSection as any).order_index as number
       }
@@ -179,7 +180,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       } as any)
       .select('*')
       .single()
-    if (itemErr) return NextResponse.json({ error: itemErr.message }, { status: 500 })
+    if (itemErr) return dbError(itemErr, 'diligence-checklist-add-item')
     return NextResponse.json({ item: inserted })
   }
 
@@ -194,7 +195,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .delete()
     .eq('deal_id', params.id)
     .eq('fund_id', fundId)
-  if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
+  if (delErr) return dbError(delErr, 'diligence-checklist-replace-delete')
 
   // Sections first so we can resolve parent_id for items.
   const sectionIdByLabel: Record<string, string> = {}
@@ -215,7 +216,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       } as any)
       .select('id')
       .single()
-    if (secErr) return NextResponse.json({ error: secErr.message }, { status: 500 })
+    if (secErr) return dbError(secErr, 'diligence-checklist-replace-section')
     sectionIdByLabel[entry.label] = (sec as any).id as string
   }
 
@@ -240,7 +241,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const { error: insErr } = await (admin as any)
       .from('diligence_checklist_items')
       .insert(chunk as any)
-    if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
+    if (insErr) return dbError(insErr, 'diligence-checklist-replace-items')
   }
 
   const { data: items } = await (admin as any)
@@ -289,7 +290,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .eq('fund_id', fundId)
     .select('*')
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-checklist-item-update')
   return NextResponse.json({ item: data })
 }
 
@@ -308,7 +309,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     .eq('id', itemId)
     .eq('deal_id', params.id)
     .eq('fund_id', fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-checklist-item-delete')
   return NextResponse.json({ ok: true })
 }
 

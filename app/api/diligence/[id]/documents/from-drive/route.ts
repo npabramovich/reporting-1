@@ -196,7 +196,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
               .upload(storagePath, buffer, { contentType: effectiveMime, upsert: false })
             if (uploadErr) {
               errorCount++
-              emit({ type: 'file_error', file: displayName, error: uploadErr.message })
+              console.error('[diligence-from-drive] upload', uploadErr.message)
+              emit({ type: 'file_error', file: displayName, error: 'Upload failed.' })
               continue
             }
 
@@ -221,7 +222,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             if (insertErr) {
               await admin.storage.from('diligence-documents').remove([storagePath]).catch(() => {})
               errorCount++
-              emit({ type: 'file_error', file: displayName, error: insertErr.message })
+              console.error('[diligence-from-drive] insert', insertErr.message)
+              emit({ type: 'file_error', file: displayName, error: 'Could not save the document.' })
               continue
             }
 

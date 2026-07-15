@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess, assertReadAccess } from '@/lib/api-helpers'
+import { dbError } from '@/lib/api-error'
 import { extractFromBuffer } from '@/lib/parsing/extractAttachmentText'
 
 /**
@@ -30,7 +31,7 @@ export async function GET() {
     .select('id, title, file_name, mime_type, size_bytes, scope, vehicle, category, doc_date, uploaded_at, lp_document_shares(lp_investor_id, lp_investors(name))')
     .eq('fund_id', access.fundId)
     .order('uploaded_at', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'lps-documents')
   return NextResponse.json({ documents: docs ?? [] })
 }
 
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
     .from('lp_documents')
     .insert({ fund_id: fundId, title, file_name: fileName, storage_path: storagePath, mime_type: body.mime_type ?? null, size_bytes: body.size_bytes ?? null, scope, vehicle, category: (typeof body.category === 'string' && body.category.trim()) ? body.category.trim() : null, doc_date: body.doc_date || null, uploaded_by: user.id })
     .select('id').single()
-  if (error || !doc) return NextResponse.json({ error: error?.message ?? 'Insert failed' }, { status: 500 })
+  if (error || !doc) return dbError(error ?? { message: 'Insert failed' }, 'lps-documents')
 
   if (investorIds.length) {
     const rows = investorIds.map(id => ({ document_id: doc.id, lp_investor_id: id, fund_id: fundId }))
@@ -136,6 +137,6 @@ export async function DELETE(req: NextRequest) {
 
   await admin.storage.from('lp-documents').remove([doc.storage_path]).catch(() => {})
   const { error } = await (admin as any).from('lp_documents').delete().eq('id', id).eq('fund_id', writeCheck.fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'lps-documents')
   return NextResponse.json({ ok: true })
 }

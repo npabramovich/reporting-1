@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Admin-only snapshot sharing (Phase 2 of LP reporting).
@@ -43,7 +44,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .select('lp_investor_id')
     .eq('snapshot_id', snapshotId)
     .eq('fund_id', fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'lps-snapshots-share')
   return NextResponse.json({ lp_investor_ids: (data ?? []).map((r: any) => r.lp_investor_id) })
 }
 
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       shared_by: user.id,
     }))
     const { error: insErr } = await (admin as any).from('lp_snapshot_shares').insert(rows)
-    if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
+    if (insErr) return dbError(insErr, 'lps-snapshots-share')
   }
 
   return NextResponse.json({ ok: true, lp_investor_ids: target })
@@ -112,6 +113,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     .eq('snapshot_id', snapshotId)
     .eq('fund_id', fundId)
     .eq('lp_investor_id', lpInvestorId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'lps-snapshots-share')
   return NextResponse.json({ ok: true })
 }

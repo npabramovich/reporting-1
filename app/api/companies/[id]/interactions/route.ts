@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 export async function GET(
   req: NextRequest,
@@ -40,7 +41,7 @@ export async function GET(
     .limit(limit)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return dbError(error, 'companies-id-interactions')
   }
 
   return NextResponse.json(interactions ?? [])

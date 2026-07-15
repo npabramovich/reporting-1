@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Generate or clear the public-submission token for a fund. The token is the
@@ -31,7 +32,7 @@ export async function POST(_req: NextRequest) {
     .from('fund_settings')
     .update({ deal_submission_token: token })
     .eq('fund_id', membership.fund_id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'settings-deal-submission-token')
 
   return NextResponse.json({ token })
 }
@@ -54,7 +55,7 @@ export async function DELETE(_req: NextRequest) {
     .from('fund_settings')
     .update({ deal_submission_token: null })
     .eq('fund_id', membership.fund_id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'settings-deal-submission-token')
 
   return NextResponse.json({ ok: true })
 }

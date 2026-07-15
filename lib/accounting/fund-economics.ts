@@ -29,6 +29,7 @@ import { computeCapitalAccounts, bucketForSourceType, emptyAccount, type Capital
 import { loadCommitmentEvents, commitmentsFrom } from './terms'
 import { commitmentsFromPositions } from './lp-positions'
 import { loadEntityNames, loadOwnership, listVehicles } from './load'
+import { loadFundPreload, vehicleCapitalPreload, commitmentEventsForGroup, type FundPreload } from './fund-preload'
 import { xirr, type CashFlow } from '@/lib/xirr'
 import { lpRatios } from '@/lib/lp-metrics'
 
@@ -124,14 +125,18 @@ export async function vehicleEconomics(
   fundId: string,
   group: string,
   asOf?: string,
+  preload?: FundPreload,
 ): Promise<VehicleEconomics> {
+  // With a preload, ownership, entity names/classes, capital source and vintage come from the
+  // one fund-wide read; without it (direct callers) each still loads per-vehicle as before.
+  const idMap = preload?.idMap
   const [{ source, postings }, commitmentEvents, owners, names, classes, vintage] = await Promise.all([
-    loadCapitalPostings(admin, fundId, group, asOf),
-    loadCommitmentEvents(admin, fundId, group),
-    loadOwnership(admin, fundId, group),
-    loadEntityNames(admin, fundId, group),
-    loadEntityClasses(admin, fundId),
-    loadVintage(admin, fundId, group),
+    loadCapitalPostings(admin, fundId, group, asOf, idMap, preload ? vehicleCapitalPreload(preload, group) : undefined),
+    loadCommitmentEvents(admin, fundId, group, idMap, preload ? commitmentEventsForGroup(preload, group) : undefined),
+    preload ? Promise.resolve(preload.ownershipByGroup.get(group) ?? []) : loadOwnership(admin, fundId, group),
+    preload ? Promise.resolve(preload.entityNames) : loadEntityNames(admin, fundId, group),
+    preload ? Promise.resolve(preload.entityClasses) : loadEntityClasses(admin, fundId),
+    preload ? Promise.resolve(preload.vintageByName.get(group) ?? null) : loadVintage(admin, fundId, group),
   ])
 
   const accounts = computeCapitalAccounts(postings)
@@ -140,7 +145,7 @@ export async function vehicleEconomics(
   // effective-dated commitment events, falling back to the legacy scalar.
   let commitmentByLp: Map<string, number>
   if (source !== 'ledger') {
-    commitmentByLp = await commitmentsFromPositions(admin, fundId, group, asOf)
+    commitmentByLp = await commitmentsFromPositions(admin, fundId, group, asOf, preload?.idMap, preload ? (preload.positionsByVehicleId.get(preload.idMap.get(group) ?? '') ?? []) : undefined)
     if (!Array.from(commitmentByLp.values()).some(v => v > 0)) {
       commitmentByLp = new Map(owners.map(o => [o.lpEntityId, o.commitment]))
     }
@@ -216,12 +221,14 @@ export async function fundEconomics(
   fundId: string,
   asOf?: string,
 ): Promise<VehicleEconomics[]> {
+  const preload = await loadFundPreload(admin, fundId, asOf)
   const vehicles = await listVehicles(admin, fundId)
   // Vehicles are independent, so derive them concurrently rather than one-await-per-vehicle.
   // This was the dominant source of /funds load lag: latency was ~(round-trips × vehicle count)
   // because each vehicle's queries waited for the previous vehicle to finish. (Mirrors what
-  // generateLiveReport already does for /lps.)
-  const out = await Promise.all(vehicles.map(v => vehicleEconomics(admin, fundId, v, asOf)))
+  // generateLiveReport already does for /lps.) The fund-wide lookups are read once (preload) and
+  // threaded in so the per-vehicle loaders skip their per-vehicle queries.
+  const out = await Promise.all(vehicles.map(v => vehicleEconomics(admin, fundId, v, asOf, preload)))
   return out.sort((a, b) => a.vehicle.localeCompare(b.vehicle))
 }
 

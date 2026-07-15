@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 export async function GET(req: NextRequest) {
   const supabase = createClient()
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'analyst-conversations')
 
   return NextResponse.json({ conversations: data })
 }
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest) {
     .select('id, title, company_id, message_count, created_at, updated_at')
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'analyst-conversations')
 
   return NextResponse.json({ conversation: data })
 }

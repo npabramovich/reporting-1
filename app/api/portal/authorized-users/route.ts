@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveLpAccess } from '@/lib/api-helpers'
+import { dbError } from '@/lib/api-error'
 
 /**
  * LP portal — an LP manages the authorized users (advisors) granted access to
@@ -28,7 +29,7 @@ export async function GET() {
     .select('id, lp_investor_id, created_at, lp_investors(name), lp_accounts!lp_authorized_users_authorized_user_account_id_fkey(email, display_name, status)')
     .eq('principal_lp_account_id', lpAccountId)
     .order('created_at', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'portal-authorized-users')
   return NextResponse.json({ authorized_users: data ?? [] })
 }
 
@@ -51,6 +52,6 @@ export async function DELETE(req: NextRequest) {
     .delete()
     .eq('id', id)
     .eq('principal_lp_account_id', lpAccountId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'portal-authorized-users')
   return NextResponse.json({ ok: true })
 }

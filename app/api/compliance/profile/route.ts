@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { rateLimit } from '@/lib/rate-limit'
+import { dbError } from '@/lib/api-error'
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()
@@ -69,6 +70,6 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'compliance-profile')
   return NextResponse.json(data)
 }

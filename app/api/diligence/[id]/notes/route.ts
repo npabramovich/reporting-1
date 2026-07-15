@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 interface RawNote {
   id: string
@@ -33,7 +34,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .eq('fund_id', fundId)
     .order('created_at', { ascending: true })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-notes-list')
 
   const notes = (data ?? []) as unknown as RawNote[]
   const enriched = await enrichAuthors(notes, fundId)
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .select('id, deal_id, body, author_id, created_at, updated_at')
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-notes-create')
   const [enriched] = await enrichAuthors([data as unknown as RawNote], fundId)
   return NextResponse.json(enriched)
 }

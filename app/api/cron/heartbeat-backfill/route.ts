@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { HeartbeatClient } from '@/lib/heartbeat/client'
 import { getHeartbeatKey, markHeartbeatError, markHeartbeatOk } from '@/lib/heartbeat/credentials'
 import { ingestHeartbeatThread } from '@/lib/heartbeat/ingest'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Heartbeat backfill poll. Runs hourly and pulls the recent threads of every
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
     .select('fund_id')
     .eq('enabled', true)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'cron-heartbeat-backfill')
 
   const funds = ((creds ?? []) as Array<{ fund_id: string }>).map(c => c.fund_id)
   if (funds.length === 0) return NextResponse.json({ ok: true, imported: 0 })

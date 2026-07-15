@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
+import { dbError } from '@/lib/api-error'
 import { rateLimit } from '@/lib/rate-limit'
 import { decrypt } from '@/lib/crypto'
 import { getAccessToken as getGoogleAccessToken, findOrCreateFolder as findOrCreateGoogleFolder, uploadFile as uploadGoogleFile } from '@/lib/google/drive'
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
     .in('id', emailIds)
 
   if (emailsError) {
-    return NextResponse.json({ error: emailsError.message }, { status: 500 })
+    return dbError(emailsError, 'emails-save-to-drive')
   }
 
   if (!emails || emails.length === 0) {

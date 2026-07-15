@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
       .rpc('memo_agent_claim_next_job') as { data: any; error: any }
     if (claimErr) {
       console.error('[memo-agent-worker] claim error:', claimErr)
-      return NextResponse.json({ error: claimErr.message, processed }, { status: 500 })
+      return NextResponse.json({ error: 'An unexpected error occurred.', processed }, { status: 500 })
     }
     if (!claimed || !claimed.id) {
       // Queue empty — nothing left to do.

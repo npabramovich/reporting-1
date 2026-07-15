@@ -4,7 +4,7 @@
 // The pure functions here are the ones worth testing; the loaders are thin.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { vehicleIdByName } from './vehicle-id'
+import { vehicleIdByName, type VehicleIdMap } from './vehicle-id'
 import { roundCents } from './ledger'
 
 export type AllocationBasis = 'commitment' | 'capital_balance'
@@ -206,9 +206,10 @@ export async function saveAllocationBasis(
 export async function loadPartnerTerms(
   admin: SupabaseClient,
   fundId: string,
-  group: string
+  group: string,
+  idMap?: VehicleIdMap
 ): Promise<PartnerTerms[]> {
-  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  const vehicleId = await vehicleIdByName(admin, fundId, group, idMap)
   const { data } = await admin
     .from('partner_allocation_terms' as any)
     .select('lp_entity_id, category, participates, weight_override, rate_override')
@@ -250,25 +251,50 @@ export async function savePartnerTerm(
   return { ok: true }
 }
 
-/** Every commitment event for the vehicle, oldest first. */
+function toCommitmentEvent(e: any): CommitmentEvent {
+  return { lpEntityId: e.lp_entity_id, effectiveDate: e.effective_date, amount: Number(e.amount), kind: e.kind }
+}
+
+/** Every commitment event for the vehicle, oldest first. Pass `events` (a preloaded slice) to
+ *  skip the query. */
 export async function loadCommitmentEvents(
   admin: SupabaseClient,
   fundId: string,
-  group: string
+  group: string,
+  idMap?: VehicleIdMap,
+  events?: CommitmentEvent[]
 ): Promise<CommitmentEvent[]> {
-  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  if (events) return events
+  const vehicleId = await vehicleIdByName(admin, fundId, group, idMap)
   const { data } = await admin
     .from('commitment_events' as any)
     .select('lp_entity_id, effective_date, amount, kind')
     .eq('fund_id', fundId)
     .eq('vehicle_id', vehicleId)
     .order('effective_date', { ascending: true })
-  return ((data as any[]) ?? []).map(e => ({
-    lpEntityId: e.lp_entity_id,
-    effectiveDate: e.effective_date,
-    amount: Number(e.amount),
-    kind: e.kind,
-  }))
+  return ((data as any[]) ?? []).map(toCommitmentEvent)
+}
+
+/**
+ * Batch-load commitment events for MANY vehicles: one `vehicle_id IN (...)` query, grouped by
+ * vehicle_id, each group oldest-first (the global order-by preserves per-vehicle order on push).
+ */
+export async function loadCommitmentEventsBatch(
+  admin: SupabaseClient,
+  fundId: string,
+  vehicleIds: string[]
+): Promise<Map<string, CommitmentEvent[]>> {
+  const out = new Map<string, CommitmentEvent[]>()
+  if (vehicleIds.length === 0) return out
+  for (const id of vehicleIds) out.set(id, [])
+  const { data } = await admin
+    .from('commitment_events' as any)
+    .select('lp_entity_id, effective_date, amount, kind, vehicle_id')
+    .eq('fund_id', fundId)
+    .in('vehicle_id', vehicleIds)
+    .order('effective_date', { ascending: true })
+  for (const e of ((data as any[]) ?? [])) out.get(e.vehicle_id)?.push(toCommitmentEvent(e))
+  return out
 }
 
 /**

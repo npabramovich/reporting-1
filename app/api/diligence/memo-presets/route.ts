@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { MemoTemplateConfig } from '@/lib/memo-agent/prompts/memo-config'
+import { dbError } from '@/lib/api-error'
 
 const VALID_STYLES = new Set(['pre_seed', 'seed', 'series_a', 'series_b', 'growth'])
 const VALID_COMPLEXITY = new Set(['brief', 'standard', 'detailed', 'comprehensive'])
@@ -28,7 +29,7 @@ export async function GET() {
     .select('*')
     .eq('fund_id', fundId)
     .order('updated_at', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-memo-presets-list')
 
   return NextResponse.json({ presets: (data ?? []) as PresetRow[] })
 }
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
     })
     .select('*')
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-memo-presets-create')
 
   return NextResponse.json({ preset: data })
 }

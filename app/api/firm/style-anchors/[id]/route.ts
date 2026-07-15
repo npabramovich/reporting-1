@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 const VOICE_LEVELS = ['exemplary', 'representative', 'atypical', 'do_not_match_voice'] as const
 const OUTCOMES = ['invested', 'passed', 'lost_competitive', 'withdrew', 'unknown'] as const
@@ -19,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .eq('fund_id', fundId)
     .maybeSingle()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'style-anchors')
   if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(data)
 }
@@ -78,7 +79,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .update(updates)
     .eq('id', params.id)
     .eq('fund_id', fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'style-anchors')
   return NextResponse.json({ ok: true })
 }
 
@@ -100,7 +101,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     .delete()
     .eq('id', params.id)
     .eq('fund_id', fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'style-anchors')
 
   if ((anchor as any).storage_path) {
     admin.storage.from('style-anchor-memos').remove([(anchor as any).storage_path]).catch(err => {

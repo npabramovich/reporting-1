@@ -101,7 +101,7 @@ export function LpStatementView({ lpEntityId }: { lpEntityId: string }) {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 rounded border border-input px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          <FileText className="h-3.5 w-3.5" />Preview statement PDF
+          <FileText className="h-3.5 w-3.5" />Generate PDF
         </a>
       </div>
 

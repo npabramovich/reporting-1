@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 const VALID_STYLES = new Set(['pre_seed', 'seed', 'series_a', 'series_b', 'growth'])
 
@@ -40,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { presetId: 
     .eq('fund_id', fundId)
     .select('*')
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-memo-preset-update')
   return NextResponse.json({ preset: data })
 }
 
@@ -54,7 +55,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { presetId
     .delete()
     .eq('id', params.presetId)
     .eq('fund_id', fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-memo-preset-delete')
   return NextResponse.json({ ok: true })
 }
 

@@ -186,7 +186,7 @@ export async function POST(
       })
 
     if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 })
+      return dbError(insertError, 'companies-id-documents')
     }
 
     logActivity(admin, company.fund_id, user.id, 'company.document_upload', { companyId: params.id })
@@ -217,7 +217,7 @@ export async function POST(
     })
 
   if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500 })
+    return dbError(insertError, 'companies-id-documents')
   }
 
   // Clean up Storage if we only needed the text

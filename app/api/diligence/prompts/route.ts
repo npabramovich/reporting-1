@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 const STAGES = ['ingest', 'research', 'qa', 'draft', 'score', 'render'] as const
 type Stage = typeof STAGES[number]
@@ -56,7 +57,7 @@ export async function PATCH(req: NextRequest) {
       .from('fund_settings')
       .update({ memo_first_page_anchor_id: id } as any)
       .eq('fund_id', fundId)
-    if (setErr) return NextResponse.json({ error: setErr.message }, { status: 500 })
+    if (setErr) return dbError(setErr, 'diligence-prompts-anchor')
   }
 
   const incoming = body?.guidance
@@ -71,7 +72,7 @@ export async function PATCH(req: NextRequest) {
       const { error } = await (admin as any)
         .from('memo_agent_prompts')
         .upsert(rows as any, { onConflict: 'fund_id,stage' })
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      if (error) return dbError(error, 'diligence-prompts-guidance')
     }
   }
 

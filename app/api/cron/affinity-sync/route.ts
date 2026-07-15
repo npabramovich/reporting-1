@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { kickWorker } from '@/lib/memo-agent/kick'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Affinity sync scheduler. Runs hourly and enqueues an `affinity_sync` job for
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
     .or(`affinity_last_synced_at.is.null,affinity_last_synced_at.lt.${dueBefore}`)
     .limit(200)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'cron-affinity-sync')
 
   const candidates = (deals ?? []) as Array<{ id: string; fund_id: string }>
   if (candidates.length === 0) {
@@ -78,7 +79,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { error: insErr } = await admin.from('memo_agent_jobs').insert(rows as any)
-  if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
+  if (insErr) return dbError(insErr, 'cron-affinity-sync')
 
   await kickWorker()
 

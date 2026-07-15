@@ -23,9 +23,10 @@ import { xirr, type CashFlow } from '@/lib/xirr'
 import { lpRatios } from '@/lib/lp-metrics'
 import { loadCapitalPostings, type CapitalSource } from './capital-source'
 import { loadCommitmentEvents, commitmentsFrom, loadPartnerTerms } from './terms'
-import { listVehicles, loadOwnership, loadEntityNames } from './load'
+import { listVehicles, loadOwnership } from './load'
 import { lookThroughAccount, associateMembers } from './look-through'
 import { latestPositionIrr } from './lp-positions'
+import { loadFundPreload, vehicleCapitalPreload, commitmentEventsForGroup, type FundPreload } from './fund-preload'
 import { roundCents } from './ledger'
 
 /** The metric half of an `lp_investments` row — same names, same units. */
@@ -180,12 +181,16 @@ export async function liveRowsForVehicle(
   admin: SupabaseClient,
   fundId: string,
   group: string,
-  asOf?: string
+  asOf?: string,
+  preload?: FundPreload
 ): Promise<{ source: CapitalSource; rows: LiveInvestmentRow[] }> {
+  // With a preload, capital source and ownership come from the one fund-wide read instead of a
+  // per-vehicle query each; commitment_events is still per-vehicle (not part of the preload).
+  const idMap = preload?.idMap
   const [{ source, postings, receivableByLp }, commitmentEvents, owners] = await Promise.all([
-    loadCapitalPostings(admin, fundId, group, asOf),
-    loadCommitmentEvents(admin, fundId, group),
-    loadOwnership(admin, fundId, group),
+    loadCapitalPostings(admin, fundId, group, asOf, idMap, preload ? vehicleCapitalPreload(preload, group) : undefined),
+    loadCommitmentEvents(admin, fundId, group, idMap, preload ? commitmentEventsForGroup(preload, group) : undefined),
+    preload ? Promise.resolve(preload.ownershipByGroup.get(group) ?? []) : loadOwnership(admin, fundId, group),
   ])
 
   // Commitment is not a ledger concept — it lives in commitment_events (effective-dated,
@@ -217,7 +222,7 @@ export async function liveRowsForVehicle(
   // a single cutover date has no time spread for a derived IRR to be meaningful, and the statement
   // figure is what the LP was actually shown. Falls back to the derived IRR when none was stored.
   const storedIrr = source === 'events'
-    ? await latestPositionIrr(admin, fundId, group, asOf)
+    ? await latestPositionIrr(admin, fundId, group, asOf, idMap, preload ? (preload.positionsByVehicleId.get(idMap?.get(group) ?? '') ?? []) : undefined)
     : new Map<string, number>()
 
   const rows = Array.from(ids).map(entityId => {
@@ -318,33 +323,32 @@ async function applyLookThrough(
   admin: SupabaseClient,
   fundId: string,
   rows: LiveInvestmentRow[],
-  asOf?: string
+  asOf?: string,
+  preload?: FundPreload
 ): Promise<LiveInvestmentRow[]> {
+  const idMap = preload?.idMap
   const links = await loadAssociateLinks(admin, fundId)
   if (links.length === 0) return rows
 
-  let out = rows
-  for (const link of links) {
-    const idx = out.findIndex(r => r.entity_id === link.entityId && r.portfolio_group === link.servesGroup)
-    if (idx === -1) continue // the associate holds nothing in that vehicle — nothing to look through
-
-    // The associate IS linked and holds a position here. Whatever happens below, this row must
-    // never read as a direct LP interest — it came through the associate. Tag it now; if the
-    // look-through fully explodes it into member rows, this tagged row is dropped anyway. If it
-    // can't (no member split configured, no rebuildable account), the tag is what keeps the row
-    // honestly attributed instead of masquerading as a direct investment in the fund.
-    out[idx] = { ...out[idx], lookThroughVia: link.associateGroup }
+  // Phase 1 — parallel: read each associate's books and compute its member rows. Reads only.
+  // The associate's own fund row (for source + commitment) is read from the ORIGINAL `rows`, so
+  // links don't depend on one another's mutations — independent associates (the norm) are
+  // unaffected; a chained associate (one holding through another) is an unsupported edge that the
+  // sequential apply below guards against rather than double-counts. `memberRows === null` means
+  // "linked but couldn't explode" (no member split / no rebuildable account) — tag only.
+  type Plan = { link: AssociateLink; associateRow: LiveInvestmentRow; memberRows: LiveInvestmentRow[] | null }
+  const plans = (await Promise.all(links.map(async (link): Promise<Plan | null> => {
+    const associateRow = rows.find(r => r.entity_id === link.entityId && r.portfolio_group === link.servesGroup)
+    if (!associateRow) return null // the associate holds nothing in that vehicle — nothing to look through
 
     // The associate's members and their two allocations, from the associate vehicle's own books.
-    const [{ postings }, commitmentEvents, terms, owners] = await Promise.all([
-      loadCapitalPostings(admin, fundId, link.associateGroup, asOf),
-      loadCommitmentEvents(admin, fundId, link.associateGroup),
-      loadPartnerTerms(admin, fundId, link.associateGroup),
-      loadOwnership(admin, fundId, link.associateGroup),
+    const [commitmentEvents, terms, owners] = await Promise.all([
+      loadCommitmentEvents(admin, fundId, link.associateGroup, idMap, preload ? commitmentEventsForGroup(preload, link.associateGroup) : undefined),
+      loadPartnerTerms(admin, fundId, link.associateGroup, idMap),
+      preload ? Promise.resolve(preload.ownershipByGroup.get(link.associateGroup) ?? []) : loadOwnership(admin, fundId, link.associateGroup),
     ])
 
     const basis = commitmentsFrom(commitmentEvents, owners, asOf)
-
     const carryWeights = new Map(
       terms
         .filter(t => t.category === 'carried_interest' && t.participates && t.weightOverride != null)
@@ -352,20 +356,18 @@ async function applyLookThrough(
     )
 
     const members = associateMembers(basis, carryWeights)
-    if (members.length === 0) continue
+    if (members.length === 0) return { link, associateRow, memberRows: null }
 
     // Rebuild the associate's capital account so the look-through can split its BUCKETS —
     // the metric row alone can't, because carry has to follow points while capital follows
     // ownership.
     const assocAccounts = computeCapitalAccounts(
-      (await loadCapitalPostings(admin, fundId, link.servesGroup, asOf)).postings
+      (await loadCapitalPostings(admin, fundId, link.servesGroup, asOf, idMap, preload ? vehicleCapitalPreload(preload, link.servesGroup) : undefined)).postings
     )
     const assocAccount = assocAccounts.get(link.entityId)
-    if (!assocAccount) continue
+    if (!assocAccount) return { link, associateRow, memberRows: null }
 
     const exploded = lookThroughAccount(assocAccount, members)
-    const associateRow = out[idx]
-
     const memberRows: LiveInvestmentRow[] = Array.from(exploded.entries()).map(([entityId, account]) => ({
       entity_id: entityId,
       portfolio_group: link.servesGroup,
@@ -378,6 +380,21 @@ async function applyLookThrough(
         0
       ),
     }))
+    return { link, associateRow, memberRows }
+  }))).filter((p): p is Plan => p !== null)
+
+  // Phase 2 — sequential apply, in link order. Tagging and the double-count DROP are cheap and
+  // order-sensitive, so they run here rather than in the parallel read phase above.
+  let out = rows
+  for (const { link, associateRow, memberRows } of plans) {
+    if (!out.includes(associateRow)) continue // already consumed by a chained associate — skip
+
+    // Whatever happens, this row must never read as a direct LP interest — it came through the
+    // associate. If we couldn't explode it, tag it (honest attribution) and move on.
+    if (memberRows === null) {
+      out = out.map(r => (r === associateRow ? { ...r, lookThroughVia: link.associateGroup } : r))
+      continue
+    }
 
     // DROP TWO THINGS, or the same money is counted twice.
     //
@@ -418,27 +435,26 @@ export async function generateLiveReport(
   fundId: string,
   asOf?: string
 ): Promise<LiveReport> {
+  // One fund-wide read of the per-vehicle lookups (id map, entity names/classes, ownership,
+  // capital source, vintage), then thread it through — the per-vehicle loaders no longer each
+  // issue their own query for every vehicle. (P1 did the id map; P2 folds in the rest.)
+  const preload = await loadFundPreload(admin, fundId, asOf)
   const groups = await listVehicles(admin, fundId)
 
   const perVehicle = await Promise.all(
     groups.map(async group => {
-      const [{ source, rows }, names] = await Promise.all([
-        liveRowsForVehicle(admin, fundId, group, asOf),
-        loadEntityNames(admin, fundId, group),
-      ])
-      return { group, source, rows, names }
+      const { source, rows } = await liveRowsForVehicle(admin, fundId, group, asOf, preload)
+      return { group, source, rows }
     })
   )
 
-  const entityNames = new Map<string, string>()
-  for (const v of perVehicle) {
-    for (const [id, name] of Array.from(v.names.entries())) entityNames.set(id, name)
-  }
+  // Names come from the preload (every entity in the fund — a superset of each vehicle's).
+  const entityNames = new Map(preload.entityNames)
 
   // Look through any associate/GP vehicle: its position in the fund becomes its members'
   // positions. This is what puts a member who invests via the GP entity into the LP report at
   // all — before, they simply weren't in it.
-  const rows = await applyLookThrough(admin, fundId, perVehicle.flatMap(v => v.rows), asOf)
+  const rows = await applyLookThrough(admin, fundId, perVehicle.flatMap(v => v.rows), asOf, preload)
 
   // Members surfaced by the look-through may not be named in any vehicle's roster.
   const missing = rows.map(r => r.entity_id).filter(id => !entityNames.has(id))

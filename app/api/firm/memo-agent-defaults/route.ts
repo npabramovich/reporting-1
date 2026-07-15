@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCapState } from '@/lib/memo-agent/cost'
+import { dbError } from '@/lib/api-error'
 
 const VALID_PROVIDERS = ['anthropic', 'openai', 'gemini', 'ollama'] as const
 // The real stages that make AI calls (must match getStageProvider keys + the UI).
@@ -129,7 +130,7 @@ export async function PATCH(req: NextRequest) {
     .from('fund_settings')
     .update(updates)
     .eq('fund_id', fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'firm-memo-agent-defaults')
   return NextResponse.json({ ok: true })
 }
 

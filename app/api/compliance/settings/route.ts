@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { rateLimit } from '@/lib/rate-limit'
+import { dbError } from '@/lib/api-error'
 
 // Bulk upsert applicability settings
 export async function POST(req: NextRequest) {
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
     .upsert(rows, { onConflict: 'fund_id,compliance_item_id,portfolio_group' })
     .select()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'compliance-settings')
   return NextResponse.json(data)
 }
 
@@ -127,6 +128,6 @@ export async function PATCH(req: NextRequest) {
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'compliance-settings')
   return NextResponse.json(data)
 }

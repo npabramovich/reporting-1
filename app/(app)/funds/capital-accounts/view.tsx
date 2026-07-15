@@ -547,7 +547,7 @@ export function CapitalAccountsView() {
             </tbody>
             <tfoot>
               <tr className="border-t bg-muted/30 font-semibold">
-                <td className="px-3 py-2">Total (NAV {fmt(nav)})</td>
+                <td className="px-3 py-2">Total</td>
                 {commitmentCols.map(c => <td key={c.key} className="px-3 py-2 text-right font-mono border-l">{fmt(commitTotals[c.key])}</td>)}
                 {columns.map((c, i) => <td key={c.key} className={`px-3 py-2 text-right font-mono ${i === 0 ? 'border-l' : ''}`}>{fmt(totals[c.key])}</td>)}
               </tr>

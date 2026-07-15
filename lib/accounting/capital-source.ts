@@ -22,11 +22,11 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CapitalPosting } from './capital-account'
-import { loadPostedLedger } from './load'
-import { vehicleIdByName } from './vehicle-id'
+import { loadPostedLedger, type LedgerRows } from './load'
+import { vehicleIdByName, type VehicleIdMap } from './vehicle-id'
 import { RECEIVABLE_CODE } from './chart'
 import { roundCents } from './ledger'
-import { loadPositionPostings } from './lp-positions'
+import { loadPositionPostings, type LpPosition } from './lp-positions'
 
 export type CapitalSource = 'ledger' | 'events'
 
@@ -40,9 +40,10 @@ export type CapitalSource = 'ledger' | 'events'
 export async function loadCapitalSource(
   admin: SupabaseClient,
   fundId: string,
-  group: string
+  group: string,
+  idMap?: VehicleIdMap
 ): Promise<CapitalSource> {
-  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  const vehicleId = await vehicleIdByName(admin, fundId, group, idMap)
   if (!vehicleId) return 'events'
   const { data } = await admin
     .from('vehicle_accounting_settings' as any)
@@ -91,21 +92,36 @@ export function receivablesFromLedger(
  * `asOf` (ISO date, inclusive) scopes to activity on or before that date, so a report can
  * be generated as of any point in time from either source.
  */
+/**
+ * Preloaded per-vehicle inputs (from a FundPreload) that let `loadCapitalPostings` skip its
+ * queries: the resolved capital `source`, the batched ledger `ledgerRows`, and the batched
+ * `positions`. Any subset may be present; a missing piece falls back to a query.
+ */
+export interface VehicleCapitalPreload {
+  source?: CapitalSource
+  ledgerRows?: LedgerRows
+  positions?: LpPosition[]
+}
+
 export async function loadCapitalPostings(
   admin: SupabaseClient,
   fundId: string,
   group: string,
-  asOf?: string
+  asOf?: string,
+  idMap?: VehicleIdMap,
+  pre?: VehicleCapitalPreload
 ): Promise<VehicleCapital> {
-  const source = await loadCapitalSource(admin, fundId, group)
+  // A preloaded `source` skips the per-vehicle vehicle_accounting_settings read; preloaded
+  // `ledgerRows`/`positions` skip the ledger/position queries (batched once, fund-wide).
+  const source = pre?.source ?? await loadCapitalSource(admin, fundId, group, idMap)
   if (source === 'ledger') {
-    const { accounts, postings, capitalPostings } = await loadPostedLedger(admin, fundId, group, asOf)
+    const { accounts, postings, capitalPostings } = await loadPostedLedger(admin, fundId, group, asOf, idMap, pre?.ledgerRows)
     return { source, postings: capitalPostings, receivableByLp: receivablesFromLedger(accounts, postings) }
   }
   // Capital tracking: derive movements from the vehicle's dated positions.
   return {
     source,
-    postings: await loadPositionPostings(admin, fundId, group, asOf),
+    postings: await loadPositionPostings(admin, fundId, group, asOf, idMap, pre?.positions),
     receivableByLp: new Map(),
   }
 }

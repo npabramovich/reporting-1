@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { AffinityClient, AffinityError } from '@/lib/affinity/client'
 import { getAffinityKey, markAffinityKeyError, markAffinityKeyOk } from '@/lib/affinity/credentials'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Link a diligence deal to an Affinity organization.
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .eq('id', params.id)
     .eq('fund_id', fundId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-affinity-link')
 
   return NextResponse.json({
     linked: true,
@@ -142,7 +143,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     .eq('id', params.id)
     .eq('fund_id', fundId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-affinity-unlink')
   return NextResponse.json({ linked: false })
 }
 

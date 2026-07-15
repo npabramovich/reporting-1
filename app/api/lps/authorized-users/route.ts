@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Admin-only authorized-user management (Phase 4 of LP reporting).
@@ -46,7 +47,7 @@ export async function GET() {
     .select('id, lp_investor_id, created_at, lp_investors(name), lp_accounts!lp_authorized_users_authorized_user_account_id_fkey(email, display_name, status)')
     .in('lp_investor_id', fundInvestorIds)
     .order('created_at', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'lps-authorized-users')
   return NextResponse.json({ authorized_users: data ?? [] })
 }
 
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
       .insert({ kind: 'authorized_user', email, display_name: displayName || null, status: 'invited' })
       .select('id')
       .single()
-    if (createErr) return NextResponse.json({ error: createErr.message }, { status: 500 })
+    if (createErr) return dbError(createErr, 'lps-authorized-users')
     accountId = created.id
   }
 
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest) {
       created_by: user.id,
     })
   if (linkErr && linkErr.code !== '23505') {
-    return NextResponse.json({ error: linkErr.message }, { status: 500 })
+    return dbError(linkErr, 'lps-authorized-users')
   }
 
   return NextResponse.json({ ok: true })
@@ -137,6 +138,6 @@ export async function DELETE(req: NextRequest) {
     .delete()
     .eq('id', id)
     .in('lp_investor_id', fundInvestorIds.length ? fundInvestorIds : ['00000000-0000-0000-0000-000000000000'])
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'lps-authorized-users')
   return NextResponse.json({ ok: true })
 }

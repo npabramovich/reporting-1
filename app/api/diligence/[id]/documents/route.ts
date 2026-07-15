@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { classifyDocumentHeuristic } from '@/lib/memo-agent/heuristic-classify'
+import { dbError } from '@/lib/api-error'
 
 const MAX_BYTES = 100 * 1024 * 1024  // 100 MB to match bucket cap
 
@@ -26,7 +27,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .eq('fund_id', fundId)
     .order('uploaded_at', { ascending: false })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-documents-list')
   return NextResponse.json(data ?? [])
 }
 
@@ -123,7 +124,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .from('diligence-documents')
       .upload(storagePath, buffer, { contentType: mime, upsert: false })
     if (uploadErr) {
-      return NextResponse.json({ error: `Upload failed: ${uploadErr.message}` }, { status: 500 })
+      console.error('[diligence-documents] upload', uploadErr.message)
+      return NextResponse.json({ error: 'Upload failed.' }, { status: 500 })
     }
   }
 
@@ -149,7 +151,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (insertErr || !row) {
     // Clean up the storage object on row-insert failure.
     await admin.storage.from('diligence-documents').remove([storagePath]).catch(() => {})
-    return NextResponse.json({ error: insertErr?.message ?? 'Insert failed' }, { status: 500 })
+    return dbError(insertErr ?? { message: 'Insert failed' }, 'diligence-documents-insert')
   }
 
   // Audio/video recordings need transcription before they can be ingested

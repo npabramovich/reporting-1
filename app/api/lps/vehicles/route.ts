@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertReadAccess } from '@/lib/api-helpers'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Admin-only: the distinct investment vehicles (lp_investments.portfolio_group)
@@ -23,7 +24,7 @@ export async function GET() {
     .from('lp_investments')
     .select('portfolio_group')
     .eq('fund_id', access.fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'lps-vehicles')
 
   const vehicles = Array.from(
     new Set(((data ?? []) as { portfolio_group: string | null }[])

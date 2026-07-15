@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { PostmarkPayload } from '@/lib/pipeline/processEmail'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Inbound emails the router matched to this deal and that are waiting for a
@@ -42,7 +43,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .order('received_at', { ascending: false })
     .limit(50)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-email-intake')
 
   const emails = ((data as any[]) ?? []).map(row => {
     const payload = (row.raw_payload ?? {}) as PostmarkPayload

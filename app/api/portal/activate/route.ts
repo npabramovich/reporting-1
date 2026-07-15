@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Bind + activate the signed-in user's LP account (called at the end of portal
@@ -59,7 +60,7 @@ export async function POST() {
     .from('lp_accounts')
     .update({ auth_user_id: user.id, status: 'active', updated_at: new Date().toISOString() })
     .eq('id', account.id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'portal-activate')
 
   return NextResponse.json({ ok: true })
 }

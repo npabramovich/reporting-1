@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { answerDealQuestion } from '@/lib/diligence/qa-answer'
+import { dbError } from '@/lib/api-error'
 
 // The POST handler makes a synchronous, user-facing LLM call plus several DB
 // round-trips. Netlify functions default to a 10s timeout, which the model
@@ -32,7 +33,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .eq('fund_id', fundId)
     .order('created_at', { ascending: true })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-qa-chat-list')
   return NextResponse.json({ messages: (data ?? []) as ChatRow[] })
 }
 
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     })
     .select('id, role, content, citations, author_id, model, created_at')
     .single()
-  if (userErr) return NextResponse.json({ error: userErr.message }, { status: 500 })
+  if (userErr) return dbError(userErr, 'diligence-qa-chat-user-insert')
 
   // Load conversation history (excluding the just-inserted user message —
   // we'll add it as the final turn explicitly below).
@@ -124,7 +125,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     })
     .select('id, role, content, citations, author_id, model, created_at')
     .single()
-  if (assistantErr) return NextResponse.json({ error: assistantErr.message }, { status: 500 })
+  if (assistantErr) return dbError(assistantErr, 'diligence-qa-chat-assistant-insert')
 
   // Auto-promote the exchange into the deal's evidence base. The memo draft,
   // checklist assessment, and future Q&A chat all read qa_answers on the
@@ -189,7 +190,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     .delete()
     .eq('deal_id', params.id)
     .eq('fund_id', fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-qa-chat-clear')
   return NextResponse.json({ ok: true })
 }
 

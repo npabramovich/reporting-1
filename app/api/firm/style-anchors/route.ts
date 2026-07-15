@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { extractText } from '@/lib/memo-agent/extract-text'
 import type { StyleAnchor } from '@/lib/memo-agent/style-anchors'
+import { dbError } from '@/lib/api-error'
 
 const MAX_BYTES = 20 * 1024 * 1024
 const ALLOWED_FORMATS = ['pdf', 'docx', 'md', 'markdown', 'txt'] as const
@@ -24,7 +25,7 @@ export async function GET() {
     .order('vintage_year', { ascending: false })
     .order('uploaded_at', { ascending: false })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'style-anchors')
 
   // Don't ship the full extracted_text on the list endpoint — it's huge.
   const anchors = ((data ?? []) as StyleAnchor[]).map(a => ({
@@ -80,7 +81,8 @@ export async function POST(req: NextRequest) {
       .from('style-anchor-memos')
       .download(storagePath)
     if (dlErr || !downloaded) {
-      return NextResponse.json({ error: `Failed to read uploaded file: ${dlErr?.message ?? 'unknown'}` }, { status: 500 })
+      console.error('[style-anchors] download', dlErr?.message ?? 'unknown')
+      return NextResponse.json({ error: 'Could not read the uploaded file.' }, { status: 500 })
     }
     buffer = Buffer.from(await downloaded.arrayBuffer())
     fileSize = buffer.length
@@ -129,7 +131,8 @@ export async function POST(req: NextRequest) {
       .from('style-anchor-memos')
       .upload(storagePath, buffer, { contentType: file.type || 'application/octet-stream', upsert: false })
     if (uploadErr) {
-      return NextResponse.json({ error: `Upload failed: ${uploadErr.message}` }, { status: 500 })
+      console.error('[style-anchors] upload', uploadErr.message)
+      return NextResponse.json({ error: 'Upload failed.' }, { status: 500 })
     }
     formMeta = formData
   }
@@ -173,7 +176,7 @@ export async function POST(req: NextRequest) {
 
   if (insertErr || !row) {
     await admin.storage.from('style-anchor-memos').remove([storagePath]).catch(() => {})
-    return NextResponse.json({ error: insertErr?.message ?? 'Insert failed' }, { status: 500 })
+    return dbError(insertErr ?? { message: 'Insert failed' }, 'style-anchors')
   }
 
   return NextResponse.json({

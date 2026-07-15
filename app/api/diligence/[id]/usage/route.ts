@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 // Approximate list pricing in USD per 1M tokens, matched by model-name
 // substring. Kept here (not the DB) so it's easy to update; reporting is
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     .eq('fund_id', fundId)
   if (since) usageQuery = usageQuery.gte('created_at', since)
   const { data: usageRows, error: usageErr } = await usageQuery
-  if (usageErr) return NextResponse.json({ error: usageErr.message }, { status: 500 })
+  if (usageErr) return dbError(usageErr, 'diligence-usage')
 
   const byFeature = new Map<string, { feature: string; calls: number; input_tokens: number; output_tokens: number; cost_usd: number }>()
   const byModel = new Map<string, { model: string; calls: number; input_tokens: number; output_tokens: number; cache_read_tokens: number; audio_seconds: number; cost_usd: number }>()

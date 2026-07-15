@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Queue external web research for an inbound deal on demand.
@@ -57,7 +58,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     .eq('id', params.id)
     .eq('fund_id', fundId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'deals-id-research')
 
   // The cron picks it up within ~10 minutes; no kick needed since research is
   // not latency-sensitive the way an interactive agent stage is.

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { safeWebUrl } from '@/lib/deals/submission-validation'
 import { seedDealChecklistFromFundDefault } from '@/lib/diligence/seed-checklist'
+import { dbError } from '@/lib/api-error'
 
 const VALID_DEAL_STATUSES = ['active', 'passed', 'won', 'lost', 'on_hold'] as const
 type DealStatus = typeof VALID_DEAL_STATUSES[number]
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
   if (lead) query = query.eq('lead_partner_id', lead)
 
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-deals-list')
   return NextResponse.json(data ?? [])
 }
 
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
     .select('id, name, sector, stage_at_consideration, deal_status, current_memo_stage, lead_partner_id, created_at, updated_at')
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-deals-create')
 
   const fundId = (membership as any).fund_id as string
   const dealId = (data as { id: string }).id

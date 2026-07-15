@@ -6,12 +6,22 @@ import { LpStatementView } from './view'
 
 export const metadata: Metadata = { title: 'LP capital statement' }
 
-export default async function LpStatementPage({ params }: { params: { lpEntityId: string } }) {
+export default async function LpStatementPage({
+  params, searchParams,
+}: {
+  params: { lpEntityId: string }
+  searchParams: { from?: string }
+}) {
   await requireAccountingAccess()
+  // Return to wherever the LP was opened from: the LP capital-accounts page marks its links
+  // with `?from=lps`; everything else (the Funds capital-accounts table) uses the default.
+  const fromLps = searchParams?.from === 'lps'
+  const backHref = fromLps ? '/lps/capital' : '/funds/capital-accounts'
+  const backLabel = fromLps ? 'LP capital accounts' : 'Capital accounts'
   return (
     <div className="px-4 md:pl-8 md:pr-4 pt-3 pb-8 w-full">
-      <Link href="/funds/capital-accounts" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-4">
-        <ArrowLeft className="h-3.5 w-3.5" />Capital accounts
+      <Link href={backHref} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-4">
+        <ArrowLeft className="h-3.5 w-3.5" />{backLabel}
       </Link>
       <div className="mb-6 space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">LP capital statement</h1>

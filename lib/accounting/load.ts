@@ -6,7 +6,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Account, AccountType, Posting } from './types'
 import type { CapitalPosting } from './capital-account'
-import { vehicleIdByName } from './vehicle-id'
+import { vehicleIdByName, type VehicleIdMap } from './vehicle-id'
 
 export type SourcedPosting = Posting & { sourceType: string | null; entryId: string; memo: string | null }
 
@@ -18,30 +18,51 @@ export interface LoadedLedger {
   sourcedPostings: SourcedPosting[]
 }
 
+/** The three raw row sets a vehicle's ledger is assembled from (chart, entries, postings). */
+export interface LedgerRows {
+  acctRows: any[]
+  entryRows: any[]
+  postingRows: any[]
+}
+
 /**
- * Load a vehicle's chart of accounts and every posting on a POSTED journal entry
- * (drafts and voids excluded). Pass `asOf` (ISO date) to include only entries on
- * or before that date — the basis for viewing statements as of any date.
+ * Batch-load the ledger rows for MANY vehicles at once: one query per table filtered by
+ * `vehicle_id IN (...)`, grouped by vehicle_id in memory. This is what lets `/funds` and `/lps`
+ * read every vehicle's ledger in 3 round-trips instead of 3× per vehicle. Each vehicle's slice
+ * is fed to `assembleLoadedLedger`, identical to the single-vehicle `loadPostedLedger` path.
  */
-export async function loadPostedLedger(
+export async function loadLedgerRowsBatch(
   admin: SupabaseClient,
   fundId: string,
-  group: string,
+  vehicleIds: string[],
   asOf?: string
-): Promise<LoadedLedger> {
-  const vehicleId = await vehicleIdByName(admin, fundId, group)
-  // entry_date rides along so the capital-account roll-forward can be scoped to a
-  // statement period without a second load.
-  let entriesQ = admin.from('journal_entries' as any).select('id, source_type, status, entry_date, memo').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'posted')
+): Promise<Map<string, LedgerRows>> {
+  const out = new Map<string, LedgerRows>()
+  if (vehicleIds.length === 0) return out
+  for (const id of vehicleIds) out.set(id, { acctRows: [], entryRows: [], postingRows: [] })
+
+  let entriesQ = admin.from('journal_entries' as any)
+    .select('id, source_type, status, entry_date, memo, vehicle_id')
+    .eq('fund_id', fundId).in('vehicle_id', vehicleIds).eq('status', 'posted')
   if (asOf) entriesQ = entriesQ.lte('entry_date', asOf)
 
   const [{ data: acctRows }, { data: entryRows }, { data: postingRows }] = await Promise.all([
-    admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id, company_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
+    admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id, company_id, vehicle_id').eq('fund_id', fundId).in('vehicle_id', vehicleIds),
     entriesQ,
-    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, currency, lp_entity_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
+    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, currency, lp_entity_id, vehicle_id').eq('fund_id', fundId).in('vehicle_id', vehicleIds),
   ])
 
-  const accounts: Account[] = ((acctRows as any[]) ?? []).map(a => ({
+  for (const r of ((acctRows as any[]) ?? [])) out.get(r.vehicle_id)?.acctRows.push(r)
+  for (const r of ((entryRows as any[]) ?? [])) out.get(r.vehicle_id)?.entryRows.push(r)
+  for (const r of ((postingRows as any[]) ?? [])) out.get(r.vehicle_id)?.postingRows.push(r)
+  return out
+}
+
+/** Assemble a vehicle's LoadedLedger from its raw rows. Pure — the same reduction whether the
+ *  rows came from a single-vehicle query or a batched `vehicle_id IN (...)` slice. */
+export function assembleLoadedLedger(fundId: string, rows: LedgerRows): LoadedLedger {
+  const { acctRows, entryRows, postingRows } = rows
+  const accounts: Account[] = (acctRows ?? []).map(a => ({
     id: a.id,
     fundId,
     code: a.code,
@@ -84,6 +105,39 @@ export async function loadPostedLedger(
   }
 
   return { accounts, postings, capitalPostings, sourcedPostings }
+}
+
+/**
+ * Load one vehicle's chart of accounts and every posting on a POSTED journal entry
+ * (drafts and voids excluded). Pass `asOf` (ISO date) to include only entries on or before
+ * that date. Pass `rows` (a slice from `loadLedgerRowsBatch`) to assemble from pre-batched
+ * rows and skip the queries — the report paths do this to avoid 3 queries per vehicle.
+ */
+export async function loadPostedLedger(
+  admin: SupabaseClient,
+  fundId: string,
+  group: string,
+  asOf?: string,
+  idMap?: VehicleIdMap,
+  rows?: LedgerRows
+): Promise<LoadedLedger> {
+  if (rows) return assembleLoadedLedger(fundId, rows)
+  const vehicleId = await vehicleIdByName(admin, fundId, group, idMap)
+  // entry_date rides along so the capital-account roll-forward can be scoped to a
+  // statement period without a second load.
+  let entriesQ = admin.from('journal_entries' as any).select('id, source_type, status, entry_date, memo').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'posted')
+  if (asOf) entriesQ = entriesQ.lte('entry_date', asOf)
+
+  const [{ data: acctRows }, { data: entryRows }, { data: postingRows }] = await Promise.all([
+    admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id, company_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
+    entriesQ,
+    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, currency, lp_entity_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
+  ])
+  return assembleLoadedLedger(fundId, {
+    acctRows: (acctRows as any[]) ?? [],
+    entryRows: (entryRows as any[]) ?? [],
+    postingRows: (postingRows as any[]) ?? [],
+  })
 }
 
 /** Names for the vehicle's LP entities (those with a commitment in this group). */

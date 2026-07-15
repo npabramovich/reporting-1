@@ -25,7 +25,7 @@ export default async function AccountingPage() {
       <div className="mb-6 space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Funds</h1>
         <p className="text-sm text-muted-foreground">
-          Performance per vehicle, derived from the ledger.
+          Performance per vehicle, derived from fund accounting or LP capital accounts.
         </p>
       </div>
 

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveLpAccess } from '@/lib/api-helpers'
 import { getSelfReadState } from '@/lib/lp-access-log'
+import { dbError } from '@/lib/api-error'
 
 /**
  * LP portal — list the letters shared with the signed-in LP. Scoped to their
@@ -23,7 +24,7 @@ export async function GET() {
     .from('lp_letter_shares')
     .select('letter_id, shared_at, fund_id, lp_letters(id, period_label, period_year, period_quarter, status)')
     .in('lp_investor_id', investorIds)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'portal-letters')
 
   const fundIds = Array.from(new Set((shares ?? []).map((s: any) => s.fund_id as string)))
   let enabledFunds = new Set<string>()

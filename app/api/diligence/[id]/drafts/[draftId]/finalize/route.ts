@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Finalize a memo draft. Admin-only. Sets is_draft=false, finalized_at, and
@@ -53,7 +54,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     } as any)
     .eq('id', params.draftId)
     .eq('fund_id', fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-draft-finalize')
 
   await admin
     .from('diligence_deals')

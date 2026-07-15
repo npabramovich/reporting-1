@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertAdminAccess } from '@/lib/api-helpers'
 import { retagPortfolioGroup } from '@/lib/vehicles'
+import { dbError } from '@/lib/api-error'
 
 // Fund-wide investment-vehicle registry (fund_vehicles). Vehicles are used across
 // LP snapshots, portfolio, compliance, and accounting — so management lives here,
@@ -34,7 +35,7 @@ export async function GET() {
       .order('active', { ascending: false })
       .order('name')
   }
-  if (rows.error) return NextResponse.json({ error: rows.error.message }, { status: 500 })
+  if (rows.error) return dbError(rows.error, 'vehicles')
   return NextResponse.json(rows.data ?? [])
 }
 
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     if ((error as any).code === '23505') return NextResponse.json({ error: 'A vehicle with that name already exists' }, { status: 409 })
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return dbError(error, 'vehicles')
   }
   return NextResponse.json(data)
 }
@@ -148,6 +149,6 @@ export async function PATCH(req: NextRequest) {
     .eq('id', body.id).eq('fund_id', gate.fundId)
     .select('id, name, kind, aliases, active')
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'vehicles')
   return NextResponse.json(data)
 }

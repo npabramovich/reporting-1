@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string; draftId: string } }) {
   const guard = await ensureMember()
@@ -14,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string;
     .eq('deal_id', params.id)
     .eq('fund_id', fundId)
     .maybeSingle()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-draft-get')
   if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(data)
 }
@@ -183,7 +184,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .update(update as any)
     .eq('id', params.draftId)
     .eq('fund_id', fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-draft-update')
   // Return the updated output so the editor can re-sync without a second
   // round-trip (needed for inserts — the new paragraph id is server-generated).
   return NextResponse.json({ ok: true, memo_draft_output: memoOutput, ingestion_output: ingestionOutput, research_output: researchOutput })

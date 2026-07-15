@@ -320,6 +320,13 @@ function PositionsTable({
     return enriched.sort((a, b) => compareVals(val(a), val(b), sort.dir))
   }, [allPositions, date, search, byEntityAsc, sort])
 
+  // Column totals for the footer. The four amounts sum; the ratios are derived from the totals
+  // (not summed), and IRR is not additive across LPs so it shows nothing.
+  const totals = rows.reduce(
+    (a, r) => ({ commitment: a.commitment + r.commitment, called: a.called + r.called, dist: a.dist + r.dist, nav: a.nav + r.nav }),
+    { commitment: 0, called: 0, dist: 0, nav: 0 },
+  )
+
   if (!date || rows.length === 0) {
     return (
       <div className="overflow-x-auto rounded-lg border">
@@ -353,6 +360,21 @@ function PositionsTable({
             <PositionRow key={p.lpEntityId} group={group} pos={p} irr={irr} editable={editable} onSaved={onSaved} fmt={fmt} />
           ))}
         </tbody>
+        <tfoot>
+          <tr className="border-t bg-muted/30 font-semibold">
+            <td className="px-3 py-2">Total</td>
+            <td className="px-3 py-2 text-right font-mono">{fmt(totals.commitment)}</td>
+            <td className="px-3 py-2 text-right font-mono">{fmt(totals.called)}</td>
+            <td className="px-3 py-2 text-right font-mono">{fmt(totals.dist)}</td>
+            <td className="px-3 py-2 text-right font-mono">{fmt(totals.nav)}</td>
+            <td className="px-3 py-2 text-right font-mono text-muted-foreground">{pctX(ratio(totals.called, totals.commitment))}</td>
+            <td className="px-3 py-2 text-right font-mono text-muted-foreground">{moicX(ratio(totals.dist, totals.called))}</td>
+            <td className="px-3 py-2 text-right font-mono text-muted-foreground">{moicX(ratio(totals.nav, totals.called))}</td>
+            <td className="px-3 py-2 text-right font-mono">{moicX(ratio(totals.dist + totals.nav, totals.called))}</td>
+            <td className="px-3 py-2 text-right font-mono text-muted-foreground">—</td>
+            {editable && <td />}
+          </tr>
+        </tfoot>
       </table>
     </div>
   )
@@ -386,7 +408,8 @@ function PositionRow({
   // section has no accounting VehicleProvider of its own.
   function openLp() {
     try { localStorage.setItem('acct_vehicle', group) } catch { /* ignore */ }
-    router.push(`/funds/capital-accounts/${pos.lpEntityId}`)
+    // `from=lps` so the statement's back link returns here, not to Funds → Capital accounts.
+    router.push(`/funds/capital-accounts/${pos.lpEntityId}?from=lps`)
   }
 
   async function save() {
@@ -429,7 +452,17 @@ function PositionRow({
   )
   return (
     <tr className="border-t bg-muted/20">
-      <td className="px-3 py-1.5 font-medium">{pos.name}</td>
+      {/* Save / cancel sit next to the name — where the edit pencil was — so it's obvious how to
+          commit the row you just opened, rather than hunting for controls in the last column. */}
+      <td className="px-3 py-1.5 font-medium">
+        <span className="flex items-center gap-2">
+          <span className="truncate max-w-[200px]" title={pos.name}>{pos.name}</span>
+          <span className="flex items-center gap-1 shrink-0">
+            <button onClick={save} disabled={saving} title="Save" className="text-green-600 hover:text-green-700">{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin inline" /> : <Check className="h-3.5 w-3.5 inline" />}</button>
+            <button onClick={() => setEditing(false)} title="Cancel" className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5 inline" /></button>
+          </span>
+        </span>
+      </td>
       <td className="px-3 py-1.5">{inp('commitment')}</td>
       <td className="px-3 py-1.5">{inp('calledCapital')}</td>
       <td className="px-3 py-1.5">{inp('distributions')}</td>
@@ -437,10 +470,7 @@ function PositionRow({
       <td colSpan={3} />
       <td className="px-3 py-1.5 text-right text-[11px] text-muted-foreground">derived</td>
       <td className="px-3 py-1.5">{inp('irr', 'w-20')}</td>
-      <td className="px-3 py-1.5 text-right whitespace-nowrap">
-        <button onClick={save} disabled={saving} className="text-green-600 mr-2">{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin inline" /> : <Check className="h-3.5 w-3.5 inline" />}</button>
-        <button onClick={() => setEditing(false)} className="text-muted-foreground"><X className="h-3.5 w-3.5 inline" /></button>
-      </td>
+      <td />
     </tr>
   )
 }

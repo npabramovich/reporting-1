@@ -4,6 +4,7 @@ import { parseCallbackPayload } from '@/lib/transcription/deepgram'
 import { logAIUsage } from '@/lib/ai/usage'
 import { uploadTranscriptToDrive } from '@/lib/memo-agent/render/gdoc'
 import { parseDriveFolderUrl } from '@/lib/google/drive'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Deepgram callback endpoint. Receives the transcript for a prerecorded
@@ -109,7 +110,7 @@ export async function POST(req: NextRequest, { params }: { params: { secret: str
     .upload(storagePath, buffer, { contentType: 'text/plain; charset=utf-8', upsert: false })
   if (upErr) {
     await markFailed(admin, job.id, `transcript upload failed: ${upErr.message}`)
-    return NextResponse.json({ error: upErr.message }, { status: 500 })
+    return dbError(upErr, 'transcription-webhook')
   }
 
   const { data: insertedDoc, error: insertErr } = await admin
@@ -134,7 +135,7 @@ export async function POST(req: NextRequest, { params }: { params: { secret: str
   if (insertErr || !insertedDoc) {
     await admin.storage.from('diligence-documents').remove([storagePath]).catch(() => {})
     await markFailed(admin, job.id, `transcript row insert failed: ${insertErr?.message ?? 'unknown'}`)
-    return NextResponse.json({ error: insertErr?.message ?? 'insert failed' }, { status: 500 })
+    return dbError(insertErr ?? { message: 'insert failed' }, 'transcription-webhook')
   }
   const transcriptDocId = (insertedDoc as any).id as string
 

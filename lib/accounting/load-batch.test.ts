@@ -1,0 +1,79 @@
+import { describe, it, expect } from 'vitest'
+import { loadLedgerRowsBatch, assembleLoadedLedger } from './load'
+import { loadPositionsBatch } from './lp-positions'
+
+// Chainable fake: every method returns the same thenable resolving to the table's canned rows.
+// Filters are no-ops — the batch loaders group by vehicle_id in memory, which is what's tested.
+function fakeAdmin(tables: Record<string, any[]>): any {
+  const makeQ = (table: string) => {
+    const rows = tables[table] ?? []
+    const q: any = {
+      select: () => q, eq: () => q, in: () => q, lte: () => q, order: () => q,
+      then: (resolve: (v: any) => any) => resolve({ data: rows, error: null }),
+    }
+    return q
+  }
+  return { from: (table: string) => makeQ(table) }
+}
+
+describe('loadLedgerRowsBatch', () => {
+  it('groups chart/entries/postings by vehicle_id, with an empty bucket per requested vehicle', async () => {
+    const admin = fakeAdmin({
+      chart_of_accounts: [
+        { id: 'a1', code: '3000', name: 'Cap', type: 'equity', lp_entity_id: 'e1', vehicle_id: 'v1' },
+        { id: 'a2', code: '1000', name: 'Cash', type: 'asset', vehicle_id: 'v2' },
+      ],
+      journal_entries: [{ id: 'j1', source_type: 'contribution', status: 'posted', entry_date: '2024-01-01', vehicle_id: 'v1' }],
+      journal_postings: [
+        { journal_entry_id: 'j1', account_id: 'a1', amount: 100, vehicle_id: 'v1' },
+        { journal_entry_id: 'jx', account_id: 'a2', amount: 5, vehicle_id: 'v2' },
+      ],
+    })
+    const map = await loadLedgerRowsBatch(admin, 'fund-1', ['v1', 'v2', 'v3'])
+    expect(map.get('v1')!.acctRows).toHaveLength(1)
+    expect(map.get('v1')!.postingRows).toHaveLength(1)
+    expect(map.get('v2')!.acctRows[0].id).toBe('a2')
+    expect(map.get('v3')).toEqual({ acctRows: [], entryRows: [], postingRows: [] }) // requested but has nothing
+  })
+
+  it('returns an empty map for no vehicles (no query)', async () => {
+    const map = await loadLedgerRowsBatch(fakeAdmin({}), 'fund-1', [])
+    expect(map.size).toBe(0)
+  })
+})
+
+describe('assembleLoadedLedger', () => {
+  it('builds accounts, keeps only postings whose entry is present, and flags LP-capital-account postings', () => {
+    const led = assembleLoadedLedger('fund-1', {
+      acctRows: [
+        { id: 'a1', code: '3000', name: 'Cap', type: 'equity', lp_entity_id: 'e1', company_id: null },
+        { id: 'a2', code: '1000', name: 'Cash', type: 'asset', lp_entity_id: null, company_id: null },
+      ],
+      entryRows: [{ id: 'j1', source_type: 'contribution', entry_date: '2024-01-01', memo: null }],
+      postingRows: [
+        { journal_entry_id: 'j1', account_id: 'a1', amount: 100, currency: 'USD', lp_entity_id: 'e1' }, // capital
+        { journal_entry_id: 'j1', account_id: 'a2', amount: -100, currency: 'USD', lp_entity_id: null }, // cash, not capital
+        { journal_entry_id: 'jx', account_id: 'a1', amount: 999, currency: 'USD', lp_entity_id: 'e1' }, // orphan entry → dropped
+      ],
+    })
+    expect(led.accounts).toHaveLength(2)
+    expect(led.postings).toHaveLength(2) // orphan dropped
+    expect(led.capitalPostings).toHaveLength(1)
+    expect(led.capitalPostings[0]).toMatchObject({ lpEntityId: 'e1', amount: 100, sourceType: 'contribution' })
+  })
+})
+
+describe('loadPositionsBatch', () => {
+  it('groups positions by vehicle_id and coerces numeric columns', async () => {
+    const admin = fakeAdmin({
+      lp_positions: [
+        { lp_entity_id: 'e1', as_of_date: '2024-06-30', commitment: '100', called_capital: '40', distributions: '0', nav: '45', irr: '0.1', vehicle_id: 'v1' },
+        { lp_entity_id: 'e2', as_of_date: '2024-06-30', commitment: '50', called_capital: '50', distributions: null, nav: '55', irr: null, vehicle_id: 'v2' },
+      ],
+    })
+    const map = await loadPositionsBatch(admin, 'fund-1', ['v1', 'v2'])
+    expect(map.get('v1')).toHaveLength(1)
+    expect(map.get('v1')![0]).toMatchObject({ lpEntityId: 'e1', commitment: 100, calledCapital: 40, nav: 45, irr: 0.1 })
+    expect(map.get('v2')![0]).toMatchObject({ lpEntityId: 'e2', distributions: null, irr: null })
+  })
+})

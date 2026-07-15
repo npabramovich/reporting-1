@@ -7,6 +7,7 @@ import { parseValue } from '@/lib/pipeline/processEmail'
 import type { ParsingReview, Metric } from '@/lib/types/database'
 import type { ExtractMetricsResult } from '@/lib/claude/extractMetrics'
 import { logActivity } from '@/lib/activity'
+import { dbError } from '@/lib/api-error'
 
 type ReviewRow = Pick<
   ParsingReview,
@@ -56,7 +57,7 @@ export async function POST(
     .eq('id', params.id)
     .maybeSingle()
 
-  if (reviewError) return NextResponse.json({ error: reviewError.message }, { status: 500 })
+  if (reviewError) return dbError(reviewError, 'review-id-resolve')
   if (!reviewData) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const review = reviewData as unknown as ReviewRow

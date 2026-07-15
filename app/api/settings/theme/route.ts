@@ -3,6 +3,7 @@ import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ACCENT_PRESETS, FONT_OPTIONS, isValidHsl, type FundTheme } from '@/lib/theme'
+import { dbError } from '@/lib/api-error'
 
 async function ctx() {
   const supabase = createClient()
@@ -42,7 +43,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const { error } = await (c.admin as any).from('fund_settings').update({ theme }).eq('fund_id', c.fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'settings-theme')
   revalidateTag('fund-settings')
   return NextResponse.json({ ok: true, theme })
 }

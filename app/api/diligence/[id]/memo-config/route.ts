@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { MemoTemplateConfig } from '@/lib/memo-agent/prompts/memo-config'
+import { dbError } from '@/lib/api-error'
 
 const VALID_STYLES = new Set(['pre_seed', 'seed', 'series_a', 'series_b', 'growth'])
 const VALID_COMPLEXITY = new Set(['brief', 'standard', 'detailed', 'comprehensive'])
@@ -17,7 +18,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .eq('id', params.id)
     .eq('fund_id', fundId)
     .maybeSingle()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-memo-config-get')
   if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   return NextResponse.json({
@@ -108,7 +109,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .eq('fund_id', fundId)
     .select('partner_memo_guidance, memo_template_config')
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-memo-config-update')
 
   return NextResponse.json({
     partner_memo_guidance: (data as any).partner_memo_guidance ?? '',

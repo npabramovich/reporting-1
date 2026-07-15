@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 const VALID_STATUSES = ['new', 'reviewing', 'advancing', 'met', 'diligence', 'invested', 'passed'] as const
 type DealStatus = typeof VALID_STATUSES[number]
@@ -25,7 +26,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .eq('fund_id', membership.fund_id)
     .maybeSingle()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'deals-id')
   if (!deal) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Hydrate the originating email for the detail panel. Project only the
@@ -104,6 +105,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .eq('id', params.id)
     .eq('fund_id', membership.fund_id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'deals-id')
   return NextResponse.json({ ok: true })
 }

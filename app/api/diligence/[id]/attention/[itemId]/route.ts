@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 const VALID_STATUSES = ['open', 'ignore', 'done'] as const
 
@@ -47,6 +48,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .eq('id', params.itemId)
     .eq('deal_id', params.id)
     .eq('fund_id', fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-attention-update')
   return NextResponse.json({ ok: true })
 }

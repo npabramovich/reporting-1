@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { DEFAULT_CHECKLIST_TEMPLATE } from '@/lib/diligence/default-checklist'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Fund-wide diligence-checklist template — the partner-curated default
@@ -45,7 +46,7 @@ export async function PATCH(req: NextRequest) {
   const { error } = await admin
     .from('fund_settings')
     .upsert({ fund_id: fundId, diligence_checklist_template: template } as any, { onConflict: 'fund_id' })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-checklist-template')
   return NextResponse.json({ template, isDefault: template.trim() === '' })
 }
 

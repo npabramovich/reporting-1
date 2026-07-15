@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertReadAccess } from '@/lib/api-helpers'
+import { dbError } from '@/lib/api-error'
 
 // GP-admin inbox for LP portal "Contact" messages (lib/api: lp_messages).
 async function requireAdmin() {
@@ -49,6 +50,6 @@ export async function PATCH(req: NextRequest) {
   const status = body.status === 'resolved' ? 'resolved' : 'open'
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const { error } = await c.admin.from('lp_messages').update({ status }).eq('id', id).eq('fund_id', c.fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'lps-messages')
   return NextResponse.json({ ok: true })
 }

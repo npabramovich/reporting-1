@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Cross-deal Memo Inbox feed. Returns open partner-attention items aggregated
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
   if (urgency) attentionQuery = attentionQuery.eq('urgency', urgency)
 
   const { data: items, error } = await attentionQuery
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-inbox')
 
   // Hydrate deal names + status. (Postgres JOIN would be ideal but the existing
   // codebase pattern is two queries + a map — match it for consistency.)

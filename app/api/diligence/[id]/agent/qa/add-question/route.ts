@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 /**
  * Append a partner-authored Q&A entry to the deal's latest draft. The partner
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .update({ qa_answers: [...existing, entry] as any })
     .eq('id', (draft as any).id)
     .eq('fund_id', fundId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'diligence-qa-add-question')
 
   return NextResponse.json({ ok: true, question_id: entry.question_id })
 }
