@@ -7,6 +7,7 @@ import { Loader2, Landmark, ClipboardList, ArrowRight, Search, X } from 'lucide-
 import { useCurrency, formatCurrency, formatCurrencyFull } from '@/components/currency-context'
 import { useVehicle } from '@/components/accounting-vehicle'
 import { Card, CardContent } from '@/components/ui/card'
+import { SortTh, nextSort, compareVals, type SortState } from '@/components/sortable-th'
 
 // The fund overview: performance per vehicle, DERIVED FROM THE LEDGER.
 //
@@ -61,6 +62,8 @@ export function FundOverview() {
   const [lens, setLens] = useState<Lens>('lp')
   const [search, setSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<'all' | 'ledger' | 'events'>('all')
+  const [sort, setSort] = useState<SortState>({ key: 'committed', dir: 'desc' })
+  const onSort = (key: string) => setSort(s => nextSort(s, key, key === 'vehicle' ? 'asc' : 'desc'))
 
   const load = useCallback(() => {
     setLoading(true)
@@ -103,6 +106,9 @@ export function FundOverview() {
     (sourceFilter === 'all' || v.source === sourceFilter) &&
     (!q || v.vehicle.toLowerCase().includes(q))
   )
+  const sortVal = (v: Vehicle): number | string | null =>
+    sort.key === 'vehicle' ? v.vehicle : sort.key === 'vintageYear' ? v.vintageYear : (m(v) as any)[sort.key] as number | null
+  const sorted = [...filtered].sort((a, b) => compareVals(sortVal(a), sortVal(b), sort.dir) || a.vehicle.localeCompare(b.vehicle))
 
   const totals = filtered.reduce((acc, v) => {
     const x = m(v)
@@ -177,7 +183,7 @@ export function FundOverview() {
       {/* Metric boxes — same Card treatment as an LP snapshot, so the two pages read as one. */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         <MetricBox label="Committed" value={fmt(totals.committed)} />
-        <MetricBox label="Paid in" value={fmt(totals.paidIn)} />
+        <MetricBox label="Called" value={fmt(totals.paidIn)} />
         <MetricBox label="Distributed" value={fmt(totals.distributions)} />
         <MetricBox label="NAV" value={fmt(totals.nav)} />
         <MetricBox label="TVPI" value={moic(tTvpi)} />
@@ -188,24 +194,24 @@ export function FundOverview() {
         <table className="w-full text-sm">
           <thead className="text-xs text-muted-foreground bg-muted/40">
             <tr>
-              <th className="text-left px-3 py-2 font-medium">Vehicle</th>
-              <th className="text-left px-3 py-2 font-medium">Vintage</th>
-              <th className="text-right px-3 py-2 font-medium">Committed</th>
-              <th className="text-right px-3 py-2 font-medium">Paid in</th>
-              <th className="text-right px-3 py-2 font-medium">Uncalled</th>
-              <th className="text-right px-3 py-2 font-medium">Distributed</th>
-              <th className="text-right px-3 py-2 font-medium">NAV</th>
-              <th className="text-right px-3 py-2 font-medium">DPI</th>
-              <th className="text-right px-3 py-2 font-medium">RVPI</th>
-              <th className="text-right px-3 py-2 font-medium">TVPI</th>
-              <th className="text-right px-3 py-2 font-medium">IRR</th>
+              <SortTh label="Vehicle" sortKey="vehicle" sort={sort} onSort={onSort} />
+              <SortTh label="Vintage" sortKey="vintageYear" sort={sort} onSort={onSort} />
+              <SortTh label="Committed" sortKey="committed" sort={sort} onSort={onSort} align="right" />
+              <SortTh label="Called" sortKey="paidIn" sort={sort} onSort={onSort} align="right" />
+              <SortTh label="Not called" sortKey="uncalled" sort={sort} onSort={onSort} align="right" />
+              <SortTh label="Distributed" sortKey="distributions" sort={sort} onSort={onSort} align="right" />
+              <SortTh label="NAV" sortKey="nav" sort={sort} onSort={onSort} align="right" />
+              <SortTh label="DPI" sortKey="dpi" sort={sort} onSort={onSort} align="right" />
+              <SortTh label="RVPI" sortKey="rvpi" sort={sort} onSort={onSort} align="right" />
+              <SortTh label="TVPI" sortKey="tvpi" sort={sort} onSort={onSort} align="right" />
+              <SortTh label="IRR" sortKey="irr" sort={sort} onSort={onSort} align="right" />
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && (
+            {sorted.length === 0 && (
               <tr><td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">No vehicles match your filters.</td></tr>
             )}
-            {filtered.map(v => {
+            {sorted.map(v => {
               const x = m(v)
               return (
                 <tr key={v.vehicle} className="border-t hover:bg-muted/30">
@@ -232,18 +238,16 @@ export function FundOverview() {
       </div>
 
       <p className="text-xs text-muted-foreground max-w-3xl">
-        Every figure is derived from the capital accounts — nothing here is typed in.{' '}
+        Every figure is derived from the capital accounts.{' '}
         {effectiveLens === 'lp' ? (
           <>
             <strong>Net to LP</strong> is the LP-class partners&rsquo; own accounts, so the GP&rsquo;s carry
-            {totals.carry !== 0 && <> ({fmtFull(totals.carry)} accrued)</>} is already deducted — this is not an
-            estimate.
+            {totals.carry !== 0 && <> ({fmtFull(totals.carry)} accrued)</>} is already deducted.
           </>
         ) : (
-          <><strong>Whole fund</strong> is every partner, GP included. Carry is an allocation between them, so it nets
-          out at this level.</>
+          <><strong>Whole fund</strong> is every partner, GP included.</>
         )}{' '}
-        Paid-in is capital <em>recognised</em> — capital is recognised when it is called, and a call may still be
+        Capital is recognised when it is called, so called capital may be
         unfunded.
       </p>
     </div>

@@ -97,6 +97,9 @@ export interface InvestmentRow {
   distributions: number | null
   /** Called but not yet funded (receivable). Present only on live-sourced rows; snapshots omit it. */
   receivable?: number | null
+  /** When the position is held through a GP/associate entity, its name — so the statement
+   *  shows the LP invested VIA that entity, not directly in the fund. Live rows only. */
+  lookThroughVia?: string | null
   irr: number | null
   lp_entities: {
     id: string
@@ -110,6 +113,8 @@ export interface ComputedRow {
   id: string
   entityName: string
   portfolioGroup: string
+  /** GP/associate entity the position is held through, if any. */
+  lookThroughVia: string | null
   commitment: number
   paidInCapital: number
   distributions: number
@@ -134,6 +139,7 @@ export function computeRow(inv: InvestmentRow): ComputedRow {
     id: inv.id,
     entityName: inv.lp_entities?.entity_name ?? '',
     portfolioGroup: inv.portfolio_group,
+    lookThroughVia: inv.lookThroughVia ?? null,
     commitment, paidInCapital, distributions, nav, totalValue,
     receivable: Number(inv.receivable) || 0,
     pctFunded, dpi, rvpi, tvpi,
@@ -178,7 +184,7 @@ export function buildReportHtml(opts: {
   const capitalRows = rows.map(r => `
     <tr style="border-bottom:1px solid #e5e5e5;">
       <td style="padding:5px 8px 5px 5px;max-width:0;overflow:hidden;text-overflow:ellipsis;">${esc(r.entityName)}</td>
-      <td style="padding:5px 5px 5px 8px;">${esc(r.portfolioGroup)}</td>
+      <td style="padding:5px 5px 5px 8px;">${esc(r.portfolioGroup)}${r.lookThroughVia ? `<span style="color:#888;"> · via ${esc(r.lookThroughVia)}</span>` : ''}</td>
       <td style="padding:5px;text-align:right;font-family:${PDF_MONO};">${fmt(r.commitment)}</td>
       <td style="padding:5px;text-align:right;font-family:${PDF_MONO};">${fmt(r.paidInCapital)}</td>
       <td style="padding:5px;text-align:right;font-family:${PDF_MONO};">${fmt(r.distributions)}</td>
@@ -189,7 +195,7 @@ export function buildReportHtml(opts: {
   const perfRows = rows.map(r => `
     <tr style="border-bottom:1px solid #e5e5e5;">
       <td style="padding:5px 8px 5px 5px;max-width:0;overflow:hidden;text-overflow:ellipsis;">${esc(r.entityName)}</td>
-      <td style="padding:5px 5px 5px 8px;">${esc(r.portfolioGroup)}</td>
+      <td style="padding:5px 5px 5px 8px;">${esc(r.portfolioGroup)}${r.lookThroughVia ? `<span style="color:#888;"> · via ${esc(r.lookThroughVia)}</span>` : ''}</td>
       <td style="padding:5px;text-align:right;font-family:${PDF_MONO};">${esc(fmtPct(r.pctFunded))}</td>
       <td style="padding:5px;text-align:right;font-family:${PDF_MONO};">${esc(fmtMoic(r.dpi))}</td>
       <td style="padding:5px;text-align:right;font-family:${PDF_MONO};">${esc(fmtMoic(r.rvpi))}</td>
@@ -481,6 +487,7 @@ export async function generateLiveInvestorReportPdf(
       commitment: r.commitment, total_value: r.total_value, nav: r.nav,
       called_capital: r.called_capital, paid_in_capital: r.paid_in_capital,
       distributions: r.distributions, receivable: r.receivable, irr: r.irr,
+      lookThroughVia: r.lookThroughVia ?? null,
       lp_entities: { id: r.entity_id, entity_name: info?.entity_name ?? r.entity_id, investor_id: info?.investor_id ?? '', lp_investors: { id: info?.investor_id ?? '', name: '' } },
     }
   })

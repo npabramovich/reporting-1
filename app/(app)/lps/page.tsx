@@ -25,6 +25,7 @@ import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
 import { lpRatios } from '@/lib/lp-metrics'
+import { SortTh, nextSort, compareVals, type SortState } from '@/components/sortable-th'
 
 interface LiveRow {
   entity_id: string
@@ -102,6 +103,8 @@ function LpsInner() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<SortState>({ key: 'commitment', dir: 'desc' })
+  const onSort = (key: string) => setSort(s => nextSort(s, key, key === 'name' ? 'asc' : 'desc'))
   const [excludedGroups, setExcludedGroups] = useState<Set<string>>(new Set())
   const [exporting, setExporting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -165,8 +168,9 @@ function LpsInner() {
       const q = search.trim().toLowerCase()
       list = list.filter(i => i.name.toLowerCase().includes(q) || i.rows.some(r => r.entity_name.toLowerCase().includes(q)))
     }
-    return list.sort((a, b) => b.totals.commitment - a.totals.commitment || a.name.localeCompare(b.name))
-  }, [visibleRows, parentOf, nameOf, search])
+    const val = (i: typeof list[number]) => (sort.key === 'name' ? i.name : (i.totals as any)[sort.key] as number | null)
+    return list.sort((a, b) => compareVals(val(a), val(b), sort.dir) || a.name.localeCompare(b.name))
+  }, [visibleRows, parentOf, nameOf, search, sort])
 
   const grand = useMemo(() => total(visibleRows), [visibleRows])
 
@@ -228,7 +232,7 @@ function LpsInner() {
         {/* Action buttons sit on the LEFT; the As-of date is pushed to the RIGHT to match the
             other LP capital pages. */}
         <Button size="sm" variant="outline" className="text-muted-foreground" onClick={exportExcel} disabled={exporting || investors.length === 0}>
-          <Download className="h-4 w-4 mr-1" />{exporting ? 'Exporting…' : 'Export Excel'}
+          <Download className="h-4 w-4 mr-1" />{exporting ? 'Exporting…' : 'Export'}
         </Button>
         <Button size="sm" variant="outline" className="text-muted-foreground" asChild>
           <Link href="/lps/cards"><FileText className="h-4 w-4 mr-1" /> PDFs</Link>
@@ -264,7 +268,7 @@ function LpsInner() {
         <>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <Stat label="Commitment" value={fmt(grand.commitment)} />
-            <Stat label="Paid in" value={fmt(grand.paid_in_capital)} />
+            <Stat label="Called" value={fmt(grand.paid_in_capital)} />
             <Stat label="Distributions" value={fmt(grand.distributions)} />
             <Stat label="NAV" value={fmt(grand.nav)} />
             <Stat label="TVPI" value={grand.tvpi != null ? `${grand.tvpi.toFixed(2)}x` : '—'} />
@@ -275,17 +279,17 @@ function LpsInner() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/40">
-                    <th className="text-left font-medium px-3 py-2">Investor</th>
-                    <th className="text-right font-medium px-3 py-2">Commitment</th>
-                    <th className="text-right font-medium px-3 py-2">Paid in</th>
-                    <th className="text-right font-medium px-3 py-2">Unfunded</th>
-                    <th className="text-right font-medium px-3 py-2">% Funded</th>
-                    <th className="text-right font-medium px-3 py-2">Distributions</th>
-                    <th className="text-right font-medium px-3 py-2">NAV</th>
-                    <th className="text-right font-medium px-3 py-2">DPI</th>
-                    <th className="text-right font-medium px-3 py-2">RVPI</th>
-                    <th className="text-right font-medium px-3 py-2">TVPI</th>
-                    <th className="text-right font-medium px-3 py-2">IRR</th>
+                    <SortTh label="Investor" sortKey="name" sort={sort} onSort={onSort} />
+                    <SortTh label="Commitment" sortKey="commitment" sort={sort} onSort={onSort} align="right" />
+                    <SortTh label="Called" sortKey="paid_in_capital" sort={sort} onSort={onSort} align="right" />
+                    <SortTh label="Unfunded" sortKey="outstanding_balance" sort={sort} onSort={onSort} align="right" />
+                    <SortTh label="% Funded" sortKey="pctFunded" sort={sort} onSort={onSort} align="right" />
+                    <SortTh label="Distributions" sortKey="distributions" sort={sort} onSort={onSort} align="right" />
+                    <SortTh label="NAV" sortKey="nav" sort={sort} onSort={onSort} align="right" />
+                    <SortTh label="DPI" sortKey="dpi" sort={sort} onSort={onSort} align="right" />
+                    <SortTh label="RVPI" sortKey="rvpi" sort={sort} onSort={onSort} align="right" />
+                    <SortTh label="TVPI" sortKey="tvpi" sort={sort} onSort={onSort} align="right" />
+                    <SortTh label="IRR" sortKey="irr" sort={sort} onSort={onSort} align="right" />
                   </tr>
                 </thead>
                 <tbody>
@@ -325,10 +329,15 @@ function LpsInner() {
                         {open && inv.rows.map(r => (
                           <tr key={`${inv.id}-${r.entity_id}-${r.portfolio_group}`} className="border-b bg-muted/10 text-muted-foreground">
                             <td className="px-3 py-1.5 pl-10 text-xs">
-                              <span className="truncate block max-w-[320px]" title={`${r.portfolio_group}${r.entity_name !== inv.name ? ` · ${r.entity_name}` : ''}`}>
-                                {r.portfolio_group}
-                                {r.entity_name !== inv.name && <span className="ml-1">· {r.entity_name}</span>}
-                                {r.lookThroughVia && <Badge variant="secondary" className="ml-1 text-[10px] py-0 px-1">via {r.lookThroughVia}</Badge>}
+                              {/* The `via [associate]` badge sits OUTSIDE the truncating span (shrink-0) so it
+                                  is never clipped — otherwise a long "group · entity" label eats the width and
+                                  the attribution disappears, making a look-through row read as a direct LP. */}
+                              <span className="flex items-center gap-1 min-w-0">
+                                <span className="truncate max-w-[300px]" title={`${r.portfolio_group}${r.entity_name !== inv.name ? ` · ${r.entity_name}` : ''}`}>
+                                  {r.portfolio_group}
+                                  {r.entity_name !== inv.name && <span className="ml-1">· {r.entity_name}</span>}
+                                </span>
+                                {r.lookThroughVia && <Badge variant="secondary" className="shrink-0 text-[10px] py-0 px-1">via {r.lookThroughVia}</Badge>}
                               </span>
                             </td>
                             <Money v={r.commitment} fmt={fmt} small />

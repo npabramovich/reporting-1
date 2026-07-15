@@ -328,6 +328,13 @@ async function applyLookThrough(
     const idx = out.findIndex(r => r.entity_id === link.entityId && r.portfolio_group === link.servesGroup)
     if (idx === -1) continue // the associate holds nothing in that vehicle — nothing to look through
 
+    // The associate IS linked and holds a position here. Whatever happens below, this row must
+    // never read as a direct LP interest — it came through the associate. Tag it now; if the
+    // look-through fully explodes it into member rows, this tagged row is dropped anyway. If it
+    // can't (no member split configured, no rebuildable account), the tag is what keeps the row
+    // honestly attributed instead of masquerading as a direct investment in the fund.
+    out[idx] = { ...out[idx], lookThroughVia: link.associateGroup }
+
     // The associate's members and their two allocations, from the associate vehicle's own books.
     const [{ postings }, commitmentEvents, terms, owners] = await Promise.all([
       loadCapitalPostings(admin, fundId, link.associateGroup, asOf),

@@ -677,7 +677,7 @@ export default function LetterEditorPage() {
                       <tr className="border-b bg-muted/50">
                         <th className="text-left px-2 py-1.5 font-semibold">Fund</th>
                         <th className="text-right px-2 py-1.5 font-semibold">Committed</th>
-                        <th className="text-right px-2 py-1.5 font-semibold">Paid In</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">Called</th>
                         <th className="text-right px-2 py-1.5 font-semibold">Distributions</th>
                         <th className="text-right px-2 py-1.5 font-semibold">FMV</th>
                         <th className="text-right px-2 py-1.5 font-semibold">DPI</th>

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { useConfirm } from '@/components/confirm-dialog'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
 import { xirr, type CashFlow } from '@/lib/xirr'
+import { SortTh, nextSort, compareVals, type SortState } from '@/components/sortable-th'
 
 interface AcctRow {
   lpEntityId: string
@@ -283,12 +284,41 @@ function PositionsTable({
     return m
   }, [allPositions])
 
+  const [sort, setSort] = useState<SortState>({ key: 'name', dir: 'asc' })
+  const onSort = (key: string) => setSort(s => nextSort(s, key, key === 'name' ? 'asc' : 'desc'))
+
+  // Rows for the shown date, each with its stored-or-derived IRR resolved up front so the
+  // IRR column is sortable (a single-date position has no time spread, so IRR is null there).
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return allPositions
+    const enriched = allPositions
       .filter(p => p.asOfDate === date && (!q || p.name.toLowerCase().includes(q)))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [allPositions, date, search])
+      .map(p => {
+        const history = (byEntityAsc.get(p.lpEntityId) ?? []).filter(h => h.asOfDate <= date)
+        const irr = p.irr != null ? p.irr : deriveIrr(history, date)
+        const commitment = p.commitment ?? 0
+        const called = p.calledCapital ?? 0
+        const dist = p.distributions ?? 0
+        const nav = p.nav ?? 0
+        return { p, irr, commitment, called, dist, nav }
+      })
+    const val = (r: typeof enriched[number]): number | string | null => {
+      switch (sort.key) {
+        case 'name': return r.p.name
+        case 'commitment': return r.commitment
+        case 'called': return r.called
+        case 'distributions': return r.dist
+        case 'nav': return r.nav
+        case 'pctFunded': return r.commitment ? r.called / r.commitment : null
+        case 'dpi': return r.called ? r.dist / r.called : null
+        case 'rvpi': return r.called ? r.nav / r.called : null
+        case 'tvpi': return r.called ? (r.dist + r.nav) / r.called : null
+        case 'irr': return r.irr
+        default: return r.p.name
+      }
+    }
+    return enriched.sort((a, b) => compareVals(val(a), val(b), sort.dir))
+  }, [allPositions, date, search, byEntityAsc, sort])
 
   if (!date || rows.length === 0) {
     return (
@@ -305,28 +335,23 @@ function PositionsTable({
       <table className="w-full text-sm">
         <thead className="text-xs text-muted-foreground bg-muted/40">
           <tr>
-            <th className="text-left px-3 py-2 font-medium">LP</th>
-            <th className="text-right px-3 py-2 font-medium">Committed</th>
-            <th className="text-right px-3 py-2 font-medium">Called</th>
-            <th className="text-right px-3 py-2 font-medium">Distributions</th>
-            <th className="text-right px-3 py-2 font-medium">NAV</th>
-            <th className="text-right px-3 py-2 font-medium">% Funded</th>
-            <th className="text-right px-3 py-2 font-medium">DPI</th>
-            <th className="text-right px-3 py-2 font-medium">RVPI</th>
-            <th className="text-right px-3 py-2 font-medium">TVPI</th>
-            <th className="text-right px-3 py-2 font-medium">IRR</th>
+            <SortTh label="LP" sortKey="name" sort={sort} onSort={onSort} align="left" />
+            <SortTh label="Committed" sortKey="commitment" sort={sort} onSort={onSort} align="right" />
+            <SortTh label="Called" sortKey="called" sort={sort} onSort={onSort} align="right" />
+            <SortTh label="Distributions" sortKey="distributions" sort={sort} onSort={onSort} align="right" />
+            <SortTh label="NAV" sortKey="nav" sort={sort} onSort={onSort} align="right" />
+            <SortTh label="% Funded" sortKey="pctFunded" sort={sort} onSort={onSort} align="right" />
+            <SortTh label="DPI" sortKey="dpi" sort={sort} onSort={onSort} align="right" />
+            <SortTh label="RVPI" sortKey="rvpi" sort={sort} onSort={onSort} align="right" />
+            <SortTh label="TVPI" sortKey="tvpi" sort={sort} onSort={onSort} align="right" />
+            <SortTh label="IRR" sortKey="irr" sort={sort} onSort={onSort} align="right" />
             {editable && <th className="px-3 py-2" />}
           </tr>
         </thead>
         <tbody>
-          {rows.map(p => {
-            const history = (byEntityAsc.get(p.lpEntityId) ?? []).filter(h => h.asOfDate <= date)
-            // Stored IRR wins; a single-date position has no time spread to derive one.
-            const irr = p.irr != null ? p.irr : deriveIrr(history, date)
-            return (
-              <PositionRow key={p.lpEntityId} group={group} pos={p} irr={irr} editable={editable} onSaved={onSaved} fmt={fmt} />
-            )
-          })}
+          {rows.map(({ p, irr }) => (
+            <PositionRow key={p.lpEntityId} group={group} pos={p} irr={irr} editable={editable} onSaved={onSaved} fmt={fmt} />
+          ))}
         </tbody>
       </table>
     </div>

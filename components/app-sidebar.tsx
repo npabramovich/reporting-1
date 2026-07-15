@@ -71,8 +71,6 @@ const NAV_ITEMS: NavItem[] = [
     href: '/lps', label: 'LPs', icon: Crown, featureKey: 'lps',
     children: [
       { href: '/lps/capital',   label: 'Capital accounts', featureKey: 'lp_tracking' },
-      // The snapshot archive: frozen historical position sets + bulk PDF printing. Admin-only.
-      { href: '/lps/snapshots', label: 'Snapshots',        adminOnly: true },
       { href: '/lp-portal',     label: 'Documents',        featureKey: 'lp_portal' },
       // See the portal exactly as an LP does ("viewing as …"). Admin-only, and only where a
       // portal exists to preview.

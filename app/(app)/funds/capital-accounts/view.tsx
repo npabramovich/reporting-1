@@ -13,6 +13,7 @@ import { PERIOD_PRESETS, type PeriodPreset } from '@/lib/accounting/statement-pe
 import { ReconciliationPanel } from './reconciliation-panel'
 import { type CapitalSource } from './capital-source-card'
 import { GpPanel } from './gp-panel'
+import { SortTh, nextSort, compareVals, type SortState } from '@/components/sortable-th'
 
 interface Account {
   beginning: number
@@ -250,6 +251,20 @@ export function CapitalAccountsView() {
     () => COMMITMENT_COLUMNS.filter(c => c.key !== 'receivable' || rows.some(r => Math.abs(r.receivable) > 0.004)),
     [rows],
   )
+
+  // Sortable headers. The account columns are period-scoped (acctOf), the commitment columns
+  // are not; `name` sorts alphabetically. A single ACCOUNT_KEYS set tells the two apart.
+  const [sort, setSort] = useState<SortState>({ key: 'name', dir: 'asc' })
+  const onSort = (key: string) => setSort(s => nextSort(s, key, key === 'name' ? 'asc' : 'desc'))
+  const sortedRows = useMemo(() => {
+    const accountKeys = new Set<string>(COLUMNS.map(c => c.key))
+    const val = (r: Row): number | string => {
+      if (sort.key === 'name') return r.name
+      if (accountKeys.has(sort.key)) return acctOf(r)[sort.key as keyof Account]
+      return (r as any)[sort.key] ?? 0
+    }
+    return [...rows].sort((a, b) => compareVals(val(a), val(b), sort.dir))
+  }, [rows, sort, period]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const totals = columns.reduce((acc, c) => {
     acc[c.key] = rows.reduce((s, r) => s + acctOf(r)[c.key], 0)
@@ -499,14 +514,14 @@ export function CapitalAccountsView() {
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="text-left px-3 py-2 font-medium">Partner</th>
+                <SortTh label="Partner" sortKey="name" sort={sort} onSort={onSort} align="left" />
                 {/* Commitment side — was the Capital calls page. */}
-                {commitmentCols.map(c => <th key={c.key} className="text-right px-3 py-2 font-medium border-l">{c.label}</th>)}
-                {columns.map((c, i) => <th key={c.key} className={`text-right px-3 py-2 font-medium ${i === 0 ? 'border-l' : ''}`}>{c.label}</th>)}
+                {commitmentCols.map(c => <SortTh key={c.key} label={c.label} sortKey={c.key} sort={sort} onSort={onSort} align="right" className="border-l" />)}
+                {columns.map((c, i) => <SortTh key={c.key} label={c.label} sortKey={c.key} sort={sort} onSort={onSort} align="right" className={i === 0 ? 'border-l' : ''} />)}
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => {
+              {sortedRows.map(r => {
                 const a = acctOf(r)
                 return (
                   <tr key={r.lpEntityId} className="border-b last:border-b-0 hover:bg-muted/30">
