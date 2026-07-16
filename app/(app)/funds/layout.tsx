@@ -1,4 +1,5 @@
 import { VehicleProvider, VehicleBar } from '@/components/accounting-vehicle'
+import { AccountingAssistantDock } from '@/components/accounting-assistant-dock'
 
 // Wraps every Accounting page with the vehicle selector + context so the whole
 // section operates on one portfolio_group at a time.
@@ -13,6 +14,8 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
         </div>
         {children}
       </div>
+      {/* The accounting assistant, one click away on every /funds/* page. */}
+      <AccountingAssistantDock />
     </VehicleProvider>
   )
 }

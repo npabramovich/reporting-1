@@ -281,7 +281,7 @@ export function PeriodsView() {
                             title={`Preview closing through ${p.period_end}`}
                             className="text-xs text-muted-foreground hover:underline disabled:opacity-50"
                           >
-                            Close through {p.period_end}
+                            Preview close
                           </button>
                         )}
                       </td>

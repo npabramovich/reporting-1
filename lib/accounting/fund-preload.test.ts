@@ -9,7 +9,7 @@ function fakeAdmin(tables: Record<string, any[]>): any {
   const makeQ = (table: string) => {
     const rows = tables[table] ?? []
     const q: any = {
-      select: () => q, eq: () => q, in: () => q, lte: () => q, order: () => q, contains: () => q,
+      select: () => q, eq: () => q, in: () => q, lte: () => q, order: () => q, contains: () => q, range: () => q,
       maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
       then: (resolve: (v: any) => any) => resolve({ data: rows, error: null }),
     }

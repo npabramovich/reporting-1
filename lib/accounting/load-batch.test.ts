@@ -8,7 +8,7 @@ function fakeAdmin(tables: Record<string, any[]>): any {
   const makeQ = (table: string) => {
     const rows = tables[table] ?? []
     const q: any = {
-      select: () => q, eq: () => q, in: () => q, lte: () => q, order: () => q,
+      select: () => q, eq: () => q, in: () => q, lte: () => q, order: () => q, range: () => q,
       then: (resolve: (v: any) => any) => resolve({ data: rows, error: null }),
     }
     return q

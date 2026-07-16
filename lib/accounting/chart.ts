@@ -96,6 +96,9 @@ export const GP_ENTITY_CHART: ChartAccountSeed[] = [
 
   // Equity
   { code: '3000', name: "Members' capital", type: 'equity', subtype: 'members_capital' },
+  // Same bridge the fund chart uses: the period close offsets each allocation to this account,
+  // then rolls it into members' capital. Without it a GP/associate vehicle can't close a period.
+  { code: '3200', name: 'Undistributed earnings (bridge)', type: 'equity', subtype: 'undistributed_earnings' },
 
   // Income
   { code: '4000', name: 'Carried interest income', type: 'income', subtype: 'carried_interest' },

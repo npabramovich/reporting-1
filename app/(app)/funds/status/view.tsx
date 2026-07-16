@@ -7,7 +7,6 @@ import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 import { CapitalSourceCard } from '../capital-accounts/capital-source-card'
 import { AccountingSetup } from '../setup'
-import { AssistantPanel } from './assistant-panel'
 import { DealCarryCard } from './deal-carry-card'
 
 interface Issue { level: 'blocker' | 'warning' | 'info'; title: string; detail: string; href?: string; action?: string }
@@ -210,19 +209,6 @@ export function StatusView() {
       {/* Deal-by-deal carry — a reference calculator for American vehicles. Renders to nothing
           otherwise, so there's no condition to keep in sync here. */}
       <DealCarryCard />
-
-      {/* The assistant reads the books and drafts entries — it belongs with the health
-          check that tells you what needs fixing, not as a separate destination. */}
-      <div>
-        <p className="text-sm font-medium mb-1">Assistant</p>
-        <p className="text-xs text-muted-foreground mb-2">
-          Ask about the books, explain a statement, or drop in a document to draft an entry.
-          Anything it proposes is applied as a draft you approve — nothing posts automatically.
-        </p>
-        <div className="border rounded-lg p-3">
-          <AssistantPanel />
-        </div>
-      </div>
 
     </div>
   )

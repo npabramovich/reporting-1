@@ -10,6 +10,26 @@ import { vehicleIdByName, type VehicleIdMap } from './vehicle-id'
 
 export type SourcedPosting = Posting & { sourceType: string | null; entryId: string; memo: string | null }
 
+/**
+ * Fetch every row of a query, paging past PostgREST's 1000-row default cap. A vehicle with more
+ * than 1000 journal postings would otherwise load a TRUNCATED ledger — silently producing a false
+ * trial-balance imbalance, phantom unallocated income, and a wrong NAV. `make(from, to)` must apply
+ * the same filters each page and add `.range(from, to)`.
+ */
+export async function fetchAllRows<T>(
+  make: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  page = 1000,
+): Promise<T[]> {
+  const out: T[] = []
+  for (let from = 0; ; from += page) {
+    const { data } = await make(from, from + page - 1)
+    const rows = data ?? []
+    out.push(...rows)
+    if (rows.length < page) break
+  }
+  return out
+}
+
 export interface LoadedLedger {
   accounts: Account[]
   postings: Posting[]
@@ -41,20 +61,21 @@ export async function loadLedgerRowsBatch(
   if (vehicleIds.length === 0) return out
   for (const id of vehicleIds) out.set(id, { acctRows: [], entryRows: [], postingRows: [] })
 
-  let entriesQ = admin.from('journal_entries' as any)
-    .select('id, source_type, status, entry_date, memo, vehicle_id')
-    .eq('fund_id', fundId).in('vehicle_id', vehicleIds).eq('status', 'posted')
-  if (asOf) entriesQ = entriesQ.lte('entry_date', asOf)
-
-  const [{ data: acctRows }, { data: entryRows }, { data: postingRows }] = await Promise.all([
-    admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id, company_id, vehicle_id').eq('fund_id', fundId).in('vehicle_id', vehicleIds),
-    entriesQ,
-    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, currency, lp_entity_id, vehicle_id').eq('fund_id', fundId).in('vehicle_id', vehicleIds),
+  // Paginated: across many vehicles the posting count easily exceeds the PostgREST 1000-row cap;
+  // a truncated batch would break the trial balance for whichever vehicles fell past the cut.
+  const [acctRows, entryRows, postingRows] = await Promise.all([
+    fetchAllRows((f, t) => admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id, company_id, vehicle_id').eq('fund_id', fundId).in('vehicle_id', vehicleIds).range(f, t)),
+    fetchAllRows((f, t) => {
+      let q = admin.from('journal_entries' as any).select('id, source_type, status, entry_date, memo, vehicle_id').eq('fund_id', fundId).in('vehicle_id', vehicleIds).eq('status', 'posted')
+      if (asOf) q = q.lte('entry_date', asOf)
+      return q.range(f, t)
+    }),
+    fetchAllRows((f, t) => admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, currency, lp_entity_id, vehicle_id').eq('fund_id', fundId).in('vehicle_id', vehicleIds).range(f, t)),
   ])
 
-  for (const r of ((acctRows as any[]) ?? [])) out.get(r.vehicle_id)?.acctRows.push(r)
-  for (const r of ((entryRows as any[]) ?? [])) out.get(r.vehicle_id)?.entryRows.push(r)
-  for (const r of ((postingRows as any[]) ?? [])) out.get(r.vehicle_id)?.postingRows.push(r)
+  for (const r of (acctRows as any[])) out.get(r.vehicle_id)?.acctRows.push(r)
+  for (const r of (entryRows as any[])) out.get(r.vehicle_id)?.entryRows.push(r)
+  for (const r of (postingRows as any[])) out.get(r.vehicle_id)?.postingRows.push(r)
   return out
 }
 
@@ -125,18 +146,21 @@ export async function loadPostedLedger(
   const vehicleId = await vehicleIdByName(admin, fundId, group, idMap)
   // entry_date rides along so the capital-account roll-forward can be scoped to a
   // statement period without a second load.
-  let entriesQ = admin.from('journal_entries' as any).select('id, source_type, status, entry_date, memo').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'posted')
-  if (asOf) entriesQ = entriesQ.lte('entry_date', asOf)
-
-  const [{ data: acctRows }, { data: entryRows }, { data: postingRows }] = await Promise.all([
-    admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id, company_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
-    entriesQ,
-    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, currency, lp_entity_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
+  // Paginated: a vehicle can hold more than 1000 postings (and a big chart / many entries), which
+  // the PostgREST default would silently truncate — a truncated ledger fails the trial balance.
+  const [acctRows, entryRows, postingRows] = await Promise.all([
+    fetchAllRows((f, t) => admin.from('chart_of_accounts' as any).select('id, code, name, type, subtype, lp_entity_id, company_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId).range(f, t)),
+    fetchAllRows((f, t) => {
+      let q = admin.from('journal_entries' as any).select('id, source_type, status, entry_date, memo').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'posted')
+      if (asOf) q = q.lte('entry_date', asOf)
+      return q.range(f, t)
+    }),
+    fetchAllRows((f, t) => admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, currency, lp_entity_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId).range(f, t)),
   ])
   return assembleLoadedLedger(fundId, {
-    acctRows: (acctRows as any[]) ?? [],
-    entryRows: (entryRows as any[]) ?? [],
-    postingRows: (postingRows as any[]) ?? [],
+    acctRows: acctRows as any[],
+    entryRows: entryRows as any[],
+    postingRows: postingRows as any[],
   })
 }
 

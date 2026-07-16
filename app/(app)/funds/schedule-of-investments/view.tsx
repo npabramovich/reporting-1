@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, AlertTriangle, Check, Download, Pencil, History } from 'lucide-react'
+import { Loader2, AlertTriangle, Check, Download, History } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
@@ -64,7 +64,6 @@ export function ScheduleOfInvestmentsView() {
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [bootDate, setBootDate] = useState(new Date().toISOString().slice(0, 10))
-  const [marking, setMarking] = useState<{ companyId: string; name: string; value: string; date: string } | null>(null)
   // Onboarding: replay the dated history (default) vs. book one snapshot (cutover).
   const [mode, setMode] = useState<'history' | 'snapshot'>('history')
   const [from, setFrom] = useState('')
@@ -112,17 +111,6 @@ export function ScheduleOfInvestmentsView() {
       setHist(null)
       setNote(`Replayed ${d.entries} ${d.entries === 1 ? 'entry' : 'entries'} across ${d.dates} ${d.dates === 1 ? 'date' : 'dates'} — ending cost ${fmt(d.cost)}, unrealized ${fmt(d.unrealized)}.`)
     }
-  }
-
-  async function saveMark() {
-    if (!marking) return
-    const v = parseFloat(marking.value)
-    if (!Number.isFinite(v)) { setError('Enter a fair value (0 to write it off)'); return }
-    const d = await post({
-      action: 'mark', companyId: marking.companyId, companyName: marking.name,
-      fairValue: v, entryDate: marking.date,
-    })
-    if (d) { setNote(`Marked ${marking.name} to ${fmt(v)} (change of ${fmt(d.delta)}).`); setMarking(null) }
   }
 
   if (loading) return <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>
@@ -340,10 +328,8 @@ export function ScheduleOfInvestmentsView() {
               <th className="text-right px-3 py-2 font-medium">Price</th>
               <th className="text-right px-3 py-2 font-medium">Cost</th>
               <th className="text-right px-3 py-2 font-medium">Fair value</th>
-              <th className="text-right px-3 py-2 font-medium border-l">Ledger FV</th>
               <th className="text-right px-3 py-2 font-medium">MOIC</th>
               <th className="text-right px-3 py-2 font-medium">% of net assets</th>
-              <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -363,82 +349,22 @@ export function ScheduleOfInvestmentsView() {
                 <td className="px-3 py-2 text-right font-mono text-xs">{r.sharePrice == null ? '—' : fmt(r.sharePrice)}</td>
                 <td className="px-3 py-2 text-right font-mono">{fmt(r.cost)}</td>
                 <td className="px-3 py-2 text-right font-mono">{fmt(r.fairValue)}</td>
-                <td className={`px-3 py-2 text-right font-mono border-l ${r.tiesOut === false ? 'text-amber-600' : 'text-muted-foreground'}`}>
-                  {r.ledgerFairValue == null ? '—' : fmt(r.ledgerFairValue)}
-                </td>
                 <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">{r.moic == null ? '—' : `${r.moic.toFixed(2)}×`}</td>
                 <td className="px-3 py-2 text-right font-mono text-muted-foreground">{pct(r.pctOfNetAssets)}</td>
-                <td className="px-3 py-2 text-right">
-                  {r.companyId && (
-                    <button
-                      onClick={() => setMarking({ companyId: r.companyId!, name: r.name, value: String(r.fairValue), date: new Date().toISOString().slice(0, 10) })}
-                      className="text-xs border border-input rounded px-2 py-1 text-muted-foreground hover:bg-accent hover:text-foreground inline-flex items-center gap-1"
-                    >
-                      <Pencil className="h-3 w-3" />Mark
-                    </button>
-                  )}
-                </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t bg-muted/30 font-semibold">
-              <td className="px-3 py-2" colSpan={5}>Total (net assets {fmt(soi.netAssets)})</td>
+              <td className="px-3 py-2" colSpan={5}>Total</td>
               <td className="px-3 py-2 text-right font-mono">{fmt(soi.totalCost)}</td>
               <td className="px-3 py-2 text-right font-mono">{fmt(soi.totalFairValue)}</td>
               <td />
-              <td className="px-3 py-2 text-right font-mono text-muted-foreground">{soi.netAssets ? pct(soi.totalFairValue / soi.netAssets) : '—'}</td>
+              <td />
             </tr>
           </tfoot>
         </table>
       </div>
-
-      {/* Marking ONE company. A write-off is simply fair value 0: the carrying value
-          goes to zero while the cost stays on the books, which is exactly what a
-          written-off position looks like. Only possible per-company because each has
-          its own 1200-<id> account now. */}
-      {marking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMarking(null)}>
-          <div className="w-full max-w-md rounded-lg border bg-card p-4 shadow-xl space-y-3" onClick={e => e.stopPropagation()}>
-            <div>
-              <p className="text-sm font-medium">Mark {marking.name}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Books the change in unrealized against this company&rsquo;s own account. Enter <strong>0</strong> to write it off.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="text-xs text-muted-foreground flex-1 min-w-[140px]">Fair value
-                <Input
-                  value={marking.value}
-                  onChange={e => setMarking(m => m && { ...m, value: e.target.value })}
-                  inputMode="decimal"
-                  className="mt-1 h-9 w-full font-mono"
-                />
-              </label>
-              <label className="text-xs text-muted-foreground">As of
-                <Input
-                  type="date"
-                  value={marking.date}
-                  onChange={e => setMarking(m => m && { ...m, date: e.target.value })}
-                  className="mt-1 h-9 w-40"
-                />
-              </label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button size="sm" onClick={saveMark} disabled={busy}>
-                {busy && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Post mark
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setMarking(null)} disabled={busy}>Cancel</Button>
-              <button
-                onClick={() => setMarking(m => m && { ...m, value: '0' })}
-                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground ml-auto"
-              >
-                Write off
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {soi.source === 'tracker' && (
         <div className="grid gap-4 md:grid-cols-2">
