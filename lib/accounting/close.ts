@@ -855,10 +855,11 @@ const ASSOCIATE_MARKUP_LINES: { bucket: keyof CapitalAccount; sourceType: string
 
 /**
  * Book, on a GP/associate entity's OWN books, its EQUITY-METHOD share of the fund it is the GP of —
- * marking its Investment in Fund (1500) to the associate's fund-book position and allocating each
- * line to members. This is BOTH the carried interest it earned (carry points) AND the appreciation
- * of its own GP capital commitment (ownership) — a GP entity's committed capital is invested in the
- * fund and moves with it, so both belong on its books.
+ * the appreciation of its own GP capital commitment (ownership) AND the carried interest it earned
+ * (carry points), each allocated to members. Kept SPLIT on the asset side so Investment in Fund
+ * (1500) stays at cost: the appreciation marks up 1550 (unrealized gain on the stake), the carry
+ * marks up 1600 (carry receivable). A GP entity's committed capital is invested in the fund and
+ * moves with it, so both pieces belong on its books.
  *
  * Runs during the ASSOCIATE'S OWN close (not the served fund's), so it is fully self-contained: it
  * carries this close's own `source_ref`, and the ordinary vehicle-scoped reopen/re-close reverses
@@ -887,6 +888,11 @@ async function accrueAssociateEconomics(
   const codes = await accountIdByCode(admin, fundId, group)
   const investmentId = codes.get('1500')
   if (!investmentId) return { entryIds: [] }
+  // Split the markup so Investment in Fund (1500) stays at COST: the appreciation lands in 1550
+  // (unrealized gain on the stake), carry in 1600 (carry receivable). Fall back to 1500 if a chart
+  // wasn't reseeded with the split accounts, so an older associate still closes (just lumped).
+  const unrealizedInFundId = codes.get('1550') ?? investmentId
+  const carryReceivableId = codes.get('1600') ?? investmentId
 
   const [served, own, ownership, terms] = await Promise.all([
     loadCapitalPostings(admin, fundId, link.servesVehicle, periodEnd),
@@ -931,11 +937,14 @@ async function accrueAssociateEconomics(
     }
     if (perMember.size === 0) continue
 
+    // Carry marks up the carry receivable (1600); every other performance line marks up the
+    // unrealized-gain-on-investment account (1550). Neither touches 1500, so it stays at cost.
+    const assetId = line.bucket === 'carriedInterest' ? carryReceivableId : unrealizedInFundId
     const entry = buildAssociateMarkupEntry(
       { fundId, entryDate: periodEnd, memo: `${line.label} from ${link.servesVehicle} at ${periodEnd} NAV` },
       perMember,
       capMap,
-      investmentId,
+      assetId,
       line.sourceType,
     )
     entry.sourceRef = sourceRef

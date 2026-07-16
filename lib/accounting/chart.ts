@@ -88,7 +88,12 @@ export const DEFAULT_CHART: ChartAccountSeed[] = [
 export const GP_ENTITY_CHART: ChartAccountSeed[] = [
   // Assets
   { code: '1000', name: 'Cash', type: 'asset', subtype: 'cash' },
+  // The GP's stake in the fund, split so each piece is visible rather than lumped together:
+  //   1500 = cost (its funded capital commitment) — only cash contributions move it;
+  //   1550 = the unrealized appreciation of that stake (its share of the fund's gains);
+  //   1600 = carried interest earned, accrued as a receivable.
   { code: '1500', name: 'Investment in Fund', type: 'asset', subtype: 'investment_in_fund' },
+  { code: '1550', name: 'Unrealized gain on Investment in Fund', type: 'asset', subtype: 'investment_in_fund_unrealized' },
   { code: '1600', name: 'Carried interest receivable', type: 'asset', subtype: 'carry_receivable' },
 
   // Liabilities

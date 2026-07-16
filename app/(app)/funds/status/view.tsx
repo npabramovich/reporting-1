@@ -8,6 +8,9 @@ import { useLedgerFetch } from '@/components/accounting-vehicle'
 import { CapitalSourceCard } from '../capital-accounts/capital-source-card'
 import { AccountingSetup } from '../setup'
 import { DealCarryCard } from './deal-carry-card'
+import { CarryTerms } from '../allocation-terms/carry-terms'
+import { AllocationTermsView } from '../allocation-terms/view'
+import { CollapsibleSection } from '@/components/collapsible-section'
 
 interface Issue { level: 'blocker' | 'warning' | 'info'; title: string; detail: string; href?: string; action?: string }
 interface Status {
@@ -188,23 +191,22 @@ export function StatusView() {
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
       </Link>
 
-      {/* Allocation terms is configuration, not a workspace — it lives here rather than
-          in the nav, next to the health check that surfaces when it's set wrong. */}
-      <Link
-        href="/funds/allocation-terms"
-        className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/30"
-      >
-        <SlidersHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">Allocation terms</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Splitting on <strong>{s.close.basis === 'capital_balance' ? 'capital-account balance' : 'committed capital'}</strong>
-            {' · '}{s.setup.partnersWithCommitment} of {s.setup.partnerCount} partners have a commitment
-            {' · '}who bears the management fee, expenses, and carry
-          </p>
-        </div>
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-      </Link>
+      {/* Settings — configuration that used to live on the separate Allocation terms page, now
+          folded in here as collapsible sections so it's all on one surface but hideable. */}
+      <div className="pt-2 space-y-2">
+        <p className="text-sm font-medium flex items-center gap-1.5"><SlidersHorizontal className="h-4 w-4 text-muted-foreground" />Settings</p>
+
+        <CollapsibleSection title="Carried interest" subtitle="The carry the close accrues, and who receives it">
+          <CarryTerms />
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          title="Allocation & partners"
+          subtitle={`Splitting on ${s.close.basis === 'capital_balance' ? 'capital-account balance' : 'committed capital'} · who bears fees, expenses, and carry · commitment history`}
+        >
+          <AllocationTermsView />
+        </CollapsibleSection>
+      </div>
 
       {/* Deal-by-deal carry — a reference calculator for American vehicles. Renders to nothing
           otherwise, so there's no condition to keep in sync here. */}
