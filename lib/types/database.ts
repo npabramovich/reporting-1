@@ -85,6 +85,7 @@ export type Database = {
           id: string
           message_count: number
           messages: Json
+          scope: string | null
           summary: string | null
           title: string
           updated_at: string
@@ -98,6 +99,7 @@ export type Database = {
           id?: string
           message_count?: number
           messages?: Json
+          scope?: string | null
           summary?: string | null
           title?: string
           updated_at?: string
@@ -111,6 +113,7 @@ export type Database = {
           id?: string
           message_count?: number
           messages?: Json
+          scope?: string | null
           summary?: string | null
           title?: string
           updated_at?: string

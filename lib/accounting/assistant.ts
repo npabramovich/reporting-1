@@ -1,12 +1,12 @@
-// Inline accounting assistant. Gathers the vehicle's books (chart, balances,
-// recent entries) as context, optionally alongside a source document the user
-// uploaded, asks the fund's AI to review the work and/or draft the entry, and
-// returns structured findings + proposals. Nothing is posted automatically: a
-// proposal is applied as a DRAFT entry the user reviews and posts.
+// The accounting half of the unified Analyst: it gathers a vehicle's books (chart, balances,
+// recent entries, partner capital) as prompt context, supplies the prompt text that teaches the
+// Analyst to reason about them and to hand back drafted entries, and applies a drafted entry.
+//
+// The Analyst that consumes all of this is /api/analyst — and it appends any of it ONLY for a
+// user entitled to accounting. See docs/plan-unified-analyst.md. Nothing here posts to the books:
+// a proposal is applied as a DRAFT entry the user reviews and posts.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createFundAIProviderWithOverride } from '@/lib/ai'
-import { withTopicalGuardrail } from '@/lib/ai/topical-guard'
 import { loadPostedLedger, loadEntityNames } from './load'
 import { accountBalances, assertBalanced } from './ledger'
 import { accountIdByCode, persistEntry } from './persist'
@@ -26,17 +26,6 @@ export interface AssistantProposal {
   sourceType?: string | null
   postings: AssistantProposalPosting[]
   rationale: string
-}
-export interface AssistantFinding {
-  severity: 'info' | 'warning' | 'error'
-  title: string
-  detail: string
-  entryId?: string | null
-}
-export interface AssistantResult {
-  summary: string
-  findings: AssistantFinding[]
-  proposals: AssistantProposal[]
 }
 
 /** A readable snapshot of one vehicle's books. `full` includes the chart and more
@@ -122,86 +111,42 @@ async function gatherContext(admin: SupabaseClient, fundId: string, group: strin
   return [primary + capText, ...relatedBlocks].join('\n\n=====\n\n')
 }
 
-const SYSTEM = `You are an expert fund-accounting assistant embedded in the Accounting section of a fund platform. You help across the WHOLE section, not just journal entries:
+/** The unified Analyst's accounting context block — exported so `/api/analyst` can append it for
+ *  a user entitled to accounting, and only for such a user. */
+export { gatherContext as buildAccountingContext }
+
+/** What the unified Analyst needs to know to reason about a vehicle's books. */
+export const ACCOUNTING_ANALYST_GUIDE = `The user is in the Accounting section, viewing one vehicle. Its books are below. You can:
 - interpret and explain financial statements (statement of assets/liabilities & partners' capital i.e. balance sheet, statement of operations i.e. income statement, statement of changes in partners' capital, cash flows, schedule of investments) from the chart, balances, and entries provided;
 - explain capital accounts and capital calls (commitment / called / funded / outstanding / NAV per partner);
 - answer reconciliation questions — including between a fund and its GP/associate entity, whose own books reconcile to the fund (a GP entity's "Investment in Fund" should equal its capital-account balance on the fund's books);
-- review the books for problems; draft or fix double-entry journal entries; and
-- convert a SOURCE DOCUMENT (capital-call notice, invoice, wire confirmation, distribution notice) into a balanced entry.
+- review the books for problems: entries that don't balance, postings that debit and credit the SAME account (always wrong), mis-categorized postings, missing counterparts (e.g. a loan drawn but never repaid), fund-vs-GP reconciliation gaps, and unusual amounts.
 
-You are given the PRIMARY vehicle being viewed (chart, balances, recent entries, partner capital) plus any RELATED GP/associate entities as read-only reference. A SOURCE DOCUMENT may also be attached.
+You are given the PRIMARY vehicle being viewed (chart, balances, recent entries, partner capital) plus any RELATED GP/associate entities as read-only reference.
 
-Sign convention: every posting amount is the signed change to the account — DEBIT positive, CREDIT negative — and each entry's postings MUST sum to exactly 0.
+Sign convention: every posting amount is the signed change to the account — DEBIT positive, CREDIT negative — and each entry's postings sum to exactly 0. Cite specific account codes, entry ids, dates, and amounts from the data below; never invent them.`
 
-When ANSWERING a question (interpretation, explanation, reconciliation), put the answer in "summary" — a few short paragraphs are fine — and leave "proposals" empty unless the user asked you to draft or fix an entry.
-When a SOURCE DOCUMENT is attached, default to proposing ONE balanced entry that records it, and explain your reading of it in "summary".
-When drafting/fixing: only use account codes that exist in the PRIMARY vehicle's chart (never invent codes), and only propose entries for the PRIMARY vehicle (related entities are reference only — describe any needed entries for them in the summary instead).
-Set "sourceType" to one of: ${ENTRY_SOURCE_TYPES.join(', ')}.
-Do NOT split a capital call pro-rata across ALL partners — that belongs in the Bank "Book as call" flow. But when the document or request names ONE specific partner, attribute that posting to them by putting their exact name in the posting's "lpEntity" field; otherwise omit it and work at the standard chart level (e.g. 3100 LP capital, 3000 GP capital).
-When reviewing, surface issues as findings: entries that don't balance, postings that debit and credit the SAME account (always wrong), mis-categorized postings, missing counterparts (e.g. a loan drawn but never repaid), fund-vs-GP reconciliation gaps, and unusual amounts.
-Respond with STRICT JSON ONLY (no prose, no code fences) of this exact shape:
-{
-  "summary": "one short paragraph",
-  "findings": [{"severity":"info|warning|error","title":"...","detail":"...","entryId":"<id or null>"}],
-  "proposals": [{"type":"create|edit","entryId":"<id for edit, else null>","entryDate":"YYYY-MM-DD","memo":"...","sourceType":"manual","postings":[{"accountCode":"1100","amount":5000000,"lpEntity":null},{"accountCode":"2200","amount":-5000000,"lpEntity":null}],"rationale":"why"}]
-}
-Return findings and proposals only when warranted; empty arrays are fine.
-If a request is outside this fund's accounting (general knowledge, coding, personal/legal/tax advice, current events, etc.), do NOT act on it: put a one-sentence polite decline in "summary" and return empty findings and proposals.`
+/** Framing for a source document the user attached. Appended only alongside the books. */
+export const ACCOUNTING_DOCUMENT_GUIDE = `The SOURCE DOCUMENT above was attached by the user — typically a capital-call notice, invoice, wire confirmation, or distribution notice. Unless they asked for something else, default to proposing ONE balanced entry that records it, and explain your reading of it in your prose: what it is, its date, its amount, and its counterparty. If the document is unreadable or isn't something you can record, say so plainly rather than guessing at an entry.`
 
-export async function runAssistant(
-  admin: SupabaseClient,
-  fundId: string,
-  group: string,
-  message: string,
-  documentText?: string
-): Promise<AssistantResult | { error: string }> {
-  const context = await gatherContext(admin, fundId, group)
+/** How the Analyst hands a drafted entry back to the app. Appended ONLY for a user entitled to
+ *  draft (admin + accounting scope) — this text IS the capability grant, so gate it there. */
+export const ACCOUNTING_DRAFTING_PROTOCOL = `
+DRAFTING ENTRIES
+When — and only when — the user asks you to draft, fix, or record a journal entry, append one fenced block per proposed entry AFTER your prose answer, in exactly this form (one JSON object per block, no other text inside it):
 
-  let provider
-  try {
-    provider = await createFundAIProviderWithOverride(admin, fundId)
-  } catch (e) {
-    return { error: `AI provider not configured: ${(e as Error).message}` }
-  }
+\`\`\`proposal
+{"type":"create","entryId":null,"entryDate":"YYYY-MM-DD","memo":"...","sourceType":"manual","postings":[{"accountCode":"1100","amount":5000000,"lpEntity":null},{"accountCode":"2200","amount":-5000000,"lpEntity":null}],"rationale":"why"}
+\`\`\`
 
-  const doc = documentText?.trim()
-  const fallback = doc
-    ? 'Draft a balanced journal entry that records the source document above.'
-    : 'Review these books and flag anything that looks wrong.'
-  const content = [
-    context,
-    ...(doc ? [`---\nSOURCE DOCUMENT:\n${doc}`] : []),
-    `---\nUSER REQUEST: ${message || fallback}`,
-  ].join('\n\n')
-  let text: string
-  try {
-    const result = await provider.provider.createMessage({ model: provider.model, maxTokens: 3000, system: withTopicalGuardrail(SYSTEM), content })
-    text = result.text
-  } catch (e) {
-    return { error: `AI request failed: ${(e as Error).message}` }
-  }
-
-  const parsed = parseAssistant(text)
-  if (!parsed) return { error: 'The assistant returned an unreadable response — try again or rephrase.' }
-  return parsed
-}
-
-function parseAssistant(text: string): AssistantResult | null {
-  const cleaned = text.replace(/```json\s*|\s*```/g, '').trim()
-  const start = cleaned.indexOf('{')
-  const end = cleaned.lastIndexOf('}')
-  if (start < 0 || end < 0) return null
-  try {
-    const obj = JSON.parse(cleaned.slice(start, end + 1))
-    return {
-      summary: typeof obj.summary === 'string' ? obj.summary : '',
-      findings: Array.isArray(obj.findings) ? obj.findings : [],
-      proposals: Array.isArray(obj.proposals) ? obj.proposals : [],
-    }
-  } catch {
-    return null
-  }
-}
+Rules:
+- DEBIT positive, CREDIT negative; the postings MUST sum to exactly 0 or the app rejects the draft.
+- Only use account codes that exist in the PRIMARY vehicle's chart, and only propose entries for the PRIMARY vehicle — related entities are reference only; describe any entries they'd need in your prose instead.
+- "sourceType" must be one of: ${ENTRY_SOURCE_TYPES.join(', ')}.
+- To fix an existing entry, use "type":"edit" with that entry's id in "entryId".
+- Do NOT split a capital call pro-rata across ALL partners — that belongs in the Bank "Book as call" flow. When the request names ONE specific partner, attribute the posting to them by putting their exact name in "lpEntity"; otherwise omit it and work at the standard chart level (e.g. 3100 LP capital, 3000 GP capital).
+- Don't mention the block itself in your prose — the app renders it as a reviewable draft the user applies. Nothing is posted automatically.
+When the user is only asking a question, emit no blocks.`
 
 /** Apply one proposal as a DRAFT entry (create, or edit an existing entry). */
 export async function applyProposal(

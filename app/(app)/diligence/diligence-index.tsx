@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Lock, Plus, Search, Loader2, Inbox } from 'lucide-react'
 import { useFeatureVisibility } from '@/components/feature-visibility-context'
+import { AnalystToggleButton } from '@/components/analyst-button'
+import { AnalystPanel } from '@/components/analyst-panel'
+import { AnalystDomainScope } from '@/components/analyst-scope'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
@@ -91,6 +94,7 @@ export function DiligenceIndex({ initialDeals, isAdmin }: { initialDeals: Deal[]
 
   return (
     <div className="p-4 md:py-8 md:pl-8 md:pr-4">
+      <AnalystDomainScope domain="diligence" />
       <div className="mb-6 flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
@@ -105,6 +109,7 @@ export function DiligenceIndex({ initialDeals, isAdmin }: { initialDeals: Deal[]
           <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4 mr-1" /> New Deal
           </Button>
+          <AnalystToggleButton />
         </div>
       </div>
 
@@ -149,35 +154,42 @@ export function DiligenceIndex({ initialDeals, isAdmin }: { initialDeals: Deal[]
         </div>
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="rounded-md border bg-card p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            {deals.length === 0 ? "No deals yet. Click \"New Deal\" to create one." : 'No deals match the filters.'}
-          </p>
+      {/* The Analyst panel is a flex sibling of the deal grid, so opening it shifts the grid
+          rather than covering it — the same pattern as /interactions and the funds pages. */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex-1 min-w-0 w-full">
+          {filtered.length === 0 ? (
+            <div className="rounded-md border bg-card p-12 text-center">
+              <p className="text-sm text-muted-foreground">
+                {deals.length === 0 ? "No deals yet. Click \"New Deal\" to create one." : 'No deals match the filters.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.map(d => (
+                <Link
+                  key={d.id}
+                  href={`/diligence/${d.id}`}
+                  className="rounded-md border bg-card p-4 hover:border-primary/50 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="font-medium truncate">{d.name}</div>
+                    <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
+                      {statusLabel(d.deal_status)}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    <div>{d.sector || '—'} {d.stage_at_consideration ? `· ${d.stage_at_consideration}` : ''}</div>
+                    <div>Stage: <span className="font-medium">{STAGE_LABEL[d.current_memo_stage]}</span></div>
+                    <div>Updated {new Date(d.updated_at).toLocaleDateString()}</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map(d => (
-            <Link
-              key={d.id}
-              href={`/diligence/${d.id}`}
-              className="rounded-md border bg-card p-4 hover:border-primary/50 transition-colors"
-            >
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="font-medium truncate">{d.name}</div>
-                <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
-                  {statusLabel(d.deal_status)}
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground space-y-0.5">
-                <div>{d.sector || '—'} {d.stage_at_consideration ? `· ${d.stage_at_consideration}` : ''}</div>
-                <div>Stage: <span className="font-medium">{STAGE_LABEL[d.current_memo_stage]}</span></div>
-                <div>Updated {new Date(d.updated_at).toLocaleDateString()}</div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+        <AnalystPanel />
+      </div>
 
       <NewDealDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={onCreated} />
     </div>

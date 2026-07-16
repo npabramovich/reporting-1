@@ -21,10 +21,12 @@ export async function GET(req: NextRequest) {
   const companyId = searchParams.get('companyId')
   const dealId = searchParams.get('dealId')
   const portfolio = searchParams.get('portfolio') === 'true'
+  // A domain thread ('accounting:<vehicle>', 'lps', 'diligence'); absent = the portfolio thread.
+  const scope = searchParams.get('scope')
 
   let query = admin
     .from('analyst_conversations')
-    .select('id, title, company_id, deal_id, message_count, created_at, updated_at')
+    .select('id, title, company_id, deal_id, scope, message_count, created_at, updated_at')
     .eq('fund_id', membership.fund_id)
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false })
@@ -34,8 +36,11 @@ export async function GET(req: NextRequest) {
     query = query.eq('deal_id', dealId)
   } else if (companyId) {
     query = query.eq('company_id', companyId).is('deal_id', null)
-  } else if (portfolio) {
+  } else if (portfolio || scope) {
+    // Both are the "not company, not deal" case; `scope` then picks the domain thread apart from
+    // the portfolio one. Listing is by ownership — the scope only sorts threads, it grants nothing.
     query = query.is('company_id', null).is('deal_id', null)
+    query = scope ? query.eq('scope', scope) : query.is('scope', null)
   }
 
   const { data, error } = await query

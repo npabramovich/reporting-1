@@ -7,6 +7,19 @@ import type { ChatMessage } from '@/lib/ai/types'
 import type { Json } from '@/lib/types/database'
 import { logAIUsage } from '@/lib/ai/usage'
 import { buildCompanyContext, buildPortfolioContext, buildDealContext } from '@/lib/ai/context-builder'
+import {
+  buildAccountingContext,
+  ACCOUNTING_ANALYST_GUIDE,
+  ACCOUNTING_DOCUMENT_GUIDE,
+  ACCOUNTING_DRAFTING_PROTOCOL,
+  type AssistantProposal,
+} from '@/lib/accounting/assistant'
+import { resolveVehicle } from '@/lib/accounting/agent-tools'
+import { buildLpContext, LP_ANALYST_GUIDE } from '@/lib/ai/lp-fund-context'
+import { buildDiligenceContext, DILIGENCE_ANALYST_GUIDE } from '@/lib/diligence/analyst-context'
+import { extractText } from '@/lib/memo-agent/extract-text'
+import { isFeatureVisible, DEFAULT_FEATURE_VISIBILITY } from '@/lib/types/features'
+import type { FeatureVisibilityMap } from '@/lib/types/features'
 import { rateLimit } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
@@ -21,6 +34,12 @@ export async function POST(req: NextRequest) {
     messages?: ChatMessage[]
     companyId?: string
     dealId?: string
+    /** Accounting scope (portfolio_group) — set by the funds pages' vehicle selector. */
+    vehicle?: string
+    /** A source document to draft an entry from. Only read when accounting scope is granted. */
+    document?: { name?: string; format?: string; base64?: string }
+    /** Which section the user is in, for the domains that have no id of their own. */
+    domain?: 'lps' | 'diligence'
     model?: { id: string; provider: string }
     conversationId?: string
   }
@@ -38,11 +57,17 @@ export async function POST(req: NextRequest) {
 
   const { data: membership } = await admin
     .from('fund_members')
-    .select('fund_id')
+    .select('fund_id, role')
     .eq('user_id', user.id)
     .maybeSingle()
 
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 404 })
+
+  // Every domain gate below is decided against these two, resolved once: the caller's role and
+  // what their fund has each feature set to. `isFeatureVisible` is the same helper the nav and
+  // the domain APIs use, so the Analyst can't drift into showing what the app itself hides.
+  const isAdmin = membership.role === 'admin'
+  const features = await loadFeatureVisibility(admin, membership.fund_id)
 
   // Build a case-insensitive lookup map of company names/aliases → company IDs
   const { data: allFundCompanies } = await admin
@@ -71,6 +96,12 @@ export async function POST(req: NextRequest) {
   let systemPrompt: string
 
   if (body.dealId) {
+    // Owning the fund isn't enough — the deals feature defaults to admin-only, and this path used
+    // to answer for any member of the fund regardless of that setting.
+    if (!isFeatureVisible(features, 'deals', isAdmin)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { data: dealCheck } = await admin
       .from('inbound_deals')
       .select('fund_id')
@@ -120,6 +151,102 @@ export async function POST(req: NextRequest) {
     systemPrompt += `\n\nIf detailed data about a specific company is included below in a "REFERENCED COMPANY" section, use that data to answer questions about that company.`
   }
 
+  // === Access-scoped domain context ===
+  //
+  // THE SECURITY BOUNDARY OF THE UNIFIED ANALYST. Access control here is what the request is
+  // GIVEN, not what the prompt asks for: a user who isn't entitled to a domain never has that
+  // domain's data appended — nor its capabilities, like entry drafting — so their Analyst has
+  // nothing to answer from and no way to act. Never soften this into a prompt instruction.
+  //
+  // Every domain follows the same shape, and a new one must too:
+  //   1. the scope comes from the body (`vehicle`, `domain`) — caller-controlled, proves nothing;
+  //   2. entitlement is checked against role + isFeatureVisible, never against the body;
+  //   3. only then is the block appended.
+
+  // --- ACCOUNTING (scope: which vehicle's books) ---
+  let accountingGroup: string | null = null
+  if (body.vehicle) {
+    // Admin AND visible: every accounting API is behind assertAdminAccess, so the Analyst must
+    // not become a way to read the books a non-admin can't read directly — even if a fund set
+    // accounting to 'everyone'.
+    const entitled = isAdmin && isFeatureVisible(features, 'accounting', isAdmin)
+    if (entitled) {
+      // The books are a much heavier context than a portfolio answer — own rate limit, mirroring
+      // the cross-company xref limit below.
+      const acctLimit = await rateLimit({
+        key: `ai-analyst-acct:${user.id}`,
+        limit: 10,
+        windowSeconds: 300,
+      })
+      if (acctLimit) return acctLimit
+
+      // Read the attachment before the books: a file we can't extract is the user's problem to
+      // fix and must surface as a 400, not get swallowed by the books-load catch below.
+      let documentBlock = ''
+      if (body.document?.base64) {
+        const doc = await extractAttachment(body.document)
+        if ('error' in doc) return NextResponse.json({ error: doc.error }, { status: 400 })
+        documentBlock = doc.text
+      }
+
+      try {
+        const group = await resolveVehicle(admin, membership.fund_id, body.vehicle)
+        const books = await buildAccountingContext(admin, membership.fund_id, group)
+        systemPrompt += `\n\n=== ACCOUNTING: ${group} ===\n${ACCOUNTING_ANALYST_GUIDE}\n\n${books}`
+        if (documentBlock) {
+          systemPrompt += `\n\n=== SOURCE DOCUMENT: ${body.document?.name ?? 'attachment'} ===\n${documentBlock}\n\n${ACCOUNTING_DOCUMENT_GUIDE}`
+        }
+        systemPrompt += `\n\n${ACCOUNTING_DRAFTING_PROTOCOL}`
+        accountingGroup = group
+      } catch (err) {
+        // An unknown/ambiguous vehicle or a books-load failure is not fatal: answer without the
+        // accounting block rather than 500 the whole Analyst.
+        console.error('[analyst] accounting context skipped:', err)
+      }
+    }
+  }
+
+  // --- LPs (scope: the whole fund) ---
+  let lpScoped = false
+  if (body.domain === 'lps' && isFeatureVisible(features, 'lps', isAdmin)) {
+    // The live report derives every LP's position from the ledger — the heaviest block we build.
+    const lpLimit = await rateLimit({ key: `ai-analyst-lps:${user.id}`, limit: 10, windowSeconds: 300 })
+    if (lpLimit) return lpLimit
+
+    // Scoped on entitlement, not on whether there's data: a fund with no LPs yet still gets its
+    // own LP thread rather than one that quietly merges into the portfolio's.
+    lpScoped = true
+    try {
+      const block = await buildLpContext(admin, membership.fund_id)
+      if (block) systemPrompt += `\n\n=== LP CAPITAL ===\n${LP_ANALYST_GUIDE}\n\n${block}`
+    } catch (err) {
+      console.error('[analyst] LP context skipped:', err)
+    }
+  }
+
+  // --- DILIGENCE (scope: the whole fund) ---
+  let diligenceScoped = false
+  if (body.domain === 'diligence' && isFeatureVisible(features, 'diligence', isAdmin)) {
+    diligenceScoped = true
+    try {
+      const block = await buildDiligenceContext(admin, membership.fund_id)
+      if (block) systemPrompt += `\n\n=== DILIGENCE PIPELINE ===\n${DILIGENCE_ANALYST_GUIDE}\n\n${block}`
+    } catch (err) {
+      console.error('[analyst] diligence context skipped:', err)
+    }
+  }
+
+  // What thread this belongs to. Company/deal already carve out their own; this separates the
+  // domain threads from each other and from the portfolio one. Derived from what was GRANTED, so
+  // a denied domain falls back to the portfolio thread rather than opening one it can't fill.
+  const scope: string | null = accountingGroup
+    ? `accounting:${accountingGroup}`
+    : lpScoped
+      ? 'lps'
+      : diligenceScoped
+        ? 'diligence'
+        : null
+
   // Dynamic context: detect company references in messages and inject their data
   const referencedCompanyIds = detectReferencedCompanies(
     body.messages,
@@ -167,7 +294,11 @@ export async function POST(req: NextRequest) {
     } else if (body.companyId) {
       memoryQuery = memoryQuery.eq('company_id', body.companyId).is('deal_id', null)
     } else {
+      // Scoped threads remember only themselves: a summary of an accounting conversation must not
+      // be replayed into a portfolio one (or another vehicle's), which would put fragments of a
+      // domain's data in front of a request that domain wasn't granted to.
       memoryQuery = memoryQuery.is('company_id', null).is('deal_id', null)
+      memoryQuery = scope ? memoryQuery.eq('scope', scope) : memoryQuery.is('scope', null)
     }
 
     // Exclude current conversation from memory
@@ -225,10 +356,17 @@ export async function POST(req: NextRequest) {
       usage,
     })
 
+    // Drafted entries come back as ```proposal fences alongside the prose. Only parse them when
+    // accounting scope was actually granted — otherwise the protocol was never in the prompt and
+    // any fence-shaped text is just prose the model wrote.
+    const { reply, proposals } = accountingGroup
+      ? extractProposals(text)
+      : { reply: text, proposals: [] as AssistantProposal[] }
+
     // Persist conversation
     let conversationId = body.conversationId ?? null
     const lastUserMsg = body.messages[body.messages.length - 1]
-    const allMessages = [...body.messages, { role: 'assistant' as const, content: text }]
+    const allMessages = [...body.messages, { role: 'assistant' as const, content: reply }]
 
     try {
       if (conversationId) {
@@ -253,6 +391,7 @@ export async function POST(req: NextRequest) {
             user_id: user.id,
             company_id: body.companyId ?? null,
             deal_id: body.dealId ?? null,
+            scope,
             title,
             messages: allMessages as unknown as Json,
             message_count: allMessages.length,
@@ -272,6 +411,7 @@ export async function POST(req: NextRequest) {
             user.id,
             body.companyId ?? null,
             body.dealId ?? null,
+            scope,
             conversationId,
           ).catch(() => {})
         }
@@ -280,7 +420,7 @@ export async function POST(req: NextRequest) {
       // Non-critical — response still succeeds
     }
 
-    return NextResponse.json({ reply: text, conversationId })
+    return NextResponse.json({ reply, conversationId, proposals, vehicle: accountingGroup, scope })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[analyst] AI error:', message, err)
@@ -288,6 +428,85 @@ export async function POST(req: NextRequest) {
       error: 'Analyst request failed. Check your API key in Settings.',
     }, { status: 500 })
   }
+}
+
+/** Attachments a user can draft an entry from. Matches what lib/memo-agent/extract-text handles. */
+const DOCUMENT_FORMATS = ['pdf', 'docx', 'md', 'markdown', 'txt']
+const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+/** A capital-call notice is a couple of pages; anything past this is a mis-attached file. */
+const MAX_DOCUMENT_CHARS = 20_000
+
+/** Decode + extract an attached source document to the text that goes in the prompt. */
+async function extractAttachment(
+  doc: { name?: string; format?: string; base64?: string },
+): Promise<{ text: string } | { error: string }> {
+  const format = String(doc.format ?? '').toLowerCase().replace(/^\./, '')
+  if (!DOCUMENT_FORMATS.includes(format)) {
+    return { error: `Can't read a .${format || '?'} file — attach a PDF, Word doc, or text file.` }
+  }
+
+  let buffer: Buffer
+  try {
+    buffer = Buffer.from(String(doc.base64), 'base64')
+  } catch {
+    return { error: 'That attachment could not be decoded.' }
+  }
+  if (buffer.length === 0) return { error: 'That attachment is empty.' }
+  if (buffer.length > MAX_DOCUMENT_BYTES) return { error: 'That attachment is too large (max 10MB).' }
+
+  const text = await extractText(buffer, format)
+  if (!text || !text.trim()) {
+    return { error: `No text could be read from ${doc.name ?? 'that file'} — a scanned image PDF won't work.` }
+  }
+  return { text: text.slice(0, MAX_DOCUMENT_CHARS) }
+}
+
+/** The fund's feature settings over the defaults — the same map the nav and the domain APIs gate on. */
+async function loadFeatureVisibility(
+  admin: ReturnType<typeof createAdminClient>,
+  fundId: string,
+): Promise<FeatureVisibilityMap> {
+  const { data } = await admin
+    .from('fund_settings')
+    .select('feature_visibility')
+    .eq('fund_id', fundId)
+    .maybeSingle()
+  return {
+    ...DEFAULT_FEATURE_VISIBILITY,
+    ...((data?.feature_visibility as Partial<FeatureVisibilityMap> | null) ?? {}),
+  }
+}
+
+/**
+ * Split a reply into the prose the user reads and the entries the app renders as reviewable
+ * drafts. Anything unparseable stays in the prose rather than being dropped — a malformed block
+ * is visible to the user, not silently swallowed.
+ */
+function extractProposals(text: string): { reply: string; proposals: AssistantProposal[] } {
+  const proposals: AssistantProposal[] = []
+  const reply = text.replace(/```proposal\s*([\s\S]*?)```/g, (whole, json: string) => {
+    try {
+      const obj = JSON.parse(json.trim())
+      if (!obj || !Array.isArray(obj.postings) || obj.postings.length === 0) return whole
+      proposals.push({
+        type: obj.type === 'edit' ? 'edit' : 'create',
+        entryId: obj.entryId ?? null,
+        entryDate: String(obj.entryDate ?? ''),
+        memo: String(obj.memo ?? ''),
+        sourceType: obj.sourceType ?? 'manual',
+        postings: obj.postings.map((p: any) => ({
+          accountCode: String(p.accountCode),
+          amount: Number(p.amount),
+          lpEntity: p.lpEntity ?? null,
+        })),
+        rationale: String(obj.rationale ?? ''),
+      })
+      return ''
+    } catch {
+      return whole
+    }
+  })
+  return { reply: reply.trim(), proposals }
 }
 
 async function summarizePreviousConversation(
@@ -298,6 +517,7 @@ async function summarizePreviousConversation(
   userId: string,
   companyId: string | null,
   dealId: string | null,
+  scope: string | null,
   excludeConvId: string,
 ) {
   // Find most recent unsummarized conversation in same scope
@@ -318,6 +538,7 @@ async function summarizePreviousConversation(
     query = query.eq('company_id', companyId).is('deal_id', null)
   } else {
     query = query.is('company_id', null).is('deal_id', null)
+    query = scope ? query.eq('scope', scope) : query.is('scope', null)
   }
 
   const { data } = await query

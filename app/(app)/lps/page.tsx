@@ -23,6 +23,7 @@ import { PortfolioGroupFilter } from '@/components/lp-portfolio-group-filter'
 import { LpSharePanel } from '@/components/lp-share-control'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
+import { AnalystDomainScope } from '@/components/analyst-scope'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
 import { lpRatios } from '@/lib/lp-metrics'
 import { SortTh, nextSort, compareVals, type SortState } from '@/components/sortable-th'
@@ -407,6 +408,7 @@ function LpsInner() {
       </Dialog>
 
       <PortfolioNotesPanel />
+      <AnalystDomainScope domain="lps" />
       <AnalystPanel />
     </div>
   )
