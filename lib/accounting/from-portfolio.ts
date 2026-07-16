@@ -44,9 +44,22 @@ export interface LedgerDraftResult {
   vehicle?: string
   /** Why nothing was drafted — always set when `drafted` is false. */
   reason?: string
+  /**
+   * The vehicle simply isn't on the ledger yet — as opposed to a real problem with this row.
+   *
+   * A fund that has never onboarded a vehicle to accounting hasn't done anything wrong, so its
+   * every save shouldn't read like a warning. Callers use this to soften the message into an
+   * invitation. It is a flag rather than a string match on `reason` because the sentence is
+   * copy and will be rewritten; the condition is behaviour and won't.
+   */
+  notOnboarded?: boolean
 }
 
 const skip = (reason: string): LedgerDraftResult => ({ drafted: false, reason })
+
+/** Skipped only because this vehicle keeps no books yet. Nothing to fix, something to offer. */
+const skipNotOnboarded = (vehicle: string, reason: string): LedgerDraftResult =>
+  ({ drafted: false, reason, notOnboarded: true, vehicle })
 
 /** The `source_ref` that ties a journal entry back to the tracker row that drafted it. */
 export const txnRef = (txnId: string) => `txn:${txnId}`
@@ -271,9 +284,11 @@ export async function draftEntryForTransaction(
     // Is this vehicle even on the ledger? If the chart was never seeded, the fund isn't
     // doing accounting here and we say so quietly rather than seeding it behind their back.
     const vehicleId = await vehicleIdByName(admin, fundId, group)
-    if (!vehicleId) return skip(`No accounting vehicle named "${group}".`)
+    if (!vehicleId) return skipNotOnboarded(group, `No accounting vehicle named "${group}".`)
     const codes = await accountIdByCode(admin, fundId, group)
-    if (codes.size === 0) return skip(`${group} has no chart of accounts — onboard it in Accounting to book entries.`)
+    if (codes.size === 0) {
+      return skipNotOnboarded(group, `${group} has no chart of accounts — onboard it in Accounting to book entries.`)
+    }
 
     const cashId = codes.get(CASH)
     if (!cashId) return skip(`${group} is missing account 1000 (Cash).`)

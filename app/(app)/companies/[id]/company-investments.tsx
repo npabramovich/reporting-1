@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, Fragment } from 'react'
 import Link from 'next/link'
-import { DollarSign, Plus, Trash2, Pencil, Loader2, ChevronDown, ChevronRight, Lock, FileText, X, AlertTriangle } from 'lucide-react'
+import { DollarSign, Plus, Trash2, Pencil, Loader2, ChevronDown, ChevronRight, Lock, FileText, X, AlertTriangle, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,6 +17,7 @@ import {
 } from '@/lib/fx'
 import type { FxRevaluationResult } from '@/lib/fx'
 import { SECURITY_LABELS } from '@/lib/accounting/soi'
+import { useCanRead } from '@/components/access-context'
 import type { InvestmentTransaction, CompanyStatus } from '@/lib/types/database'
 import type { CompanyInvestmentSummary } from '@/lib/types/investments'
 
@@ -161,7 +162,21 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
     amount?: number
     vehicle?: string
     reason?: string
+    /** The vehicle keeps no books yet — an invitation, not a warning. See from-portfolio.ts. */
+    notOnboarded?: boolean
   } | null>(null)
+  /**
+   * Whether to say anything about the ledger at all.
+   *
+   * Every banner below is about double-entry bookkeeping: drafts awaiting review, closed periods,
+   * vehicles that keep no books. To someone without accounting it is noise about a system they
+   * cannot see, linking to pages they cannot open — so they just save their transaction and hear
+   * nothing. One call answers both halves: the resolver returns none when the fund has accounting
+   * switched off AND when this user was never granted it.
+   *
+   * Affordance only. The API drafts (or doesn't) regardless; this decides who is told.
+   */
+  const canReadAccounting = useCanRead('accounting')
   const [showOrigCurrency, setShowOrigCurrency] = useState(false)
   const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10))
 
@@ -468,7 +483,7 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
     <div className="mt-6">
       {/* A draft entry nobody knows about is worse than none — it sits in the journal
           silently changing nothing while the books drift. So say it, and link to it. */}
-      {ledger?.drafted && (
+      {canReadAccounting && ledger?.drafted && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-sm">
           <FileText className="h-4 w-4 shrink-0 text-blue-700 dark:text-blue-400" />
           <span>
@@ -487,10 +502,29 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
         </div>
       )}
 
-      {/* Nothing was booked. Amber, not red: it is usually correct (the vehicle keeps no
-          books, the row is company-wide pricing). But the user has to KNOW, because the
-          tracker and the ledger now say different things and only this message explains why. */}
-      {ledger && !ledger.drafted && ledger.reason && (
+      {/* The vehicle isn't on the ledger yet. That is not a warning — a fund that hasn't onboarded
+          a vehicle has done nothing wrong, and telling it "NOTHING WAS BOOKED" in amber on every
+          single save is alarming about a non-event. Neutral, and an offer rather than a scolding. */}
+      {canReadAccounting && ledger && !ledger.drafted && ledger.notOnboarded && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+          <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span>
+            Saved. Onboard <strong>{ledger.vehicle}</strong> to accounting to create full financial
+            statements.
+          </span>
+          <Link href="/funds/status" className="ml-auto text-xs underline underline-offset-2 hover:text-foreground">
+            Onboard
+          </Link>
+          <button onClick={() => setLedger(null)} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Nothing was booked, for a reason that IS worth a warning: a closed period, a missing
+          account, a row the ledger can't place. Amber, because the tracker and the ledger now say
+          different things and only this message explains why. */}
+      {canReadAccounting && ledger && !ledger.drafted && !ledger.notOnboarded && ledger.reason && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
           <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
           <span>
