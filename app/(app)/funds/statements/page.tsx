@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: 'Financial statements' }
 export default async function StatementsPage() {
   await requireAccountingAccess()
   return (
-    <div className="px-4 md:pl-8 md:pr-4 pt-3 pb-8 w-full">
+    <div className="pt-3 pb-8 w-full">
       <div className="mb-6 space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Financial statements</h1>
         <p className="text-sm text-muted-foreground">

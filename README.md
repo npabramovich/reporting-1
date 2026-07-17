@@ -29,7 +29,8 @@ Turn on fund accounting when you want the LP numbers to come from a real ledger 
 - **Layered, not all-or-nothing** — LP tracking, the LP portal, LP documents, and fund accounting are independent switches, each off by default. Turn on only what you use: track LP capital from pasted statements without any accounting, keep full books for the vehicles you run yourself, or anything in between.
 - **Lightweight CRM** - Track intros, strategy, qualitative value-adds to demonstrate how you work with your portfolio
 
-> Detailed feature descriptions at [FEATURES](./FEATURES.md)
+> Detailed feature descriptions at [FEATURES](./FEATURES.md)  
+> Fund accounting setup and double-entry reference at [ACCOUNTING](./ACCOUNTING.md)
 
 ![LP Portal](public/screenshots/lp-portal.png)
 

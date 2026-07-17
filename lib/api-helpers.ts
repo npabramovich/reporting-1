@@ -77,7 +77,7 @@ export async function assertWriteAccess(
  * resolver. A second, coarser, contradictory policy is not defence in depth. It is a bug that
  * only ever fires on the people you meant to let in.
  *
- * Retired only AFTER the domain gate's own leaks were closed — see docs/plan-access-control.md →
+ * Retired only AFTER the domain gate's own leaks were closed — see plans/plan-access-control.md →
  * Sequencing. Ordering mattered: removing this while the replacement still leaked would have left
  * a window where neither policy was correct.
  */

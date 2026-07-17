@@ -4,7 +4,7 @@
 // The deep per-deal evidence (claims, research findings, Q&A, checklist) is what
 // lib/diligence/qa-chat-context.ts assembles for the per-deal Q&A; pulling that for every deal
 // would blow the prompt. /api/analyst appends this ONLY for a user the `diligence` feature is
-// visible to. See docs/plan-unified-analyst.md.
+// visible to. See plans/plan-unified-analyst.md.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 

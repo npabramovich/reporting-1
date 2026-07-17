@@ -5,7 +5,7 @@
 // API route, MCP tool, Analyst context block, and nav item maps to exactly one Domain, and every
 // surface resolves access through `effectiveAccess` (lib/access/effective.ts).
 //
-// See docs/plan-access-control.md.
+// See plans/plan-access-control.md.
 
 import {
   DEFAULT_FEATURE_VISIBILITY,

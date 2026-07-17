@@ -14,7 +14,7 @@ import { DOMAINS, DOMAIN_META, type Domain } from '@/lib/access/domains'
 //        | { userId, role }           change a member's role
 //
 // Admin-only: this is the control panel for who can see what, so being able to READ it already
-// tells you the shape of the fund's data. See docs/plan-access-control.md.
+// tells you the shape of the fund's data. See plans/plan-access-control.md.
 
 export const dynamic = 'force-dynamic'
 

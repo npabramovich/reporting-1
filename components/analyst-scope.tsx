@@ -5,7 +5,7 @@
 //
 // These only report WHERE the user is. Whether they actually GET a domain's data is decided
 // server-side in /api/analyst against their role and the fund's feature settings — see
-// docs/plan-unified-analyst.md. Mounting one of these grants nothing.
+// plans/plan-unified-analyst.md. Mounting one of these grants nothing.
 
 import { useEffect } from 'react'
 import { useVehicle } from '@/components/accounting-vehicle'

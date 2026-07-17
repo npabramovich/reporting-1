@@ -54,7 +54,7 @@ export const DEFAULT_FEATURE_VISIBILITY: FeatureVisibilityMap = {
  * navigation (feature still works if accessed directly)" — which is not access control: the nav
  * hid the panel while the API underneath happily served the data. Once that was fixed, `hidden`
  * and `off` became the same thing, so Settings stopped offering both.
- * See docs/plan-access-control.md.
+ * See plans/plan-access-control.md.
  */
 export function isFeatureVisible(
   featureVisibility: FeatureVisibilityMap | null | undefined,

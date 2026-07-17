@@ -3,7 +3,7 @@ import path from 'node:path'
 
 export default defineConfig({
   test: {
-    include: ['lib/**/*.{test,spec}.ts', '__tests__/**/*.{test,spec}.ts'],
+    include: ['lib/**/*.{test,spec}.ts', 'tests/**/*.{test,spec}.ts'],
     globals: false,
     environment: 'node',
   },

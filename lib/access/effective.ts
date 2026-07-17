@@ -2,7 +2,7 @@
 // MCP server, API keys — answers "may this user touch this?" through `effectiveAccess`, so that
 // "can see it" and "can access it" are the same function rather than two that drift.
 //
-// See docs/plan-access-control.md.
+// See plans/plan-access-control.md.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { DOMAIN_META, DOMAINS, type Domain } from './domains'

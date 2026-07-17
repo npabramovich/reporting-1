@@ -45,7 +45,7 @@ describe('route gates honour the per-domain grants', () => {
         : `\n\nThese routes are gated on the ADMIN ROLE but belong to a granted domain, so a member\n` +
           `holding that grant is refused and the grant means nothing:\n${offenders.map(o => `  - ${o}`).join('\n')}\n\n` +
           `The middleware already checked this route's domain. Use assertWriteAccess (which keeps\n` +
-          `the read-only demo out) or assertReadAccess. See docs/plan-access-control.md.\n`,
+          `the read-only demo out) or assertReadAccess. See plans/plan-access-control.md.\n`,
     ).toEqual([])
   })
 

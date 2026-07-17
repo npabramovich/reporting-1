@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 // POST { action: 'apply', proposal } → apply one proposal as a DRAFT entry.
 //
 // This is the apply half of the accounting assistant. The ask half moved to /api/analyst, which
-// is the one Analyst for the whole app (see docs/plan-unified-analyst.md); it drafts the
+// is the one Analyst for the whole app (see plans/plan-unified-analyst.md); it drafts the
 // proposals and this route applies them. Applying stays here, behind the accounting domain's
 // write grant (enforced by the middleware): the Analyst route never writes to the books.
 export async function POST(req: NextRequest) {

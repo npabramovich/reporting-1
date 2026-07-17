@@ -13,7 +13,7 @@ import path from 'node:path'
  * If this test is in your way: the answer is to add your route to one of the two maps, not to
  * add an exception here.
  *
- * See docs/plan-access-control.md.
+ * See plans/plan-access-control.md.
  */
 
 import { ROUTE_DOMAINS, UNGATED_ROUTES, OPTIONAL_ROUTES, requiredLevel } from './route-domains'

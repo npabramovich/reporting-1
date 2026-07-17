@@ -3,7 +3,7 @@
 // Analyst to reason about them and to hand back drafted entries, and applies a drafted entry.
 //
 // The Analyst that consumes all of this is /api/analyst — and it appends any of it ONLY for a
-// user entitled to accounting. See docs/plan-unified-analyst.md. Nothing here posts to the books:
+// user entitled to accounting. See plans/plan-unified-analyst.md. Nothing here posts to the books:
 // a proposal is applied as a DRAFT entry the user reviews and posts.
 
 import type { SupabaseClient } from '@supabase/supabase-js'

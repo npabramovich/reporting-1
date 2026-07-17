@@ -4,7 +4,7 @@
 // Not to be confused with lib/ai/lp-analyst-context.ts, which is the LP-PORTAL-facing analyst —
 // scoped to one investor and only to what has been shared with them. This one is GP-facing and
 // fund-wide, and /api/analyst appends it ONLY for a user the `lps` feature is visible to. See
-// docs/plan-unified-analyst.md.
+// plans/plan-unified-analyst.md.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { generateLiveReport } from '@/lib/accounting/live-report'

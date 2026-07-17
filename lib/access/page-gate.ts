@@ -5,7 +5,7 @@
 // straight from a server component would be a leak. So server components that show a domain's
 // data resolve it here rather than reimplementing a rule.
 //
-// See docs/plan-access-control.md.
+// See plans/plan-access-control.md.
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hasAccess, loadAccessContext, type AccessContext } from './effective'

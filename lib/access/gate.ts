@@ -5,7 +5,7 @@
 // intent — it was that resolving the fund took five lines and gating took thought. Here, gating
 // IS the resolve: you cannot get the fundId without stating what you need.
 //
-// See docs/plan-access-control.md.
+// See plans/plan-access-control.md.
 
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'

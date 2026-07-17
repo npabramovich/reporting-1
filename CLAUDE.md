@@ -79,7 +79,7 @@ defaulting to `fund_domain_defaults`) narrow it and never widen it. **The order 
 policy** — `lib/access/effective.test.ts` pins it; read that before changing the function.
 
 `hidden` and `off` deny every surface, admins included. `hidden` does NOT mean "gone from the nav but
-still reachable by URL" — that was the bug this replaced. See `docs/plan-access-control.md`.
+still reachable by URL" — that was the bug this replaced. See `plans/plan-access-control.md`.
 
 ## Data-access conventions
 

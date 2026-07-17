@@ -99,7 +99,7 @@ export function VehicleBar() {
   if (pathname === '/funds') return null
 
   return (
-    <div className="mb-4 text-sm">
+    <div className="text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground">Vehicle</span>
         {vehicles.length === 0 ? (

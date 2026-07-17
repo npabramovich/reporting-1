@@ -3,6 +3,7 @@
 - Project overview at [README](./README.md)
 - Detailed feature descriptions at [FEATURES](./FEATURES.md)
 - Technical deployment details at [DOCS](./DOCS.md)
+- Fund accounting setup and double-entry reference at [ACCOUNTING](./ACCOUNTING.md)
 
 ## Setup & Deployment
 

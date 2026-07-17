@@ -3,6 +3,7 @@
 - Project overview at [README](./README.md)
 - Detailed feature descriptions at [FEATURES](./FEATURES.md)
 - Technical deployment details at [DOCS](./DOCS.md)
+- Fund accounting setup and double-entry reference at [ACCOUNTING](./ACCOUNTING.md)
 
 ## How It Works
 
@@ -129,6 +130,8 @@ The snapshot archive keeps all the original tools: create a named snapshot, past
 ## Accounting
 
 Accounting gives each of your vehicles — a fund, an SPV, a direct deal, a GP entity — a real double-entry ledger, and turns it into the numbers your LPs actually see. It is optional: turn it on for one vehicle, or none, and the rest of the platform works exactly as before.
+
+> Setup guide, every entry type in T-account and plain-text form, and the checks that should always hold: [ACCOUNTING](./ACCOUNTING.md)
 
 **Onboarding a vehicle.** Seed the chart of accounts, then choose how the books start: *full history*, rebuilding the ledger from inception out of your existing portfolio and LP data, or *cutover*, starting at a date with opening balances. GP and associate entities get their own chart (Investment in Fund, members' capital, carried interest income) rather than the fund chart, because they keep different books.
 

@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest'
  * every reordering is a security change that would otherwise look like a refactor. These tests are
  * the specification — read them before touching the resolver.
  *
- * See docs/plan-access-control.md.
+ * See plans/plan-access-control.md.
  */
 
 import { effectiveAccess, hasAccess, readableDomains, normalizeRole, type AccessContext } from './effective'

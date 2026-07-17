@@ -6,7 +6,7 @@
 // route cannot ship without an answer: it is either mapped to a domain, or explicitly listed as
 // ungated WITH A REASON. Discipline didn't hold this; the test does.
 //
-// See docs/plan-access-control.md.
+// See plans/plan-access-control.md.
 
 import type { Domain } from './domains'
 import type { AccessLevel } from './effective'
@@ -376,7 +376,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   'api/public/submit/[token]': 'Public deal-submission form; path token.',
 
   // A separate identity model: LP portal accounts, scoped per investor entity by resolveLpAccess.
-  // Deliberately NOT merged into fund-member domains — see docs/plan-access-control.md.
+  // Deliberately NOT merged into fund-member domains — see plans/plan-access-control.md.
   'api/portal/access-history': 'LP portal: resolveLpAccess.',
   'api/portal/activate': 'LP portal: invite activation.',
   'api/portal/analyst': 'LP portal: resolveLpAccess.',

@@ -55,3 +55,6 @@ supabase/.temp
 /lib/demo/
 /app/api/demo/seed/
 /scripts/run-demo-seed.ts
+
+# Internal planning + thinking. Kept locally, not published.
+/plans/

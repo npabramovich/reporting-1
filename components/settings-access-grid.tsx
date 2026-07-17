@@ -7,7 +7,7 @@
 // either a locked-out colleague or an over-shared one. The default is set once, and a member's
 // own grant overrides it.
 //
-// See docs/plan-access-control.md.
+// See plans/plan-access-control.md.
 
 import { useCallback, useEffect, useState } from 'react'
 import { Loader2, Shield, Check } from 'lucide-react'

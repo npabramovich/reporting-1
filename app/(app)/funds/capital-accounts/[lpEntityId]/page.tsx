@@ -19,7 +19,7 @@ export default async function LpStatementPage({
   const backHref = fromLps ? '/lps/capital' : '/funds/capital-accounts'
   const backLabel = fromLps ? 'LP capital accounts' : 'Capital accounts'
   return (
-    <div className="px-4 md:pl-8 md:pr-4 pt-3 pb-8 w-full">
+    <div className="pt-3 pb-8 w-full">
       <Link href={backHref} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-4">
         <ArrowLeft className="h-3.5 w-3.5" />{backLabel}
       </Link>
