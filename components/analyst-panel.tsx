@@ -21,7 +21,7 @@ interface Scope {
 function emptyState({ dealId, companyId, vehicle, domain }: Scope): string {
   if (dealId) return "Ask about this deal — fit against your thesis, founder background, dilution math, or comparable deals you've seen."
   if (companyId) return 'Ask about this company’s metrics, performance, documents, or portfolio position. You can also ask the AI to draft a summary.'
-  if (vehicle) return `Ask about ${vehicle}’s accounting — “Explain my income statement,” “Does the GP entity reconcile to the fund?”, “Review my books,” or ask me to draft an entry for you to review. You can attach a capital-call notice, invoice, or wire confirmation and I’ll draft the entry from it.`
+  if (vehicle) return `Ask about ${vehicle}’s financials or ask me to draft a journal entry for you to review. You can attach a capital-call notice, invoice, or wire confirmation and I’ll draft the entry from it.`
   if (domain === 'lps') return 'Ask about your LPs — who’s furthest behind on funding, who has the largest unfunded commitment, how DPI and TVPI look across the fund.'
   if (domain === 'diligence') return 'Ask about your diligence pipeline — what’s active, what’s stalled mid-memo, how deals break down by sector or stage.'
   return 'Ask about your portfolio, compare companies, or get high-level insights across all investments.'
