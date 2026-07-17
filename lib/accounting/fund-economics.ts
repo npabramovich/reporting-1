@@ -29,6 +29,7 @@ import { computeCapitalAccounts, bucketForSourceType, emptyAccount, type Capital
 import { loadCommitmentEvents, commitmentsFrom } from './terms'
 import { commitmentsFromPositions } from './lp-positions'
 import { loadEntityNames, loadOwnership, listVehicles } from './load'
+import { vehicleIdByName } from './vehicle-id'
 import { loadFundPreload, vehicleCapitalPreload, commitmentEventsForGroup, type FundPreload } from './fund-preload'
 import { xirr, type CashFlow } from '@/lib/xirr'
 import { lpRatios } from '@/lib/lp-metrics'
@@ -51,6 +52,9 @@ export interface FundMetrics {
 
 export interface VehicleEconomics {
   vehicle: string
+  /** The vehicle's stable `fund_vehicles.id`, when it has a registry row — the key the detail
+   *  page routes on. Null for legacy vehicles that exist only as a portfolio_group string. */
+  id: string | null
   /** The vehicle's vintage year, if recorded. Nothing derives this — it is stated. */
   vintageYear: number | null
   source: 'ledger' | 'events'
@@ -130,13 +134,16 @@ export async function vehicleEconomics(
   // With a preload, ownership, entity names/classes, capital source and vintage come from the
   // one fund-wide read; without it (direct callers) each still loads per-vehicle as before.
   const idMap = preload?.idMap
-  const [{ source, postings }, commitmentEvents, owners, names, classes, vintage] = await Promise.all([
+  const [{ source, postings }, commitmentEvents, owners, names, classes, vintage, id] = await Promise.all([
     loadCapitalPostings(admin, fundId, group, asOf, idMap, preload ? vehicleCapitalPreload(preload, group) : undefined),
     loadCommitmentEvents(admin, fundId, group, idMap, preload ? commitmentEventsForGroup(preload, group) : undefined),
     preload ? Promise.resolve(preload.ownershipByGroup.get(group) ?? []) : loadOwnership(admin, fundId, group),
     preload ? Promise.resolve(preload.entityNames) : loadEntityNames(admin, fundId, group),
     preload ? Promise.resolve(preload.entityClasses) : loadEntityClasses(admin, fundId),
     preload ? Promise.resolve(preload.vintageByName.get(group) ?? null) : loadVintage(admin, fundId, group),
+    // The stable registry id the detail page routes on. From the preload's name→id map when we
+    // have it, else a per-vehicle lookup. Null for a legacy portfolio_group with no registry row.
+    vehicleIdByName(admin, fundId, group, idMap),
   ])
 
   const accounts = computeCapitalAccounts(postings)
@@ -205,6 +212,7 @@ export async function vehicleEconomics(
 
   return {
     vehicle: group,
+    id,
     vintageYear: vintage,
     source,
     lpCount: lpIds.size,

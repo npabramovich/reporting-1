@@ -27,6 +27,8 @@ interface Metrics {
 }
 interface Vehicle {
   vehicle: string
+  /** Stable registry id — the detail page routes on it. Null for legacy portfolio_group-only vehicles. */
+  id: string | null
   vintageYear: number | null
   source: 'ledger' | 'events'
   lpCount: number
@@ -56,7 +58,12 @@ export function FundOverview() {
 
   // Clicking a vehicle selects it (localStorage-backed context the whole section reads) and opens
   // its detail page — the lead page for the fund. Admin (/funds/status) is reached from there.
-  const openVehicle = (vehicle: string) => { setGroup(vehicle); router.push(`/funds/${encodeURIComponent(vehicle)}`) }
+  // Route on the stable id (like companies and LPs); a legacy vehicle without one falls back to
+  // its name, which the detail page resolves the same way.
+  const openVehicle = (v: Vehicle) => {
+    setGroup(v.vehicle)
+    router.push(`/funds/${v.id ?? encodeURIComponent(v.vehicle)}`)
+  }
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [loading, setLoading] = useState(true)
@@ -218,7 +225,7 @@ export function FundOverview() {
               return (
                 <tr key={v.vehicle} className="border-t hover:bg-muted/30">
                   <td className="px-3 py-2 font-medium">
-                    <button onClick={() => openVehicle(v.vehicle)} title={v.vehicle} className="text-left hover:underline hover:text-foreground truncate max-w-[220px] block">
+                    <button onClick={() => openVehicle(v)} title={v.vehicle} className="text-left hover:underline hover:text-foreground truncate max-w-[220px] block">
                       {v.vehicle}
                     </button>
                   </td>
@@ -313,10 +320,10 @@ function OnboardingEmptyState() {
         <p className="text-xs text-muted-foreground">Two ways in:</p>
         <div className="flex flex-wrap gap-2">
           <Link
-            href="/funds/status"
+            href="/settings"
             className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
           >
-            Set up a vehicle
+            Add a vehicle
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
           <Link

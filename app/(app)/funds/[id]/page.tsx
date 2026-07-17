@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { vehicleNameById } from '@/lib/accounting/vehicle-id'
 import { requireAccountingAccess } from '../guard'
 import { AccountingBody } from '@/components/accounting-chrome'
 import { FundDetailView } from './fund-detail-view'
@@ -16,14 +18,19 @@ export const metadata: Metadata = { title: 'Fund' }
  * The operational admin — onboarding, the close, the health check, allocation settings — stays on
  * `/funds/status`, which this page links to.
  *
- * `[id]` is the vehicle NAME (portfolio_group), URL-encoded — the whole Accounting section keys on
- * the name, not a surrogate id (see components/accounting-vehicle.tsx). Like `/funds`, this page
- * owns its own layout: AccountingChrome steps aside for it (isFundDetailPath), so there is no
- * vehicle-selector bar — the URL pins the vehicle.
+ * `[id]` is the vehicle's stable `fund_vehicles.id` (a UUID), the same way companies and LPs are
+ * addressed — routing on the id survives a rename and sidesteps names with slashes. We resolve it
+ * to the name here and hand the client the name, because the accounting data still keys on the
+ * portfolio_group string. A legacy vehicle with no registry row is addressed by its name directly,
+ * so an un-migrated fund still works. Like `/funds`, this page owns its layout: AccountingChrome
+ * steps aside (isFundDetailPath), so there is no vehicle-selector bar — the URL pins the vehicle.
  */
 export default async function FundDetailPage({ params }: { params: { id: string } }) {
-  await requireAccountingAccess()
-  const vehicle = decodeURIComponent(params.id)
+  const { fundId } = await requireAccountingAccess()
+  const raw = decodeURIComponent(params.id)
+  // UUID → current name. Falls back to treating the param as the name itself, for legacy vehicles
+  // that exist only as a portfolio_group string (no registry id to route on).
+  const vehicle = (await vehicleNameById(createAdminClient(), fundId, raw)) ?? raw
 
   return (
     <div className="pt-4 md:pt-8 pb-8 w-full">

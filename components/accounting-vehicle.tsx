@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Plus } from 'lucide-react'
+import Link from 'next/link'
+import { Settings2 } from 'lucide-react'
 
 interface VehicleCtx {
   group: string | null
@@ -68,7 +69,7 @@ export function useLedgerFetch() {
   )
 }
 
-/** Vehicle selector (+ quick create) shown across the Accounting section. */
+/** Vehicle selector shown across the Accounting section. */
 export function VehicleBar() {
   // The /funds landing page is the fund overview — it spans every vehicle and the selector
   // drives nothing on it, so it would just be a confusing no-op control. The subpages
@@ -77,11 +78,6 @@ export function VehicleBar() {
   const pathname = usePathname()
   const { group, setGroup } = useVehicle()
   const [vehicles, setVehicles] = useState<string[]>([])
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newKind, setNewKind] = useState('fund')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
     fetch('/api/accounting/vehicles').then(r => (r.ok ? r.json() : [])).then(v => setVehicles(Array.isArray(v) ? v : []))
@@ -93,31 +89,21 @@ export function VehicleBar() {
     if (!group && vehicles.length > 0) setGroup(vehicles[0])
   }, [vehicles, group, setGroup])
 
-  async function create() {
-    const name = newName.trim()
-    if (!name) return
-    setBusy(true); setError(null)
-    const res = await fetch('/api/vehicles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, kind: newKind }) })
-    setBusy(false)
-    if (res.ok) {
-      setCreating(false); setNewName(''); setNewKind('fund')
-      load()
-      setGroup(name) // select the new vehicle
-    } else {
-      setError((await res.json().catch(() => ({}))).error ?? 'Could not create vehicle')
-    }
-  }
-
   const current = group ?? (vehicles[0] ?? '')
 
   if (pathname === '/funds') return null
 
+  // Creating and configuring a vehicle (name, kind, vintage, associate links) is an infrequent,
+  // multi-field setup, so it lives in one place — Settings → Investment vehicles — rather than as a
+  // quick-add here that only captured a name and kind. This bar just selects among what exists.
   return (
     <div className="text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground">Vehicle</span>
         {vehicles.length === 0 ? (
-          <span className="italic text-muted-foreground">none yet</span>
+          <Link href="/settings" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground underline underline-offset-2">
+            <Settings2 className="h-3 w-3" />Add one in Settings
+          </Link>
         ) : vehicles.length === 1 ? (
           <span className="font-medium">{current}</span>
         ) : (
@@ -125,31 +111,7 @@ export function VehicleBar() {
             {vehicles.map(v => <option key={v} value={v}>{v}</option>)}
           </select>
         )}
-        {!creating && (
-          <button onClick={() => setCreating(true)} className="inline-flex items-center gap-1 rounded-md border border-input px-2.5 py-1 text-xs hover:bg-accent transition-colors"><Plus className="h-3 w-3" />New vehicle</button>
-        )}
       </div>
-
-      {creating && (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <input
-            autoFocus value={newName} onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') create(); if (e.key === 'Escape') { setCreating(false); setError(null) } }}
-            placeholder="Vehicle name (e.g. Fund IV, LP)"
-            className="min-w-[220px] rounded border border-input bg-transparent px-2 py-1 text-sm"
-          />
-          <select value={newKind} onChange={e => setNewKind(e.target.value)} className="rounded border border-input bg-transparent px-2 py-1 text-sm">
-            <option value="fund">Fund</option>
-            <option value="spv">SPV</option>
-            <option value="direct">Direct</option>
-            <option value="associate">Associate</option>
-            <option value="other">Other</option>
-          </select>
-          <button onClick={create} disabled={busy || !newName.trim()} className="rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50">{busy ? 'Adding…' : 'Add'}</button>
-          <button onClick={() => { setCreating(false); setError(null) }} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
-          {error && <span className="text-xs text-destructive">{error}</span>}
-        </div>
-      )}
     </div>
   )
 }
