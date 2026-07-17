@@ -44,3 +44,19 @@ export async function vehicleIdByName(
   const { data: alias } = await (admin as any).from('fund_vehicles').select('id').eq('fund_id', fundId).contains('aliases', [name]).maybeSingle()
   return (alias?.id as string) ?? null
 }
+
+/**
+ * Resolve a `fund_vehicles.id` back to its current name, scoped to the fund. The inverse of
+ * `vehicleIdByName`, for the URL-addressable surfaces (e.g. /funds/[id]) that route on the stable
+ * UUID — like companies and LPs — rather than the mutable name. Returns null when the id isn't a
+ * vehicle in this fund, so a stale or cross-fund link resolves to "not found" instead of leaking.
+ */
+export async function vehicleNameById(
+  admin: SupabaseClient,
+  fundId: string,
+  id: string,
+): Promise<string | null> {
+  const { data } = await (admin as any)
+    .from('fund_vehicles').select('name').eq('id', id).eq('fund_id', fundId).maybeSingle()
+  return (data?.name as string) ?? null
+}
