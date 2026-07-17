@@ -1,8 +1,8 @@
 ![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js) ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-97.6%25-3178C6?logo=typescript&logoColor=white) ![GitHub Stars](https://img.shields.io/github/stars/tdavidson/reporting?style=flat) ![License](https://img.shields.io/badge/license-Apache_2.0-blue)
 
-# AI-native fund reporting and analysis platform for Venture Capital Fund Managers
+# AI-native venture capital accounting, reporting, and analysis platform for fund managers
 
-AI-native venture capital investor reporting and analysis platform. Inbound deal screening, due diligence and investment memo drafting, portfolio KPI collection and reporting, fund performance reporting, and limited partner portal, powered by your AI. Pick and choose which features you want to use, run on your own infrastructure and use your own AI.
+AI-native venture capital investor accounting, reporting and analysis platform. Inbound deal screening, due diligence and investment memo drafting, portfolio KPI collection and reporting, fund performance reporting, fund and SPV accounting, and a limited partner portal to provide all the reports you create. Pick and choose which features you want to use, run on your own infrastructure, and use your own AI.
 
 ![Public Home Page](public/screenshots/homepage.png)
 
