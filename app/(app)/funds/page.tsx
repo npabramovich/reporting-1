@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { requireAccountingAccess } from './guard'
 import { FundOverview } from './fund-overview'
+import { AccountingPageHeader, AccountingBody } from '@/components/accounting-chrome'
 
 export const metadata: Metadata = { title: 'Funds' }
 
@@ -21,15 +22,17 @@ export default async function AccountingPage() {
   await requireAccountingAccess()
 
   return (
-    <div className="pt-3 pb-8 w-full">
-      <div className="mb-6 space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Funds</h1>
-        <p className="text-sm text-muted-foreground">
-          Performance per vehicle, derived from fund accounting or LP capital accounts.
-        </p>
-      </div>
+    // The overview owns its own layout, in the /dashboard shape: the header sits ABOVE the body,
+    // so the title goes all the way to the top with the toggle inline at its right, and the Analyst
+    // panel opens below it rather than level with it. AccountingChrome steps aside on this route.
+    <div className="pt-4 md:pt-8 pb-8 w-full">
+      <AccountingPageHeader title="Funds">
+        Performance per vehicle, derived from fund accounting or LP capital accounts.
+      </AccountingPageHeader>
 
-      <FundOverview />
+      <AccountingBody>
+        <FundOverview />
+      </AccountingBody>
     </div>
   )
 }
