@@ -134,9 +134,11 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
     () => transactions.filter(tx =>
       tx.transaction_type === 'investment' &&
       (tx.security_type === 'safe' || tx.security_type === 'convertible_note') &&
-      !transactions.some(x => x.converts_from_txn_id === tx.id)
+      // Exclude instruments already converted by SOME OTHER row — but keep the one this row (when
+      // editing a conversion) already points to, so it stays selectable.
+      !transactions.some(x => x.id !== editingId && (x as any).converts_from_txn_id === tx.id)
     ),
-    [transactions]
+    [transactions, editingId]
   )
 
   /**
@@ -223,8 +225,13 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
 
   function openEdit(txn: InvestmentTransaction) {
     setEditingId(txn.id)
+    // A conversion is stored as an `investment` row with a converts_from link. Recognize it so the
+    // dialog reopens in Conversion mode with its fields — otherwise editing shows plain-investment
+    // fields and, worse, saving nulls the link (turning it back into a $0-cost investment).
+    const convertsFrom = (txn as any).converts_from_txn_id ?? ''
     setForm({
-      transaction_type: txn.transaction_type,
+      transaction_type: convertsFrom ? 'conversion' : txn.transaction_type,
+      converts_from_txn_id: convertsFrom,
       round_name: txn.round_name ?? '',
       transaction_date: txn.transaction_date ?? '',
       notes: txn.notes ?? '',
@@ -383,7 +390,9 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
       round_name: form.round_name || null,
       transaction_date: form.transaction_date || null,
       notes: form.notes || null,
-      investment_cost: numOrNull(form.investment_cost),
+      // A conversion carries no cash of its own — it's a roll-over. New money at the round is a
+      // separate Investment row. So a conversion never writes investment_cost.
+      investment_cost: isConversion ? null : numOrNull(form.investment_cost),
       interest_converted: numOrNull(form.interest_converted) ?? 0,
       security_type: form.security_type || null,
       interest_rate: rateOrNull(form.interest_rate),
@@ -666,7 +675,11 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
           </DialogHeader>
 
           <div className="space-y-4">
-            {!editingId && (
+            {/* On create, the full type list. On edit, an investment/conversion row can still toggle
+                between Investment and Conversion (both store as an `investment` row — the only
+                difference is the converts_from link), so an existing round can be marked as a
+                conversion. Other types stay locked on edit. */}
+            {(!editingId || form.transaction_type === 'investment' || form.transaction_type === 'conversion') && (
               <div>
                 <Label>Transaction Type</Label>
                 <Select
@@ -683,9 +696,9 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
                   <SelectContent>
                     <SelectItem value="investment">Investment</SelectItem>
                     <SelectItem value="conversion">Conversion (SAFE / note → equity)</SelectItem>
-                    <SelectItem value="proceeds">Proceeds</SelectItem>
-                    <SelectItem value="unrealized_gain_change">Valuation Update</SelectItem>
-                    <SelectItem value="round_info">Round</SelectItem>
+                    {!editingId && <SelectItem value="proceeds">Proceeds</SelectItem>}
+                    {!editingId && <SelectItem value="unrealized_gain_change">Valuation Update</SelectItem>}
+                    {!editingId && <SelectItem value="round_info">Round</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -889,13 +902,15 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
             )}
 
             {txnType === 'conversion' && (() => {
+              // A conversion is a pure roll-over of the SAFE/note into shares — no cash. New money
+              // written at the same round is recorded as its OWN Investment row (same round name),
+              // so it stays a distinct, visible line rather than being buried in the conversion.
               const src = transactions.find(t => t.id === form.converts_from_txn_id)
               const carriedPrincipal = Number(src?.investment_cost ?? 0)
               const interest = parseFloat(form.interest_converted) || 0
-              const newCash = parseFloat(form.investment_cost) || 0
               const shares = parseFloat(form.shares_acquired) || 0
               const price = parseFloat(form.share_price) || 0
-              const carriedBasis = carriedPrincipal + interest + newCash
+              const carriedBasis = carriedPrincipal + interest
               const roundValue = shares > 0 && price > 0 ? shares * price : carriedBasis
               const stepUp = roundValue - carriedBasis
               return (
@@ -942,12 +957,6 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
                       <p className="text-[11px] text-muted-foreground mt-1">Accrued note interest capitalizing into basis at this date. 0 for a SAFE.</p>
                     </div>
                     <div>
-                      <Label>New Cash at This Round ({symbol.trim()})</Label>
-                      <Input className="mt-1" type="number" step="any" value={form.investment_cost}
-                        onChange={e => setForm(f => ({ ...f, investment_cost: e.target.value }))} placeholder="0" />
-                      <p className="text-[11px] text-muted-foreground mt-1">Any additional check written into this round. Leave 0 for a pure conversion.</p>
-                    </div>
-                    <div>
                       <Label>Security Type</Label>
                       <select
                         className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
@@ -970,11 +979,14 @@ export function CompanyInvestments({ companyId, companyStatus, portfolioGroups, 
                   {/* Live preview so the arithmetic of the conversion is obvious before saving. */}
                   {form.converts_from_txn_id && (
                     <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
-                      <div className="flex justify-between"><span className="text-muted-foreground">Carried basis (principal + interest + new cash)</span><span className="font-mono">{symbol.trim()}{fmtNum(carriedBasis)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Carried basis (principal + interest)</span><span className="font-mono">{symbol.trim()}{fmtNum(carriedBasis)}</span></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">Round value ({shares > 0 && price > 0 ? `${fmtNum(shares)} × ${symbol.trim()}${fmtNum(price)}` : 'held at cost'})</span><span className="font-mono">{symbol.trim()}{fmtNum(roundValue)}</span></div>
                       <div className="flex justify-between font-medium"><span>{stepUp >= 0 ? 'Step-up recognized' : 'Down-round loss'} at {form.transaction_date || 'conversion date'}</span><span className={`font-mono ${stepUp >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{stepUp >= 0 ? '+' : ''}{symbol.trim()}{fmtNum(stepUp)}</span></div>
                     </div>
                   )}
+                  <p className="text-[11px] text-muted-foreground">
+                    Wrote a new check at this round too? Add it as a separate <strong>Investment</strong> with the same round name — it stays its own line.
+                  </p>
                 </div>
               )
             })()}
@@ -1641,7 +1653,11 @@ function TransactionTable({
                       <span className="w-3.5" aria-hidden="true" />
                     ) : null}
                     <span className="text-xs text-muted-foreground">
-                      {TYPE_LABELS[txn.transaction_type as TransactionType] ?? txn.transaction_type}
+                      {/* A conversion is stored as an investment; surface it as a Conversion so the
+                          row is identifiable and distinct from a plain investment. */}
+                      {(txn as any).converts_from_txn_id
+                        ? TYPE_LABELS.conversion
+                        : TYPE_LABELS[txn.transaction_type as TransactionType] ?? txn.transaction_type}
                     </span>
                     {isFx && (
                       <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

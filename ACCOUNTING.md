@@ -367,21 +367,24 @@ recorded as the **priced-round investment it becomes**, linked to the instrument
 (`converts_from_txn_id`); there is no separate transaction type. Saving it **drafts** the entry
 below — like every tracker→ledger mirror, it lands as a draft for review, not a post.
 
+A conversion is a **pure roll-over — it carries no cash of its own**. New money written at the same
+round is recorded as a *separate* `investment` row (same round name), so it stays a distinct line.
+
 The source instrument's **principal is already in `1100`** from its own purchase date and is never
 re-posted. The conversion books only what changes **on the conversion date**, as one entry with up
 to three independently-balanced pieces:
 
 | Account | Dr / Cr | When present |
 |---|---|---|
-| 1100-`<co>` Investments at cost | Dr interest + new cash | interest and/or a follow-on check |
+| 1100-`<co>` Investments at cost | Dr interest | a note with accrued interest |
 | 1150-`<co>` Accrued interest | Cr interest | a note with accrued interest |
-| 1000 Cash | Cr new cash | you wrote a new check into the round |
 | 1200-`<co>` Unrealized appreciation | Dr step-up | round price ≠ carried basis |
 | 4200 Change in unrealized (income) | Cr step-up | — |
 
-where **carried basis** = source principal + converted interest + new cash, and **step-up** =
+where **carried basis** = source principal + converted interest, and **step-up** =
 (shares × round price) − carried basis (negative on a down round → an unrealized loss). With no
-round price the position is held at carried cost and no step-up is booked.
+round price the position is held at carried cost and no step-up is booked. (A pure SAFE conversion
+with no interest books *only* the step-up.)
 
 ```text
 2022-06-01 * "Conversion to equity — Acme (Series A)"   ; $100k SAFE → 50,000 @ $3.00 = $150k
@@ -393,13 +396,13 @@ round price the position is held at carried cost and no step-up is booked.
 
 **How it reaches the statements** (all derived from the posted ledger):
 - **Balance sheet** — the position's carrying value (`1100 + 1200`) becomes shares × round price;
-  `1150` accrued interest clears into basis; cash falls by any new check.
+  `1150` accrued interest clears into basis. (Any new check at the round is its own investment row.)
 - **Statement of operations** — the step-up is **change in unrealized appreciation (`4200`)**, in the
   period of the conversion date, not the SAFE's original date. Interest that accrued *before*
   conversion already hit `4100` over prior closes, so it is not re-recognized here.
-- **Cash flows** — a pure conversion moves no cash, so it appears under **supplemental non-cash
-  investing & financing** (ASC 230), never as an outflow; a follow-on check shows as an operating
-  outflow on the conversion date.
+- **Cash flows** — a conversion moves no cash, so it appears under **supplemental non-cash
+  investing & financing** (ASC 230), never as an outflow. (A new check at the round is a separate
+  investment row and shows as its own operating outflow.)
 - **Schedule of investments** — cost = carried basis, fair value = shares × round price, and the
   ledger ties to the tracker because the step-up actually posted to `1200`.
 - **Changes in partners' capital** — the step-up allocates to LPs (line **gains**) at the next
