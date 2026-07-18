@@ -359,6 +359,13 @@ export const UNGATED_ROUTES: Record<string, string> = {
 
   // Their own credential, not a session. These resolve an API key or OAuth token and enforce
   // access per tool — see lib/accounting/api-keys.ts.
+  // Per-row domain gating in the handler: a fund's queue spans domains, so the route can't name
+  // one. The list filters each row by hasAccess(read); approve/reject resolve the row's domain and
+  // require write. See lib/pending-actions and the plan-analyst-live-tools design.
+  'api/pending-actions': 'Queue spans domains; each row filtered by hasAccess(read) in-handler.',
+  'api/pending-actions/[id]/approve': 'Domain resolved from the row; write enforced in-handler.',
+  'api/pending-actions/[id]/reject': 'Domain resolved from the row; write enforced in-handler.',
+
   'api/mcp': 'MCP: authenticates by API key/OAuth token; gated per tool by domain.',
   'api/accounting/mcp': 'MCP (legacy path): as api/mcp.',
   'api/agent': 'Agent REST: as api/mcp.',
