@@ -180,10 +180,14 @@ export class AnthropicProvider implements AIProvider {
 
     const systemBlocks = cacheableSystem(params.system)
 
-    const messages: Anthropic.MessageParam[] = [{
-      role: 'user',
-      content: typeof params.content === 'string' ? params.content : toAnthropicContent(params.content),
-    }]
+    // Seed from multi-turn history when the caller supplied it (chat surfaces); otherwise open
+    // with the single `content` message (one-shot agentic calls).
+    const messages: Anthropic.MessageParam[] = params.messages?.length
+      ? params.messages.map(m => ({ role: m.role, content: m.content }))
+      : [{
+          role: 'user',
+          content: typeof params.content === 'string' ? params.content : toAnthropicContent(params.content ?? []),
+        }]
 
     const toolCalls: ToolCallRecord[] = []
     const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 }

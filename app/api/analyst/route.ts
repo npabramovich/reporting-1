@@ -15,6 +15,7 @@ import {
   type AssistantProposal,
 } from '@/lib/accounting/assistant'
 import { resolveVehicle } from '@/lib/accounting/agent-tools'
+import { buildAnalystTools } from '@/lib/ai/analyst-tools'
 import { buildLpContext, LP_ANALYST_GUIDE } from '@/lib/ai/lp-fund-context'
 import { buildDiligenceContext, DILIGENCE_ANALYST_GUIDE } from '@/lib/diligence/analyst-context'
 import { extractText } from '@/lib/memo-agent/extract-text'
@@ -347,12 +348,43 @@ export async function POST(req: NextRequest) {
   }))
 
   try {
-    const { text, usage } = await provider.createChat({
-      model: aiModel,
-      maxTokens: 2000,
-      system: withTopicalGuardrail(systemPrompt),
-      messages,
-    })
+    let text: string
+    let usage: { inputTokens: number; outputTokens: number }
+    let toolCalls: { name: string }[] = []
+
+    // Run as a live tool loop when the fund's provider supports it; otherwise fall back to the
+    // old single-shot context-injection chat (OpenAI/Gemini/Ollama). Tools are the access-filtered
+    // read registry — scope narrows what's exposed, never widens it.
+    if (provider.supportsToolLoop && provider.createToolLoop) {
+      const { tools, executeTool } = buildAnalystTools({
+        admin,
+        fundId: membership.fund_id,
+        userId: user.id,
+        access,
+        vehicle: accountingGroup ?? undefined,
+      })
+      const result = await provider.createToolLoop({
+        model: aiModel,
+        maxTokens: 2000,
+        system: withTopicalGuardrail(systemPrompt),
+        messages,
+        tools,
+        executeTool,
+        maxIterations: 6,
+      })
+      text = result.text
+      usage = result.usage
+      toolCalls = result.toolCalls.map(c => ({ name: c.name }))
+    } else {
+      const result = await provider.createChat({
+        model: aiModel,
+        maxTokens: 2000,
+        system: withTopicalGuardrail(systemPrompt),
+        messages,
+      })
+      text = result.text
+      usage = result.usage
+    }
 
     logAIUsage(admin, {
       fundId: membership.fund_id,
@@ -427,7 +459,7 @@ export async function POST(req: NextRequest) {
       // Non-critical — response still succeeds
     }
 
-    return NextResponse.json({ reply, conversationId, proposals, vehicle: accountingGroup, scope })
+    return NextResponse.json({ reply, conversationId, proposals, vehicle: accountingGroup, scope, toolCalls })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[analyst] AI error:', message, err)

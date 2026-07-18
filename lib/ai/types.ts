@@ -107,7 +107,17 @@ export interface McpServerConfig {
   authorizationToken?: string
 }
 
-export interface CreateToolLoopParams extends CreateMessageParams {
+export interface CreateToolLoopParams extends Omit<CreateMessageParams, 'content'> {
+  /**
+   * A single opening user message. Use for one-shot agentic calls (e.g. diligence Q&A).
+   * Provide EITHER this or `messages`; when both are set, `messages` wins.
+   */
+  content?: MessageContent
+  /**
+   * Multi-turn conversation history to seed the loop with — for chat surfaces (the Analyst) that
+   * must keep prior turns. Roles map straight to the provider's user/assistant turns.
+   */
+  messages?: ChatMessage[]
   tools?: ToolDefinition[]
   executeTool?: ToolExecutor
   mcpServers?: McpServerConfig[]
