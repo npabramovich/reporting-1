@@ -8,6 +8,7 @@ import { logAIUsage } from '@/lib/ai/usage'
 import { rateLimit } from '@/lib/rate-limit'
 import { resolveLpAccess } from '@/lib/api-helpers'
 import { buildLpAnalystContext } from '@/lib/ai/lp-analyst-context'
+import { buildLpAnalystTools } from '@/lib/ai/lp-analyst-tools'
 
 /**
  * LP-portal AI analyst. Stateless (no stored history). The fund and the LP's
@@ -101,12 +102,35 @@ export async function POST(req: NextRequest) {
   }))
 
   try {
-    const { text, usage } = await provider.createChat({
-      model: aiModel,
-      maxTokens: 1500,
-      system: withTopicalGuardrail(systemPrompt),
-      messages,
-    })
+    let text: string
+    let usage: { inputTokens: number; outputTokens: number }
+
+    // When the provider supports it, run a live tool loop with the tenant-scoped LP tools (closed
+    // over THIS investor's ids). The kill-switch and investor scope are already enforced above; no
+    // tool is fund-wide, so cross-tenant access stays impossible by construction.
+    if (provider.supportsToolLoop && provider.createToolLoop) {
+      const { tools, executeTool } = buildLpAnalystTools({ admin, fundId, investorIds: access.investorIds })
+      const result = await provider.createToolLoop({
+        model: aiModel,
+        maxTokens: 1500,
+        system: withTopicalGuardrail(systemPrompt),
+        messages,
+        tools,
+        executeTool,
+        maxIterations: 6,
+      })
+      text = result.text
+      usage = result.usage
+    } else {
+      const result = await provider.createChat({
+        model: aiModel,
+        maxTokens: 1500,
+        system: withTopicalGuardrail(systemPrompt),
+        messages,
+      })
+      text = result.text
+      usage = result.usage
+    }
     logAIUsage(admin, { fundId, userId: user.id, provider: aiProviderType, model: aiModel, feature: 'lp-analyst', usage })
     return NextResponse.json({ reply: text })
   } catch {
