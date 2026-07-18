@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { dbError } from '@/lib/api-error'
+import { writeMetricValue } from '@/lib/pending-actions/metric-value'
+import type { AccessContext } from '@/lib/access/effective'
 
 export async function GET(
   _req: NextRequest,
@@ -50,24 +52,6 @@ export async function POST(
   const writeCheck = await assertWriteAccess(admin, user.id)
   if (writeCheck instanceof NextResponse) return writeCheck
 
-  const { data: metric } = await admin
-    .from('metrics')
-    .select('id, fund_id, value_type')
-    .eq('id', params.metricId)
-    .eq('company_id', params.id)
-    .maybeSingle()
-
-  if (!metric) return NextResponse.json({ error: 'Metric not found' }, { status: 404 })
-
-  const { data: membership } = await admin
-    .from('fund_members')
-    .select('id')
-    .eq('fund_id', metric.fund_id)
-    .eq('user_id', user.id)
-    .maybeSingle()
-
-  if (!membership) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
   const body = await req.json()
   const { period_label, period_year, period_quarter, period_month, value, notes } = body
 
@@ -75,69 +59,17 @@ export async function POST(
     return NextResponse.json({ error: 'period_label and period_year are required' }, { status: 400 })
   }
 
-  const valueFields: { value_number?: number; value_text?: string } =
-    metric.value_type === 'text'
-      ? { value_text: String(value) }
-      : { value_number: typeof value === 'number' ? value : parseFloat(value) }
-
-  // Check for existing value in the same period — update instead of creating duplicate
-  let existingQuery = admin
-    .from('metric_values')
-    .select('id')
-    .eq('metric_id', params.metricId)
-    .eq('period_year', period_year)
-
-  if (period_quarter != null) {
-    existingQuery = existingQuery.eq('period_quarter', period_quarter)
-  } else {
-    existingQuery = existingQuery.is('period_quarter', null)
+  // Single write path — shared with the Analyst's pending-action layer, which stages this same
+  // call for human approval. `writeMetricValue` re-checks the metric belongs to the caller's fund.
+  try {
+    const result = await writeMetricValue(
+      { admin, fundId: writeCheck.fundId, userId: user.id, access: {} as unknown as AccessContext },
+      { companyId: params.id, metricId: params.metricId, period_label, period_year, period_quarter, period_month, value, notes },
+    )
+    return NextResponse.json(result, { status: result.mode === 'insert' ? 201 : 200 })
+  } catch (e) {
+    const message = (e as Error).message
+    if (/not found/i.test(message)) return NextResponse.json({ error: message }, { status: 404 })
+    return dbError({ message }, 'metric-values')
   }
-  if (period_month != null) {
-    existingQuery = existingQuery.eq('period_month', period_month)
-  } else {
-    existingQuery = existingQuery.is('period_month', null)
-  }
-
-  const { data: existing } = await existingQuery.maybeSingle()
-
-  if (existing) {
-    // Update the existing row
-    const { data, error } = await admin
-      .from('metric_values')
-      .update({
-        period_label,
-        confidence: 'high',
-        is_manually_entered: true,
-        notes: notes ?? null,
-        ...valueFields,
-      })
-      .eq('id', existing.id)
-      .select()
-      .single()
-
-    if (error) return dbError(error, 'metric-values')
-    return NextResponse.json(data)
-  }
-
-  const { data, error } = await admin
-    .from('metric_values')
-    .insert({
-      metric_id: params.metricId,
-      company_id: params.id,
-      fund_id: metric.fund_id,
-      period_label,
-      period_year,
-      period_quarter: period_quarter ?? null,
-      period_month: period_month ?? null,
-      confidence: 'high',
-      is_manually_entered: true,
-      notes: notes ?? null,
-      ...valueFields,
-    })
-    .select()
-    .single()
-
-  if (error) return dbError(error, 'metric-values')
-
-  return NextResponse.json(data, { status: 201 })
 }
