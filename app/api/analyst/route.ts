@@ -483,7 +483,7 @@ export async function POST(req: NextRequest) {
 }
 
 /** Attachments a user can draft an entry from. Matches what lib/memo-agent/extract-text handles. */
-const DOCUMENT_FORMATS = ['pdf', 'docx', 'xlsx', 'xls', 'md', 'markdown', 'txt']
+const DOCUMENT_FORMATS = ['pdf', 'docx', 'xlsx', 'xls', 'md', 'markdown', 'txt', 'csv']
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
 /** A capital-call notice is a couple of pages; anything past this is a mis-attached file. */
 const MAX_DOCUMENT_CHARS = 20_000

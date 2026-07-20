@@ -10,7 +10,7 @@ import mammoth from 'mammoth'
  *      provider's native PDF handling. We want the bytes once, cached on the
  *      row, not re-shipped on every prompt.
  *
- * Supported: PDF, DOCX, XLSX/XLS, MD/TXT. Returns null when extraction fails.
+ * Supported: PDF, DOCX, XLSX/XLS, MD/TXT/CSV. Returns null when extraction fails.
  */
 export async function extractText(buffer: Buffer, fileFormat: string): Promise<string | null> {
   const fmt = fileFormat.toLowerCase()
@@ -18,7 +18,7 @@ export async function extractText(buffer: Buffer, fileFormat: string): Promise<s
     if (fmt === 'pdf') return await extractPdf(buffer)
     if (fmt === 'docx' || fmt === 'doc') return await extractDocx(buffer)
     if (fmt === 'xlsx' || fmt === 'xls') return await extractXlsx(buffer)
-    if (fmt === 'md' || fmt === 'markdown' || fmt === 'txt') return buffer.toString('utf8')
+    if (fmt === 'md' || fmt === 'markdown' || fmt === 'txt' || fmt === 'csv') return buffer.toString('utf8')
   } catch (err) {
     console.error(`[memo-agent.extract-text] ${fmt} extraction failed:`, err)
   }
