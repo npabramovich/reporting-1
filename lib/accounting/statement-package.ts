@@ -140,7 +140,7 @@ export async function buildStatementPackage(
 
   const preset = sp.get('preset') as PeriodPreset | null
   const asOf = sp.get('asOf')
-  const asOfDate = asOf ? new Date(asOf) : undefined
+  const asOfDate = asOf && /^\d{4}-\d{2}-\d{2}$/.test(asOf) ? new Date(asOf) : undefined
   const period = preset && preset !== 'custom'
     ? resolvePeriod(preset, asOfDate)
     : customPeriod(sp.get('start'), sp.get('end') ?? asOf)

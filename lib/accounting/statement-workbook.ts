@@ -168,16 +168,16 @@ function capitalSheet(payloads: StatementPayload[]): XLSX.WorkSheet {
   }
   // Multi-period: detail collapses to a partner × period ending-capital matrix — the
   // per-source roll-forward columns don't compose across periods the way ending balances do.
-  const names: string[] = []
+  const partnerRows: { id: string; name: string }[] = []
   const seen = new Set<string>()
   for (const p of payloads) for (const partner of p.changesInPartnersCapital.partners) {
-    if (!seen.has(partner.name)) { seen.add(partner.name); names.push(partner.name) }
+    if (!seen.has(partner.id)) { seen.add(partner.id); partnerRows.push({ id: partner.id, name: partner.name }) }
   }
   const header: Row = ['Partner', ...payloads.map(p => p.period.label)]
   const rows: Row[] = [['Statement of changes in partners’ capital'], [], header]
-  for (const name of names) {
+  for (const { id, name } of partnerRows) {
     rows.push([name, ...payloads.map(p => {
-      const partner = p.changesInPartnersCapital.partners.find(pp => pp.name === name)
+      const partner = p.changesInPartnersCapital.partners.find(pp => pp.id === id)
       return partner ? money(partner.ending) : ''
     })])
   }

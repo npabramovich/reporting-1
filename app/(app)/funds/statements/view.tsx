@@ -359,14 +359,14 @@ export function StatementsView() {
           single partners&rsquo; capital line on the balance sheet
         </p>
         {cols.length > 1 ? (() => {
-          // Union partners across periods by name; value = that period's ending capital.
-          const names: string[] = []
+          // Union partners across periods by id; value = that period's ending capital.
+          const rows: { id: string; name: string }[] = []
           const seen = new Set<string>()
           for (const c of cols) for (const p of c.changesInPartnersCapital.partners) {
-            if (!seen.has(p.name)) { seen.add(p.name); names.push(p.name) }
+            if (!seen.has(p.id)) { seen.add(p.id); rows.push({ id: p.id, name: p.name }) }
           }
-          const endingFor = (c: Omit<Data, 'comparisons'>, name: string) =>
-            c.changesInPartnersCapital.partners.find(p => p.name === name)?.ending
+          const endingFor = (c: Omit<Data, 'comparisons'>, id: string) =>
+            c.changesInPartnersCapital.partners.find(p => p.id === id)?.ending
           return (
             <div className="border rounded-lg overflow-x-auto">
               <table className="w-full text-sm">
@@ -377,10 +377,10 @@ export function StatementsView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {names.map(name => (
-                    <tr key={name} className="border-t">
-                      <td className="px-3 py-1.5 text-muted-foreground">{name}</td>
-                      {cols.map((c, i) => <td key={i} className="px-3 py-1.5 text-right font-mono">{fmtCell(endingFor(c, name))}</td>)}
+                  {rows.map(r => (
+                    <tr key={r.id} className="border-t">
+                      <td className="px-3 py-1.5 text-muted-foreground">{r.name}</td>
+                      {cols.map((c, i) => <td key={i} className="px-3 py-1.5 text-right font-mono">{fmtCell(endingFor(c, r.id))}</td>)}
                     </tr>
                   ))}
                   <tr className="border-t font-semibold">
