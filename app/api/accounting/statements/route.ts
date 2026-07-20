@@ -35,5 +35,5 @@ export async function GET(req: NextRequest) {
   // (see DOMAIN_META.lp_capital.impliedBy) and this package is whole again.
 
   const pkg = await buildStatementPackage(admin, gate.fundId, group, req.nextUrl.searchParams)
-  return NextResponse.json(pkg.payload)
+  return NextResponse.json(pkg.comparisons ? { ...pkg.payload, comparisons: pkg.comparisons } : pkg.payload)
 }
