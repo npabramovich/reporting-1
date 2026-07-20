@@ -78,15 +78,13 @@ export function JournalView() {
 
   return (
     <div className="space-y-4">
+      {/* Actions + search on the left; the period controls are right-aligned so the
+          extra From/To inputs that appear in Custom mode grow leftward and don't shove
+          the rest of the row around. Pagination lives BELOW the table (see footer). */}
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" onClick={() => setEditing({ entryId: null })}>
           <Plus className="h-4 w-4 mr-1" />New entry
         </Button>
-        <PeriodPicker
-          preset={preset} onPreset={p => { setPreset(p); setPage(0) }}
-          start={start} end={end}
-          onStart={v => { setStart(v); setPage(0) }} onEnd={v => { setEnd(v); setPage(0) }}
-        />
         <Input
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -94,10 +92,12 @@ export function JournalView() {
           className="h-9 max-w-xs"
         />
         {error && <span className="text-xs text-amber-600">{error}</span>}
-        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{total === 0 ? 'No entries' : `Showing ${page * PAGE + 1}–${Math.min((page + 1) * PAGE, total)} of ${total}`}</span>
-          <Button size="sm" variant="outline" disabled={page === 0 || loading} onClick={() => setPage(p => Math.max(0, p - 1))}>Prev</Button>
-          <Button size="sm" variant="outline" disabled={(page + 1) * PAGE >= total || loading} onClick={() => setPage(p => p + 1)}>Next</Button>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <PeriodPicker
+            preset={preset} onPreset={p => { setPreset(p); setPage(0) }}
+            start={start} end={end}
+            onStart={v => { setStart(v); setPage(0) }} onEnd={v => { setEnd(v); setPage(0) }}
+          />
         </div>
       </div>
 
@@ -110,8 +110,11 @@ export function JournalView() {
       ) : (
         <div className="border rounded-lg divide-y font-mono text-xs">
           {entries.map(e => {
-            const flag = e.status === 'posted' ? '*' : e.status === 'void' ? '#' : '!'
             const narration = (e.memo || e.source_type || 'Entry').replace(/"/g, "'")
+            // Readable status marker instead of a cryptic */!/# flag.
+            const statusCls = e.status === 'posted'
+              ? 'bg-green-500/15 text-green-600'
+              : e.status === 'void' ? 'bg-muted text-muted-foreground' : 'bg-amber-500/15 text-amber-600'
             const clickable = e.status !== 'void'
             return (
               <div
@@ -125,7 +128,7 @@ export function JournalView() {
                   <div className="min-w-0 flex-1 leading-relaxed">
                     <div className="whitespace-pre-wrap break-words">
                       <span className="text-muted-foreground">{e.entry_date}</span>{' '}
-                      <span className={e.status === 'posted' ? 'text-green-600' : 'text-amber-600'}>{flag}</span>{' '}
+                      <span className={`mr-1 rounded px-1 py-0.5 align-middle font-sans text-[9px] font-medium uppercase tracking-wide ${statusCls}`}>{e.status}</span>{' '}
                       <span>&quot;{narration}&quot;</span>
                     </div>
                     {e.source_type && (
@@ -164,6 +167,16 @@ export function JournalView() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Pagination below the table — its position doesn't shift when Custom mode adds
+          the From/To inputs to the toolbar above. */}
+      {total > 0 && (
+        <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
+          <span>Showing {page * PAGE + 1}–{Math.min((page + 1) * PAGE, total)} of {total}</span>
+          <Button size="sm" variant="outline" disabled={page === 0 || loading} onClick={() => setPage(p => Math.max(0, p - 1))}>Prev</Button>
+          <Button size="sm" variant="outline" disabled={(page + 1) * PAGE >= total || loading} onClick={() => setPage(p => p + 1)}>Next</Button>
         </div>
       )}
 
