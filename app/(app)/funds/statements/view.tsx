@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { Loader2, Download } from 'lucide-react'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch, useVehicle, useFundSeg } from '@/components/accounting-vehicle'
-import { PERIOD_PRESETS, type PeriodPreset } from '@/lib/accounting/statement-period'
+import { type PeriodPreset } from '@/lib/accounting/statement-period'
+import { PeriodPicker } from '@/components/accounting/period-picker'
 
 interface Section { label: string; rows: { code: string; name: string; amount: number }[]; total: number }
 interface PartnerRow {
@@ -46,6 +47,8 @@ interface Data {
     endingCash: number
     nonCash: { entryId: string; date: string | null; description: string; amount: number; legs: { name: string; amount: number }[] }[]
   } | null
+  // Prior-period payloads, most-recent-first, present only when ?compare= was sent.
+  comparisons?: Omit<Data, 'comparisons'>[]
 }
 
 const CAP_COLS: { key: keyof PartnerRow; label: string }[] = [
@@ -71,6 +74,8 @@ export function StatementsView() {
   const [preset, setPreset] = useState<PeriodPreset>('ytd')
   const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
+  const [compare, setCompare] = useState<string>('0') // '0'|'1'|'2'|'3'|'4'|'all'
+  const [order, setOrder] = useState<'recent' | 'oldest'>('recent')
   const lf = useLedgerFetch()
   const { group } = useVehicle()
   const fundSeg = useFundSeg()
@@ -83,6 +88,7 @@ export function StatementsView() {
     if (end) exportQs.set('end', end)
   }
   if (group) exportQs.set('group', group)
+  if (compare !== '0') exportQs.set('compare', compare)
   const exportUrl = `/api/accounting/statements/export?${exportQs}`
   const canExport = !loading && !!data && data.trialBalance.rows.length > 0
 
@@ -93,11 +99,17 @@ export function StatementsView() {
       if (start) qs.set('start', start)
       if (end) qs.set('end', end)
     }
+    if (compare !== '0') qs.set('compare', compare)
     lf(`/api/accounting/statements?${qs}`)
       .then(r => (r.ok ? r.json() : null))
       .then(setData)
       .finally(() => setLoading(false))
-  }, [lf, preset, start, end])
+  }, [lf, preset, start, end, compare])
+
+  // Comparisons arrive most-recent-first and exclude the primary, so most-recent-first
+  // columns = [primary, ...comparisons]; oldest-first is that reversed.
+  const colData = data ? [data, ...(data.comparisons ?? [])] : []
+  const cols = order === 'recent' ? colData : [...colData].reverse()
 
   const period = data?.period
   // A balance sheet is a snapshot; an income statement and cash flows cover a span.
@@ -106,38 +118,70 @@ export function StatementsView() {
     ? 'since inception'
     : period?.start && period?.end ? `for ${period.label}` : period?.label ?? ''
 
-  // A section with no detail rows (partners' capital) renders as a single total line.
-  const Sec = ({ s }: { s: Section }) => (
-    <>
-      {s.rows.length > 0 && (
-        <tr className="border-t bg-muted/30"><td className="px-3 py-1.5 font-medium" colSpan={2}>{s.label}</td></tr>
-      )}
-      {s.rows.map(r => (
-        <tr key={r.code || r.name} className="border-t">
-          <td className="px-3 py-1.5 text-muted-foreground">{r.code ? `${r.code} · ` : ''}{r.name}</td>
-          <td className="px-3 py-1.5 text-right font-mono">{fmt(r.amount)}</td>
-        </tr>
+  const fmtCell = (v: number | undefined) => (v === undefined ? '' : fmt(v))
+
+  // Header row of period labels for a statement table. With compare='0', cols has
+  // length 1 and this renders exactly the single-column header shape used before.
+  const PeriodHead = ({ kind }: { kind: 'asOf' | 'over' }) => (
+    <tr className="border-b bg-muted/50">
+      <th className="text-left px-3 py-2 font-medium" />
+      {cols.map((c, i) => (
+        <th key={i} className="text-right px-3 py-2 font-medium whitespace-nowrap">
+          <div>{c.period.label}</div>
+          <div className="text-[10px] font-normal text-muted-foreground">
+            {kind === 'asOf' ? (c.period.end ? `as of ${c.period.end}` : 'as of today') : (c.period.preset === 'itd' ? 'since inception' : c.period.label)}
+          </div>
+        </th>
       ))}
-      <tr className="border-t font-semibold">
-        <td className="px-3 py-1.5">Total {s.label}</td>
-        <td className="px-3 py-1.5 text-right font-mono">{fmt(s.total)}</td>
-      </tr>
-    </>
+    </tr>
   )
 
-  // Coded like every other statement — `1000 · Cash` — rather than a bare name.
-  const CFSec = ({ sec }: { sec: CFSection }) => (
-    <>
-      <tr className="border-t bg-muted/30"><td className="px-3 py-1.5 font-medium" colSpan={2}>{sec.label}</td></tr>
-      {sec.lines.map(l => (
-        <tr key={`${l.code}|${l.name}`} className="border-t">
-          <td className="px-3 py-1.5 text-muted-foreground">{l.code} · {l.name}</td>
-          <td className="px-3 py-1.5 text-right font-mono">{fmt(l.amount)}</td>
+  // Union section rows across columns by key, pulling each column's amount.
+  const sectionMatrix = (pick: (d: Omit<Data, 'comparisons'>) => Section) => {
+    const label = pick(cols[0]).label
+    const keys: { key: string; name: string; code: string }[] = []
+    const seen = new Set<string>()
+    for (const c of cols) for (const r of pick(c).rows) {
+      const key = r.code || r.name
+      if (!seen.has(key)) { seen.add(key); keys.push({ key, name: r.name, code: r.code }) }
+    }
+    const amountFor = (c: Omit<Data, 'comparisons'>, key: string) =>
+      pick(c).rows.find(r => (r.code || r.name) === key)?.amount
+    return { label, keys, amountFor, totalFor: (c: Omit<Data, 'comparisons'>) => pick(c).total }
+  }
+
+  // A section with no detail rows (partners' capital) renders as a single total line.
+  const MultiSec = ({ pick }: { pick: (d: Omit<Data, 'comparisons'>) => Section }) => {
+    const m = sectionMatrix(pick)
+    if (m.keys.length === 0 && cols.every(c => pick(c).total === 0)) return null
+    return (
+      <>
+        {m.keys.length > 0 && (
+          <tr className="border-t bg-muted/30"><td className="px-3 py-1.5 font-medium" colSpan={cols.length + 1}>{m.label}</td></tr>
+        )}
+        {m.keys.map(k => (
+          <tr key={k.key} className="border-t">
+            <td className="px-3 py-1.5 text-muted-foreground">{k.code ? `${k.code} · ` : ''}{k.name}</td>
+            {cols.map((c, i) => <td key={i} className="px-3 py-1.5 text-right font-mono">{fmtCell(m.amountFor(c, k.key))}</td>)}
+          </tr>
+        ))}
+        <tr className="border-t font-semibold">
+          <td className="px-3 py-1.5">Total {m.label}</td>
+          {cols.map((c, i) => <td key={i} className="px-3 py-1.5 text-right font-mono">{fmt(m.totalFor(c))}</td>)}
         </tr>
-      ))}
-      <tr className="border-t font-semibold"><td className="px-3 py-1.5">Total {sec.label}</td><td className="px-3 py-1.5 text-right font-mono">{fmt(sec.total)}</td></tr>
-    </>
-  )
+      </>
+    )
+  }
+
+  // Cash-flow sections have a slightly different shape ({ lines } not { rows }); map
+  // them into Section so MultiSec can be reused instead of duplicating the renderer.
+  const cfAsSection = (get: (cf: NonNullable<Data['cashFlows']>) => CFSection) =>
+    (d: Omit<Data, 'comparisons'>): Section => {
+      const cf = d.cashFlows
+      if (!cf) return { label: get({ operating: { label: '', lines: [], total: 0 }, financing: { label: '', lines: [], total: 0 } } as any).label, rows: [], total: 0 }
+      const s = get(cf)
+      return { label: s.label, rows: s.lines.map(l => ({ code: l.code, name: l.name, amount: l.amount })), total: s.total }
+    }
 
   return (
     <div className="space-y-4">
@@ -159,20 +203,32 @@ export function StatementsView() {
         )}
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {preset === 'custom' && (
-            <>
-              <input type="date" value={start} onChange={e => setStart(e.target.value)} aria-label="From" className="h-9 w-36 px-2 rounded-md border border-input bg-transparent text-sm" />
-              <input type="date" value={end} onChange={e => setEnd(e.target.value)} aria-label="To" className="h-9 w-36 px-2 rounded-md border border-input bg-transparent text-sm" />
-            </>
-          )}
+          <PeriodPicker
+            preset={preset} onPreset={setPreset}
+            start={start} end={end} onStart={setStart} onEnd={setEnd}
+          />
           <select
-            value={preset}
-            onChange={e => setPreset(e.target.value as PeriodPreset)}
-            aria-label="Statement period"
+            value={compare}
+            onChange={e => setCompare(e.target.value)}
+            aria-label="Compare periods"
             className="h-9 px-3 rounded-md border border-input bg-background text-sm"
           >
-            {PERIOD_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+            <option value="0">No comparison</option>
+            <option value="1">+ Previous period</option>
+            <option value="2">+ Past 2</option>
+            <option value="3">+ Past 3</option>
+            <option value="4">+ Past 4</option>
+            <option value="all">+ All prior</option>
           </select>
+          {compare !== '0' && (
+            <button
+              onClick={() => setOrder(o => (o === 'recent' ? 'oldest' : 'recent'))}
+              className="h-9 px-3 rounded-md border border-input bg-background text-sm text-muted-foreground hover:text-foreground"
+              title="Toggle column order"
+            >
+              {order === 'recent' ? 'Recent → old' : 'Old → recent'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -190,10 +246,11 @@ export function StatementsView() {
         <p className="text-xs text-muted-foreground mb-2">Balance sheet — {asOfLabel}</p>
         <div className="border rounded-lg overflow-x-auto">
           <table className="w-full text-sm">
+            <thead><PeriodHead kind="asOf" /></thead>
             <tbody>
-              <Sec s={data.balanceSheet.assets} />
-              <Sec s={data.balanceSheet.liabilities} />
-              <Sec s={data.balanceSheet.equity} />
+              <MultiSec pick={d => d.balanceSheet.assets} />
+              <MultiSec pick={d => d.balanceSheet.liabilities} />
+              <MultiSec pick={d => d.balanceSheet.equity} />
             </tbody>
           </table>
         </div>
@@ -217,12 +274,13 @@ export function StatementsView() {
         <p className="text-xs text-muted-foreground mb-2">Income statement — {overLabel}</p>
         <div className="border rounded-lg overflow-x-auto">
           <table className="w-full text-sm">
+            <thead><PeriodHead kind="over" /></thead>
             <tbody>
-              <Sec s={data.incomeStatement.income} />
-              <Sec s={data.incomeStatement.expenses} />
+              <MultiSec pick={d => d.incomeStatement.income} />
+              <MultiSec pick={d => d.incomeStatement.expenses} />
               <tr className="border-t font-semibold bg-muted/30">
                 <td className="px-3 py-1.5">Net income</td>
-                <td className="px-3 py-1.5 text-right font-mono">{fmt(data.incomeStatement.netIncome)}</td>
+                {cols.map((c, i) => <td key={i} className="px-3 py-1.5 text-right font-mono">{fmt(c.incomeStatement.netIncome)}</td>)}
               </tr>
             </tbody>
           </table>
@@ -241,16 +299,21 @@ export function StatementsView() {
           <p className="text-xs text-muted-foreground mb-2">{overLabel}</p>
           <div className="border rounded-lg overflow-x-auto">
             <table className="w-full text-sm">
+              <thead><PeriodHead kind="over" /></thead>
               <tbody>
-                <CFSec sec={data.cashFlows.operating} />
-                <CFSec sec={data.cashFlows.financing} />
+                <MultiSec pick={cfAsSection(cf => cf.operating)} />
+                <MultiSec pick={cfAsSection(cf => cf.financing)} />
                 <tr className="border-t font-semibold bg-muted/30">
                   <td className="px-3 py-1.5">Net change in cash</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{fmt(data.cashFlows.netChange)}</td>
+                  {cols.map((c, i) => <td key={i} className="px-3 py-1.5 text-right font-mono">{fmtCell(c.cashFlows?.netChange)}</td>)}
+                </tr>
+                <tr className="border-t">
+                  <td className="px-3 py-1.5 text-muted-foreground">Opening cash</td>
+                  {cols.map((c, i) => <td key={i} className="px-3 py-1.5 text-right font-mono">{fmtCell(c.cashFlows?.openingCash)}</td>)}
                 </tr>
                 <tr className="border-t">
                   <td className="px-3 py-1.5 text-muted-foreground">Ending cash</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{fmt(data.cashFlows.endingCash)}</td>
+                  {cols.map((c, i) => <td key={i} className="px-3 py-1.5 text-right font-mono">{fmtCell(c.cashFlows?.endingCash)}</td>)}
                 </tr>
               </tbody>
             </table>
