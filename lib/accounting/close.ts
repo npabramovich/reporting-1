@@ -426,7 +426,18 @@ export async function previewCloseThrough(
 
   const start = await nextCloseStart(admin, fundId, group)
   if (!start) return { error: 'Nothing to close — the ledger has no posted entries' }
-  if (start > endDate) return { error: `Already closed through ${start} — pick a later date` }
+  if (start > endDate) {
+    // `start` is where the next close BEGINS. If a period is actually closed, say so;
+    // otherwise the ledger simply has no POSTED entry before `start` — the message must
+    // not claim a close that never happened (a vehicle can have years of DRAFT entries
+    // before its first posted one). Post those drafts to bring them into scope.
+    const closed = await closedPeriodRanges(admin, fundId, group)
+    if (closed.length > 0) {
+      const lastClosed = closed.map(p => p.period_end).sort().pop()!
+      return { error: `Already closed through ${lastClosed} — pick a later date.` }
+    }
+    return { error: `Closing starts at ${start} (the first posted entry) — pick ${start} or later. Anything dated earlier is still a draft; post those entries first to include them.` }
+  }
 
   const windows = monthWindows(start, endDate)
 
