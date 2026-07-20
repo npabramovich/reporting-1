@@ -11,6 +11,7 @@ import { persistEntry } from '@/lib/accounting/persist'
 import { assertBalanced } from '@/lib/accounting/ledger'
 import { closedPeriodRanges, dateInAnyClosedPeriod } from '@/lib/accounting/periods'
 import { fundCurrency } from '@/lib/accounting/currency'
+import { resolvePeriod, customPeriod, type PeriodPreset } from '@/lib/accounting/statement-period'
 import type { JournalEntry, Posting } from '@/lib/accounting/types'
 
 // GET — the vehicle's journal entries with postings, or a single entry via ?id=.
@@ -38,9 +39,27 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data ?? null)
   }
 
-  const { data, error } = await base.order('entry_date', { ascending: false }).limit(500)
+  // List path: resolve the period window (default YTD), then hand filtering + pagination
+  // to the RPC so search spans account names/amounts across all pages.
+  const sp = req.nextUrl.searchParams
+  const preset = (sp.get('preset') as PeriodPreset | null) ?? 'ytd'
+  const period = preset === 'custom'
+    ? customPeriod(sp.get('start'), sp.get('end'))
+    : resolvePeriod(preset)
+  const limit = Math.min(Math.max(parseInt(sp.get('limit') ?? '50', 10) || 50, 1), 200)
+  const offset = Math.max(parseInt(sp.get('offset') ?? '0', 10) || 0, 0)
+
+  const { data, error } = await admin.rpc('journal_search' as any, {
+    p_fund_id: gate.fundId,
+    p_vehicle_id: vehicleId,
+    p_start: period.start,
+    p_end: period.end,
+    p_query: sp.get('q'),
+    p_limit: limit,
+    p_offset: offset,
+  })
   if (error) return dbError(error, 'accounting-journal')
-  return NextResponse.json(data ?? [])
+  return NextResponse.json(data ?? { entries: [], total: 0 })
 }
 
 // PUT — replace a DRAFT entry's postings (and date/memo). Posted entries are
