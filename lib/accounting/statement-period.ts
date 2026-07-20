@@ -72,3 +72,87 @@ export function customPeriod(start: string | null, end: string | null): Statemen
     label: start && end ? `${start} → ${end}` : end ? `Through ${end}` : start ? `From ${start}` : 'Inception to date',
   }
 }
+
+// --- Comparison stepping -----------------------------------------------------
+
+type PeriodInterval = 'quarter' | 'year' | 'ytd' | 'custom-length' | 'none'
+
+function intervalOf(preset: PeriodPreset): PeriodInterval {
+  switch (preset) {
+    case 'this_quarter':
+    case 'last_quarter': return 'quarter'
+    case 'prior_year': return 'year'
+    case 'ytd': return 'ytd'
+    case 'custom': return 'custom-length'
+    default: return 'none' // itd
+  }
+}
+
+const addMonthsUTC = (isoDate: string, months: number): string => {
+  const d = new Date(isoDate + 'T00:00:00Z')
+  d.setUTCMonth(d.getUTCMonth() + months)
+  return d.toISOString().slice(0, 10)
+}
+const addDaysUTC = (isoDate: string, days: number): string => {
+  const d = new Date(isoDate + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+const daysInclusive = (start: string, end: string): number => {
+  const a = new Date(start + 'T00:00:00Z').getTime()
+  const b = new Date(end + 'T00:00:00Z').getTime()
+  return Math.round((b - a) / 86_400_000) + 1
+}
+const yearOf = (isoDate: string) => Number(isoDate.slice(0, 4))
+const quarterLabel = (start: string) => {
+  const month = Number(start.slice(5, 7)) - 1
+  return `Q${Math.floor(month / 3) + 1} ${yearOf(start)}`
+}
+
+/** The window `k` intervals before `base` (k≥1), or null if base can't be stepped. */
+function priorPeriod(base: StatementPeriod, k: number): StatementPeriod | null {
+  const kind = intervalOf(base.preset)
+  if (!base.start || !base.end) return null
+  if (kind === 'quarter') {
+    const start = addMonthsUTC(base.start, -3 * k)
+    const end = addDaysUTC(addMonthsUTC(start, 3), -1)
+    return { preset: base.preset, start, end, label: quarterLabel(start) }
+  }
+  if (kind === 'year') {
+    const start = addMonthsUTC(base.start, -12 * k)
+    const end = addDaysUTC(addMonthsUTC(start, 12), -1)
+    return { preset: base.preset, start, end, label: `FY ${yearOf(start)}` }
+  }
+  if (kind === 'ytd') {
+    const start = addMonthsUTC(base.start, -12 * k)
+    const end = addMonthsUTC(base.end, -12 * k)
+    return { preset: base.preset, start, end, label: `YTD ${yearOf(start)}` }
+  }
+  if (kind === 'custom-length') {
+    const len = daysInclusive(base.start, base.end)
+    const start = addDaysUTC(base.start, -(len - 1) * k)
+    const end = addDaysUTC(base.end, -len * k)
+    return { preset: 'custom', start, end, label: `${start} → ${end}` }
+  }
+  return null // 'none' (itd)
+}
+
+/**
+ * Up to `count` prior windows of the same shape as `base`, most-recent-first.
+ * Stops once a window ends before `earliest` (the fund's first posting) — that
+ * data bound is what "as many periods as exist" means. `count` may be Infinity.
+ */
+export function comparisonPeriods(
+  base: StatementPeriod,
+  count: number,
+  earliest: string | null,
+): StatementPeriod[] {
+  if (count <= 0 || !earliest || intervalOf(base.preset) === 'none') return []
+  const out: StatementPeriod[] = []
+  for (let k = 1; k <= count && out.length < 200; k++) {
+    const p = priorPeriod(base, k)
+    if (!p || !p.end || p.end < earliest) break
+    out.push(p)
+  }
+  return out
+}
