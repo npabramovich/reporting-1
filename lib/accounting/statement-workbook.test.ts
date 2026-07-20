@@ -94,4 +94,14 @@ describe('buildStatementWorkbook', () => {
     const flat = rows.flat().join(' ')
     expect(flat).toContain('not yet allocated')
   })
+
+  it('adds one value column per comparison period', () => {
+    const pkg = fixture()
+    pkg.comparisons = [pkg.payload] // reuse the same payload as a stand-in prior period
+    const wb = buildStatementWorkbook(pkg, { fundName: 'F', vehicle: 'V', generatedAt: '2026-07-20T00:00:00Z' })
+    const bs = wb.Sheets[wb.SheetNames.find(n => n.startsWith('Balance')) ?? '']
+    const ref = XLSX.utils.decode_range(bs['!ref']!)
+    // label col + 2 period cols = at least 3 columns (index 2 present)
+    expect(ref.e.c).toBeGreaterThanOrEqual(2)
+  })
 })

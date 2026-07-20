@@ -7,7 +7,7 @@
 // sum and pivot them, not re-key them.
 
 import * as XLSX from 'xlsx'
-import type { StatementPackage } from './statement-package'
+import type { StatementPackage, StatementPayload } from './statement-package'
 import type { SourcedPosting } from './load'
 import type { Account } from './types'
 import { ACTIVITY_FIELDS, type CapitalAccount } from './capital-account'
@@ -103,6 +103,30 @@ function sectionRows(s: Section): Row[] {
   return out
 }
 
+/**
+ * Multi-period version of `sectionRows`: unions rows by `code||name` across every
+ * payload (so a line present in only one period still shows, blank elsewhere) and
+ * emits one money column per payload. Payloads must be pre-aligned — [primary, ...comparisons].
+ */
+function sectionRowsMulti(pick: (p: StatementPayload) => Section, payloads: StatementPayload[]): Row[] {
+  const keys: { code: string; name: string; key: string }[] = []
+  const seen = new Set<string>()
+  for (const p of payloads) for (const r of pick(p).rows) {
+    const key = r.code || r.name
+    if (!seen.has(key)) { seen.add(key); keys.push({ code: r.code, name: r.name, key }) }
+  }
+  const label = pick(payloads[0]).label
+  const out: Row[] = []
+  if (keys.length > 0) out.push([label])
+  for (const k of keys) {
+    const amt = (p: StatementPayload) => pick(p).rows.find(r => (r.code || r.name) === k.key)?.amount
+    out.push([k.code, k.name, ...payloads.map(p => { const a = amt(p); return a === undefined ? '' : money(a) })])
+  }
+  out.push([`Total ${label}`, '', ...payloads.map(p => money(pick(p).total))])
+  out.push([])
+  return out
+}
+
 function trialBalanceSheet(pkg: StatementPackage): XLSX.WorkSheet {
   const tb = pkg.payload.trialBalance
   const rows: Row[] = [['Code', 'Account', 'Type', 'Debit', 'Credit']]
@@ -111,23 +135,26 @@ function trialBalanceSheet(pkg: StatementPackage): XLSX.WorkSheet {
   return sheet(rows, [10, 34, 12, 16, 16])
 }
 
-function balanceSheetSheet(pkg: StatementPackage): XLSX.WorkSheet {
-  const bs = pkg.payload.balanceSheet
-  const rows: Row[] = [['Statement of assets, liabilities and partners’ capital'], []]
-  rows.push(...sectionRows(bs.assets))
-  rows.push(...sectionRows(bs.liabilities))
-  // Partners' capital is a single total line — per-partner detail is its own sheet.
-  rows.push(['Partners’ capital', '', money(bs.equity.total)], [])
-  return sheet(rows, [10, 34, 16])
+/** Header row of period labels, aligned under the money columns (after code+name). */
+function periodHeader(payloads: StatementPayload[]): Row {
+  return ['', '', ...payloads.map(p => p.period.label)]
 }
 
-function incomeStatementSheet(pkg: StatementPackage): XLSX.WorkSheet {
-  const is = pkg.payload.incomeStatement
-  const rows: Row[] = [['Statement of operations'], []]
-  rows.push(...sectionRows(is.income))
-  rows.push(...sectionRows(is.expenses))
-  rows.push(['Net income', '', money(is.netIncome)])
-  return sheet(rows, [10, 34, 16])
+function balanceSheetSheet(payloads: StatementPayload[]): XLSX.WorkSheet {
+  const rows: Row[] = [['Statement of assets, liabilities and partners’ capital'], [], periodHeader(payloads)]
+  rows.push(...sectionRowsMulti(p => p.balanceSheet.assets, payloads))
+  rows.push(...sectionRowsMulti(p => p.balanceSheet.liabilities, payloads))
+  // Partners' capital is a single total line — per-partner detail is its own sheet.
+  rows.push(['Partners’ capital', '', ...payloads.map(p => money(p.balanceSheet.equity.total))], [])
+  return sheet(rows, [10, 34, ...payloads.map(() => 16)])
+}
+
+function incomeStatementSheet(payloads: StatementPayload[]): XLSX.WorkSheet {
+  const rows: Row[] = [['Statement of operations'], [], periodHeader(payloads)]
+  rows.push(...sectionRowsMulti(p => p.incomeStatement.income, payloads))
+  rows.push(...sectionRowsMulti(p => p.incomeStatement.expenses, payloads))
+  rows.push(['Net income', '', ...payloads.map(p => money(p.incomeStatement.netIncome))])
+  return sheet(rows, [10, 34, ...payloads.map(() => 16)])
 }
 
 const CAP_FIELDS: (keyof CapitalAccount)[] = ['beginning', ...ACTIVITY_FIELDS, 'ending']
@@ -139,13 +166,32 @@ const CAP_LABELS: Record<string, string> = {
   unclassified: 'Unclassified', ending: 'Ending',
 }
 
-function capitalSheet(pkg: StatementPackage): XLSX.WorkSheet {
-  const c = pkg.payload.changesInPartnersCapital
-  const header: Row = ['Partner', ...CAP_FIELDS.map(f => CAP_LABELS[f] ?? f)]
+function capitalSheet(payloads: StatementPayload[]): XLSX.WorkSheet {
+  if (payloads.length === 1) {
+    const c = payloads[0].changesInPartnersCapital
+    const header: Row = ['Partner', ...CAP_FIELDS.map(f => CAP_LABELS[f] ?? f)]
+    const rows: Row[] = [['Statement of changes in partners’ capital'], [], header]
+    for (const p of c.partners) rows.push([p.name, ...CAP_FIELDS.map(f => money(p[f] as number))])
+    rows.push(['Total', ...CAP_FIELDS.map(f => money(c.totals[f] as number))])
+    return sheet(rows, [28, ...CAP_FIELDS.map(() => 16)])
+  }
+  // Multi-period: detail collapses to a partner × period ending-capital matrix — the
+  // per-source roll-forward columns don't compose across periods the way ending balances do.
+  const names: string[] = []
+  const seen = new Set<string>()
+  for (const p of payloads) for (const partner of p.changesInPartnersCapital.partners) {
+    if (!seen.has(partner.name)) { seen.add(partner.name); names.push(partner.name) }
+  }
+  const header: Row = ['Partner', ...payloads.map(p => p.period.label)]
   const rows: Row[] = [['Statement of changes in partners’ capital'], [], header]
-  for (const p of c.partners) rows.push([p.name, ...CAP_FIELDS.map(f => money(p[f] as number))])
-  rows.push(['Total', ...CAP_FIELDS.map(f => money(c.totals[f] as number))])
-  return sheet(rows, [28, ...CAP_FIELDS.map(() => 16)])
+  for (const name of names) {
+    rows.push([name, ...payloads.map(p => {
+      const partner = p.changesInPartnersCapital.partners.find(pp => pp.name === name)
+      return partner ? money(partner.ending) : ''
+    })])
+  }
+  rows.push(['Total', ...payloads.map(p => money(p.changesInPartnersCapital.totals.ending))])
+  return sheet(rows, [28, ...payloads.map(() => 16)])
 }
 
 function soiSheet(pkg: StatementPackage): XLSX.WorkSheet {
@@ -171,26 +217,31 @@ function soiSheet(pkg: StatementPackage): XLSX.WorkSheet {
   return sheet(rows, [30, 18, 14, 16, 16, 16])
 }
 
-function cashFlowSheet(pkg: StatementPackage): XLSX.WorkSheet {
-  const cf = pkg.payload.cashFlows
-  if (!cf) return sheet([['Statement of cash flows'], [], ['No cash account on this vehicle.']], [30, 16])
-  const rows: Row[] = [['Statement of cash flows'], []]
-  const sec = (label: string, lines: { code: string; name: string; amount: number }[], total: number) => {
-    rows.push([label])
-    for (const l of lines) rows.push([l.code, l.name, money(l.amount)])
-    rows.push([`Total ${label}`, '', money(total)], [])
-  }
-  sec(cf.operating.label, cf.operating.lines, cf.operating.total)
-  sec(cf.financing.label, cf.financing.lines, cf.financing.total)
-  rows.push(['Net change in cash', '', money(cf.netChange)])
-  rows.push(['Opening cash', '', money(cf.openingCash)])
-  rows.push(['Ending cash', '', money(cf.endingCash)])
-  if (cf.nonCash.length > 0) {
+/** Adapts one cash-flow section (operating/financing — `lines`, not `rows`) to the shared `Section` shape. */
+function cfSection(cf: NonNullable<StatementPayload['cashFlows']>, which: 'operating' | 'financing'): Section {
+  const s = cf[which]
+  return { label: s.label, rows: s.lines, total: s.total }
+}
+
+function cashFlowSheet(payloads: StatementPayload[]): XLSX.WorkSheet {
+  const primary = payloads[0]
+  if (!primary.cashFlows) return sheet([['Statement of cash flows'], [], ['No cash account on this vehicle.']], [30, 16])
+  // Comparison periods on a vehicle without a cash account (shouldn't happen in practice,
+  // since the cash account is a vehicle property) are dropped rather than breaking column alignment.
+  const withCf = payloads.filter((p): p is StatementPayload & { cashFlows: NonNullable<StatementPayload['cashFlows']> } => !!p.cashFlows)
+  const rows: Row[] = [['Statement of cash flows'], [], periodHeader(withCf)]
+  rows.push(...sectionRowsMulti(p => cfSection(p.cashFlows!, 'operating'), withCf))
+  rows.push(...sectionRowsMulti(p => cfSection(p.cashFlows!, 'financing'), withCf))
+  rows.push(['Net change in cash', '', ...withCf.map(p => money(p.cashFlows!.netChange))])
+  rows.push(['Opening cash', '', ...withCf.map(p => money(p.cashFlows!.openingCash))])
+  rows.push(['Ending cash', '', ...withCf.map(p => money(p.cashFlows!.endingCash))])
+  // Non-cash supplemental disclosure is a narrative list, not a comparable figure — primary period only.
+  if (primary.cashFlows.nonCash.length > 0) {
     rows.push([], ['Supplemental — non-cash investing and financing activities'])
     rows.push(['Date', 'Description', 'Amount'])
-    for (const n of cf.nonCash) rows.push([n.date ?? '', n.description, money(n.amount)])
+    for (const n of primary.cashFlows.nonCash) rows.push([n.date ?? '', n.description, money(n.amount)])
   }
-  return sheet(rows, [12, 34, 16])
+  return sheet(rows, [12, 34, ...withCf.map(() => 16)])
 }
 
 function glDetailSheet(accounts: Account[], inPeriod: SourcedPosting[]): XLSX.WorkSheet {
@@ -230,14 +281,17 @@ function glDetailSheet(accounts: Account[], inPeriod: SourcedPosting[]): XLSX.Wo
 
 /** Build the full workpaper workbook from a computed package. */
 export function buildStatementWorkbook(pkg: StatementPackage, meta: WorkbookMeta): XLSX.WorkBook {
+  // [primary, ...comparisons] — the columnized sheets get one money column per payload.
+  // With no ?compare= this is a single-element array and every sheet keeps today's shape.
+  const payloads: StatementPayload[] = [pkg.payload, ...(pkg.comparisons ?? [])]
   const wb = XLSX.utils.book_new()
   append(wb, 'Cover', coverSheet(pkg, meta))
   append(wb, 'Trial Balance', trialBalanceSheet(pkg))
-  append(wb, 'Balance Sheet', balanceSheetSheet(pkg))
-  append(wb, 'Income Statement', incomeStatementSheet(pkg))
-  append(wb, 'Partners Capital', capitalSheet(pkg))
+  append(wb, 'Balance Sheet', balanceSheetSheet(payloads))
+  append(wb, 'Income Statement', incomeStatementSheet(payloads))
+  append(wb, 'Partners Capital', capitalSheet(payloads))
   append(wb, 'Schedule of Investments', soiSheet(pkg))
-  append(wb, 'Cash Flows', cashFlowSheet(pkg))
+  append(wb, 'Cash Flows', cashFlowSheet(payloads))
   append(wb, 'GL Detail', glDetailSheet(pkg.accounts, pkg.inPeriodSourced))
   return wb
 }
