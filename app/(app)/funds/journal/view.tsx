@@ -74,23 +74,25 @@ export function JournalView() {
     setPosting(true)
     setPostMsg(null)
     let totalPosted = 0
-    const skippedAll: { id: string; reason: string }[] = []
+    const skipIds = new Set<string>()
     let failed = false
-    const step = (iter: number): Promise<void> => {
-      if (iter >= 50) return Promise.resolve()
-      return lf('/api/accounting/journal/bulk-post', { method: 'POST', body: JSON.stringify({}) })
-        .then(r => (r.ok ? r.json() : { posted: 0, skipped: [], remaining: 0 }))
+    // Keyset loop: page by the cursor the server returns (afterId), and dedup skips by id so
+    // a stuck entry counts once no matter how many pages it survives.
+    const step = (afterId: string | null, iter: number): Promise<void> => {
+      if (iter >= 200) return Promise.resolve()
+      return lf('/api/accounting/journal/bulk-post', { method: 'POST', body: JSON.stringify(afterId ? { afterId } : {}) })
+        .then(r => (r.ok ? r.json() : { posted: 0, skipped: [], hasMore: false, cursor: null }))
         .then(d => {
           totalPosted += d.posted ?? 0
-          if (Array.isArray(d.skipped)) skippedAll.push(...d.skipped)
-          if ((d.remaining ?? 0) > 0) return step(iter + 1)
+          if (Array.isArray(d.skipped)) for (const s of d.skipped) skipIds.add(s.id)
+          if (d.hasMore && d.cursor) return step(d.cursor, iter + 1)
         })
         .catch(() => { failed = true })
     }
-    step(0).finally(() => {
+    step(null, 0).finally(() => {
       setPostMsg(failed
         ? 'Could not post draft entries.'
-        : `Posted ${totalPosted} entries.${skippedAll.length ? ` ${skippedAll.length} skipped (closed period or out of balance).` : ''}`)
+        : `Posted ${totalPosted} entries.${skipIds.size ? ` ${skipIds.size} skipped (closed period or out of balance).` : ''}`)
       setPosting(false)
       loadPage()
     })
