@@ -6,18 +6,25 @@ import { dbError } from '@/lib/api-error'
 // grant for this route + method; this resolves identity and keeps the demo out of writes.
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
-import { loadCommitmentEvents, recordCommitmentChange, savePartnerTerm } from '@/lib/accounting/terms'
+import { loadCommitmentEvents, recordCommitmentChange, savePartnerTerm, loadPartnerTerms } from '@/lib/accounting/terms'
 
 // A GP entity does not bear the management fee or carried interest; an LP entity bears both.
 // Sets BOTH directions (not just gp->disable) so a gp->lp class switch re-enables participation —
 // the original create-path block only ever disabled, since a partner's class never changed there.
 async function applyPartnerClassTerms(admin: ReturnType<typeof createAdminClient>, fundId: string, group: string, entityId: string, partnerClass: 'gp' | 'lp') {
   const participates = partnerClass === 'lp'
+  // A class switch changes ONLY participation — preserve any negotiated weight/rate overrides
+  // (a read-modify-write), otherwise flipping GP<->LP would silently null out a partner's
+  // custom management-fee rate or carry weight.
+  const existing = await loadPartnerTerms(admin, fundId, group)
   for (const category of ['management_fee', 'carried_interest'] as const) {
+    const prev = existing.find(t => t.lpEntityId === entityId && t.category === category)
     await savePartnerTerm(admin, fundId, group, {
       lpEntityId: entityId,
       category,
       participates,
+      weightOverride: prev?.weightOverride ?? null,
+      rateOverride: prev?.rateOverride ?? null,
       memo: `${partnerClass.toUpperCase()} entity — set on class change`,
     })
   }

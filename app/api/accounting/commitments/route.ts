@@ -144,7 +144,8 @@ export async function PATCH(req: NextRequest) {
     const amt = Number(body.amount)
     if (!Number.isFinite(amt) || amt === 0) return NextResponse.json({ error: 'Amount must be a non-zero number' }, { status: 400 })
     update.amount = amt
-    update.kind = amt > 0 ? 'increase' : 'decrease'
+    // Preserve an 'initial' marker; only a plain increase/decrease flips with the sign.
+    update.kind = row.kind === 'initial' ? 'initial' : amt > 0 ? 'increase' : 'decrease'
   }
   if (Object.keys(update).length > 0) {
     const { error } = await admin
