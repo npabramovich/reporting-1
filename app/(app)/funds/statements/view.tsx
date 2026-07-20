@@ -358,36 +358,71 @@ export function StatementsView() {
           {overLabel} — beginning capital is the balance carried into the period; this is the detail behind the
           single partners&rsquo; capital line on the balance sheet
         </p>
-        <div className="border rounded-lg overflow-x-auto">
-          <table className="w-full text-sm whitespace-nowrap">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left px-3 py-2 font-medium">Partner</th>
-                {CAP_COLS.map(c => <th key={c.key} className="text-right px-3 py-2 font-medium">{c.label}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {data.changesInPartnersCapital.partners.map(p => (
-                <tr key={p.id} className="border-b last:border-b-0 hover:bg-muted/30">
-                  {/* p.id is the lpEntityId — link through to that partner's capital
-                      account. The synthetic GP row has no entity to link to. */}
-                  <td className="px-3 py-2">
-                    {p.id === 'gp'
-                      ? p.name
-                      : <Link href={fundSeg ? `/funds/${fundSeg}/capital-accounts/${p.id}` : '/funds'} className="hover:underline">{p.name}</Link>}
-                  </td>
-                  {CAP_COLS.map(c => <td key={c.key} className={`px-3 py-2 text-right font-mono ${c.key === 'ending' ? 'font-semibold' : ''}`}>{fmt(p[c.key] as number)}</td>)}
+        {cols.length > 1 ? (() => {
+          // Union partners across periods by name; value = that period's ending capital.
+          const names: string[] = []
+          const seen = new Set<string>()
+          for (const c of cols) for (const p of c.changesInPartnersCapital.partners) {
+            if (!seen.has(p.name)) { seen.add(p.name); names.push(p.name) }
+          }
+          const endingFor = (c: Omit<Data, 'comparisons'>, name: string) =>
+            c.changesInPartnersCapital.partners.find(p => p.name === name)?.ending
+          return (
+            <div className="border rounded-lg overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left px-3 py-2 font-medium">Partner</th>
+                    {cols.map((c, i) => <th key={i} className="text-right px-3 py-2 font-medium whitespace-nowrap">{c.period.label}<div className="text-[10px] font-normal text-muted-foreground">ending capital{c.period.end ? ` · ${c.period.end}` : ''}</div></th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {names.map(name => (
+                    <tr key={name} className="border-t">
+                      <td className="px-3 py-1.5 text-muted-foreground">{name}</td>
+                      {cols.map((c, i) => <td key={i} className="px-3 py-1.5 text-right font-mono">{fmtCell(endingFor(c, name))}</td>)}
+                    </tr>
+                  ))}
+                  <tr className="border-t font-semibold">
+                    <td className="px-3 py-1.5">Total</td>
+                    {cols.map((c, i) => <td key={i} className="px-3 py-1.5 text-right font-mono">{fmt(c.changesInPartnersCapital.totals.ending)}</td>)}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )
+        })() : (
+          <div className="border rounded-lg overflow-x-auto">
+            <table className="w-full text-sm whitespace-nowrap">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left px-3 py-2 font-medium">Partner</th>
+                  {CAP_COLS.map(c => <th key={c.key} className="text-right px-3 py-2 font-medium">{c.label}</th>)}
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t bg-muted/30 font-semibold">
-                <td className="px-3 py-2">Total</td>
-                {CAP_COLS.map(c => <td key={c.key} className="px-3 py-2 text-right font-mono">{fmt(data.changesInPartnersCapital.totals[c.key] as number)}</td>)}
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {data.changesInPartnersCapital.partners.map(p => (
+                  <tr key={p.id} className="border-b last:border-b-0 hover:bg-muted/30">
+                    {/* p.id is the lpEntityId — link through to that partner's capital
+                        account. The synthetic GP row has no entity to link to. */}
+                    <td className="px-3 py-2">
+                      {p.id === 'gp'
+                        ? p.name
+                        : <Link href={fundSeg ? `/funds/${fundSeg}/capital-accounts/${p.id}` : '/funds'} className="hover:underline">{p.name}</Link>}
+                    </td>
+                    {CAP_COLS.map(c => <td key={c.key} className={`px-3 py-2 text-right font-mono ${c.key === 'ending' ? 'font-semibold' : ''}`}>{fmt(p[c.key] as number)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t bg-muted/30 font-semibold">
+                  <td className="px-3 py-2">Total</td>
+                  {CAP_COLS.map(c => <td key={c.key} className="px-3 py-2 text-right font-mono">{fmt(data.changesInPartnersCapital.totals[c.key] as number)}</td>)}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
       </section>
     </div>
       )}
