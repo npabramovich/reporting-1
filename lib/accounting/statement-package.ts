@@ -17,7 +17,7 @@ import {
 import { loadPostedLedger, loadEntityNames, type SourcedPosting } from './load'
 import { buildSoiPositions, type SoiCompany } from './soi'
 import { computeCapitalAccounts, totalNav } from './capital-account'
-import { resolvePeriod, customPeriod, type PeriodPreset, type StatementPeriod } from './statement-period'
+import { resolvePeriod, customPeriod, comparisonPeriods, type PeriodPreset, type StatementPeriod } from './statement-period'
 import { accountBalances, normalBalance } from './ledger'
 import type { Account } from './types'
 
@@ -41,6 +41,87 @@ export interface StatementPackage {
   accounts: Account[]
   /** Postings within the period window, entry-tagged — the GL-detail rows. */
   inPeriodSourced: SourcedPosting[]
+  /** Prior-period payloads, most-recent-first, present only when ?compare= was passed. */
+  comparisons?: StatementPayload[]
+}
+
+export interface LedgerData {
+  accounts: Account[]
+  postings: Awaited<ReturnType<typeof loadPostedLedger>>['postings']
+  capitalPostings: Awaited<ReturnType<typeof loadPostedLedger>>['capitalPostings']
+  sourcedPostings: SourcedPosting[]
+  names: Awaited<ReturnType<typeof loadEntityNames>>
+  txns: any[]
+  companies: any[]
+  group: string
+  cashAccount: Account | undefined
+  gpAccount: Account | undefined
+  /** Min entryDate across postings — the inception bound for comparison stepping. */
+  earliest: string | null
+}
+
+/** Min entryDate across postings, ignoring nulls. */
+export function earliestPostingDate(postings: { entryDate?: string | null }[]): string | null {
+  let min: string | null = null
+  for (const p of postings) {
+    const d = p.entryDate
+    if (d && (min === null || d < min)) min = d
+  }
+  return min
+}
+
+/** One DB load, reused across every period window. */
+export async function loadLedgerData(admin: SupabaseClient, fundId: string, group: string): Promise<LedgerData> {
+  const [{ accounts, postings, capitalPostings, sourcedPostings }, names, { data: txns }, { data: companies }] = await Promise.all([
+    loadPostedLedger(admin, fundId, group),
+    loadEntityNames(admin, fundId, group),
+    admin.from('investment_transactions' as any).select('*').eq('fund_id', fundId).order('transaction_date', { ascending: true }),
+    admin.from('companies' as any).select('*').eq('fund_id', fundId),
+  ])
+  return {
+    accounts, postings, capitalPostings, sourcedPostings, names,
+    txns: (txns as any[]) ?? [],
+    companies: (companies as any[]) ?? [],
+    group,
+    cashAccount: accounts.find(a => a.code === '1000'),
+    gpAccount: accounts.find(a => a.code === '3000'),
+    earliest: earliestPostingDate(postings),
+  }
+}
+
+/** The per-window statement math — pure over already-loaded ledger data. */
+export function computePayload(data: LedgerData, period: StatementPeriod): StatementPayload {
+  const cumulative = postingsAsOf(data.postings, period.end)
+  const inPeriod = postingsInPeriod(data.postings, period.start, period.end)
+  const inPeriodSourced = postingsInPeriod(data.sourcedPostings, period.start, period.end)
+
+  const capitalAccounts = computeCapitalAccounts(data.capitalPostings, period)
+  const itdCapitalAccounts = computeCapitalAccounts(data.capitalPostings, { end: period.end })
+  const nav = totalNav(itdCapitalAccounts)
+
+  const positions = buildSoiPositions(
+    data.txns, data.companies as SoiCompany[], data.group,
+    period.end ? new Date(period.end) : undefined,
+  )
+
+  const bal = accountBalances(cumulative)
+  const gpEnding = data.gpAccount ? normalBalance(data.gpAccount, bal.get(data.gpAccount.id) ?? 0) : 0
+
+  return {
+    period,
+    asOf: period.end,
+    trialBalance: trialBalance(data.accounts, cumulative),
+    balanceSheet: balanceSheet(data.accounts, cumulative),
+    incomeStatement: incomeStatement(data.accounts, inPeriod),
+    scheduleOfInvestments: scheduleOfInvestments(data.accounts, cumulative, nav, positions),
+    changesInPartnersCapital: changesInPartnersCapital(capitalAccounts, data.names, gpEnding),
+    cashFlows: data.cashAccount
+      ? statementOfCashFlows(
+          data.cashAccount.id, inPeriodSourced, data.accounts,
+          openingCashBalance(data.cashAccount.id, data.sourcedPostings, period.start),
+        )
+      : null,
+  }
 }
 
 /**
@@ -55,61 +136,24 @@ export async function buildStatementPackage(
   group: string,
   sp: URLSearchParams,
 ): Promise<StatementPackage> {
+  const data = await loadLedgerData(admin, fundId, group)
+
   const preset = sp.get('preset') as PeriodPreset | null
   const asOf = sp.get('asOf')
+  const asOfDate = asOf ? new Date(asOf) : undefined
   const period = preset && preset !== 'custom'
-    ? resolvePeriod(preset)
+    ? resolvePeriod(preset, asOfDate)
     : customPeriod(sp.get('start'), sp.get('end') ?? asOf)
 
-  // Load the WHOLE ledger (no date cutoff): the period statements need pre-period
-  // history to compute beginning capital and opening cash.
-  const [{ accounts, postings, capitalPostings, sourcedPostings }, names, { data: txns }, { data: companies }] = await Promise.all([
-    loadPostedLedger(admin, fundId, group),
-    loadEntityNames(admin, fundId, group),
-    admin.from('investment_transactions' as any).select('*').eq('fund_id', fundId).order('transaction_date', { ascending: true }),
-    admin.from('companies' as any).select('*').eq('fund_id', fundId),
-  ])
+  const payload = computePayload(data, period)
+  const inPeriodSourced = postingsInPeriod(data.sourcedPostings, period.start, period.end)
 
-  // Point-in-time: everything through the period end. Over-time: only the window.
-  const cumulative = postingsAsOf(postings, period.end)
-  const inPeriod = postingsInPeriod(postings, period.start, period.end)
-  // Entry-tagged postings within the window — feeds both the cash-flow statement
-  // and the GL-detail supporting schedule in the export.
-  const inPeriodSourced = postingsInPeriod(sourcedPostings, period.start, period.end)
-
-  const capitalAccounts = computeCapitalAccounts(capitalPostings, period)
-  const itdCapitalAccounts = computeCapitalAccounts(capitalPostings, { end: period.end })
-  const nav = totalNav(itdCapitalAccounts)
-
-  const positions = buildSoiPositions(
-    (txns as any[]) ?? [],
-    ((companies as any[]) ?? []) as SoiCompany[],
-    group,
-    period.end ? new Date(period.end) : undefined,
-  )
-
-  const bal = accountBalances(cumulative)
-  const gpAccount = accounts.find(a => a.code === '3000')
-  const gpEnding = gpAccount ? normalBalance(gpAccount, bal.get(gpAccount.id) ?? 0) : 0
-  const cashAccount = accounts.find(a => a.code === '1000')
-
-  const payload: StatementPayload = {
-    period,
-    asOf: period.end,
-    trialBalance: trialBalance(accounts, cumulative),
-    balanceSheet: balanceSheet(accounts, cumulative),
-    incomeStatement: incomeStatement(accounts, inPeriod),
-    scheduleOfInvestments: scheduleOfInvestments(accounts, cumulative, nav, positions),
-    changesInPartnersCapital: changesInPartnersCapital(capitalAccounts, names, gpEnding),
-    cashFlows: cashAccount
-      ? statementOfCashFlows(
-          cashAccount.id,
-          inPeriodSourced,
-          accounts,
-          openingCashBalance(cashAccount.id, sourcedPostings, period.start),
-        )
-      : null,
+  const compareParam = sp.get('compare')
+  let comparisons: StatementPayload[] | undefined
+  if (compareParam) {
+    const count = compareParam === 'all' ? Infinity : Math.max(0, parseInt(compareParam, 10) || 0)
+    comparisons = comparisonPeriods(period, count, data.earliest).map(p => computePayload(data, p))
   }
 
-  return { payload, accounts, inPeriodSourced }
+  return { payload, accounts: data.accounts, inPeriodSourced, comparisons }
 }
