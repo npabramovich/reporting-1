@@ -138,7 +138,7 @@ export function EntryModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="w-full max-w-2xl rounded-lg border bg-card shadow-xl" onClick={e => e.stopPropagation()}>
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-lg border bg-card shadow-xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h2 className="text-sm font-medium">{isNew ? 'New journal entry' : editable ? 'Edit journal entry' : 'Journal entry'}</h2>
           <div className="flex items-center gap-2">
@@ -150,7 +150,8 @@ export function EntryModal({
         {loading ? (
           <div className="flex items-center gap-2 p-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>
         ) : (
-          <div className="space-y-3 p-4">
+          <>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
             <div className="flex flex-wrap gap-3">
               <label className="text-xs text-muted-foreground">Date
                 {editable
@@ -238,20 +239,25 @@ export function EntryModal({
               <span className={`text-xs ${diff === 0 ? 'text-muted-foreground' : 'text-amber-600'}`}>{diff === 0 ? 'Balanced' : `Out of balance by ${fmt(Math.abs(diff))}`}</span>
               {error && <span className="text-xs text-destructive">{error}</span>}
             </div>
+            </div>
 
-            {editable ? (
-              <div className="flex justify-end gap-2 pt-1">
-                <Button size="sm" variant="outline" onClick={onClose}>Cancel</Button>
-                <Button size="sm" variant="outline" onClick={() => save(false)} disabled={saving || !balanced}>{saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Save draft</Button>
-                <Button size="sm" onClick={() => save(true)} disabled={saving || !balanced}>Save &amp; post</Button>
-              </div>
-            ) : (
-              <div className="flex justify-end gap-2 pt-1">
-                <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
-                <Button size="sm" variant="outline" onClick={unpostAndEdit} disabled={saving} title="Revert to draft so you can edit it">{saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Unpost &amp; edit</Button>
-              </div>
-            )}
-          </div>
+            {/* Pinned footer — stays visible no matter how many lines the entry has;
+                the lines area above scrolls within the modal's max height. */}
+            <div className="border-t p-4">
+              {editable ? (
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="outline" onClick={onClose}>Cancel</Button>
+                  <Button size="sm" variant="outline" onClick={() => save(false)} disabled={saving || !balanced}>{saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Save draft</Button>
+                  <Button size="sm" onClick={() => save(true)} disabled={saving || !balanced}>Save &amp; post</Button>
+                </div>
+              ) : (
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
+                  <Button size="sm" variant="outline" onClick={unpostAndEdit} disabled={saving} title="Revert to draft so you can edit it">{saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Unpost &amp; edit</Button>
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>
