@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 import { textAccountName } from '@/lib/accounting/text-ledger'
 import type { Account, AccountType } from '@/lib/accounting/types'
+import { PeriodPicker } from '@/components/accounting/period-picker'
+import type { PeriodPreset } from '@/lib/accounting/statement-period'
 import { EntryModal } from '../entry-modal'
 
 interface Posting { id: string; account_id: string; amount: number; currency: string | null; lp_entity_id: string | null }
@@ -26,27 +28,47 @@ const actionBtn = 'shrink-0 rounded border border-input px-2 py-1 font-sans text
 export function JournalView() {
   const lf = useLedgerFetch()
 
+  const PAGE = 50
   const [entries, setEntries] = useState<Entry[]>([])
+  const [total, setTotal] = useState(0)
   const [accounts, setAccounts] = useState<AcctRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [debounced, setDebounced] = useState('')
+  const [preset, setPreset] = useState<PeriodPreset>('ytd')
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
+  const [page, setPage] = useState(0)
   // `{ entryId: null }` = a new entry; readOnly = view a posted one without reverting it.
   const [editing, setEditing] = useState<{ entryId: string | null; readOnly?: boolean } | null>(null)
 
-  const load = useCallback(() => {
-    setLoading(true)
-    Promise.all([
-      lf('/api/accounting/journal').then(r => (r.ok ? r.json() : [])),
-      lf('/api/accounting/chart').then(r => (r.ok ? r.json() : [])),
-    ])
-      .then(([e, c]) => {
-        setEntries(Array.isArray(e) ? e : [])
-        setAccounts(Array.isArray(c) ? c : [])
-      })
-      .finally(() => setLoading(false))
+  // Debounce the search box → server query.
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search.trim()), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Reset to page 0 whenever the filter changes.
+  useEffect(() => { setPage(0) }, [debounced, preset, start, end])
+
+  // Load the chart once (for account-name display).
+  useEffect(() => {
+    lf('/api/accounting/chart').then(r => (r.ok ? r.json() : [])).then(c => setAccounts(Array.isArray(c) ? c : []))
   }, [lf])
-  useEffect(() => { load() }, [load])
+
+  const loadPage = useCallback(() => {
+    setLoading(true)
+    const qs = new URLSearchParams({ preset, limit: String(PAGE), offset: String(page * PAGE) })
+    if (preset === 'custom') { if (start) qs.set('start', start); if (end) qs.set('end', end) }
+    if (debounced) qs.set('q', debounced)
+    lf(`/api/accounting/journal?${qs}`)
+      .then(r => (r.ok ? r.json() : { entries: [], total: 0 }))
+      .then(d => { setEntries(Array.isArray(d.entries) ? d.entries : []); setTotal(d.total ?? 0) })
+      .catch(() => setError('Could not load entries'))
+      .finally(() => setLoading(false))
+  }, [lf, preset, start, end, debounced, page])
+  useEffect(() => { loadPage() }, [loadPage])
 
   // The same names the plain-text ledger uses (Assets:Cash:1000), so an entry reads
   // exactly as it serializes.
@@ -54,39 +76,39 @@ export function JournalView() {
     accounts.map(a => [a.id, textAccountName({ id: a.id, fundId: '', code: a.code, name: a.name, type: a.type as AccountType } as Account)])
   )
 
-  const visible = entries.filter(e => {
-    const q = search.trim().toLowerCase()
-    if (!q) return true
-    return (e.memo ?? '').toLowerCase().includes(q)
-      || (e.source_type ?? '').toLowerCase().includes(q)
-      || e.entry_date.includes(q)
-  })
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" onClick={() => setEditing({ entryId: null })}>
           <Plus className="h-4 w-4 mr-1" />New entry
         </Button>
+        <PeriodPicker
+          preset={preset} onPreset={setPreset}
+          start={start} end={end} onStart={setStart} onEnd={setEnd}
+        />
         <Input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search memo, source, or date…"
+          placeholder="Search memo, source, date, account, or amount…"
           className="h-9 max-w-xs"
         />
-        <span className="text-xs text-muted-foreground">{visible.length} of {entries.length} entries</span>
         {error && <span className="text-xs text-amber-600">{error}</span>}
+        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{total === 0 ? 'No entries' : `Showing ${page * PAGE + 1}–${Math.min((page + 1) * PAGE, total)} of ${total}`}</span>
+          <Button size="sm" variant="outline" disabled={page === 0 || loading} onClick={() => setPage(p => Math.max(0, p - 1))}>Prev</Button>
+          <Button size="sm" variant="outline" disabled={(page + 1) * PAGE >= total || loading} onClick={() => setPage(p => p + 1)}>Next</Button>
+        </div>
       </div>
 
       {loading ? (
         <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>
       ) : entries.length === 0 ? (
         <div className="border border-dashed rounded-lg p-8 text-center text-sm text-muted-foreground">
-          No journal entries yet. Create one above, or import bank transactions and categorize them.
+          {debounced ? 'No entries match your search in this period.' : 'No journal entries in this period. Widen the range, create one above, or import bank transactions.'}
         </div>
       ) : (
         <div className="border rounded-lg divide-y font-mono text-xs">
-          {visible.map(e => {
+          {entries.map(e => {
             const flag = e.status === 'posted' ? '*' : e.status === 'void' ? '#' : '!'
             const narration = (e.memo || e.source_type || 'Entry').replace(/"/g, "'")
             const clickable = e.status !== 'void'
@@ -149,7 +171,7 @@ export function JournalView() {
           entryId={editing.entryId}
           readOnly={editing.readOnly}
           onClose={() => setEditing(null)}
-          onSaved={load}
+          onSaved={loadPage}
         />
       )}
     </div>
