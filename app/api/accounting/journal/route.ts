@@ -48,6 +48,9 @@ export async function GET(req: NextRequest) {
     : resolvePeriod(preset)
   const limit = Math.min(Math.max(parseInt(sp.get('limit') ?? '50', 10) || 50, 1), 200)
   const offset = Math.max(parseInt(sp.get('offset') ?? '0', 10) || 0, 0)
+  // Status filter: draft | posted | void; anything else (incl. 'all') → no filter.
+  const statusParam = sp.get('status')
+  const status = ['draft', 'posted', 'void'].includes(statusParam ?? '') ? statusParam : null
 
   const { data, error } = await admin.rpc('journal_search' as any, {
     p_fund_id: gate.fundId,
@@ -55,6 +58,7 @@ export async function GET(req: NextRequest) {
     p_start: period.start,
     p_end: period.end,
     p_query: sp.get('q'),
+    p_status: status,
     p_limit: limit,
     p_offset: offset,
   })
