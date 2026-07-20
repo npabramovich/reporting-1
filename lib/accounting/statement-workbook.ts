@@ -94,15 +94,6 @@ function coverSheet(pkg: StatementPackage, meta: WorkbookMeta): XLSX.WorkSheet {
 
 interface Section { label: string; rows: { code: string; name: string; amount: number }[]; total: number }
 
-function sectionRows(s: Section): Row[] {
-  const out: Row[] = []
-  if (s.rows.length > 0) out.push([s.label])
-  for (const r of s.rows) out.push([r.code, r.name, money(r.amount)])
-  out.push([`Total ${s.label}`, '', money(s.total)])
-  out.push([])
-  return out
-}
-
 /**
  * Multi-period version of `sectionRows`: unions rows by `code||name` across every
  * payload (so a line present in only one period still shows, blank elsewhere) and

@@ -101,7 +101,7 @@ describe('buildStatementWorkbook', () => {
     const wb = buildStatementWorkbook(pkg, { fundName: 'F', vehicle: 'V', generatedAt: '2026-07-20T00:00:00Z' })
     const bs = wb.Sheets[wb.SheetNames.find(n => n.startsWith('Balance')) ?? '']
     const ref = XLSX.utils.decode_range(bs['!ref']!)
-    // label col + 2 period cols = at least 3 columns (index 2 present)
-    expect(ref.e.c).toBeGreaterThanOrEqual(2)
+    // label col + 2 period cols = at least 3 columns (index 3 required for second value column)
+    expect(ref.e.c).toBeGreaterThanOrEqual(3)
   })
 })
