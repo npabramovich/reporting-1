@@ -7,38 +7,44 @@
 // strings (aliases → canonical) across every vehicle-scoped table, drop strays,
 // and upsert fund_vehicles. Idempotent — safe to re-run.
 
+import { readFileSync } from 'node:fs'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const APPLY = process.argv.includes('--apply')
 const admin: any = createAdminClient()
 
 interface VehicleDef { name: string; kind: 'fund' | 'spv' | 'direct' | 'associate' | 'other'; aliases?: string[] }
+interface FundPlan { vehicles: VehicleDef[]; strays?: { table: string; value: string }[] }
 
-// Explicit registry for the funds that need merges/renames. Any fund not listed
-// here is auto-derived from its existing distinct portfolio_group strings.
-const EXPLICIT: Record<string, { vehicles: VehicleDef[]; strays?: { table: string; value: string }[] }> = {
-  'Ashgrove Capital Group': {
-    vehicles: [
-      { name: 'Ashgrove Capital Group, LP',      kind: 'fund',      aliases: ['Fund I'] },
-      { name: 'Ashgrove Capital Group II, LP',   kind: 'fund',      aliases: ['Fund II'] },
-      { name: 'Ashgrove Capital Group III, LP',  kind: 'fund',      aliases: ['Fund III', 'Ashgrove Capital Group III, L.P.'] },
-      { name: 'Northwind Holdings Fund I',                     kind: 'fund' },
-      { name: 'Northwind Holdings Fund II',                    kind: 'fund' },
-      { name: 'Tern SPV LP',                kind: 'spv',       aliases: ['Tern SPV'] },
-      { name: 'Ledgerline SPV LP',                 kind: 'spv' },
-      { name: 'Ledgerline SPV II LP',              kind: 'spv' },
-      { name: 'Proteus Collection, LP',         kind: 'spv' },
-      { name: 'Alice',                          kind: 'spv' },
-      { name: 'Copperline Direct',                    kind: 'direct' },
-      { name: 'Fernway (Direct)',             kind: 'direct' },
-      { name: 'Ashgrove Associates LLC',         kind: 'associate' },
-      { name: 'Ashgrove Associates II LLC',      kind: 'associate' },
-      { name: 'Ashgrove Associates III LLC',     kind: 'associate', aliases: ['Ashgrove Associates III, LLC'] },
-      { name: 'Tern SPV Associates LLC',    kind: 'associate' },
-    ],
-    strays: [{ table: 'fund_group_config', value: 'SPV' }],
-  },
+// Funds needing merges/renames are described in a LOCAL, git-ignored file — a real vehicle
+// registry names the firm, its funds and every SPV it holds, which is not something to commit.
+// Without the file every fund is auto-derived from its existing distinct portfolio_group
+// strings (no aliasing, no stray-dropping), which is the correct default for a fresh install.
+//
+//   scripts/vehicle-registry.local.json
+//   {
+//     "<fund name as stored in funds.name>": {
+//       "vehicles": [
+//         { "name": "<canonical vehicle>", "kind": "fund", "aliases": ["<legacy group string>"] }
+//       ],
+//       "strays": [{ "table": "fund_group_config", "value": "<group string to delete>" }]
+//     }
+//   }
+const REGISTRY_PATH = new URL('./vehicle-registry.local.json', import.meta.url)
+
+function loadExplicit(): Record<string, FundPlan> {
+  try {
+    return JSON.parse(readFileSync(REGISTRY_PATH, 'utf8')) as Record<string, FundPlan>
+  } catch (e: any) {
+    if (e?.code === 'ENOENT') {
+      console.log('No scripts/vehicle-registry.local.json — auto-deriving every fund from its existing groups.\n')
+      return {}
+    }
+    throw new Error(`Could not read scripts/vehicle-registry.local.json: ${e?.message ?? e}`)
+  }
 }
+
+const EXPLICIT = loadExplicit()
 
 // Every table with a scalar portfolio_group column that keys to a vehicle.
 const SCALAR_TABLES = [
