@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Loader2, Shield } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { AlertCircle, Check, Copy, Loader2, Shield } from 'lucide-react'
 import { Section } from '@/components/settings/section'
 import { AccessGrid } from '@/components/settings-access-grid'
 import type { FeatureVisibilityMap } from '@/lib/types/features'
@@ -29,6 +31,11 @@ export function TeamSection({ isAdmin, featureVisibility }: { isAdmin: boolean; 
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviting, setInviting] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/settings/members')
@@ -59,6 +66,32 @@ export function TeamSection({ isAdmin, featureVisibility }: { isAdmin: boolean; 
     setProcessingId(null)
     setConfirmRemoveId(null)
     if (res.ok) load()
+  }
+
+  const handleInvite = async () => {
+    if (!inviteEmail.trim() || !inviteEmail.includes('@')) return
+    setInviting(true)
+    setInviteError(null)
+    setInviteLink(null)
+    const res = await fetch('/api/settings/members/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: inviteEmail.trim() }),
+    })
+    setInviting(false)
+    if (res.ok) {
+      const data = await res.json()
+      setInviteEmail('')
+      if (data.inviteLink) {
+        setInviteLink(data.inviteLink)
+      } else {
+        setInviteLink(null)
+      }
+      load()
+    } else {
+      const data = await res.json()
+      setInviteError(data.error)
+    }
   }
 
   return (
@@ -155,6 +188,57 @@ export function TeamSection({ isAdmin, featureVisibility }: { isAdmin: boolean; 
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Invite new member (admin only) */}
+          {isAdmin && (
+            <div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+                <div className="flex-1">
+                  <Label>Invite new member</Label>
+                  <p className="text-xs text-muted-foreground mt-1 mb-2">
+                    Send an email invitation. The user will be automatically added to the fund upon logging in.
+                  </p>
+                  <Input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => { setInviteEmail(e.target.value); setInviteError(null) }}
+                    placeholder="teammate@domain.com"
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleInvite() }}
+                  />
+                </div>
+                <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim() || !inviteEmail.includes('@')} size="sm">
+                  {inviting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+              {inviteError && (
+                <p className="text-sm text-destructive flex items-center gap-1 mt-1">
+                  <AlertCircle className="h-3 w-3" /> {inviteError}
+                </p>
+              )}
+              {inviteLink && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">
+                    Member added! Copy and share this invite link if they did not receive an email:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-[11px] bg-muted rounded px-2 py-1 break-all font-mono">{inviteLink}</code>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(inviteLink)
+                        setInviteLinkCopied(true)
+                        setTimeout(() => setInviteLinkCopied(false), 2000)
+                      }}
+                    >
+                      {inviteLinkCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

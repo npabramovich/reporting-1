@@ -75,8 +75,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           defaultAIProvider={defaultAIProvider}
           featureVisibility={featureVisibility}
           headerNode={
-            <Suspense fallback={<AppHeader fundName={fundName} fundLogo={fundLogo} userEmail={user.email ?? ''} reviewBadge={0} isAdmin={isAdmin} featureVisibility={featureVisibility} />}>
-              <AppHeaderServer fundId={fund.id} userId={user.id} fundName={fundName} fundLogo={fundLogo} userEmail={user.email ?? ''} isAdmin={isAdmin} featureVisibility={featureVisibility} />
+            <Suspense fallback={<AppHeader fundName={fundName} fundLogo={fundLogo} userEmail={user.email ?? ''} />}>
+              <AppHeaderServer fundName={fundName} fundLogo={fundLogo} userEmail={user.email ?? ''} />
             </Suspense>
           }
           sidebarNode={

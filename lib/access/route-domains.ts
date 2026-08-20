@@ -340,6 +340,7 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   // Any member sees the team roster; changing it is administration.
   'api/settings/members': { domain: 'admin', level: { GET: 'any' } },
   'api/settings/members/[id]': { domain: 'admin' },
+  'api/settings/members/invite': { domain: 'admin' },
 
   // ── A member's own data — membership is the whole test ─────────────────────
   // The Analyst gates each domain block internally against this same resolver, so gating the route

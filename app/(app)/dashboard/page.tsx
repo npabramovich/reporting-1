@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { resolvePageAccess, canViewPage } from '@/lib/access/page-gate'
 import { computeSummary } from '@/lib/investments'
 import type { InvestmentTransaction, CompanyStatus } from '@/lib/types/database'
 import { Suspense } from 'react'
@@ -50,6 +51,7 @@ async function DashboardContent({ user, isAdmin }: { user: any; isAdmin: boolean
       metrics(id, name, unit, unit_position, value_type, currency, display_order, is_active),
       parsing_reviews(id, resolution)
     `)
+    .eq('holding_type', 'company')
     .order('name') as { data: CompanyRow[] | null }
 
   // Find cash metric IDs for each company
@@ -205,13 +207,10 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth')
 
-  const { data: membership } = await supabase
-    .from('fund_members')
-    .select('role')
-    .eq('user_id', user.id)
-    .maybeSingle() as { data: { role: string } | null }
+  const page = await resolvePageAccess(user.id)
+  if (!page || !canViewPage(page, 'portfolio')) redirect('/dashboard')
 
-  const isAdmin = membership?.role === 'admin'
+  const isAdmin = page.isAdmin
 
   return (
     <div className="p-4 md:py-8 md:pl-8 md:pr-4">
