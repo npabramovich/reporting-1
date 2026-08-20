@@ -13,14 +13,27 @@ export interface PortfolioContext {
   teamNotesBlock: string
 }
 
+/**
+ * What of a context to build. `includeTeamNotes` is an ACCESS decision, not a preference: internal
+ * notes are the `relationships` domain, and the portfolio/company context they hang off is
+ * `portfolio`. A member granted portfolio but denied relationships must not receive the team's
+ * candid commentary through the Analyst — so the caller resolves it and says. Required, not
+ * defaulted, because a default here is a leak waiting for the next call site.
+ */
+export interface ContextOptions {
+  includeTeamNotes: boolean
+}
+
 export async function buildPortfolioContext(
   admin: Admin,
-  fundId: string
+  fundId: string,
+  options: ContextOptions
 ): Promise<PortfolioContext> {
   const { data: allCompanies } = await admin
     .from('companies')
     .select('id, name, status, stage, industry')
     .eq('fund_id', fundId)
+    .eq('holding_type', 'company')   // fund holdings have their own surfaces
 
   const { data: allTransactions } = await admin
     .from('investment_transactions')
@@ -68,13 +81,17 @@ export async function buildPortfolioContext(
     }
   }
 
-  // Fetch recent team notes (general/portfolio-wide + company-tagged)
-  const { data: portfolioNotes } = await admin
-    .from('company_notes')
-    .select('content, user_id, company_id, created_at')
-    .eq('fund_id', fundId)
-    .order('created_at', { ascending: false })
-    .limit(30) as { data: { content: string; user_id: string; company_id: string | null; created_at: string }[] | null }
+  // Fetch recent team notes (general/portfolio-wide + company-tagged) — only for a reader
+  // entitled to them. Not fetched rather than fetched-and-dropped: the rule is that a request is
+  // never GIVEN what it isn't entitled to.
+  const { data: portfolioNotes } = options.includeTeamNotes
+    ? await admin
+        .from('company_notes')
+        .select('content, user_id, company_id, created_at')
+        .eq('fund_id', fundId)
+        .order('created_at', { ascending: false })
+        .limit(30) as { data: { content: string; user_id: string; company_id: string | null; created_at: string }[] | null }
+    : { data: null }
 
   let teamNotesBlock = ''
   if (portfolioNotes && portfolioNotes.length > 0) {
@@ -136,7 +153,8 @@ export interface CompanyContext {
 
 export async function buildCompanyContext(
   admin: Admin,
-  companyId: string
+  companyId: string,
+  options: ContextOptions
 ): Promise<CompanyContext | null> {
   // --- Company ---
   const { data: company } = await admin
@@ -201,19 +219,22 @@ export async function buildCompanyContext(
     .from('companies')
     .select('id, name, status')
     .eq('fund_id', company.fund_id)
+    .eq('holding_type', 'company')   // fund holdings have their own surfaces
 
   const { data: allTransactions } = await admin
     .from('investment_transactions')
     .select('company_id, transaction_type, investment_cost, proceeds_received, proceeds_escrow, current_share_price, shares_acquired, unrealized_value_change')
     .eq('fund_id', company.fund_id)
 
-  // --- Team discussion notes ---
-  const { data: teamNotes } = await admin
-    .from('company_notes')
-    .select('content, user_id, created_at')
-    .eq('company_id', companyId)
-    .order('created_at', { ascending: false })
-    .limit(20) as { data: { content: string; user_id: string; created_at: string }[] | null }
+  // --- Team discussion notes --- (relationships domain; see ContextOptions)
+  const { data: teamNotes } = options.includeTeamNotes
+    ? await admin
+        .from('company_notes')
+        .select('content, user_id, created_at')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false })
+        .limit(20) as { data: { content: string; user_id: string; created_at: string }[] | null }
+    : { data: null }
 
   // Batch-load display names for note authors
   const noteAuthorIds = Array.from(new Set((teamNotes ?? []).map(n => n.user_id)))
@@ -431,5 +452,104 @@ ${company.current_update ?? ''}
     investmentBlock,
     portfolioBlock,
     teamNotesBlock,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Deal context — for the analyst panel scoped to a single inbound deal.
+// ---------------------------------------------------------------------------
+
+export interface DealContext {
+  systemPrompt: string
+  dealName: string
+  dealBlock: string
+  thesisBlock: string
+  emailBlock: string
+}
+
+export async function buildDealContext(admin: Admin, dealId: string): Promise<DealContext | null> {
+  const { data: dealRow } = await admin
+    .from('inbound_deals')
+    .select('*')
+    .eq('id', dealId)
+    .maybeSingle()
+  if (!dealRow) return null
+  const deal = dealRow as Record<string, any>
+
+  const fundId: string = deal.fund_id
+  const emailId: string = deal.email_id
+
+  const [{ data: settingsRow }, { data: emailRow }, { data: priorRow }] = await Promise.all([
+    admin
+      .from('fund_settings')
+      .select('deal_thesis, deal_screening_prompt')
+      .eq('fund_id', fundId)
+      .maybeSingle(),
+    admin
+      .from('inbound_emails')
+      .select('from_address, subject, received_at, raw_payload')
+      .eq('id', emailId)
+      .maybeSingle(),
+    deal.prior_deal_id
+      ? admin
+          .from('inbound_deals')
+          .select('id, company_name, thesis_fit_score, status, created_at')
+          .eq('id', deal.prior_deal_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null } as { data: null }),
+  ])
+
+  const settings = (settingsRow as { deal_thesis: string | null; deal_screening_prompt: string | null } | null) ?? null
+  const thesis = settings?.deal_thesis?.trim() ?? '(no thesis configured)'
+
+  const dealName = (deal.company_name as string | null) ?? 'this deal'
+
+  const dealLines = [
+    `Company: ${deal.company_name ?? 'unknown'}`,
+    deal.company_url ? `URL: ${deal.company_url}` : null,
+    deal.company_domain ? `Domain: ${deal.company_domain}` : null,
+    deal.founder_name ? `Primary founder: ${deal.founder_name}${deal.founder_email ? ` <${deal.founder_email}>` : ''}` : null,
+    Array.isArray(deal.co_founders) && deal.co_founders.length > 0
+      ? `Co-founders: ${deal.co_founders.map((c: any) => `${c.name}${c.role ? ` (${c.role})` : ''}`).join(', ')}`
+      : null,
+    deal.intro_source ? `Intro source: ${deal.intro_source}${deal.referrer_name ? ` via ${deal.referrer_name}` : ''}` : null,
+    deal.stage ? `Stage: ${deal.stage}` : null,
+    deal.industry ? `Industry: ${deal.industry}` : null,
+    deal.raise_amount ? `Raise: ${deal.raise_amount}` : null,
+    deal.thesis_fit_score ? `Thesis fit score: ${deal.thesis_fit_score}` : null,
+    deal.status ? `Status: ${deal.status}` : null,
+  ].filter(Boolean)
+
+  if (priorRow && (priorRow as any).id) {
+    const p = priorRow as { company_name: string | null; thesis_fit_score: string | null; status: string | null; created_at: string | null }
+    dealLines.push(`Prior pitch from same founder/company: ${p.company_name ?? 'unknown'} (status: ${p.status}, fit: ${p.thesis_fit_score}, ${p.created_at?.slice(0, 10) ?? '?'})`)
+  }
+
+  let dealBlock = dealLines.join('\n')
+  if (deal.company_summary) dealBlock += `\n\nGenerated summary:\n${deal.company_summary}`
+  if (deal.thesis_fit_analysis) dealBlock += `\n\nGenerated thesis-fit analysis:\n${deal.thesis_fit_analysis}`
+
+  const email = (emailRow as { from_address: string; subject: string | null; received_at: string | null; raw_payload: any } | null) ?? null
+  let emailBlock = ''
+  if (email) {
+    const payload = email.raw_payload as PostmarkPayload | null
+    const body = payload?.TextBody ?? ''
+    emailBlock = `From: ${email.from_address}\nSubject: ${email.subject ?? '(none)'}\nReceived: ${email.received_at ?? '(unknown)'}\n\n${body.slice(0, 4000)}`
+  }
+
+  const systemPrompt =
+    `You are the Analyst, helping a partner at a venture capital fund evaluate "${dealName}" — an inbound pitch. ` +
+    `Use the deal data, originating email, and fund thesis below to answer the partner's questions. ` +
+    `Be specific and ground your answers in the supplied materials. If something isn't in the materials, ` +
+    `say so explicitly rather than speculating. Use plain text (no markdown).`
+
+  const thesisBlock = thesis
+
+  return {
+    systemPrompt,
+    dealName,
+    dealBlock,
+    thesisBlock,
+    emailBlock,
   }
 }

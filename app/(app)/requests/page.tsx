@@ -41,19 +41,22 @@ interface SendResult {
   error?: string
 }
 
-const DEFAULT_SUBJECT = 'Laconia - Q4 and YE 2025 Information Request'
+// A starting point, not a fixed template: both fields are editable below, and once a request
+// has been sent the last-sent subject and body are restored instead of these. Placeholders
+// rather than real names so nothing about a particular fund is baked into the repo.
+const DEFAULT_SUBJECT = '[Fund name] - [Period] Information Request'
 
-const DEFAULT_BODY = `Hi! We are finalizing Laconia's quarterly and year-end reporting and need your help obtaining the following information:
+const DEFAULT_BODY = `Hi! We are finalizing [fund name]'s quarterly and year-end reporting and need your help obtaining the following information:
 
-- Q4 and YE 2025 Income Statement (Monthly and Quarterly will be great, if possible)
-- YE 2025 Balance Sheet (Monthly and Quarterly will be great, if possible)
-- Q4 and YE 2025 Cashflow Statement (Monthly and Quarterly will be great, if possible)
+- [Period] Income Statement (Monthly and Quarterly will be great, if possible)
+- [Period] Balance Sheet (Monthly and Quarterly will be great, if possible)
+- [Period] Cashflow Statement (Monthly and Quarterly will be great, if possible)
 - Any financing activities that occurred during the quarter (If a new financing closed, please include the fully executed documents)
 - Any other crucial materials, such as the latest board decks or key KPIs
 
-Please provide the above information by Friday, February 20, 2026. Contact me or anyone on the Laconia team if you have any questions. Thank you,
+Please provide the above information by [date]. Contact me or anyone on the team if you have any questions. Thank you,
 
-Taylor`
+[Your name]`
 
 function plainTextToHtml(text: string): string {
   const escaped = text
@@ -84,6 +87,7 @@ export default function RequestsPage() {
   const [subject, setSubject] = useState(DEFAULT_SUBJECT)
   const [bodyText, setBodyText] = useState(DEFAULT_BODY)
   const [cc, setCc] = useState('')
+  const [bcc, setBcc] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmSend, setConfirmSend] = useState(false)
 
@@ -129,6 +133,11 @@ export default function RequestsPage() {
       if (lastSent) {
         setBodyText(lastSent.body_html as string)
         if (lastSent.subject) setSubject(lastSent.subject as string)
+        // Restored the same way as subject and body: the same people are usually copied
+        // every quarter. Empty string when the last send had none, so the field stays blank
+        // rather than holding a stale list.
+        setCc((lastSent.cc as string | null) ?? '')
+        setBcc((lastSent.bcc as string | null) ?? '')
       }
     }
 
@@ -194,6 +203,7 @@ export default function RequestsPage() {
         body_html: plainTextToHtml(bodyText),
         body_text: bodyText,
         cc: cc.trim() || undefined,
+        bcc: bcc.trim() || undefined,
         from_name: fromName.trim() || undefined,
         from_address: fromAddress.trim() || undefined,
         recipients: [{ emails: [testEmail.trim()], companyName: 'Test' }],
@@ -234,6 +244,7 @@ export default function RequestsPage() {
         body_html: plainTextToHtml(bodyText),
         body_text: bodyText,
         cc: cc.trim() || undefined,
+        bcc: bcc.trim() || undefined,
         from_name: fromName.trim() || undefined,
         from_address: fromAddress.trim() || undefined,
         recipients,
@@ -258,7 +269,7 @@ export default function RequestsPage() {
       <div className="p-4 md:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.asks === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Asks</h1>
+            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.asks === 'admin' && <Lock className="h-4 w-4 text-warning" />}Asks</h1>
             <p className="text-sm text-muted-foreground mt-1">Monitor responses to quarterly reporting asks</p>
           </div>
           <div className="flex items-center gap-2">
@@ -286,7 +297,7 @@ export default function RequestsPage() {
       <div className="p-4 md:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.asks === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Asks</h1>
+            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.asks === 'admin' && <Lock className="h-4 w-4 text-warning" />}Asks</h1>
             <p className="text-sm text-muted-foreground mt-1">Quarterly reporting email program</p>
           </div>
           <div className="flex items-center gap-2">
@@ -299,7 +310,7 @@ export default function RequestsPage() {
           {trackerQuarters.length > 0 && (
             <ResponseTracker quarters={trackerQuarters} data={trackerData} onStatusChange={handleResponseStatusChange} />
           )}
-          <div className="rounded-lg border border-dashed p-12 text-center space-y-2">
+          <div className="rounded-card border border-dashed p-12 text-center space-y-2">
             <p className="text-muted-foreground">
               Administrators can configure and send quarterly reporting request emails to portfolio companies from this page.
             </p>
@@ -323,7 +334,7 @@ export default function RequestsPage() {
     <div className="p-4 md:p-8">
       <div className="mb-6 space-y-1">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.asks === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Asks</h1>
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.asks === 'admin' && <Lock className="h-4 w-4 text-warning" />}Asks</h1>
           <div className="flex items-center gap-2">
             <PortfolioNotesButton />
             <AnalystToggleButton />
@@ -341,7 +352,7 @@ export default function RequestsPage() {
       <h2 className="text-lg font-semibold tracking-tight">Create an Ask</h2>
 
       {!hasEmailProvider && (
-        <div className="rounded-lg border border-dashed p-4 text-center space-y-1">
+        <div className="rounded-card border border-dashed p-4 text-center space-y-1">
           <p className="text-sm text-muted-foreground">Set up an outbound email provider in Settings to enable sending emails.</p>
           <p className="text-xs text-muted-foreground">
             Choose from Gmail, Resend, Mailgun, or Postmark in Settings &gt; Outbound Email.
@@ -350,7 +361,7 @@ export default function RequestsPage() {
       )}
 
       {/* Compose */}
-      <div className="rounded-lg border bg-card p-5 space-y-3">
+      <div className="rounded-card border bg-card p-5 space-y-3">
         {settings?.asksEmailProvider && settings.asksEmailProvider !== 'gmail' && (
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -396,23 +407,38 @@ export default function RequestsPage() {
           </p>
         </div>
 
-        <div>
-          <Label>CC</Label>
-          <Input
-            value={cc}
-            onChange={(e) => setCc(e.target.value)}
-            placeholder="cc@example.com"
-          />
-          <p className="text-xs text-muted-foreground mt-1">
-            Optional. CC'd on every email sent.
-          </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <Label>CC</Label>
+            <Input
+              value={cc}
+              onChange={(e) => setCc(e.target.value)}
+              placeholder="cc@example.com, someone@example.com"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Optional. Separate multiple addresses with commas. CC'd on every email sent, and
+              visible to recipients.
+            </p>
+          </div>
+          <div>
+            <Label>BCC</Label>
+            <Input
+              value={bcc}
+              onChange={(e) => setBcc(e.target.value)}
+              placeholder="bcc@example.com, someone@example.com"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Optional. Separate multiple addresses with commas. Blind-copied on every email
+              sent — recipients don't see them.
+            </p>
+          </div>
         </div>
       </div>
 
       {/* Recipients */}
-      <div className="rounded-lg border bg-card p-5">
+      <div className="rounded-card border bg-card p-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium">Recipients ({selected.size} of {companies.length})</h2>
+          <h2 className="text-base font-medium">Recipients ({selected.size} of {companies.length})</h2>
           <button
             onClick={toggleAll}
             className="text-xs text-primary hover:underline"
@@ -449,8 +475,8 @@ export default function RequestsPage() {
       </div>
 
       {/* Test send */}
-      <div className="rounded-lg border bg-card p-5 space-y-3">
-        <h2 className="text-sm font-medium">Test send</h2>
+      <div className="rounded-card border bg-card p-5 space-y-3">
+        <h2 className="text-base font-medium">Test send</h2>
         <div className="flex items-center gap-2">
           <Input
             value={testEmail}
@@ -472,11 +498,11 @@ export default function RequestsPage() {
           </Button>
           {testResult && (
             testResult.success ? (
-              <span className="text-xs text-emerald-600 flex items-center gap-1">
+              <span className="text-xs text-success flex items-center gap-1">
                 <Check className="h-3 w-3" /> Sent
               </span>
             ) : (
-              <span className="text-xs text-destructive flex items-center gap-1">
+              <span className="text-sm text-destructive flex items-center gap-1">
                 <AlertCircle className="h-3 w-3" /> {testResult.error || 'Failed'}
               </span>
             )
@@ -506,7 +532,7 @@ export default function RequestsPage() {
               {sending ? (
                 <><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Sending...</>
               ) : (
-                <>Confirm — send {selected.size} email{selected.size !== 1 ? 's' : ''} now</>
+                <>Confirm, send {selected.size} email{selected.size !== 1 ? 's' : ''} now</>
               )}
             </Button>
             <Button
@@ -521,7 +547,7 @@ export default function RequestsPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-destructive/30 p-4">
+        <div className="rounded-card border border-destructive/30 p-4">
           <p className="text-sm text-destructive flex items-center gap-2">
             <AlertCircle className="h-4 w-4" /> {error}
           </p>
@@ -529,8 +555,8 @@ export default function RequestsPage() {
       )}
 
       {results && (
-        <div className="rounded-lg border bg-card p-5 space-y-3">
-          <h2 className="text-sm font-medium">
+        <div className="rounded-card border bg-card p-5 space-y-3">
+          <h2 className="text-base font-medium">
             Results: {results.sent} sent, {results.failed} failed
           </h2>
           <div className="border rounded-lg divide-y max-h-[300px] overflow-y-auto">
@@ -538,11 +564,11 @@ export default function RequestsPage() {
               <div key={i} className="flex items-center justify-between px-3 py-2">
                 <span className="text-sm">{r.emails}</span>
                 {r.success ? (
-                  <span className="text-xs text-emerald-600 flex items-center gap-1">
+                  <span className="text-xs text-success flex items-center gap-1">
                     <Check className="h-3 w-3" /> Sent
                   </span>
                 ) : (
-                  <span className="text-xs text-destructive flex items-center gap-1">
+                  <span className="text-sm text-destructive flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" /> {r.error || 'Failed'}
                   </span>
                 )}

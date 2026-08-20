@@ -2,15 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
+import { dbError } from '@/lib/api-error'
 import { rateLimit } from '@/lib/rate-limit'
 import { decrypt } from '@/lib/crypto'
 import { getAccessToken as getGoogleAccessToken, findOrCreateFolder as findOrCreateGoogleFolder, uploadFile as uploadGoogleFile } from '@/lib/google/drive'
 import { getGoogleCredentials } from '@/lib/google/credentials'
-import { getDropboxCredentials } from '@/lib/dropbox/credentials'
-import { getAccessToken as getDropboxAccessToken, findOrCreateFolder as findOrCreateDropboxFolder, uploadFile as uploadDropboxFile } from '@/lib/dropbox/files'
 import { hydrateAttachments } from '@/lib/parsing/extractAttachmentText'
 
-// POST — save one or more emails to file storage (Google Drive or Dropbox)
+// POST — save one or more emails to file storage (Google Drive)
 export async function POST(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -43,7 +42,7 @@ export async function POST(req: NextRequest) {
   // Check file storage provider
   const { data: settings } = await admin
     .from('fund_settings')
-    .select('file_storage_provider, google_refresh_token_encrypted, encryption_key_encrypted, google_drive_folder_id, dropbox_refresh_token_encrypted, dropbox_folder_path')
+    .select('file_storage_provider, google_refresh_token_encrypted, encryption_key_encrypted, google_drive_folder_id')
     .eq('fund_id', membership.fund_id)
     .single()
 
@@ -58,54 +57,47 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Encryption not configured' }, { status: 500 })
   }
 
-  const dek = decrypt(settings.encryption_key_encrypted, kek)
+  let dek: string
+  try {
+    dek = decrypt(settings.encryption_key_encrypted, kek)
+  } catch (err) {
+    console.error('[save-to-drive] Failed to decrypt encryption key:', err)
+    return NextResponse.json({ error: 'Failed to decrypt credentials' }, { status: 500 })
+  }
 
   // Set up provider-specific upload functions
-  let uploadEmail: (companyName: string, dateStr: string, subject: string, emailBody: string, companyInfo: { google_drive_folder_id: string | null; dropbox_folder_path: string | null } | null) => Promise<void>
-  let uploadAttachment: (companyName: string, name: string, content: Buffer, companyInfo: { google_drive_folder_id: string | null; dropbox_folder_path: string | null } | null) => Promise<void>
+  let uploadEmail: (companyName: string, dateStr: string, subject: string, emailBody: string, companyInfo: { google_drive_folder_id: string | null } | null) => Promise<void>
+  let uploadAttachment: (companyName: string, name: string, content: Buffer, companyInfo: { google_drive_folder_id: string | null } | null) => Promise<void>
 
-  if (provider === 'google_drive') {
-    if (!settings.google_refresh_token_encrypted || !settings.google_drive_folder_id) {
-      return NextResponse.json({ error: 'Google Drive not connected or no folder selected' }, { status: 400 })
-    }
-    const refreshToken = decrypt(settings.google_refresh_token_encrypted, dek)
-    const creds = await getGoogleCredentials(admin, membership.fund_id)
-    if (!creds?.clientId || !creds?.clientSecret) {
-      return NextResponse.json({ error: 'Google OAuth credentials not configured' }, { status: 400 })
-    }
-    const accessToken = await getGoogleAccessToken(refreshToken, creds.clientId, creds.clientSecret)
-    const rootFolderId = settings.google_drive_folder_id
+  try {
+    if (provider === 'google_drive') {
+      if (!settings.google_refresh_token_encrypted || !settings.google_drive_folder_id) {
+        return NextResponse.json({ error: 'Google Drive not connected or no folder selected' }, { status: 400 })
+      }
+      const refreshToken = decrypt(settings.google_refresh_token_encrypted, dek)
+      const creds = await getGoogleCredentials(admin, membership.fund_id)
+      if (!creds?.clientId || !creds?.clientSecret) {
+        return NextResponse.json({ error: 'Google OAuth credentials not configured' }, { status: 400 })
+      }
+      const accessToken = await getGoogleAccessToken(refreshToken, creds.clientId, creds.clientSecret)
+      const rootFolderId = settings.google_drive_folder_id
 
-    uploadEmail = async (companyName, dateStr, subject, emailBody, companyInfo) => {
-      const folderId = companyInfo?.google_drive_folder_id || await findOrCreateGoogleFolder(accessToken, rootFolderId, companyName)
-      await uploadGoogleFile(accessToken, folderId, `${dateStr}_${subject}.txt`, emailBody, 'text/plain')
+      uploadEmail = async (companyName, dateStr, subject, emailBody, companyInfo) => {
+        const folderId = companyInfo?.google_drive_folder_id || await findOrCreateGoogleFolder(accessToken, rootFolderId, companyName)
+        await uploadGoogleFile(accessToken, folderId, `${dateStr}_${subject}.txt`, emailBody, 'text/plain')
+      }
+      uploadAttachment = async (companyName, name, content, companyInfo) => {
+        const safeName = name.replace(/[\/\\:*?"<>|]/g, '_').replace(/\.\./g, '_')
+        const folderId = companyInfo?.google_drive_folder_id || await findOrCreateGoogleFolder(accessToken, rootFolderId, companyName)
+        await uploadGoogleFile(accessToken, folderId, safeName, content, 'application/octet-stream')
+      }
+    } else {
+      return NextResponse.json({ error: `Unknown storage provider: ${provider}` }, { status: 400 })
     }
-    uploadAttachment = async (companyName, name, content, companyInfo) => {
-      const folderId = companyInfo?.google_drive_folder_id || await findOrCreateGoogleFolder(accessToken, rootFolderId, companyName)
-      await uploadGoogleFile(accessToken, folderId, name, content, 'application/octet-stream')
-    }
-  } else if (provider === 'dropbox') {
-    if (!settings.dropbox_refresh_token_encrypted || !settings.dropbox_folder_path) {
-      return NextResponse.json({ error: 'Dropbox not connected or no folder selected' }, { status: 400 })
-    }
-    const refreshToken = decrypt(settings.dropbox_refresh_token_encrypted, dek)
-    const creds = await getDropboxCredentials(admin, membership.fund_id)
-    if (!creds) return NextResponse.json({ error: 'Dropbox credentials not found' }, { status: 400 })
-    const accessToken = await getDropboxAccessToken(refreshToken, creds.appKey, creds.appSecret)
-    const rootPath = settings.dropbox_folder_path
-
-    uploadEmail = async (companyName, dateStr, subject, emailBody, companyInfo) => {
-      const companyPath = companyInfo?.dropbox_folder_path || `${rootPath}/${companyName}`
-      await findOrCreateDropboxFolder(accessToken, companyPath)
-      await uploadDropboxFile(accessToken, companyPath, `${dateStr}_${subject}.txt`, emailBody)
-    }
-    uploadAttachment = async (companyName, name, content, companyInfo) => {
-      const companyPath = companyInfo?.dropbox_folder_path || `${rootPath}/${companyName}`
-      await findOrCreateDropboxFolder(accessToken, companyPath)
-      await uploadDropboxFile(accessToken, companyPath, name, content)
-    }
-  } else {
-    return NextResponse.json({ error: `Unknown storage provider: ${provider}` }, { status: 400 })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    console.error('[save-to-drive] Provider setup failed:', msg)
+    return NextResponse.json({ error: 'Storage connection failed. Check your credentials in Settings.' }, { status: 500 })
   }
 
   // Fetch the emails with their company info
@@ -116,7 +108,7 @@ export async function POST(req: NextRequest) {
     .in('id', emailIds)
 
   if (emailsError) {
-    return NextResponse.json({ error: emailsError.message }, { status: 500 })
+    return dbError(emailsError, 'emails-save-to-drive')
   }
 
   if (!emails || emails.length === 0) {
@@ -125,16 +117,16 @@ export async function POST(req: NextRequest) {
 
   // Get company info for subfolder creation
   const companyIds = Array.from(new Set(emails.map(e => e.company_id).filter(Boolean))) as string[]
-  const companiesMap: Record<string, { name: string; google_drive_folder_id: string | null; dropbox_folder_path: string | null }> = {}
+  const companiesMap: Record<string, { name: string; google_drive_folder_id: string | null }> = {}
 
   if (companyIds.length > 0) {
     const { data: companies } = await admin
       .from('companies')
-      .select('id, name, google_drive_folder_id, dropbox_folder_path')
+      .select('id, name, google_drive_folder_id')
       .in('id', companyIds)
 
     for (const c of companies ?? []) {
-      companiesMap[c.id] = { name: c.name, google_drive_folder_id: c.google_drive_folder_id, dropbox_folder_path: c.dropbox_folder_path }
+      companiesMap[c.id] = { name: c.name, google_drive_folder_id: c.google_drive_folder_id }
     }
   }
 

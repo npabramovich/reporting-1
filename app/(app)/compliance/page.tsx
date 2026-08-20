@@ -66,7 +66,7 @@ const QUESTIONS = [
   {
     key: 'registration_status',
     question: 'How is your firm registered with the SEC?',
-    explainer: 'Most VC firms are ERAs under the Dodd-Frank Act — they file limited sections of Form ADV but aren\'t fully registered. If your firm advises only qualifying VC funds and has filed Form ADV checking the \'exempt reporting adviser\' box, you\'re an ERA.',
+    explainer: 'Most VC firms are ERAs under the Dodd-Frank Act, they file limited sections of Form ADV but aren\'t fully registered. If your firm advises only qualifying VC funds and has filed Form ADV checking the \'exempt reporting adviser\' box, you\'re an ERA.',
     options: [
       { value: 'ria', label: 'SEC-Registered Investment Adviser (RIA)' },
       { value: 'era', label: 'Exempt Reporting Adviser (ERA)' },
@@ -115,8 +115,8 @@ const QUESTIONS = [
     question: 'Did your fund raise capital under Regulation D (Rule 506)?',
     explainer: 'Almost all VC funds raise under Reg D. If your fund has a PPM and subscription agreements, you\'re almost certainly using Reg D.',
     options: [
-      { value: '506b', label: 'Yes — Rule 506(b) (no general solicitation)' },
-      { value: '506c', label: 'Yes — Rule 506(c) (general solicitation permitted)' },
+      { value: '506b', label: 'Yes, Rule 506(b) (no general solicitation)' },
+      { value: '506c', label: 'Yes, Rule 506(c) (general solicitation permitted)' },
       { value: 'no', label: 'No / not applicable' },
       { value: 'unsure', label: 'I\'m not sure' },
     ],
@@ -151,10 +151,10 @@ const QUESTIONS = [
     question: 'Do any of your funds hold publicly traded equity securities?',
     explainer: 'Most VC funds hold only private company equity, which means 13F, 13G, 13H, and N-PX don\'t apply.',
     options: [
-      { value: 'yes_over_100m', label: 'Yes — over $100M in public equities' },
-      { value: 'yes_under_100m', label: 'Yes — under $100M' },
-      { value: 'yes_5pct_single', label: 'Yes — and we hold 5%+ of a single public company' },
-      { value: 'no', label: 'No — private investments only' },
+      { value: 'yes_over_100m', label: 'Yes, over $100M in public equities' },
+      { value: 'yes_under_100m', label: 'Yes, under $100M' },
+      { value: 'yes_5pct_single', label: 'Yes, and we hold 5%+ of a single public company' },
+      { value: 'no', label: 'No, private investments only' },
       { value: 'unsure', label: 'I\'m not sure' },
     ],
   },
@@ -163,8 +163,8 @@ const QUESTIONS = [
     question: 'Does your fund engage in any commodity, futures, or swap trading?',
     explainer: 'If your fund uses any hedging instruments, interest rate swaps, or commodity-linked investments, you may need to file an exemption with the NFA.',
     options: [
-      { value: 'yes_with_exemption', label: 'Yes — and we\'ve filed a CPO exemption (e.g., §4.13(a)(3))' },
-      { value: 'yes_no_exemption', label: 'Yes — but we haven\'t filed an exemption' },
+      { value: 'yes_with_exemption', label: 'Yes, and we\'ve filed a CPO exemption (e.g., §4.13(a)(3))' },
+      { value: 'yes_no_exemption', label: 'Yes, but we haven\'t filed an exemption' },
       { value: 'no', label: 'No commodity/futures/swap activity' },
       { value: 'unsure', label: 'I\'m not sure' },
     ],
@@ -184,8 +184,18 @@ const QUESTIONS = [
     question: 'Are any of your fund entities formed under the laws of a foreign country?',
     explainer: 'As of March 2025, FinCEN exempted all U.S.-formed entities from BOI reporting. Only foreign-formed entities registered to do business in the U.S. still need to file.',
     options: [
-      { value: 'yes', label: 'Yes — we have offshore/foreign fund entities registered in the U.S.' },
-      { value: 'no', label: 'No — all entities are U.S.-formed' },
+      { value: 'yes', label: 'Yes, we have offshore/foreign fund entities registered in the U.S.' },
+      { value: 'no', label: 'No, all entities are U.S.-formed' },
+    ],
+  },
+  {
+    key: 'has_foreign_investors',
+    question: 'Does your fund have any foreign (non-U.S.) investors?',
+    explainer: 'Funds with foreign investors have FATCA withholding and reporting obligations (Form 1042-S, Form 1042) and may have CRS reporting obligations depending on jurisdiction. W-8BEN/W-8BEN-E forms must be collected from foreign investors.',
+    options: [
+      { value: 'yes', label: 'Yes, one or more investors are non-U.S. persons or entities' },
+      { value: 'no', label: 'No, all investors are U.S. persons' },
+      { value: 'unsure', label: 'Unsure' },
     ],
   },
 ] as const
@@ -194,24 +204,41 @@ type View = ComplianceTab
 type StatusFilter = 'active' | 'completed' | 'dismissed' | 'all'
 
 const STATUS_COLORS: Record<Applicability | 'monitor', { bg: string; text: string; icon: typeof Check }> = {
-  applies: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400', icon: Check },
-  completed: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400', icon: Check },
+  applies: { bg: 'bg-success-subtle dark:bg-success-subtle/30', text: 'text-success', icon: Check },
+  completed: { bg: 'bg-info-subtle dark:bg-info-subtle/30', text: 'text-info', icon: Check },
   not_applicable: { bg: 'bg-muted', text: 'text-muted-foreground', icon: X },
-  needs_review: { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-400', icon: AlertTriangle },
-  monitor: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400', icon: Clock },
+  needs_review: { bg: 'bg-warning-subtle dark:bg-warning-subtle/30', text: 'text-warning', icon: AlertTriangle },
+  monitor: { bg: 'bg-info-subtle dark:bg-info-subtle/30', text: 'text-info', icon: Clock },
 }
 
-const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
-  'SEC Filings':           { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-400' },
-  'Securities Offerings':  { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-400' },
-  'Tax Filings':           { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400' },
-  'Internal Compliance':   { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400' },
-  'Fund Reporting':        { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-400' },
-  'State Compliance':      { bg: 'bg-rose-100 dark:bg-rose-900/30', text: 'text-rose-700 dark:text-rose-400' },
-  'CFTC':                  { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-400' },
-  'AML / FinCEN':          { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-400' },
+/**
+ * Compliance category → categorical slot.
+ *
+ * These used to borrow the STATUS colours: "SEC Filings" was amber, "State
+ * Compliance" red, "Tax Filings" green. A category is not a status, so a routine
+ * state filing rendered as an error and three unrelated categories shared amber
+ * because there were not enough status colours to go round.
+ *
+ * Now each category owns a fixed slot from the categorical palette (--cat-1..8,
+ * validated in globals.css). Fixed, so a category keeps its hue no matter which
+ * categories are on screen — colour follows the entity, never its rank.
+ *
+ * The hue rides on a DOT, not on the text or a fill behind it: identity is never
+ * colour-alone (the label is right there), and it sidesteps the three light-mode
+ * slots that sit under 3:1 on white.
+ */
+const CATEGORY_DOT: Record<string, string> = {
+  'SEC Filings':           'bg-cat-1',
+  'Securities Offerings':  'bg-cat-2',
+  'Tax Filings':           'bg-cat-3',
+  'Internal Compliance':   'bg-cat-4',
+  'Fund Reporting':        'bg-cat-5',
+  'State Compliance':      'bg-cat-6',
+  'CFTC':                  'bg-cat-7',
+  'AML / FinCEN':          'bg-cat-8',
 }
-const DEFAULT_CATEGORY_COLORS = { bg: 'bg-muted', text: 'text-muted-foreground' }
+const DEFAULT_CATEGORY_DOT = 'bg-muted-foreground'
+const categoryDot = (c: string) => CATEGORY_DOT[c] ?? DEFAULT_CATEGORY_DOT
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -501,13 +528,7 @@ export default function CompliancePage() {
                   <button
                     key={f}
                     onClick={() => setStatusFilter(f)}
-                    className={`px-3 py-1 capitalize transition-colors ${
-                      i === 0 ? 'rounded-l-md' : i === arr.length - 1 ? 'rounded-r-md' : ''
-                    } ${
-                      statusFilter === f
-                        ? 'bg-foreground text-background'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`px-3 py-1 capitalize transition-colors ${ i === 0 ? 'rounded-l-md' : i === arr.length - 1 ? 'rounded-r-md' : '' } ${ statusFilter === f ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground' }`}
                   >
                     {f}
                   </button>
@@ -593,7 +614,7 @@ function IntakeQuestionnaire({
         <h2 className="text-lg font-medium mb-1">{isEdit ? 'Update Fund Profile' : 'Fund Profile Setup'}</h2>
         <p className="text-sm text-muted-foreground mb-3">
           Answer these questions to determine which compliance obligations apply to your fund.
-          Your answers auto-determine applicability — you can override any result later.
+          Your answers auto-determine applicability, you can override any result later.
         </p>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
@@ -610,7 +631,7 @@ function IntakeQuestionnaire({
         {QUESTIONS.map((q, idx) => {
           const currentVal = answers[q.key]
           return (
-            <div key={q.key} className="rounded-lg border p-4">
+            <div key={q.key} className="rounded-card border p-4">
               <p className="font-medium text-sm mb-1">
                 <span className="text-muted-foreground mr-2">{idx + 1}.</span>
                 {q.question}
@@ -635,11 +656,7 @@ function IntakeQuestionnaire({
                             return { ...prev, [q.key]: [...filtered, opt.value] }
                           })
                         }}
-                        className={`w-full text-left px-3 py-2 rounded-md text-sm border transition-colors ${
-                          selected
-                            ? 'border-foreground bg-accent font-medium'
-                            : 'border-border hover:bg-accent/50'
-                        }`}
+                        className={`w-full text-left px-3 py-2 rounded-md text-sm border transition-colors ${ selected ? 'border-foreground bg-accent font-medium' : 'border-border hover:bg-accent/50' }`}
                       >
                         {opt.label}
                       </button>
@@ -652,11 +669,7 @@ function IntakeQuestionnaire({
                     <button
                       key={opt.value}
                       onClick={() => setAnswers(prev => ({ ...prev, [q.key]: opt.value }))}
-                      className={`w-full text-left px-3 py-2 rounded-md text-sm border transition-colors ${
-                        currentVal === opt.value
-                          ? 'border-foreground bg-accent font-medium'
-                          : 'border-border hover:bg-accent/50'
-                      }`}
+                      className={`w-full text-left px-3 py-2 rounded-md text-sm border transition-colors ${ currentVal === opt.value ? 'border-foreground bg-accent font-medium' : 'border-border hover:bg-accent/50' }`}
                     >
                       {opt.label}
                     </button>
@@ -720,7 +733,7 @@ function CalendarView({
             return (
               <div
                 key={month}
-                className={`rounded-lg border p-3 ${isPast ? 'opacity-60' : ''}`}
+                className={`rounded-card border p-3 ${isPast ? 'opacity-60' : ''}`}
               >
                 <p className={`text-base font-semibold mb-2 ${isCurrent ? 'text-foreground' : 'text-muted-foreground'}`}>
                   {MONTHS[month - 1]}
@@ -729,21 +742,23 @@ function CalendarView({
                   {entries.map(entry => {
                     const { item, group } = entry
                     const status = getStatus(item.id, group)
-                    const colors = status === 'not_applicable'
-                      ? { bg: 'bg-muted', text: 'text-muted-foreground' }
+                    // Status wins over category: a dismissed or completed item reads as
+                    // its state, so it drops the category dot entirely.
+                    const tone = status === 'not_applicable'
+                      ? 'bg-muted text-muted-foreground'
                       : status === 'completed'
-                        ? { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400' }
-                        : (CATEGORY_COLORS[item.category] ?? DEFAULT_CATEGORY_COLORS)
+                        ? 'bg-info-subtle dark:bg-info-subtle/30 text-info'
+                        : 'bg-muted/60 text-foreground'
+                    const dot = status === 'not_applicable' || status === 'completed' ? null : categoryDot(item.category)
                     const ek = entryKey(entry)
                     const isExpanded = expandedEntry?.itemId === item.id && expandedEntry?.group === group
                     return (
                       <div key={ek}>
                         <button
                           onClick={() => setExpandedEntry(isExpanded ? null : { itemId: item.id, group })}
-                          className={`w-full text-left px-2 py-1 rounded text-xs ${
-                            isExpanded ? 'ring-1 ring-foreground' : ''
-                          } ${colors.bg} ${colors.text} hover:opacity-80 transition-opacity`}
+                          className={`w-full text-left px-2 py-1 rounded text-xs flex items-center gap-1.5 ${ isExpanded ? 'ring-1 ring-foreground' : '' } ${tone} hover:opacity-80 transition-opacity`}
                         >
+                          {dot && <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} aria-hidden />}
                           {item.short_name}
                           {group && <span className="ml-1 opacity-70">· {group}</span>}
                           {item.deadline_day && !group && <span className="ml-1 opacity-70">({item.deadline_month}/{item.deadline_day})</span>}
@@ -774,7 +789,7 @@ function CalendarView({
 
         </div>
 
-        {/* Detail panel — sticky on the right, desktop only */}
+        {/* Detail panel, sticky on the right, desktop only */}
         <div className="hidden lg:block flex-1 min-w-0">
           {expandedEntry ? (
             <div className="sticky top-8 [&>div]:mt-0">
@@ -889,40 +904,41 @@ function ItemsView({
   return (
     <div>
       {orderedCategories.map(category => {
-        const catColors = CATEGORY_COLORS[category] ?? DEFAULT_CATEGORY_COLORS
+        const catDot = categoryDot(category)
         const instances = categoryInstances[category]
         return (
           <div key={category} className="mb-6">
-            <h3 className={`text-xs font-medium mb-2 ${catColors.text}`}>{category} ({instances.length})</h3>
+            <h3 className="text-base font-medium mb-2 flex items-center gap-1.5">
+              <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${catDot}`} aria-hidden />
+              {category} ({instances.length})
+            </h3>
             <div className="space-y-1">
               {instances.map(inst => {
                 const ik = instanceKey(inst)
                 const status = getStatus(inst.item.id, inst.group)
                 const isDismissed = status === 'not_applicable'
                 const isCompleted = status === 'completed'
-                const colors = isDismissed
-                  ? { bg: 'bg-muted', text: 'text-muted-foreground' }
+                const dotClass = isDismissed
+                  ? 'bg-muted-foreground/40'
                   : isCompleted
-                    ? { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400' }
-                    : catColors
+                    ? 'bg-info'
+                    : catDot
                 const isExpanded = expandedItem === ik
                 return (
                   <div key={ik}>
                     <button
                       onClick={() => setExpandedItem(isExpanded ? null : ik)}
-                      className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm flex items-center justify-between transition-colors ${
-                        isExpanded ? 'bg-accent border-foreground/20' : 'hover:bg-accent/50'
-                      }`}
+                      className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm flex items-center justify-between transition-colors ${ isExpanded ? 'bg-accent border-foreground/20' : 'hover:bg-accent/50' }`}
                     >
                       <span className="flex items-center gap-2">
-                        <span className={`inline-block w-2 h-2 rounded-full ${colors.bg}`} />
-                        <span className={`font-medium ${isDismissed ? 'text-muted-foreground line-through' : ''} ${isCompleted ? 'text-blue-700 dark:text-blue-400' : ''}`}>
+                        <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${dotClass}`} aria-hidden />
+                        <span className={`font-medium ${isDismissed ? 'text-muted-foreground line-through' : ''} ${isCompleted ? 'text-info dark:text-info' : ''}`}>
                           {inst.item.short_name}
                         </span>
                         {inst.group && <span className="text-xs text-muted-foreground">· {inst.group}</span>}
                       </span>
                       <span className="flex items-center gap-2">
-                        {isCompleted && <span className="text-xs text-blue-600 dark:text-blue-400">Completed</span>}
+                        {isCompleted && <span className="text-xs text-info">Completed</span>}
                         {isDismissed && <span className="text-xs text-muted-foreground">Dismissed</span>}
                         <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                       </span>
@@ -975,10 +991,10 @@ function ItemDetail({
   const isDismissed = status === 'not_applicable' && setting?.dismissed
 
   return (
-    <div className="rounded-lg border bg-card p-4 mt-2 mb-4">
+    <div className="rounded-card border bg-card p-4 mt-2 mb-4">
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h3 className="font-medium text-sm">{item.name}{group && <span className="text-muted-foreground font-normal"> · {group}</span>}</h3>
+          <h3 className="font-medium text-base">{item.name}{group && <span className="text-muted-foreground font-normal"> · {group}</span>}</h3>
           <p className="text-sm text-muted-foreground">{item.category} · {item.frequency} · {item.complexity} complexity</p>
         </div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -987,7 +1003,7 @@ function ItemDetail({
       </div>
 
       {isCompleted && (
-        <div className="text-sm px-2.5 py-1.5 rounded mb-3 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+        <div className="text-sm px-2.5 py-1.5 rounded mb-3 bg-info-subtle dark:bg-info-subtle/30 text-info">
           <span className="font-medium">Completed</span>
           {setting?.completed_at && <span> on {new Date(setting.completed_at).toLocaleDateString()}</span>}
           {setting?.completed_note && <p className="mt-1">{setting.completed_note}</p>}
@@ -1008,7 +1024,7 @@ function ItemDetail({
       )}
 
       {item.alert && (
-        <div className="text-sm px-2.5 py-1.5 rounded mb-3 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+        <div className="text-sm px-2.5 py-1.5 rounded mb-3 bg-warning-subtle dark:bg-warning-subtle/30 text-warning">
           {item.alert}
         </div>
       )}

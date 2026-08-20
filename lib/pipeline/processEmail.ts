@@ -9,13 +9,14 @@ import {
   type MetricDef,
   type ExtractMetricsResult,
 } from '@/lib/claude/extractMetrics'
-import { createFundAIProvider } from '@/lib/ai'
+import { getFeatureProvider } from '@/lib/ai/feature-provider'
 import { decryptApiKey, decrypt } from '@/lib/crypto'
 import { getAccessToken as getGoogleAccessToken, findOrCreateFolder as findOrCreateGoogleFolder, uploadFile as uploadGoogleFile } from '@/lib/google/drive'
 import { getGoogleCredentials } from '@/lib/google/credentials'
-import { getDropboxCredentials } from '@/lib/dropbox/credentials'
-import { getAccessToken as getDropboxAccessToken, findOrCreateFolder as findOrCreateDropboxFolder, uploadFile as uploadDropboxFile } from '@/lib/dropbox/files'
 import { extractInteraction } from '@/lib/claude/extractInteraction'
+import { classifyEmail, detectForward, type SenderFlags, type AttachmentDescriptor } from '@/lib/pipeline/classifyEmail'
+import { isAuthorizedSender } from '@/lib/pipeline/isAuthorizedSender'
+import { loadActiveDiligenceDeals, matchDiligenceDeal } from '@/lib/pipeline/matchDiligenceDeal'
 import type { Json, IssueType, ProcessingStatus } from '@/lib/types/database'
 
 type Supabase = ReturnType<typeof createAdminClient>
@@ -29,9 +30,11 @@ export interface PostmarkPayload {
   FromFull?: { Email: string; Name: string }
   To: string
   OriginalRecipient?: string
+  Date?: string
   Subject?: string
   TextBody?: string
   HtmlBody?: string
+  MessageID?: string
   Attachments?: Array<{
     Name: string
     ContentType: string
@@ -52,11 +55,107 @@ export async function runPipeline(
   payload: PostmarkPayload,
   fundMember?: { userId: string } | null
 ): Promise<void> {
+  const warnings: string[] = []
+
   // Step 4: Extract text from email body and attachments
   const extracted = await extractAttachmentText(payload)
 
-  // Fetch the fund's AI provider based on default_ai_provider setting
-  const { provider, model, providerType } = await createFundAIProvider(supabase, fundId)
+  // Step 4.5: Routing classifier. Settings determine whether the result is
+  // acted on (active routing) or merely recorded (shadow mode — when
+  // deal_intake_enabled is false). A classifier failure must never break the
+  // existing reporting/interactions pipeline; on error we fall through.
+  const dealsSettings = await loadDealsSettings(supabase, fundId)
+  let routingDecision: RoutingDecision = 'shadow'
+  let classification: ClassificationResultStored | null = null
+  try {
+    // Classifier runs on the deal_classify feature model (defaults to a fast
+    // model; honors a per-feature override and the legacy routing_model field).
+    const cls = await getFeatureProvider(supabase, fundId, 'deal_classify')
+    classification = await classifyAndStore(
+      supabase, emailId, fundId, payload, extracted.emailBody, fundMember,
+      cls.provider, cls.providerType, cls.model, null
+    )
+    if (classification) {
+      routingDecision = decideRoute(classification, dealsSettings)
+    }
+  } catch (err) {
+    console.error('[pipeline] Classifier failed (non-blocking):', err)
+  }
+
+  // Branch on classifier decision when intake is enabled.
+  if (routingDecision === 'deals') {
+    try {
+      const { processDeal } = await import('@/lib/pipeline/processDeal')
+      const da = await getFeatureProvider(supabase, fundId, 'deal_analysis')
+      await processDeal({ supabase, emailId, fundId, payload, extracted, provider: da.provider, providerType: da.providerType, model: da.model })
+      await supabase.from('inbound_emails').update({ routed_to: 'deals' }).eq('id', emailId)
+      await finalizeEmail(supabase, emailId, { status: 'success' })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[pipeline] processDeal failed:', err)
+      await finalizeEmail(supabase, emailId, { status: 'failed', warnings: [msg] })
+    }
+    return
+  }
+
+  // Diligence: the email is about a company already under diligence. We do NOT
+  // copy it into the shared data room here. An inbound mailbox is a firehose,
+  // and a wrong match would hand the memo agent a stranger's attachment as
+  // evidence. Instead we park it as a proposal and let a human accept it —
+  // choosing the deal and which attachments to take. See
+  // /api/emails/[id]/accept-to-diligence.
+  if (routingDecision === 'diligence' && classification?.diligence_deal_id) {
+    await supabase
+      .from('inbound_emails')
+      .update({
+        routed_to: 'diligence',
+        diligence_deal_id: classification.diligence_deal_id,
+        diligence_intake_status: 'pending',
+      } as any)
+      .eq('id', emailId)
+
+    await createReview(supabase, {
+      fund_id: fundId,
+      email_id: emailId,
+      issue_type: 'diligence_intake_pending',
+      context_snippet:
+        `Matched to a deal in diligence (${classification.diligence_match_basis ?? 'classifier'}, ` +
+        `confidence ${classification.confidence.toFixed(2)}). ${classification.reasoning} ` +
+        `Accept it to add the email and its attachments to the deal's data room.`,
+    })
+
+    await finalizeEmail(supabase, emailId, { status: 'needs_review' })
+    return
+  }
+
+  if (routingDecision === 'audit') {
+    await supabase.from('inbound_emails').update({ routed_to: 'audit' }).eq('id', emailId)
+    await finalizeEmail(supabase, emailId, { status: 'not_processed' })
+    return
+  }
+
+  if (routingDecision === 'review') {
+    await createReview(supabase, {
+      fund_id: fundId,
+      email_id: emailId,
+      issue_type: 'routing_low_confidence',
+      context_snippet: classification
+        ? `Classifier: ${classification.label} @ ${classification.confidence.toFixed(2)} (secondary: ${classification.secondary_label ?? 'none'}). ${classification.reasoning}`
+        : '',
+    })
+    await supabase.from('inbound_emails').update({ routed_to: 'review' }).eq('id', emailId)
+    await finalizeEmail(supabase, emailId, { status: 'needs_review' })
+    return
+  }
+
+  // Shadow mode OR explicit reporting/interactions decision → existing flow.
+  // Persist routed_to so /emails UI can show the active destination.
+  const fallbackRouted = routingDecision === 'shadow' ? 'reporting' : routingDecision
+  await supabase.from('inbound_emails').update({ routed_to: fallbackRouted }).eq('id', emailId)
+
+  // Inbound analysis / portfolio tracking runs on the 'portfolio' feature model
+  // (company identification, metric extraction, interaction extraction).
+  const { provider, model, providerType } = await getFeatureProvider(supabase, fundId, 'portfolio')
 
   // Step 5: Identify the company (skip if already assigned, e.g. from manual assignment)
   const { data: existingEmail } = await supabase
@@ -130,7 +229,18 @@ export async function runPipeline(
   const metrics = await getMetrics(supabase, companyId!)
 
   if (metrics.length === 0) {
-    await finalizeEmail(supabase, emailId, { status: 'not_processed', metricsExtracted: 0 })
+    // Still save to file storage even when no metrics are defined
+    try {
+      await Promise.race([
+        saveToFileStorage(supabase, fundId, companyName, payload),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('File storage save timed out after 15s')), 15_000)),
+      ])
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[pipeline] File storage save failed (non-blocking):', msg)
+      warnings.push(describeStorageError(msg))
+    }
+    await finalizeEmail(supabase, emailId, { status: 'not_processed', metricsExtracted: 0, warnings })
     if (fundMember) {
       try {
         await maybeExtractInteraction(supabase, fundId, emailId, companyId, fundMember.userId, payload, extracted.emailBody, provider, providerType, model)
@@ -141,7 +251,7 @@ export async function runPipeline(
     return
   }
 
-  const combinedText = buildCombinedText(extracted)
+  const combinedText = buildCombinedText(extracted, payload)
 
   const pdfBase64s = extracted.attachments
     .filter(a => !a.skipped && a.base64Content && isPdf(a.contentType))
@@ -179,16 +289,20 @@ export async function runPipeline(
     metrics
   )
 
-  // Step 8: Finalize
-  const status: ProcessingStatus = reviewCount > 0 ? 'needs_review' : writtenCount > 0 ? 'success' : 'not_processed'
-  await finalizeEmail(supabase, emailId, { status, metricsExtracted: writtenCount })
-
-  // Step 9: Save to file storage (non-blocking)
+  // Step 8-9: Save to file storage then finalize
   try {
-    await saveToFileStorage(supabase, fundId, companyName, payload)
+    await Promise.race([
+      saveToFileStorage(supabase, fundId, companyName, payload),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('File storage save timed out after 15s')), 15_000)),
+    ])
   } catch (err) {
-    console.error('[pipeline] File storage save failed (non-blocking):', err)
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    console.error('[pipeline] File storage save failed (non-blocking):', msg)
+    warnings.push(describeStorageError(msg))
   }
+
+  const status: ProcessingStatus = reviewCount > 0 ? 'needs_review' : writtenCount > 0 ? 'success' : 'not_processed'
+  await finalizeEmail(supabase, emailId, { status, metricsExtracted: writtenCount, warnings })
 
   // Step 10: Extract interaction (fund member emails only)
   if (fundMember) {
@@ -349,7 +463,7 @@ export async function getClaudeModel(supabase: Supabase, fundId: string): Promis
     .eq('fund_id', fundId)
     .single()
 
-  return data?.claude_model || 'claude-sonnet-4-5'
+  return data?.claude_model || 'claude-sonnet-4-6'
 }
 
 export async function getOpenAIApiKey(supabase: Supabase, fundId: string): Promise<string> {
@@ -376,7 +490,7 @@ export async function getOpenAIModel(supabase: Supabase, fundId: string): Promis
   return data?.openai_model || 'gpt-4o'
 }
 
-export async function getDefaultAIProvider(supabase: Supabase, fundId: string): Promise<'anthropic' | 'openai' | 'gemini' | 'ollama'> {
+export async function getDefaultAIProvider(supabase: Supabase, fundId: string): Promise<'anthropic' | 'openai' | 'openrouter'> {
   const { data } = await supabase
     .from('fund_settings')
     .select('default_ai_provider')
@@ -384,44 +498,35 @@ export async function getDefaultAIProvider(supabase: Supabase, fundId: string): 
     .single()
 
   const provider = data?.default_ai_provider
-  if (provider === 'openai' || provider === 'gemini' || provider === 'ollama') return provider
+  // A fund still set to the removed 'gemini' provider falls through to the Claude default.
+  if (provider === 'openai' || provider === 'openrouter') return provider
   return 'anthropic'
 }
 
-export async function getGeminiApiKey(supabase: Supabase, fundId: string): Promise<string> {
-  const { data, error } = await supabase
+export async function getOpenRouterApiKey(supabase: Supabase, fundId: string): Promise<string> {
+  const { data, error } = await (supabase as any)
     .from('fund_settings')
-    .select('gemini_api_key_encrypted, encryption_key_encrypted')
+    .select('openrouter_api_key_encrypted, encryption_key_encrypted')
     .eq('fund_id', fundId)
     .single()
 
-  if (error || !data?.gemini_api_key_encrypted || !data?.encryption_key_encrypted) {
-    throw new Error(`Gemini API key not configured for fund ${fundId}`)
+  if (error || !data?.openrouter_api_key_encrypted || !data?.encryption_key_encrypted) {
+    throw new Error(`OpenRouter API key not configured for fund ${fundId}`)
   }
 
-  return decryptApiKey(data.gemini_api_key_encrypted, data.encryption_key_encrypted)
+  return decryptApiKey(data.openrouter_api_key_encrypted, data.encryption_key_encrypted)
 }
 
-export async function getGeminiModel(supabase: Supabase, fundId: string): Promise<string> {
-  const { data } = await supabase
+export async function getOpenRouterConfig(supabase: Supabase, fundId: string): Promise<{ baseUrl: string; model: string }> {
+  const { data } = await (supabase as any)
     .from('fund_settings')
-    .select('gemini_model')
-    .eq('fund_id', fundId)
-    .single()
-
-  return data?.gemini_model || 'gemini-2.0-flash'
-}
-
-export async function getOllamaConfig(supabase: Supabase, fundId: string): Promise<{ baseUrl: string; model: string }> {
-  const { data } = await supabase
-    .from('fund_settings')
-    .select('ollama_base_url, ollama_model')
+    .select('openrouter_base_url, openrouter_model')
     .eq('fund_id', fundId)
     .single()
 
   return {
-    baseUrl: data?.ollama_base_url || 'http://localhost:11434/v1',
-    model: data?.ollama_model || 'llama3.2',
+    baseUrl: data?.openrouter_base_url || 'https://openrouter.ai/api/v1',
+    model: data?.openrouter_model || 'openai/gpt-4o-mini',
   }
 }
 
@@ -430,6 +535,7 @@ export async function getCompanies(supabase: Supabase, fundId: string): Promise<
     .from('companies')
     .select('id, name, aliases')
     .eq('fund_id', fundId)
+    .eq('holding_type', 'company')   // fund holdings have their own surfaces
     .eq('status', 'active')
 
   return data ?? []
@@ -492,14 +598,16 @@ export async function createReview(
 export async function finalizeEmail(
   supabase: Supabase,
   emailId: string,
-  opts: { status: ProcessingStatus; metricsExtracted?: number }
+  opts: { status: ProcessingStatus; metricsExtracted?: number; warnings?: string[] }
 ) {
+  const update: Record<string, unknown> = {
+    processing_status: opts.status,
+    processing_error: opts.warnings?.length ? opts.warnings.join('; ') : null,
+    metrics_extracted: opts.metricsExtracted ?? 0,
+  }
   await supabase
     .from('inbound_emails')
-    .update({
-      processing_status: opts.status,
-      metrics_extracted: opts.metricsExtracted ?? 0,
-    })
+    .update(update)
     .eq('id', emailId)
 }
 
@@ -507,14 +615,36 @@ export async function finalizeEmail(
 // Text helpers
 // ---------------------------------------------------------------------------
 
-export function buildCombinedText(extracted: ExtractionResult): string {
-  const parts: string[] = [`[EMAIL BODY]\n${extracted.emailBody}`]
+export function buildCombinedText(extracted: ExtractionResult, payload?: PostmarkPayload): string {
+  const parts: string[] = []
+
+  // Include email metadata so the AI has subject/sender/date context
+  if (payload) {
+    const metaParts: string[] = []
+    if (payload.Subject) metaParts.push(`Subject: ${payload.Subject}`)
+    if (payload.FromFull?.Name) metaParts.push(`From: ${payload.FromFull.Name} <${payload.FromFull.Email}>`)
+    else if (payload.From) metaParts.push(`From: ${payload.From}`)
+    if (payload.Date) metaParts.push(`Date: ${payload.Date}`)
+    if (metaParts.length) parts.push(`[EMAIL METADATA]\n${metaParts.join('\n')}`)
+  }
+
+  parts.push(`[EMAIL BODY]\n${extracted.emailBody}`)
   for (const att of extracted.attachments) {
     if (!att.skipped && att.extractedText) {
       parts.push(`[ATTACHMENT: ${att.filename}]\n${att.extractedText}`)
     }
   }
   return parts.join('\n\n')
+}
+
+function describeStorageError(msg: string): string {
+  if (msg.includes('Failed to refresh Google token') || msg.includes('invalid_grant')) {
+    return 'File storage skipped: Google Drive connection expired. Reconnect in Settings > Google credentials.'
+  }
+  if (msg.includes('timed out')) {
+    return 'File storage skipped: connection timed out. Check your storage provider in Settings.'
+  }
+  return `File storage skipped: ${msg}`
 }
 
 export function parseValue(
@@ -603,7 +733,7 @@ async function saveToFileStorage(
 ): Promise<void> {
   const { data: settings } = await supabase
     .from('fund_settings')
-    .select('file_storage_provider, google_refresh_token_encrypted, encryption_key_encrypted, google_drive_folder_id, dropbox_refresh_token_encrypted, dropbox_folder_path')
+    .select('file_storage_provider, google_refresh_token_encrypted, encryption_key_encrypted, google_drive_folder_id')
     .eq('fund_id', fundId)
     .single()
 
@@ -611,8 +741,6 @@ async function saveToFileStorage(
 
   if (settings.file_storage_provider === 'google_drive') {
     await saveToGoogleDrive(supabase, fundId, companyName, payload, settings)
-  } else if (settings.file_storage_provider === 'dropbox') {
-    await saveToDropbox(supabase, fundId, companyName, payload, settings)
   }
 }
 
@@ -654,56 +782,194 @@ async function saveToGoogleDrive(
   if (payload.Attachments?.length) {
     for (const att of payload.Attachments) {
       if (!att.Content) continue
+      const safeName = att.Name.replace(/[\/\\:*?"<>|]/g, '_').replace(/\.\./g, '_')
       const content = Buffer.from(att.Content, 'base64')
-      await uploadGoogleFile(accessToken, companyFolderId, att.Name, content, att.ContentType)
+      await uploadGoogleFile(accessToken, companyFolderId, safeName, content, att.ContentType)
     }
   }
 }
 
-async function saveToDropbox(
+// ---------------------------------------------------------------------------
+// Routing classifier (Step 4.5)
+// ---------------------------------------------------------------------------
+
+export type RoutingDecision = 'deals' | 'diligence' | 'audit' | 'review' | 'reporting' | 'interactions' | 'shadow'
+
+export interface ClassificationResultStored {
+  label: 'reporting' | 'interactions' | 'deals' | 'diligence' | 'other'
+  confidence: number
+  reasoning: string
+  secondary_label: 'reporting' | 'interactions' | 'deals' | 'diligence' | 'other' | null
+  diligence_deal_name: string | null
+  /** Resolved from diligence_deal_name (or the deterministic matcher) at classify time. */
+  diligence_deal_id: string | null
+  diligence_match_basis: string | null
+}
+
+interface DealsSettings {
+  deal_intake_enabled: boolean
+  routing_confidence_threshold: number | null
+  routing_model: string | null
+}
+
+async function loadDealsSettings(supabase: Supabase, fundId: string): Promise<DealsSettings> {
+  const { data } = await supabase
+    .from('fund_settings')
+    .select('deal_intake_enabled, routing_confidence_threshold, routing_model')
+    .eq('fund_id', fundId)
+    .maybeSingle()
+  const row = data as { deal_intake_enabled: boolean | null; routing_confidence_threshold: number | null; routing_model: string | null } | null
+  return {
+    deal_intake_enabled: row?.deal_intake_enabled ?? false,
+    routing_confidence_threshold: row?.routing_confidence_threshold ?? null,
+    routing_model: row?.routing_model ?? null,
+  }
+}
+
+/**
+ * Translate a classifier result + settings into a routing decision.
+ *   shadow       → intake disabled; existing pipeline runs unchanged
+ *   review       → confidence below threshold; queue for human resolution
+ *   audit        → label 'other'; recorded but no pipeline runs
+ *   deals        → run processDeal
+ *   diligence    → propose the email for a diligence deal's data room (human accepts)
+ *   reporting    → existing flow runs (label confirms reporting)
+ *   interactions → existing flow runs (label is interactions)
+ */
+function decideRoute(c: ClassificationResultStored, s: DealsSettings): RoutingDecision {
+  if (!s.deal_intake_enabled) return 'shadow'
+
+  const threshold = s.routing_confidence_threshold ?? 0
+  if (c.confidence < threshold) return 'review'
+
+  if (c.label === 'other') return 'audit'
+  if (c.label === 'deals') return 'deals'
+  if (c.label === 'diligence') {
+    // A diligence label we can't tie to an actual deal is useless — we'd have
+    // nowhere to file the email. Send it to the review queue so a human can
+    // pick the deal, rather than silently downgrading it to reporting.
+    return c.diligence_deal_id ? 'diligence' : 'review'
+  }
+  return c.label // 'reporting' | 'interactions'
+}
+
+async function classifyAndStore(
   supabase: Supabase,
+  emailId: string,
   fundId: string,
-  companyName: string,
   payload: PostmarkPayload,
-  settings: { dropbox_refresh_token_encrypted: string | null; encryption_key_encrypted: string | null; dropbox_folder_path: string | null }
-): Promise<void> {
-  if (
-    !settings.dropbox_refresh_token_encrypted ||
-    !settings.encryption_key_encrypted ||
-    !settings.dropbox_folder_path
-  ) {
-    return
+  emailBody: string,
+  fundMember: { userId: string } | null | undefined,
+  provider: import('@/lib/ai/types').AIProvider,
+  providerType: string,
+  defaultModel: string,
+  routingModelOverride: string | null
+): Promise<ClassificationResultStored | null> {
+  const senderEmail = (payload.FromFull?.Email ?? payload.From ?? '').trim().toLowerCase()
+  if (!senderEmail) return null
+
+  const fwd = detectForward(emailBody || '')
+
+  const [authorizedSender, knownReferrer, fwdAuthorized] = await Promise.all([
+    fundMember ? Promise.resolve(false) : isAuthorizedSender(supabase, fundId, senderEmail),
+    isKnownReferrer(supabase, fundId, senderEmail),
+    fwd.forwarded_from_email
+      ? isAuthorizedSender(supabase, fundId, fwd.forwarded_from_email)
+      : Promise.resolve(false),
+  ])
+
+  const flags: SenderFlags = {
+    is_fund_member: !!fundMember,
+    is_authorized_sender: authorizedSender,
+    is_known_referrer: knownReferrer,
+    is_forward: fwd.is_forward,
+    forwarded_from_email: fwd.forwarded_from_email,
+    forwarded_from_is_authorized_sender: fwdAuthorized,
   }
 
-  const kek = process.env.ENCRYPTION_KEY
-  if (!kek) return
+  const attachments: AttachmentDescriptor[] = (payload.Attachments ?? []).map(a => ({
+    name: a.Name,
+    contentType: a.ContentType,
+    sizeBytes: a.ContentLength ?? 0,
+  }))
 
-  const dek = decrypt(settings.encryption_key_encrypted, kek)
-  const refreshToken = decrypt(settings.dropbox_refresh_token_encrypted, dek)
+  // Deterministic deal matching runs BEFORE the model. A sender-domain hit is
+  // stronger evidence than anything the classifier can infer from prose, and
+  // giving the model the answer it should already reach makes the label stable.
+  const activeDeals = await loadActiveDiligenceDeals(supabase, fundId)
+  const deterministic = matchDiligenceDeal({
+    senderEmail,
+    forwardedFromEmail: fwd.forwarded_from_email,
+    subject: payload.Subject ?? '',
+    deals: activeDeals,
+  })
 
-  const creds = await getDropboxCredentials(supabase, fundId)
-  if (!creds) return
+  const result = await classifyEmail(
+    {
+      subject: payload.Subject ?? '',
+      body: emailBody || '',
+      attachments,
+      flags,
+      activeDiligenceDeals: activeDeals.map(d => d.name),
+      matchedDealName: deterministic?.basis === 'sender_domain' ? deterministic.deal.name : null,
+    },
+    provider,
+    providerType,
+    routingModelOverride ?? defaultModel,
+    { admin: supabase, fundId }
+  )
 
-  const accessToken = await getDropboxAccessToken(refreshToken, creds.appKey, creds.appSecret)
-  const rootPath = settings.dropbox_folder_path
-
-  // Create company subfolder (sanitize name to prevent path traversal)
-  const safeCompanyName = companyName.replace(/[\/\\:*?"<>|.]/g, '_').replace(/^_+/, '').slice(0, 100) || 'Unknown'
-  const companyPath = `${rootPath}/${safeCompanyName}`
-  await findOrCreateDropboxFolder(accessToken, companyPath)
-
-  const dateStr = new Date().toISOString().slice(0, 10)
-  const subject = payload.Subject?.replace(/[^a-zA-Z0-9 _-]/g, '').slice(0, 60) || 'Report'
-  const emailFilename = `${dateStr}_${subject}.txt`
-
-  const emailBody = payload.TextBody || payload.HtmlBody || '(no body)'
-  await uploadDropboxFile(accessToken, companyPath, emailFilename, emailBody)
-
-  if (payload.Attachments?.length) {
-    for (const att of payload.Attachments) {
-      if (!att.Content) continue
-      const content = Buffer.from(att.Content, 'base64')
-      await uploadDropboxFile(accessToken, companyPath, att.Name, content)
+  // Resolve the label to a concrete deal. The model names a deal; we only trust
+  // a name that exactly matches one we gave it (case-insensitively) — otherwise
+  // a hallucinated company name would file an email against nothing. The
+  // deterministic match wins when both are present.
+  let dealId: string | null = null
+  let basis: string | null = null
+  if (deterministic) {
+    dealId = deterministic.deal.id
+    basis = deterministic.basis
+  }
+  if (!dealId && result.label === 'diligence' && result.diligence_deal_name) {
+    const wanted = result.diligence_deal_name.trim().toLowerCase()
+    const hit = activeDeals.find(d => d.name.trim().toLowerCase() === wanted)
+    if (hit) {
+      dealId = hit.id
+      basis = 'classifier'
     }
   }
+
+  const stored: ClassificationResultStored = {
+    label: result.label as ClassificationResultStored['label'],
+    confidence: result.confidence,
+    reasoning: result.reasoning,
+    secondary_label: result.secondary_label as ClassificationResultStored['secondary_label'],
+    diligence_deal_name: result.diligence_deal_name,
+    diligence_deal_id: dealId,
+    diligence_match_basis: basis,
+  }
+
+  await supabase
+    .from('inbound_emails')
+    .update({
+      routing_label: result.label,
+      routing_confidence: result.confidence,
+      routing_reasoning: result.reasoning,
+      routing_secondary_label: result.secondary_label,
+      // Recorded even when we don't route to diligence: the review queue uses it
+      // to offer a one-click "file this under <deal>".
+      diligence_deal_id: dealId,
+    } as any)
+    .eq('id', emailId)
+
+  return stored
+}
+
+async function isKnownReferrer(supabase: Supabase, fundId: string, email: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('known_referrers')
+    .select('id')
+    .eq('fund_id', fundId)
+    .eq('email', email)
+    .maybeSingle()
+  return !!data
 }

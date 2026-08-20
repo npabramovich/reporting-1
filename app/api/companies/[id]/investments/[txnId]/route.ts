@@ -4,6 +4,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { dbError } from '@/lib/api-error'
 import { logActivity } from '@/lib/activity'
+import { redraftEntryForTransaction, retractEntriesForTransaction } from '@/lib/accounting/from-portfolio'
+import { validateConversionLink } from '@/lib/accounting/conversion-link'
+import { normalizeSecurityType, SECURITY_TYPES } from '@/lib/accounting/soi'
+import { ensureVehiclesByName } from '@/lib/accounting/vehicle-id'
 
 // ---------------------------------------------------------------------------
 // PATCH — update a transaction
@@ -25,10 +29,10 @@ export async function PATCH(
   // Verify transaction exists and belongs to this company
   const { data: existing } = await admin
     .from('investment_transactions' as any)
-    .select('id, company_id, fund_id')
+    .select('id, company_id, fund_id, transaction_type')
     .eq('id', params.txnId)
     .eq('company_id', params.id)
-    .maybeSingle() as { data: { id: string; company_id: string; fund_id: string } | null }
+    .maybeSingle() as { data: { id: string; company_id: string; fund_id: string; transaction_type: string } | null }
 
   if (!existing) return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
 
@@ -39,8 +43,42 @@ export async function PATCH(
 
   const body = await req.json()
 
+  // A mis-typed row can be reclassified on edit (e.g. a "Round" that should be a "Valuation
+  // Update"). Only the four DB types are valid; the UI's "conversion" is already translated to
+  // 'investment' + converts_from before it reaches here.
+  const VALID_TYPES = ['investment', 'proceeds', 'unrealized_gain_change', 'round_info']
+  if ('transaction_type' in body && !VALID_TYPES.includes(body.transaction_type)) {
+    return NextResponse.json({ error: 'Invalid transaction_type' }, { status: 400 })
+  }
+  const nextType: string = ('transaction_type' in body ? body.transaction_type : existing.transaction_type)
+
+  // Rows whose conversion depends on THIS row (this row is their SAFE/note source).
+  const { data: dependents } = await admin
+    .from('investment_transactions' as any)
+    .select('id')
+    .eq('converts_from_txn_id', params.txnId) as { data: { id: string }[] | null }
+  const dependentCount = (dependents ?? []).length
+
+  // #5 — A conversion source must stay an `investment`. Reclassifying it to anything else would
+  // silently drop the dependent conversion's carried basis (computeSummary skips non-investment
+  // sources). Block it rather than let the numbers shrink with no warning.
+  if (dependentCount > 0 && nextType !== 'investment') {
+    return NextResponse.json(
+      { error: `Can't change this to a ${nextType}: ${dependentCount} conversion${dependentCount > 1 ? 's' : ''} on this company convert${dependentCount > 1 ? '' : 's'} from it. Re-point or remove those conversions first.` },
+      { status: 400 },
+    )
+  }
+
+  // #2 — Validate the conversion link the same way create does (dangling / cross-company / self /
+  // non-investment). Without this, an edit could set a link the create path would have rejected.
+  if (body.converts_from_txn_id) {
+    const linkError = await validateConversionLink(admin, params.id, body.converts_from_txn_id, nextType, params.txnId)
+    if (linkError) return NextResponse.json({ error: linkError }, { status: 400 })
+  }
+
   // Only allow updating known fields
   const allowedFields = [
+    'transaction_type',
     'round_name', 'transaction_date', 'notes',
     'investment_cost', 'interest_converted', 'shares_acquired', 'share_price',
     'cost_basis_exited', 'proceeds_received', 'proceeds_escrow',
@@ -52,12 +90,46 @@ export async function PATCH(
     'original_proceeds_received', 'original_proceeds_per_share', 'original_exit_valuation',
     'original_unrealized_value_change', 'original_current_share_price',
     'original_latest_postmoney_valuation',
+    'valuation_change_source', 'fx_rate', 'prior_fx_rate', 'fx_value_change',
+    'original_position_value',
     'portfolio_group',
+    // The Schedule of Investments reads `security_type` for its by-asset-type breakout, but
+    // it was in no create route, no allowlist and no import — so nothing in the app could
+    // ever set it, and the breakout fell back to a two-bucket guess forever.
+    'security_type',
+    // Convertible-note terms. `interest_rate` is the ONLY rate the ledger accrues on.
+    // `dividend_rate` is preferred-equity dividends: they accrue to the liquidation preference,
+    // not to income, and never touch the books.
+    'interest_rate', 'maturity_date', 'dividend_rate',
+    // The conversion link (which SAFE/note this priced round converted). Editing a conversion
+    // re-drafts its ledger entry from the new values, same as any other investment edit.
+    'converts_from_txn_id',
   ]
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const key of allowedFields) {
     if (key in body) updates[key] = body[key]
+  }
+
+  // Same CHECK constraint as the create route: reject in words rather than let Postgres reject it
+  // in a 500. Null stays null — that's how you clear the instrument back to the derived fallback.
+  if (body.security_type != null && body.security_type !== '') {
+    const security_type = normalizeSecurityType(body.security_type)
+    if (!security_type) {
+      return NextResponse.json(
+        { error: `Invalid security_type "${body.security_type}". Must be one of: ${SECURITY_TYPES.join(', ')}` },
+        { status: 400 },
+      )
+    }
+    updates.security_type = security_type
+  } else if ('security_type' in body) {
+    updates.security_type = null
+  }
+
+  if ('portfolio_group' in updates) {
+    // Every stored portfolio_group name must be backed by a real fund_vehicles row — never a
+    // disconnected string. Resolve/create before the write, not after.
+    await ensureVehiclesByName(admin, existing.fund_id, [updates.portfolio_group as string | null | undefined])
   }
 
   const { data: txn, error } = await admin
@@ -74,7 +146,20 @@ export async function PATCH(
     transactionId: params.txnId,
   })
 
-  return NextResponse.json(txn)
+  // Re-mirror the ledger. Creating a transaction drafted a journal entry, but editing one
+  // used to change nothing on the books — so correcting a fat-fingered cost left the ledger
+  // permanently wrong, with only a passive variance warning to notice, and no way to tell why.
+  const { data: company } = await admin
+    .from('companies' as any)
+    .select('name')
+    .eq('id', params.id)
+    .maybeSingle() as { data: { name: string } | null }
+
+  const ledger = await redraftEntryForTransaction(
+    admin, existing.fund_id, user.id, txn, company?.name ?? 'Investment'
+  )
+
+  return NextResponse.json({ ...(txn as object), ledger })
 }
 
 // ---------------------------------------------------------------------------
@@ -109,6 +194,30 @@ export async function DELETE(
     return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
   }
 
+  // #3 — Refuse to delete an instrument that a conversion depends on. The FK is ON DELETE SET
+  // NULL, so deleting it would silently orphan the conversion into a $0-cost investment (its basis
+  // gone, its shares now valued at nothing). Make the dependency explicit instead of destroying it.
+  const { data: dependents } = await admin
+    .from('investment_transactions' as any)
+    .select('id')
+    .eq('converts_from_txn_id', params.txnId) as { data: { id: string }[] | null }
+  if ((dependents ?? []).length > 0) {
+    const n = (dependents ?? []).length
+    return NextResponse.json(
+      { error: `Can't delete this: ${n} conversion${n > 1 ? 's' : ''} on this company convert${n > 1 ? '' : 's'} from it. Delete or re-point ${n > 1 ? 'those' : 'that'} first.` },
+      { status: 400 },
+    )
+  }
+
+  // Retract the ledger side FIRST. If its journal entry sits in a closed period we refuse the
+  // whole delete — otherwise the tracker would lose a transaction the books still carry, and
+  // the two would disagree with nothing to explain why. Deleting the tracker row first and
+  // then failing here would leave exactly that mess.
+  const ledger = await retractEntriesForTransaction(admin, existing.fund_id, params.txnId)
+  if (ledger.reason) {
+    return NextResponse.json({ error: `Can't delete this transaction. ${ledger.reason}` }, { status: 400 })
+  }
+
   const { error } = await admin
     .from('investment_transactions' as any)
     .delete()
@@ -121,5 +230,5 @@ export async function DELETE(
     transactionId: params.txnId,
   })
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, ledger })
 }

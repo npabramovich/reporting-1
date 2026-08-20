@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { rateLimit } from '@/lib/rate-limit'
+import { dbError } from '@/lib/api-error'
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
     cftc_activity: ['yes_with_exemption', 'yes_no_exemption', 'no', 'unsure'],
     access_person_count: ['1_to_3', '4_to_10', '11_plus'],
     has_foreign_entities: ['yes', 'no'],
+    has_foreign_investors: ['yes', 'no', 'unsure'],
   } as const
 
   const VALID_CA_NEXUS = ['hq_ca', 'investors_ca', 'investments_ca', 'fundraising_ca', 'none']
@@ -56,6 +58,7 @@ export async function POST(req: NextRequest) {
     cftc_activity: validateEnum(body.cftc_activity, VALID.cftc_activity),
     access_person_count: validateEnum(body.access_person_count, VALID.access_person_count),
     has_foreign_entities: validateEnum(body.has_foreign_entities, VALID.has_foreign_entities),
+    has_foreign_investors: validateEnum(body.has_foreign_investors, VALID.has_foreign_investors),
     completed_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     updated_by: user.id,
@@ -67,6 +70,6 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'compliance-profile')
   return NextResponse.json(data)
 }

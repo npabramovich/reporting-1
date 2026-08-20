@@ -111,28 +111,35 @@ export async function GET() {
   let outboundEmail = null
   let fileStorage = null
   let senders = null
+  let memoAgent: { schemasSeeded: boolean; styleAnchorCount: number } | null = null
 
   if (hasFund) {
     try {
-      const [settingsResult, sendersResult] = await Promise.all([
+      const [settingsResult, sendersResult, schemasResult, anchorsResult] = await Promise.all([
         supabase
           .from('fund_settings')
           .select(
-            'claude_api_key_encrypted, openai_api_key_encrypted, gemini_api_key_encrypted, default_ai_provider, ollama_base_url, ollama_model, inbound_email_provider, postmark_webhook_token, postmark_webhook_token_encrypted, mailgun_signing_key_encrypted, outbound_email_provider, postmark_server_token_encrypted, resend_api_key_encrypted, mailgun_api_key_encrypted, file_storage_provider, google_refresh_token_encrypted, dropbox_refresh_token_encrypted'
+            'claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, inbound_email_provider, postmark_webhook_token, postmark_webhook_token_encrypted, mailgun_signing_key_encrypted, outbound_email_provider, postmark_server_token_encrypted, resend_api_key_encrypted, mailgun_api_key_encrypted, file_storage_provider, google_refresh_token_encrypted'
           )
           .limit(1)
           .maybeSingle(),
         supabase.from('authorized_senders').select('id', { count: 'exact', head: true }),
+        supabase.from('firm_schemas').select('schema_name', { count: 'exact', head: false }).eq('is_active', true),
+        supabase.from('style_anchor_memos').select('id', { count: 'exact', head: true }),
       ])
+
+      memoAgent = {
+        // Seven schemas required when seeded.
+        schemasSeeded: (schemasResult.count ?? schemasResult.data?.length ?? 0) >= 7,
+        styleAnchorCount: anchorsResult.count ?? 0,
+      }
 
       const s = settingsResult.data
 
       const hasClaudeKey = !!s?.claude_api_key_encrypted
       const hasOpenAIKey = !!s?.openai_api_key_encrypted
-      const hasGeminiKey = !!s?.gemini_api_key_encrypted
-      const hasOllama = !!s?.ollama_base_url && !!s?.ollama_model
       ai = {
-        hasProvider: hasClaudeKey || hasOpenAIKey || hasGeminiKey || hasOllama,
+        hasProvider: hasClaudeKey || hasOpenAIKey,
       }
 
       const hasInboundProvider = !!s?.inbound_email_provider
@@ -154,9 +161,8 @@ export async function GET() {
       }
 
       const hasGoogleDrive = !!s?.google_refresh_token_encrypted
-      const hasDropbox = !!s?.dropbox_refresh_token_encrypted
       fileStorage = {
-        connected: hasGoogleDrive || hasDropbox,
+        connected: hasGoogleDrive,
       }
 
       senders = {
@@ -189,5 +195,6 @@ export async function GET() {
     outboundEmail,
     fileStorage,
     senders,
+    memoAgent,
   })
 }

@@ -13,6 +13,15 @@ export function xirr(flows: CashFlow[]): number | null {
 
   const daysFromFirst = flows.map(f => (f.date.getTime() - flows[0].date.getTime()) / (365.25 * 86400000))
 
+  // No time spread → IRR is undefined. Every flow is at the same instant, so npv(rate) is the
+  // (rate-independent) SUM of the amounts: it has no root in `rate` at all. When that sum is also
+  // ~0 (e.g. a single cutover position where NAV = called with no distributions), the Newton loop
+  // below sees npv≈0 at its first guess, "accepts" it, and returns that guess (0.1 → a spurious
+  // 10%). Bail here instead: you cannot compute a return from a single point in time.
+  let minT = daysFromFirst[0], maxT = daysFromFirst[0]
+  for (const t of daysFromFirst) { if (t < minT) minT = t; if (t > maxT) maxT = t }
+  if (maxT - minT < 1 / 365.25) return null // under a day of spread
+
   function npv(rate: number): number {
     return flows.reduce((sum, f, i) => sum + f.amount / Math.pow(1 + rate, daysFromFirst[i]), 0)
   }

@@ -79,7 +79,7 @@ export async function POST(
     })
     .eq('id', params.id)
 
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+  if (updateError) return dbError(updateError, 'emails-id-attachments')
 
   return NextResponse.json({ ok: true, filename })
 }

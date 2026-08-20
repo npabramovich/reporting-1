@@ -1,41 +1,28 @@
 'use client'
 
-import { useState } from 'react'
-import { Menu, LogOut, Building2 } from 'lucide-react'
+import { LogOut, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
-import { AppSidebar } from '@/components/app-sidebar'
+import { LpPortalSwitchLink } from '@/components/lp-portal-switch-link'
 import { useSidebar } from '@/components/sidebar-context'
-import type { FeatureVisibilityMap } from '@/lib/types/features'
 
 interface AppHeaderProps {
   fundName: string
   fundLogo?: string | null
   userEmail: string
-  reviewBadge: number
-  settingsBadge?: number
-  notesBadge?: number
-  isAdmin?: boolean
-  featureVisibility?: FeatureVisibilityMap
 }
 
-export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge, settingsBadge, notesBadge, isAdmin, featureVisibility }: AppHeaderProps) {
-  const [drawerOpen, setDrawerOpen] = useState(false)
+// Identity and sign-out. Navigation is NOT here any more: on desktop it is the aside
+// in app-shell.tsx, and on a phone it is components/mobile-nav.tsx — a bottom tab bar
+// with the sidebar behind "More". The hamburger this used to carry was in the corner
+// of the screen furthest from a thumb, and opened a menu a third of which could not be
+// scrolled to.
+export function AppHeader({ fundName, fundLogo, userEmail }: AppHeaderProps) {
   const { collapsed } = useSidebar()
 
   return (
     <header className="relative flex items-center justify-between px-4 py-3 shrink-0">
-      {/* Left: hamburger + logo + fund name */}
+      {/* Left: logo + fund name */}
       <div className="flex items-center gap-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="md:hidden p-1.5"
-          onClick={() => setDrawerOpen(true)}
-        >
-          <Menu className="h-5 w-5" />
-          <span className="sr-only">Open menu</span>
-        </Button>
         {fundLogo ? (
           <img
             src={fundLogo}
@@ -52,15 +39,19 @@ export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge, settings
         )}
       </div>
 
-      {/* Fund name aligned above page content when sidebar collapsed */}
+      {/* Fund name aligned above page content when sidebar collapsed.
+          left-28 (112px) is the page content's left edge, and has to be kept in step with it:
+          64 (the collapsed aside's w-16) + 16 (main's md:pl-4) + 32 (the section layout's
+          md:pl-8, e.g. app/(app)/funds/layout.tsx). */}
       {collapsed && (
-        <span className="hidden md:block absolute left-24 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground/70 tracking-tight">
+        <span className="hidden md:block absolute left-28 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground/70 tracking-tight">
           {fundName}
         </span>
       )}
 
       {/* Right: user + sign out */}
       <div className="flex items-center gap-3">
+        <LpPortalSwitchLink />
         <span className="text-xs text-muted-foreground truncate hidden sm:block max-w-[200px]">
           {userEmail}
         </span>
@@ -76,20 +67,6 @@ export function AppHeader({ fundName, fundLogo, userEmail, reviewBadge, settings
           </Button>
         </form>
       </div>
-
-      {/* Mobile drawer */}
-      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="left" className="p-0 pt-12 w-64">
-          <AppSidebar
-            reviewBadge={reviewBadge}
-            settingsBadge={settingsBadge}
-            notesBadge={notesBadge}
-            isAdmin={isAdmin}
-            featureVisibility={featureVisibility}
-            onNavigate={() => setDrawerOpen(false)}
-          />
-        </SheetContent>
-      </Sheet>
     </header>
   )
 }

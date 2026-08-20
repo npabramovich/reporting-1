@@ -33,6 +33,7 @@ interface SetupStatus {
   outboundEmail: { providerConfigured: boolean; keyConfigured: boolean } | null
   fileStorage: { connected: boolean } | null
   senders: { count: number } | null
+  memoAgent: { schemasSeeded: boolean; styleAnchorCount: number } | null
 }
 
 interface CheckItem {
@@ -152,7 +153,7 @@ export default function SetupPage() {
       sections.push({
         title: 'File Storage',
         checks: [
-          { label: 'Google Drive or Dropbox connected', passed: s.fileStorage.connected, required: false, helpLabel: 'Settings', helpUrl: '/settings' },
+          { label: 'Google Drive connected', passed: s.fileStorage.connected, required: false, helpLabel: 'Settings', helpUrl: '/settings' },
         ],
       })
     }
@@ -162,6 +163,35 @@ export default function SetupPage() {
         title: 'Authorized Senders',
         checks: [
           { label: `At least one sender (${s.senders.count} configured)`, passed: s.senders.count > 0, required: false, helpLabel: 'Settings', helpUrl: '/settings' },
+        ],
+      })
+    }
+
+    if (s.memoAgent) {
+      sections.push({
+        title: 'Memo Agent',
+        checks: [
+          {
+            label: 'Schema set seeded (7 active schemas)',
+            passed: s.memoAgent.schemasSeeded,
+            required: false,
+            helpLabel: 'Open schemas',
+            helpUrl: '/settings/memo-agent/schemas',
+          },
+          {
+            label: `Reference memos uploaded (${s.memoAgent.styleAnchorCount}; recommended ≥3 for reliable voice match)`,
+            passed: s.memoAgent.styleAnchorCount >= 3,
+            required: false,
+            helpLabel: 'Open style anchors',
+            helpUrl: '/settings/memo-agent/style-anchors',
+          },
+          {
+            label: 'AI provider configured (required for the agent)',
+            passed: !!s.ai?.hasProvider,
+            required: false,
+            helpLabel: 'Settings',
+            helpUrl: '/settings',
+          },
         ],
       })
     }
@@ -193,7 +223,7 @@ export default function SetupPage() {
         </div>
 
         {error && (
-          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          <div className="rounded-card border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
             {error}
           </div>
         )}
@@ -207,11 +237,7 @@ export default function SetupPage() {
         {status && (
           <>
             <div
-              className={`rounded-lg border p-4 text-sm font-medium ${
-                allRequiredPassed
-                  ? 'border-green-500/50 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
-                  : 'border-amber-500/50 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
-              }`}
+              className={`rounded-card border p-4 text-sm font-medium ${ allRequiredPassed ? 'border-success/50 bg-success-subtle text-success dark:bg-success-subtle/30 dark:text-success' : 'border-warning/50 bg-warning-subtle text-warning dark:bg-warning-subtle/30 dark:text-warning' }`}
             >
               {allRequiredPassed
                 ? 'All required checks passed!'
@@ -219,21 +245,21 @@ export default function SetupPage() {
             </div>
 
             {sections.map((section) => (
-              <div key={section.title} className="rounded-lg border bg-card p-4">
-                <h2 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              <div key={section.title} className="rounded-card border bg-card p-4">
+                <h2 className="mb-3 text-base font-semibold text-muted-foreground uppercase tracking-wide">
                   {section.title}
                 </h2>
                 <ul className="space-y-2">
                   {section.checks.map((check) => (
                     <li key={check.label} className="flex items-center gap-3 text-sm">
                       {check.passed ? (
-                        <CheckCircle2 className="h-5 w-5 shrink-0 text-green-500" />
+                        <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
                       ) : check.required ? (
-                        <XCircle className="h-5 w-5 shrink-0 text-red-500" />
+                        <XCircle className="h-5 w-5 shrink-0 text-destructive" />
                       ) : (
                         <Circle className="h-5 w-5 shrink-0 text-muted-foreground" />
                       )}
-                      <span className={check.passed ? '' : check.required ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}>
+                      <span className={check.passed ? '' : check.required ? 'text-destructive' : 'text-muted-foreground'}>
                         {check.label}
                       </span>
                       {!check.passed && check.helpUrl && (

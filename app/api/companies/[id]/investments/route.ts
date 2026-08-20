@@ -7,6 +7,10 @@ import { logActivity } from '@/lib/activity'
 import type { InvestmentTransaction, CompanyStatus } from '@/lib/types/database'
 import type { CompanyInvestmentSummary } from '@/lib/types/investments'
 import { computeSummary } from '@/lib/investments'
+import { draftEntryForTransaction } from '@/lib/accounting/from-portfolio'
+import { validateConversionLink } from '@/lib/accounting/conversion-link'
+import { normalizeSecurityType, SECURITY_TYPES } from '@/lib/accounting/soi'
+import { ensureVehiclesByName } from '@/lib/accounting/vehicle-id'
 
 // ---------------------------------------------------------------------------
 // GET — all transactions for a company + computed summary
@@ -97,7 +101,7 @@ export async function POST(
   // Verify company exists
   const { data: company } = await admin
     .from('companies')
-    .select('id, fund_id')
+    .select('id, fund_id, name')
     .eq('id', params.id)
     .maybeSingle()
 
@@ -119,12 +123,37 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid transaction_type' }, { status: 400 })
   }
 
+  // security_type is CHECK-constrained. Unvalidated, a bad value reached Postgres and came back as
+  // a raw constraint violation the user saw as "An unexpected error occurred" — so say what's wrong
+  // here instead. Normalizing first keeps "Convertible Note" from an API caller working.
+  const security_type = body.security_type ? normalizeSecurityType(body.security_type) : null
+  if (body.security_type && !security_type) {
+    return NextResponse.json(
+      { error: `Invalid security_type "${body.security_type}". Must be one of: ${SECURITY_TYPES.join(', ')}` },
+      { status: 400 },
+    )
+  }
+
+  // A conversion links to the SAFE/note it converts. Validate the link the same way here and in
+  // PATCH — a dangling or cross-company id would silently break the basis carry and the ledger entry.
+  const convertsFrom: string | null = body.converts_from_txn_id ?? null
+  if (convertsFrom) {
+    const linkError = await validateConversionLink(admin, params.id, convertsFrom, transaction_type)
+    if (linkError) return NextResponse.json({ error: linkError }, { status: 400 })
+  }
+
+  // Every stored portfolio_group name must be backed by a real fund_vehicles row — never a
+  // disconnected string. Resolve/create before the write, not after.
+  await ensureVehiclesByName(admin, company.fund_id, [body.portfolio_group])
+
   const { data: txn, error } = await admin
     .from('investment_transactions' as any)
     .insert({
       company_id: params.id,
       fund_id: company.fund_id,
       transaction_type: body.transaction_type,
+      // Non-null on a conversion: this investment row is the priced round a SAFE/note became.
+      converts_from_txn_id: convertsFrom,
       round_name: body.round_name ?? null,
       transaction_date: body.transaction_date ?? null,
       notes: body.notes ?? null,
@@ -153,7 +182,21 @@ export async function POST(
       original_unrealized_value_change: body.original_unrealized_value_change ?? null,
       original_current_share_price: body.original_current_share_price ?? null,
       original_latest_postmoney_valuation: body.original_latest_postmoney_valuation ?? null,
+      valuation_change_source: body.valuation_change_source ?? null,
+      fx_rate: body.fx_rate ?? null,
+      prior_fx_rate: body.prior_fx_rate ?? null,
+      fx_value_change: body.fx_value_change ?? null,
+      original_position_value: body.original_position_value ?? null,
       portfolio_group: body.portfolio_group ?? null,
+      // Feeds the SOI's by-asset-type breakout. The column existed and soi.ts read it, but no
+      // route ever wrote it, so the breakout fell back to a derived two-bucket guess forever.
+      security_type,
+      // Convertible-note terms. The close accrues interest on `interest_rate` only.
+      // `dividend_rate` (preferred dividends) accrues to the liquidation preference and is
+      // deliberately invisible to the ledger — an undeclared preferred dividend is not income.
+      interest_rate: body.interest_rate ?? null,
+      maturity_date: body.maturity_date ?? null,
+      dividend_rate: body.dividend_rate ?? null,
     })
     .select('*')
     .single() as { data: InvestmentTransaction | null; error: { message: string } | null }
@@ -165,5 +208,17 @@ export async function POST(
     transactionType: transaction_type,
   })
 
-  return NextResponse.json(txn)
+  // Mirror it into the ledger as a DRAFT for review. Deliberately after the insert and
+  // deliberately non-fatal: the transaction is saved either way, and `ledger.reason`
+  // says why no entry was drafted (vehicle not on the ledger, a closed period, a
+  // company-wide pricing row with no vehicle to attribute it to).
+  const ledger = await draftEntryForTransaction(
+    admin,
+    company.fund_id,
+    user.id,
+    txn,
+    (company as any).name ?? 'Investment',
+  )
+
+  return NextResponse.json({ ...txn, ledger })
 }

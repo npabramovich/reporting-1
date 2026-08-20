@@ -5,6 +5,7 @@ import { assertWriteAccess } from '@/lib/api-helpers'
 import type { CompanyStatus } from '@/lib/types/database'
 import { dbError } from '@/lib/api-error'
 import { logActivity } from '@/lib/activity'
+import { ensureVehiclesByName } from '@/lib/accounting/vehicle-id'
 
 const VALID_STATUSES: CompanyStatus[] = ['active', 'exited', 'written-off']
 
@@ -34,7 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (writeCheck instanceof NextResponse) return writeCheck
 
   const body = await req.json()
-  const { name, aliases, tags, stage, industry, notes, status, overview, founders, why_invested, current_update, contact_email, portfolio_group, google_drive_folder_id, google_drive_folder_name, dropbox_folder_path } = body
+  const { name, aliases, tags, stage, industry, country, notes, status, overview, founders, why_invested, current_update, contact_email, portfolio_group, google_drive_folder_id, google_drive_folder_name } = body
 
   if (name !== undefined && !name?.trim()) {
     return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 })
@@ -66,16 +67,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (tags !== undefined) updates.tags = tags
   if (stage !== undefined) updates.stage = stage?.trim() || null
   if (industry !== undefined) updates.industry = industry
+  // The Schedule of Investments renders a by-geography breakout from `companies.country`, but
+  // the column was in no write path anywhere — so the table read "Unclassified" for every
+  // position, permanently. This is that write path.
+  if (country !== undefined) updates.country = country?.trim() || null
   if (notes !== undefined) updates.notes = notes?.trim() || null
   if (overview !== undefined) updates.overview = overview?.trim() || null
   if (founders !== undefined) updates.founders = founders?.trim() || null
   if (why_invested !== undefined) updates.why_invested = why_invested?.trim() || null
   if (current_update !== undefined) updates.current_update = current_update?.trim() || null
   if (contact_email !== undefined) updates.contact_email = contact_email
-  if (portfolio_group !== undefined) updates.portfolio_group = portfolio_group
+  if (portfolio_group !== undefined) {
+    // Every stored portfolio_group name must be backed by a real fund_vehicles row — never a
+    // disconnected string. Resolve/create before the write, not after.
+    await ensureVehiclesByName(admin, company.fund_id, portfolio_group ?? [])
+    updates.portfolio_group = portfolio_group
+  }
   if (google_drive_folder_id !== undefined) updates.google_drive_folder_id = google_drive_folder_id || null
   if (google_drive_folder_name !== undefined) updates.google_drive_folder_name = google_drive_folder_name || null
-  if (dropbox_folder_path !== undefined) updates.dropbox_folder_path = dropbox_folder_path || null
   if (status !== undefined) {
     if (!VALID_STATUSES.includes(status)) {
       return NextResponse.json({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` }, { status: 400 })

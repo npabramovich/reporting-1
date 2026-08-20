@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 export async function GET() {
   const supabase = createClient()
@@ -26,10 +27,11 @@ export async function GET() {
       metrics(id, name, unit, unit_position, value_type, currency, display_order, is_active)
     `)
     .eq('fund_id', fundId)
+    .eq('holding_type', 'company')   // fund holdings have their own surfaces
     .eq('status', 'active')
     .order('name')
 
-  if (compError) return NextResponse.json({ error: compError.message }, { status: 500 })
+  if (compError) return dbError(compError, 'dashboard-table-data')
 
   const companies = (companiesRaw ?? []) as {
     id: string
@@ -68,7 +70,7 @@ export async function GET() {
       .order('period_year', { ascending: true })
       .order('period_month', { ascending: true, nullsFirst: true })
 
-    if (valError) return NextResponse.json({ error: valError.message }, { status: 500 })
+    if (valError) return dbError(valError, 'dashboard-table-data')
     allValues = valuesRaw ?? []
   }
 

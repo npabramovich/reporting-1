@@ -202,15 +202,19 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+# Required: a password signup must prove inbox ownership before it can bind to an
+# invited LP account (see app/api/portal/activate). Mirror this in the hosted
+# Supabase Auth settings — config.toml does not drive a hosted project.
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
 max_frequency = "1s"
 # Number of characters used in the email OTP.
 otp_length = 6
-# Number of seconds before the email OTP expires (defaults to 1 hour).
-otp_expiry = 3600
+# Number of seconds before the email OTP expires. Shortened from 1 hour to limit
+# the brute-force window on the 6-digit code.
+otp_expiry = 600
 
 # Use a production-ready SMTP server
 # [auth.email.smtp]

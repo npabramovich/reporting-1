@@ -1,4 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { EMAIL_RE } from '@/lib/deals/submission-validation'
+
+export interface EmailAttachment {
+  filename: string
+  content: Buffer
+  contentType: string
+}
 
 export interface EmailParams {
   to: string
@@ -6,6 +13,8 @@ export interface EmailParams {
   subject: string
   html: string
   cc?: string
+  bcc?: string
+  attachments?: EmailAttachment[]
 }
 
 export interface OutboundConfig {
@@ -25,8 +34,10 @@ async function sendViaResend(apiKey: string, params: EmailParams) {
     from: params.from || process.env.EMAIL_FROM || 'onboarding@resend.dev',
     to: params.to,
     cc: params.cc || undefined,
+    bcc: params.bcc || undefined,
     subject: params.subject,
     html: params.html,
+    attachments: params.attachments?.map(a => ({ filename: a.filename, content: a.content })),
   })
   return { id: result.data?.id }
 }
@@ -38,8 +49,15 @@ async function sendViaPostmark(serverToken: string, params: EmailParams) {
     From: params.from || process.env.EMAIL_FROM || 'noreply@example.com',
     To: params.to,
     Cc: params.cc || undefined,
+    Bcc: params.bcc || undefined,
     Subject: params.subject,
     HtmlBody: params.html,
+    Attachments: params.attachments?.map(a => ({
+      Name: a.filename,
+      Content: a.content.toString('base64'),
+      ContentType: a.contentType,
+      ContentID: null as unknown as string,
+    })),
   })
   return { id: result.MessageID }
 }
@@ -53,8 +71,10 @@ async function sendViaMailgun(apiKey: string, domain: string, params: EmailParam
     from: params.from || process.env.EMAIL_FROM || `noreply@${domain}`,
     to: [params.to],
     cc: params.cc || undefined,
+    bcc: params.bcc || undefined,
     subject: params.subject,
     html: params.html,
+    attachment: params.attachments?.map(a => ({ filename: a.filename, data: a.content })),
   })
   return { id: result.id }
 }
@@ -63,7 +83,7 @@ async function sendViaGmail(admin: SupabaseClient, fundId: string, params: Email
   const { decrypt } = await import('@/lib/crypto')
   const { getGoogleCredentials } = await import('@/lib/google/credentials')
   const { getAccessToken } = await import('@/lib/google/drive')
-  const { sendEmail, getGmailProfile } = await import('@/lib/google/gmail')
+  const { sendEmail } = await import('@/lib/google/gmail')
 
   const { data: settings } = await admin
     .from('fund_settings')
@@ -85,10 +105,34 @@ async function sendViaGmail(admin: SupabaseClient, fundId: string, params: Email
     throw new Error('Google OAuth credentials not configured')
   }
   const accessToken = await getAccessToken(refreshToken, creds.clientId, creds.clientSecret)
-  const senderEmail = await getGmailProfile(accessToken)
 
-  const result = await sendEmail(accessToken, params.to, senderEmail, params.subject, params.html, params.cc)
+  const result = await sendEmail(accessToken, params.to, params.subject, params.html, params.cc, params.bcc, params.attachments)
   return { id: result.id }
+}
+
+/**
+ * Normalize a user-typed Cc/Bcc field into a header-safe address list.
+ *
+ * Accepts comma- or semicolon-separated entries, either bare (`a@b.com`) or with a
+ * display name (`Ada <a@b.com>`). Returns the joined list, or the first entry that
+ * isn't an address so the caller can reject it with a useful message — providers
+ * fail an unparseable Cc with an opaque error, and Gmail would happily put it in a
+ * header.
+ */
+export function parseAddressList(
+  input: string | null | undefined,
+): { value?: string; invalid?: string } {
+  const entries = (input ?? '')
+    .split(/[,;]/)
+    .map(e => e.replace(/[\r\n]+/g, ' ').trim())
+    .filter(Boolean)
+
+  for (const entry of entries) {
+    const address = entry.match(/<([^>]*)>$/)?.[1].trim() ?? entry
+    if (!EMAIL_RE.test(address)) return { invalid: entry }
+  }
+
+  return { value: entries.length ? entries.join(', ') : undefined }
 }
 
 /**

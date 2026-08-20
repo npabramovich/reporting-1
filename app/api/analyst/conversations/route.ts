@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dbError } from '@/lib/api-error'
 
 export async function GET(req: NextRequest) {
   const supabase = createClient()
@@ -18,24 +19,32 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url)
   const companyId = searchParams.get('companyId')
+  const dealId = searchParams.get('dealId')
   const portfolio = searchParams.get('portfolio') === 'true'
+  // A domain thread ('accounting:<vehicle>', 'lps', 'diligence'); absent = the portfolio thread.
+  const scope = searchParams.get('scope')
 
   let query = admin
     .from('analyst_conversations')
-    .select('id, title, company_id, message_count, created_at, updated_at')
+    .select('id, title, company_id, deal_id, scope, message_count, created_at, updated_at')
     .eq('fund_id', membership.fund_id)
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false })
     .limit(20)
 
-  if (companyId) {
-    query = query.eq('company_id', companyId)
-  } else if (portfolio) {
-    query = query.is('company_id', null)
+  if (dealId) {
+    query = query.eq('deal_id', dealId)
+  } else if (companyId) {
+    query = query.eq('company_id', companyId).is('deal_id', null)
+  } else if (portfolio || scope) {
+    // Both are the "not company, not deal" case; `scope` then picks the domain thread apart from
+    // the portfolio one. Listing is by ownership — the scope only sorts threads, it grants nothing.
+    query = query.is('company_id', null).is('deal_id', null)
+    query = scope ? query.eq('scope', scope) : query.is('scope', null)
   }
 
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'analyst-conversations')
 
   return NextResponse.json({ conversations: data })
 }
@@ -83,7 +92,7 @@ export async function POST(req: NextRequest) {
     .select('id, title, company_id, message_count, created_at, updated_at')
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'analyst-conversations')
 
   return NextResponse.json({ conversation: data })
 }

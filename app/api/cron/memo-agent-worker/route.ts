@@ -1,0 +1,175 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { runIngestJob } from '@/lib/memo-agent/jobs/ingest-job'
+import { runIngestSynthesisJob } from '@/lib/memo-agent/jobs/ingest-synthesis-job'
+import { runResearchJob } from '@/lib/memo-agent/jobs/research-job'
+import { runDraftJob } from '@/lib/memo-agent/jobs/draft-job'
+import { runDraftReviewJob } from '@/lib/memo-agent/jobs/draft-review-job'
+import { runScoreJob } from '@/lib/memo-agent/jobs/score-job'
+import { runRenderJob } from '@/lib/memo-agent/jobs/render-job'
+import { runTranscribeJob, isAwaitingCallback } from '@/lib/memo-agent/jobs/transcribe-job'
+import { runChecklistAssessmentJob } from '@/lib/memo-agent/jobs/checklist-assessment-job'
+import { runAffinitySyncJob } from '@/lib/memo-agent/jobs/affinity-sync-job'
+import { kickWorker } from '@/lib/memo-agent/kick'
+
+/**
+ * Memo Agent worker. Triggered by Vercel cron every minute (per
+ * BUILD_PLAN_FOR_CLAUDE_CODE.md decision). Claims one pending job from
+ * `memo_agent_jobs`, dispatches it to the right stage handler, and writes
+ * the outcome back. Designed to fit comfortably inside a 120s function
+ * — long stages must internally chunk to that ceiling.
+ *
+ * Auth: same `Authorization: Bearer ${CRON_SECRET}` pattern as the
+ * deals-digest cron.
+ */
+export async function GET(req: NextRequest) {
+  // Fail-closed: an unset CRON_SECRET means the endpoint refuses traffic.
+  // The prior "if cronSecret then check" pattern silently opened the worker
+  // to anonymous callers in any environment where the env var wasn't set
+  // (PR previews, staging, misconfigured prod).
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret) {
+    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
+  }
+  const auth = req.headers.get('authorization')
+  if (auth !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const admin = createAdminClient()
+
+  // Self-heal: any job stuck in `running` past the function ceiling was killed
+  // by Vercel mid-stage and will never finish on its own. Fail them so the UI
+  // unblocks and the user can retry without manual DB edits. The cutoff has to
+  // be at least the worker's maxDuration (300s in vercel.json) plus headroom,
+  // or we'll kill jobs that are still alive — 6m gives a clean buffer.
+  // Transcribe jobs with an external_job_id are legitimately awaiting a
+  // provider callback and can take much longer than a Vercel function — they
+  // get a separate, looser timeout below.
+  const STALE_RUNNING_MS = 6 * 60 * 1000
+  const staleCutoff = new Date(Date.now() - STALE_RUNNING_MS).toISOString()
+  await admin
+    .from('memo_agent_jobs')
+    .update({
+      status: 'failed',
+      error: 'killed: worker timed out (no progress for >6m)',
+      finished_at: new Date().toISOString(),
+      progress_message: 'killed: timeout',
+    } as any)
+    .eq('status', 'running')
+    .is('external_job_id', null)
+    .lt('started_at', staleCutoff)
+
+  // Transcribe jobs stuck awaiting an external callback for >1h are presumed
+  // lost (Deepgram didn't call back, our webhook 500'd, etc).
+  const STALE_CALLBACK_MS = 60 * 60 * 1000
+  const callbackCutoff = new Date(Date.now() - STALE_CALLBACK_MS).toISOString()
+  await admin
+    .from('memo_agent_jobs')
+    .update({
+      status: 'failed',
+      error: 'killed: external callback never arrived (>1h)',
+      finished_at: new Date().toISOString(),
+      progress_message: 'killed: callback timeout',
+    } as any)
+    .eq('status', 'running')
+    .not('external_job_id', 'is', null)
+    .lt('started_at', callbackCutoff)
+
+  // Drain the queue: process jobs back-to-back until it's empty or we approach
+  // the function's time ceiling. Because each stage enqueues the next, this
+  // chains a whole memo pipeline in one invocation instead of one stage per cron
+  // tick. The budget leaves headroom below the 300s maxDuration for one more
+  // in-flight job; if we stop with jobs still pending, we hand off to a fresh
+  // invocation so the queue keeps draining without waiting for the cron.
+  const DRAIN_BUDGET_MS = 120_000
+  const startedAt = Date.now()
+  let processed = 0
+
+  while (Date.now() - startedAt < DRAIN_BUDGET_MS) {
+    const { data: claimed, error: claimErr } = await (admin as any)
+      .rpc('memo_agent_claim_next_job') as { data: any; error: any }
+    if (claimErr) {
+      console.error('[memo-agent-worker] claim error:', claimErr)
+      return NextResponse.json({ error: 'An unexpected error occurred.', processed }, { status: 500 })
+    }
+    if (!claimed || !claimed.id) {
+      // Queue empty — nothing left to do.
+      return NextResponse.json({ ok: true, idle: processed === 0, processed })
+    }
+    await processJob(admin, claimed as Job)
+    processed++
+  }
+
+  // Time budget hit with jobs likely still pending — kick a fresh invocation to
+  // continue the drain immediately rather than waiting for the next cron tick.
+  await kickWorker()
+  return NextResponse.json({ ok: true, processed, handedOff: true })
+}
+
+interface Job {
+  id: string
+  fund_id: string
+  deal_id: string
+  draft_id: string | null
+  kind: 'ingest' | 'ingest_synthesis' | 'research' | 'qa' | 'draft' | 'draft_review' | 'score' | 'render' | 'transcribe' | 'checklist_assessment' | 'affinity_sync'
+  payload: Record<string, unknown>
+  enqueued_by: string | null
+}
+
+/** Run one claimed job and write its outcome back. Never throws. */
+async function processJob(admin: ReturnType<typeof createAdminClient>, job: Job): Promise<void> {
+  console.log(`[memo-agent-worker] claimed ${job.kind} job ${job.id} (deal ${job.deal_id})`)
+  try {
+    let result: unknown
+    switch (job.kind) {
+      case 'ingest': result = await runIngestJob(admin, job); break
+      case 'ingest_synthesis': result = await runIngestSynthesisJob(admin, job); break
+      case 'research': result = await runResearchJob(admin, job); break
+      case 'draft': result = await runDraftJob(admin, job); break
+      case 'draft_review': result = await runDraftReviewJob(admin, job); break
+      case 'score': result = await runScoreJob(admin, job); break
+      case 'render': result = await runRenderJob(admin, job); break
+      case 'transcribe': result = await runTranscribeJob(admin, job); break
+      case 'checklist_assessment': result = await runChecklistAssessmentJob(admin, job); break
+      case 'affinity_sync': result = await runAffinitySyncJob(admin, job); break
+      case 'qa':
+        // Q&A is a synchronous interactive flow, not a worker job — fail if seen.
+        await markFailed(admin, job.id, 'Q&A is run interactively; no worker job needed.')
+        return
+      default:
+        await markFailed(admin, job.id, `Unknown job kind: ${job.kind}`)
+        return
+    }
+
+    // Async jobs that handed work to an external provider stay `running` until
+    // the provider's webhook finishes them — leave their status untouched.
+    if (isAwaitingCallback(result)) return
+
+    await admin
+      .from('memo_agent_jobs')
+      .update({
+        status: 'success',
+        result: result as any,
+        finished_at: new Date().toISOString(),
+        progress_message: 'completed',
+      })
+      .eq('id', job.id)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(`[memo-agent-worker] ${job.kind} job ${job.id} failed:`, err)
+    await markFailed(admin, job.id, message)
+  }
+}
+
+async function markFailed(admin: ReturnType<typeof createAdminClient>, id: string, error: string) {
+  await admin
+    .from('memo_agent_jobs')
+    .update({
+      status: 'failed',
+      error,
+      finished_at: new Date().toISOString(),
+      progress_message: 'failed',
+    })
+    .eq('id', id)
+}

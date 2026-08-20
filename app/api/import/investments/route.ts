@@ -6,6 +6,9 @@ import { createFundAIProvider } from '@/lib/ai'
 import { logAIUsage } from '@/lib/ai/usage'
 import { logActivity } from '@/lib/activity'
 import { rateLimit } from '@/lib/rate-limit'
+import { draftEntryForTransaction } from '@/lib/accounting/from-portfolio'
+import { normalizeSecurityType, SECURITY_TYPES } from '@/lib/accounting/soi'
+import { ensureVehiclesByName } from '@/lib/accounting/vehicle-id'
 
 interface ParsedTransaction {
   company_name: string
@@ -28,6 +31,17 @@ interface ParsedTransaction {
   postmoney_valuation?: number
   latest_postmoney_valuation?: number
   exit_valuation?: number
+  /**
+   * The instrument, feeding the SOI's by-asset-type breakout. CHECK-constrained in the DB — see
+   * SECURITY_TYPES. Whatever the model returns goes through normalizeSecurityType(), because this
+   * arrives from an LLM reading someone's spreadsheet and "Series A Preferred" is not a valid value.
+   */
+  security_type?: string
+  /** 'mark' | 'fx' — keeps a currency move out of investment performance. */
+  valuation_change_source?: string
+  fx_value_change?: number
+  fx_rate?: number
+  prior_fx_rate?: number
   original_currency?: string
   original_investment_cost?: number
   original_share_price?: number
@@ -157,6 +171,7 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
 
 Rules:
 - transaction_type must be one of: "investment", "proceeds", "unrealized_gain_change", "round_info"
+- security_type is OPTIONAL and, if the source names the instrument, must be EXACTLY one of: ${SECURITY_TYPES.map(t => `"${t}"`).join(', ')}. Map what you read onto that list ("Series A Preferred" -> "preferred", "Convertible Promissory Note" -> "convertible_note"). If the instrument is unclear, OMIT the field rather than guessing
 - company_status must be one of: "active", "exited", "written-off". Infer from context: if there are proceeds/exit transactions, use "exited"; if marked as written off or loss, use "written-off"; otherwise default to "active"
 - Dates should be in YYYY-MM-DD format
 - All monetary values should be plain numbers (no currency symbols)
@@ -222,11 +237,18 @@ ${text}`,
     return NextResponse.json({ error: 'Too many transactions in parsed result (max 5000)' }, { status: 400 })
   }
 
+  // Every stored portfolio_group name must be backed by a real fund_vehicles row — never a
+  // disconnected string. The importer is the biggest source of orphan vehicle names (an LLM
+  // free-typing "Fund I" / "SPV 1" straight into the column), so resolve/create every distinct
+  // name ONCE up front rather than per-row.
+  await ensureVehiclesByName(admin, fundId, parsed.transactions.map(t => t.portfolio_group))
+
   // Get existing companies for matching
   const { data: existingCompanies } = await admin
     .from('companies')
     .select('id, name')
     .eq('fund_id', fundId)
+    .eq('holding_type', 'company')   // fund holdings have their own surfaces
 
   const companyByName = new Map(
     (existingCompanies ?? []).map(c => [c.name.toLowerCase(), c.id])
@@ -238,9 +260,15 @@ ${text}`,
     unrealizedCreated: 0,
     companiesMatched: 0,
     companiesCreated: 0,
+    /** Journal entries drafted from the imported rows. */
+    entriesDrafted: 0,
     errors: [] as string[],
+    /** Rows that were imported but implied no ledger entry, and why. Reported, not swallowed —
+     *  "10 imported, 0 booked" is something the user must be told, not left to discover. */
+    ledgerSkips: [] as string[],
   }
 
+  const ledgerSkips = results.ledgerSkips
   const matchedCompanies = new Set<string>()
 
   for (const pt of parsed.transactions) {
@@ -293,7 +321,20 @@ ${text}`,
       continue
     }
 
-    const { error: insertError } = await admin
+    // Unlike transaction_type, an unrecognised instrument does NOT skip the row. security_type is a
+    // label on the Schedule of Investments; the cost, shares and proceeds on this row are the money.
+    // Dropping the transaction because a model wrote "Series A-1 Pfd" would lose the position to
+    // save the caption — so the caption goes, the position stays, and the import says so. Left null,
+    // the SOI falls back to its derived priced-equity/convertible proxy.
+    const security_type = pt.security_type ? normalizeSecurityType(pt.security_type) : null
+    if (pt.security_type && !security_type) {
+      results.errors.push(
+        `Unrecognised security type "${pt.security_type}" for "${companyName}" — imported without ` +
+        `an instrument. Set it on the transaction if the asset-type breakout matters.`,
+      )
+    }
+
+    const { data: inserted, error: insertError } = await admin
       .from('investment_transactions' as any)
       .insert({
         company_id: companyId,
@@ -327,7 +368,18 @@ ${text}`,
         original_current_share_price: pt.original_current_share_price ?? null,
         original_latest_postmoney_valuation: pt.original_latest_postmoney_valuation ?? null,
         portfolio_group: pt.portfolio_group ?? null,
+        // These three were silently dropped by the importer even though the single-create
+        // route writes them. `security_type` feeds the SOI's by-asset-type breakout;
+        // `valuation_change_source` + `fx_value_change` are what keep a currency move out of
+        // investment performance (1250/4300 rather than 1200/4200).
+        security_type,
+        valuation_change_source: pt.valuation_change_source ?? null,
+        fx_value_change: pt.fx_value_change ?? null,
+        fx_rate: pt.fx_rate ?? null,
+        prior_fx_rate: pt.prior_fx_rate ?? null,
       })
+      .select('*')
+      .single()
 
     if (insertError) {
       results.errors.push(`Failed to insert ${txnType} for "${companyName}": ${insertError.message}`)
@@ -337,6 +389,18 @@ ${text}`,
     if (txnType === 'investment') results.investmentsCreated++
     else if (txnType === 'proceeds') results.proceedsCreated++
     else if (txnType === 'unrealized_gain_change') results.unrealizedCreated++
+
+    // Mirror to the ledger, exactly as the single-create route does. Without this an imported
+    // portfolio silently diverged from the books — every position present in the tracker and
+    // absent from the ledger — until someone happened to run a bootstrap or replay.
+    //
+    // Non-fatal by design: the import must not fail because a vehicle has no chart of
+    // accounts. Reasons are collected and reported, never swallowed.
+    if (inserted) {
+      const draft = await draftEntryForTransaction(admin, fundId, user.id, inserted, companyName)
+      if (draft.drafted) results.entriesDrafted++
+      else if (draft.reason) ledgerSkips.push(`${companyName} (${txnType}): ${draft.reason}`)
+    }
   }
 
   logActivity(admin, fundId, user.id, 'import.investments', {

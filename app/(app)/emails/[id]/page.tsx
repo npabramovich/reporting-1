@@ -1,17 +1,20 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getUser } from '@/lib/supabase/server'
+import { resolvePageAccess, canViewPage } from '@/lib/access/page-gate'
 import type { InboundEmail } from '@/lib/types/database'
 
 export const metadata: Metadata = { title: 'Email' }
 import { ChevronLeft } from 'lucide-react'
 import { ReprocessButton } from './reprocess-button'
-import { ApproveButton } from './approve-button'
+import { RerouteButton } from './reroute-button'
+import { ChangeStatusButton } from './change-status-button'
 import { UploadDocumentButton } from './upload-document-button'
 import { SaveToDriveButton } from './save-to-drive-button'
 import { CollapsibleJson } from './collapsible-json'
 import { ReviewItems } from './review-items'
+import { EmailMetricsSection } from './metrics-section'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,14 +49,14 @@ type ReviewRow = {
 // ---------------------------------------------------------------------------
 
 const STATUS_VARIANTS: Record<string, { label: string; className: string }> = {
-  pending: { label: 'Pending', className: 'bg-slate-100 text-slate-700 border-slate-200' },
-  processing: { label: 'Processing', className: 'bg-blue-100 text-blue-800 border-blue-200' },
-  success: { label: 'Success', className: 'bg-green-100 text-green-800 border-green-200' },
-  not_processed: { label: 'Not processed', className: 'bg-gray-100 text-gray-600 border-gray-200' },
-  failed: { label: 'Failed', className: 'bg-red-100 text-red-800 border-red-200' },
+  pending: { label: 'Pending', className: 'bg-muted text-muted-foreground border-border' },
+  processing: { label: 'Processing', className: 'bg-info-subtle text-info border-info' },
+  success: { label: 'Success', className: 'bg-success-subtle text-success border-success' },
+  not_processed: { label: 'Skipped', className: 'bg-muted text-muted-foreground border-border' },
+  failed: { label: 'Failed', className: 'bg-destructive-subtle text-destructive border-destructive' },
   needs_review: {
     label: 'Review',
-    className: 'bg-amber-100 text-amber-800 border-amber-200',
+    className: 'bg-warning-subtle text-warning border-warning',
   },
 }
 
@@ -79,12 +82,22 @@ function formatValue(mv: MetricRow, metric: MetricDef | null): string {
 
 export default async function EmailDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
+  const user = await getUser()
+  if (!user) redirect('/auth')
+
+  // A SERVER COMPONENT FETCHES ITS OWN DATA, so the middleware never sees it — this page's entry
+  // in ROUTE_DOMAINS governs `api/emails/[id]`, not the page. Below, RLS ("Fund members can read
+  // emails") scopes the row to the fund and stops there, so without this gate any member with the
+  // UUID got the whole message server-rendered — raw_payload included — whatever their grant said.
+  // That is the "hidden but still reachable by URL" hole the access model exists to close.
+  const page = await resolvePageAccess(user.id)
+  if (!page || !canViewPage(page, 'portfolio')) redirect('/dashboard')
 
   // Fetch email row (no join — avoids TS inference issues with hand-written DB types)
   const { data: emailData, error } = await supabase
     .from('inbound_emails')
     .select(
-      'id, from_address, subject, received_at, processing_status, processing_error, claude_response, metrics_extracted, attachments_count, raw_payload, company_id, fund_id'
+      'id, from_address, subject, received_at, processing_status, processing_error, claude_response, metrics_extracted, attachments_count, raw_payload, company_id, fund_id, routed_to, routing_label, routing_confidence, routing_reasoning'
     )
     .eq('id', params.id)
     .maybeSingle()
@@ -184,18 +197,21 @@ export default async function EmailDetailPage({ params }: { params: { id: string
         </div>
       </div>
 
-      {/* Error message */}
-      {email.processing_error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-          <p className="font-medium mb-1">Processing error</p>
-          <p className="font-mono text-xs break-all">{email.processing_error}</p>
-        </div>
-      )}
+      {/* Error / warning message */}
+      {email.processing_error && (() => {
+        const isWarning = email.processing_status === 'success' || email.processing_status === 'needs_review' || email.processing_status === 'not_processed'
+        return (
+          <div className={`rounded-card border p-4 text-sm ${isWarning ? 'border-warning bg-warning-subtle text-warning' : 'border-destructive bg-destructive-subtle text-destructive'}`}>
+            <p className="font-medium mb-1">{isWarning ? 'Warning' : 'Processing error'}</p>
+            <p className="text-xs break-all">{email.processing_error}</p>
+          </div>
+        )
+      })()}
 
       {/* Metrics written */}
       {metricValues.length > 0 && (
         <section>
-          <h2 className="text-sm font-semibold mb-2">Metrics Written ({metricValues.length})</h2>
+          <h2 className="text-base font-semibold mb-2">Metrics Written ({metricValues.length})</h2>
           <div className="rounded-lg border overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
@@ -221,7 +237,7 @@ export default async function EmailDetailPage({ params }: { params: { id: string
                     <tr key={mv.id}>
                       <td className="px-4 py-2.5 font-medium">{metric?.name ?? '—'}</td>
                       <td className="px-4 py-2.5 text-muted-foreground">{mv.period_label}</td>
-                      <td className="px-4 py-2.5 font-mono">{formatValue(mv, metric)}</td>
+                      <td className="px-4 py-2.5 tabular-nums">{formatValue(mv, metric)}</td>
                       <td className="px-4 py-2.5">
                         <ConfidenceBadge confidence={mv.confidence} />
                       </td>
@@ -237,10 +253,13 @@ export default async function EmailDetailPage({ params }: { params: { id: string
       {/* Review items */}
       <ReviewItems emailId={params.id} hasReviews={reviews.length > 0} />
 
+      {/* Company + metric configuration — the same options the review modal offers */}
+      <EmailMetricsSection emailId={params.id} initialCompany={company} />
+
       {/* Attachments */}
       {attachments.length > 0 && (
         <section>
-          <h2 className="text-sm font-semibold mb-2">Attachments ({attachments.length})</h2>
+          <h2 className="text-base font-semibold mb-2">Attachments ({attachments.length})</h2>
           <div className="space-y-1.5">
             {attachments.map((att, i) => (
               <div
@@ -261,8 +280,8 @@ export default async function EmailDetailPage({ params }: { params: { id: string
       {/* Email body */}
       {textBody && (
         <section>
-          <h2 className="text-sm font-semibold mb-2">Email Body</h2>
-          <pre className="text-xs bg-muted rounded-lg p-4 whitespace-pre-wrap break-words font-mono max-h-96 overflow-auto border">
+          <h2 className="text-base font-semibold mb-2">Email Body</h2>
+          <pre className="text-xs bg-muted rounded-card p-4 whitespace-pre-wrap break-words font-mono max-h-96 overflow-auto border">
             {textBody}
           </pre>
         </section>
@@ -277,21 +296,15 @@ export default async function EmailDetailPage({ params }: { params: { id: string
 
       {/* Actions */}
       <section className="pt-2 border-t space-y-4">
-        {(email.processing_status === 'needs_review' || email.processing_status === 'processing' || email.processing_status === 'failed' || email.processing_status === 'not_processed') && (
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-            <div>
-              <p className="text-sm font-medium">
-                {email.processing_status === 'needs_review' ? 'Approve email' : 'Mark as complete'}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {email.processing_status === 'needs_review'
-                  ? 'Accept all outstanding reviews and mark this email as successfully processed.'
-                  : 'Override the current status and mark this email as successfully processed.'}
-              </p>
-            </div>
-            <ApproveButton emailId={email.id} />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          <div>
+            <p className="text-sm font-medium">Change status</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Manually update the processing status of this email.
+            </p>
           </div>
-        )}
+          <ChangeStatusButton emailId={email.id} currentStatus={email.processing_status ?? 'pending'} />
+        </div>
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div>
@@ -323,7 +336,10 @@ export default async function EmailDetailPage({ params }: { params: { id: string
               values from this email will be replaced.
             </p>
           </div>
-          <ReprocessButton emailId={email.id} />
+          <div className="flex gap-2 shrink-0">
+            <RerouteButton emailId={email.id} currentTarget={(email as any).routed_to ?? null} />
+            <ReprocessButton emailId={email.id} />
+          </div>
         </div>
       </section>
     </div>
@@ -332,9 +348,9 @@ export default async function EmailDetailPage({ params }: { params: { id: string
 
 function ConfidenceBadge({ confidence }: { confidence: string }) {
   const styles: Record<string, string> = {
-    high: 'bg-green-100 text-green-800 border-green-200',
-    medium: 'bg-amber-100 text-amber-800 border-amber-200',
-    low: 'bg-red-100 text-red-800 border-red-200',
+    high: 'bg-success-subtle text-success border-success',
+    medium: 'bg-warning-subtle text-warning border-warning',
+    low: 'bg-destructive-subtle text-destructive border-destructive',
   }
   return (
     <span

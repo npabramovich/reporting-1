@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose, Sparkles, Shield, ShieldCheck, Handshake, Users, ArrowDownCircle, DollarSign, FileText, Briefcase, Crown } from 'lucide-react'
+import { Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose, Sparkles, Shield, ShieldCheck, Handshake, Users, ArrowDownCircle, DollarSign, FileText, Briefcase, Crown, Lightbulb, Microscope } from 'lucide-react'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
 
@@ -20,6 +20,8 @@ export default function SupportPage() {
       <li><a href="#settings" className="hover:text-foreground underline underline-offset-4">Settings</a></li>
       <li><a href="#notes" className="hover:text-foreground underline underline-offset-4">Notes</a></li>
       <li><a href="#interactions" className="hover:text-foreground underline underline-offset-4">Interactions</a></li>
+      <li><a href="#deals" className="hover:text-foreground underline underline-offset-4">Deals</a></li>
+      <li><a href="#diligence" className="hover:text-foreground underline underline-offset-4">Diligence</a></li>
       <li><a href="#investments" className="hover:text-foreground underline underline-offset-4">Investments</a></li>
       <li><a href="#funds" className="hover:text-foreground underline underline-offset-4">Funds</a></li>
       <li><a href="#letters" className="hover:text-foreground underline underline-offset-4">Letters</a></li>
@@ -46,7 +48,7 @@ export default function SupportPage() {
         {/* Main content */}
         <div className="flex-1 min-w-0 max-w-3xl space-y-8 text-sm leading-relaxed">
           {/* Contact info */}
-          <div className="rounded-lg border bg-card p-5">
+          <div className="rounded-card border bg-card p-5">
             <h2 className="text-base font-medium mb-2">Need help?</h2>
             <p className="text-muted-foreground">
               For questions about your fund&apos;s data, companies, metrics, or account access,
@@ -73,7 +75,7 @@ export default function SupportPage() {
             </p>
           </div>
 
-          {/* Table of contents — inline on mobile only */}
+          {/* Table of contents, inline on mobile only */}
           <nav className="xl:hidden">
             <h2 className="text-base font-medium mb-2">On this page</h2>
             {tocLinks}
@@ -113,7 +115,7 @@ export default function SupportPage() {
         </div>
 
         <div id="setup" className="pl-4 border-l-2 border-border">
-          <h3 className="text-sm font-medium mb-2">Setup</h3>
+          <h3 className="text-base font-medium mb-2">Setup</h3>
           <p className="text-muted-foreground mb-2">
             Under the hood, the platform uses a database, authentication, file storage, inbound email
             processing, and an AI provider, with prebuilt integrations for several third-party services
@@ -155,22 +157,20 @@ export default function SupportPage() {
         </div>
 
         <div id="license" className="pl-4 border-l-2 border-border">
-          <h3 className="text-sm font-medium mb-2">License</h3>
+          <h3 className="text-base font-medium mb-2">License</h3>
           <p className="text-muted-foreground mb-2">
-            This software is free to use if you are a single fund management company running your own
-            operations &mdash; that includes all of your funds, SPVs, and internal team members. You can
-            modify it and deploy it on your own infrastructure. If you are a fund administrator, outsourced
-            CFO, consultant, or any kind of service provider using this software across multiple clients or
-            management companies, you need a paid commercial license.
+            Apache License 2.0. You are free to use it, modify it,
+            and deploy it on your own infrastructure &mdash; for your own fund or commercially. There are no
+            per-seat fees and no single-fund restriction. It includes an express patent grant, and the
+            software is provided as-is, without warranty of any kind.
           </p>
           <p className="text-muted-foreground mb-2">
-            You also cannot resell it, white-label it, offer it as SaaS, or bundle it into another product.
-            All intellectual property stays with Unstructured Ventures, LLC. The software is provided as-is
-            with no warranties, and liability is capped at $100. If you violate the terms, your license ends
-            immediately.
+            The license covers the source code and documentation. Per its trademark clause, it does not
+            grant rights to the &ldquo;Hemrock&rdquo; or &ldquo;Unstructured Ventures&rdquo; names or logos
+            &mdash; if you fork or redeploy the software, please use your own branding.
           </p>
           <p className="text-muted-foreground">
-            For commercial licensing, reach out to{' '}
+            Need help deploying, hosting, or supporting it? Reach out to{' '}
             <a
               href="mailto:hello@hemrock.com"
               className="text-foreground underline underline-offset-4 hover:text-foreground/80"
@@ -179,7 +179,9 @@ export default function SupportPage() {
             </a>
             . Read the{' '}
             <a
-              href="/license"
+              href="https://github.com/tdavidson/reporting/blob/main/LICENSE.md"
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-foreground underline underline-offset-4 hover:text-foreground/80"
             >
               full license
@@ -189,11 +191,13 @@ export default function SupportPage() {
         </div>
 
         <div id="pricing" className="pl-4 border-l-2 border-border">
-          <h3 className="text-sm font-medium mb-2">Pricing</h3>
+          <h3 className="text-base font-medium mb-2">Pricing</h3>
           <p className="text-muted-foreground mb-2">
             You can download and deploy this platform for your own use under the terms of the{' '}
             <a
-              href="/license"
+              href="https://github.com/tdavidson/reporting/blob/main/LICENSE.md"
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-foreground underline underline-offset-4 hover:text-foreground/80"
             >
               license
@@ -263,7 +267,7 @@ export default function SupportPage() {
         </div>
 
         <div id="company-detail" className="pl-4 border-l-2 border-border">
-          <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+          <h3 className="text-base font-medium mb-2 flex items-center gap-2">
             <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
             Company Detail
           </h3>
@@ -380,14 +384,14 @@ export default function SupportPage() {
           </p>
           <p className="text-muted-foreground">
             The platform can also store documents for you automatically. If your admin has connected
-            <strong>Google Drive</strong> or <strong>Dropbox</strong> in Settings, every inbound email and its attachments are saved
+            <strong>Google Drive</strong> in Settings, every inbound email and its attachments are saved
             into company-specific folders &mdash; organized by company name &mdash; so you always have
             the original source files alongside the extracted data.
           </p>
         </div>
 
         <div id="email-detail" className="pl-4 border-l-2 border-border">
-          <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+          <h3 className="text-base font-medium mb-2 flex items-center gap-2">
             <Mail className="h-3.5 w-3.5 text-muted-foreground" />
             Email Detail
           </h3>
@@ -416,7 +420,7 @@ export default function SupportPage() {
             your portfolio, updated metric definitions, or changed AI providers. It will replace any
             existing extracted metrics and review items with fresh results. If file storage is
             connected, a <strong>Save to File Storage</strong> button lets you manually push the email
-            and its attachments to your Google Drive or Dropbox, organized into the appropriate company
+            and its attachments to your Google Drive, organized into the appropriate company
             folder.
           </p>
         </div>
@@ -458,13 +462,6 @@ export default function SupportPage() {
             companies. This is useful for bulk-importing cap table history, backfilling historical rounds,
             or onboarding an entire portfolio&apos;s investment data at once. Transactions are written to
             each company&apos;s Investments section automatically.
-          </p>
-          <p className="text-muted-foreground mb-2">
-            You can also paste <strong>fund-level cash flow data</strong> &mdash; commitments, capital calls, and
-            distributions per portfolio group. Each row uses the format: date, group, type, amount,
-            notes (optional). Type accepts full names (commitment, called_capital, distribution)
-            or abbreviations (com, cc, dist). These cash flows power the computed LP metrics
-            (TVPI, DPI, RVPI, Net IRR) shown on the Funds and Investments pages.
           </p>
           <p className="text-muted-foreground">
             Tip: for best results, include the company name and reporting period somewhere in the pasted
@@ -516,9 +513,9 @@ export default function SupportPage() {
           </p>
           <p className="text-muted-foreground mb-2">
             For admins, Settings covers the full platform configuration: <strong>AI provider keys</strong> and model
-            selection (Anthropic, OpenAI, Google Gemini, and/or Ollama for local models), the default AI provider
+            selection (Anthropic, OpenAI, and/or OpenRouter), the default AI provider
             for the fund, <strong>feature visibility</strong> controls, inbound email setup (Postmark or Mailgun), outbound email
-            providers (Gmail, Resend, Postmark, or Mailgun), file storage connections (Google Drive or Dropbox),
+            providers (Gmail, Resend, Postmark, or Mailgun), file storage connections (Google Drive),
             the AI summary prompt, and email templates for reporting asks.
           </p>
           <p className="text-muted-foreground mb-2">
@@ -632,6 +629,99 @@ export default function SupportPage() {
           </p>
         </div>
 
+        <div id="deals">
+          <h2 className="text-base font-medium mb-2 flex items-center gap-2">
+            <Lightbulb className="h-4 w-4 text-muted-foreground" />
+            Deals
+          </h2>
+          <p className="text-muted-foreground mb-2">
+            Deals is the inbound side of deal flow &mdash; cold pitches, partner-forwarded intros, and
+            scout submissions arrive at your existing inbound email address and are screened against your
+            fund&apos;s thesis before they reach a partner&apos;s inbox. Every inbound email runs through a
+            content-aware classifier that decides between four destinations: <strong>reporting</strong> (portfolio
+            metrics), <strong>interactions</strong> (CRM-style emails from fund members),
+            <strong>deals</strong> (a company pitching the fund), or <strong>other</strong> (newsletters,
+            recruiter spam, vendor pitches). Sender identity is a strong signal but not a hard rule, so a
+            partner forwarding a cold pitch lands in Deals where it belongs.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            For each pitch routed to Deals, a single AI call extracts company name, founder, intro source,
+            referrer when applicable, stage, industry, raise size, a 100&ndash;150 word company summary, and a
+            thesis-fit analysis with a fit score (strong, moderate, weak, out of thesis). Out-of-thesis pitches
+            auto-archive and surface in a weekly digest email so partners can sanity-check without eyeballing
+            every cold pitch. Founders can also submit pitches directly via a public form at a per-fund URL
+            &mdash; admins generate or rotate the URL in Settings.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            The Deals page lists active pitches as a sortable table or a kanban board (drag-and-drop across
+            status columns: new, reviewing, advancing, met, passed). Click a pitch to see the summary,
+            thesis-fit analysis, source email, attachments, founders, intro source, and a deal-scoped Analyst
+            chat that knows the pitch and your thesis.
+          </p>
+          <p className="text-muted-foreground">
+            Settings &rarr; Deals controls the investment thesis, screening prompt, public submission token,
+            and the Known Referrers list (scouts and friends-of-fund whose intros bias toward Deals).
+            Uncertain items go to a Review queue with the top two predicted destinations for one-click
+            resolution &mdash; nothing is silently dropped.
+          </p>
+        </div>
+
+        <div id="diligence">
+          <h2 className="text-base font-medium mb-2 flex items-center gap-2">
+            <Microscope className="h-4 w-4 text-muted-foreground" />
+            Diligence
+          </h2>
+          <p className="text-muted-foreground mb-2">
+            Diligence is the pre-investment workflow: when a deal is worth real time, you create a diligence
+            record, upload the data room, and run a schema-driven agent that ingests the
+            documents, conducts external research, asks partner Q&amp;A, drafts a structured memo, scores it
+            per your rubric, and renders to Word or Google Docs. Each diligence record has tabs for Decision,
+            Data Room (uploaded files), Diligence (external research), Partner Q&amp;A, and Memo (drafts).
+          </p>
+          <p className="text-muted-foreground mb-2">
+            The agent is operated by <strong>seven YAML/MD configuration files</strong> (&ldquo;schemas&rdquo;)
+            that admins edit per-fund through an in-app editor under Settings &rarr; Diligence &rarr; Schemas:
+            instructions, rubric, qa_library, data_room_ingestion, research_dossier, memo_output, and
+            style_anchors. The schema editor is a plain-text editor with inline YAML syntax validation and
+            version history; rolling back to a prior version is one click. Defaults are seeded automatically
+            the first time you open the editor, so you can run the agent immediately and customize as you go.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            <strong>Style Anchors</strong> are uploaded reference memos that teach the agent your firm&apos;s
+            voice. Upload 3&ndash;8 prior memos in Settings &rarr; Diligence &rarr; Style Anchors, tag each
+            with vintage, sector, voice representativeness, and partner notes, and the agent uses them to
+            match structure and tone during drafting. Reference memos teach voice &mdash; they never supply
+            facts to a new memo.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            The agent runs in six stages: <strong>Ingest</strong> (classify each doc, extract claims, run gap
+            analysis), <strong>Research</strong> (verify or contradict claims, build a competitive map,
+            compile founder dossiers), <strong>Q&amp;A</strong> (next-best partner questions per the qa_library
+            with skip logic against ingestion + research), <strong>Draft</strong> (assemble paragraphs with
+            paragraph-level citations), <strong>Score</strong> (rate each rubric dimension; partner-only
+            dimensions like team get null score with supporting material), <strong>Render</strong> (markdown,
+            .docx download, or native Google Doc). Long stages run as background jobs picked up by a worker
+            every minute.
+          </p>
+          <p className="text-muted-foreground mb-2">
+            The memo editor is a two-pane view: rendered memo on the left with inline citation markers and
+            visual treatment for projections, unverified claims, and contradictions; paragraph inspector and
+            partner-attention sidebar on the right. Partners edit any paragraph (it flips to
+            <em>partner_edited</em> origin), update rubric scores by hand, work through the attention queue
+            (must-address / should-address / FYI), and finalize when ready &mdash; finalizing locks the draft.
+            Recommendation and team scoring are partner-only and can never be set by the agent.
+          </p>
+          <p className="text-muted-foreground">
+            Across all your active deals, the <strong>Inbox</strong> aggregates open partner-attention
+            items so you can triage them in one pass. The <strong>Analytics</strong> view shows the agent
+            funnel (created &rarr; ingestion &rarr; research &rarr; Q&amp;A &rarr; draft &rarr; finalized
+            &rarr; won) with drop-off percentages, time-in-stage medians, win/loss by sector, and throughput
+            per lead partner. Settings &rarr; Diligence &rarr; Defaults sets per-deal and monthly token caps
+            (with current-month usage bar) and per-stage AI provider overrides &mdash; e.g. cheap model for
+            ingest, stronger model for draft.
+          </p>
+        </div>
+
         <div id="investments">
           <h2 className="text-base font-medium mb-2 flex items-center gap-2">
             <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -681,9 +771,8 @@ export default function SupportPage() {
             Estimated carry is computed as 20% of profit above remaining invested capital.
           </p>
           <p className="text-muted-foreground">
-            Cash flows can be added individually from the Funds page or bulk-imported via the Import page
-            by pasting tab or comma-separated data. The same computed metrics also appear in the group summary
-            table on the Investments page.
+            Cash flows can be added individually from the Funds page. The same computed metrics also
+            appear in the group summary table on the Investments page.
           </p>
         </div>
 
@@ -826,8 +915,7 @@ export default function SupportPage() {
           </p>
           <p className="text-muted-foreground mb-2">
             The top section displays <strong>AI token usage</strong> broken down by provider (Anthropic,
-            OpenAI, Gemini, and/or Ollama), with month-to-date totals for input tokens, output tokens, and estimated cost.
-            Ollama usage is tracked but shown at zero cost since it runs locally.
+            OpenAI, and/or OpenRouter), with month-to-date totals for input tokens, output tokens, and estimated cost.
             A daily breakdown table shows usage by model, so you can see exactly where tokens are being
             spent &mdash; email processing, metric extraction, company identification, summaries, or
             analyst conversations.
@@ -921,17 +1009,17 @@ export default function SupportPage() {
           </p>
           <p className="text-muted-foreground mb-2">
             The platform does not currently include built-in antivirus or <strong>malware scanning</strong> of uploaded
-            files. Files are stored in your configured storage provider (Supabase Storage, Google Drive,
-            or Dropbox), which may provide their own scanning capabilities depending on your plan and
+            files. Files are stored in your configured storage provider (Supabase Storage or Google
+            Drive), which may provide their own scanning capabilities depending on your plan and
             configuration. If your organization requires virus scanning, we recommend configuring it at
             the storage provider level or scanning files before uploading them to the platform.
           </p>
           <p className="text-muted-foreground mb-2">
-            When <strong>file storage</strong> is configured (Google Drive or Dropbox),
+            When <strong>file storage</strong> is configured (Google Drive),
             email attachments and uploaded documents are automatically organized into company-specific
             folders. This provides a backup of all source materials alongside the extracted data. Files
             stored in Supabase Storage are accessible through the platform&apos;s UI; files in Google
-            Drive or Dropbox can also be accessed directly through those services.
+            Drive can also be accessed directly through that service.
           </p>
           <p className="text-muted-foreground">
             Uploaded files and their extracted content are only accessible to members of your fund.
@@ -987,7 +1075,7 @@ export default function SupportPage() {
         </div>
         </div>
 
-        {/* Sticky sidebar TOC — desktop only */}
+        {/* Sticky sidebar TOC, desktop only */}
         <nav className="hidden xl:block w-44 shrink-0 text-sm">
           <div className="sticky top-8">
             <h2 className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider mb-3">On this page</h2>

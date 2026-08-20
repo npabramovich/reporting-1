@@ -4,6 +4,46 @@ import { withBotId } from 'botid/next/config'
 const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['@sparticuz/chromium', 'puppeteer-core'],
+    // Include the memo-agent default schema files in the serverless function
+    // bundle. Without this, `fs.readFile` calls inside `ensureDefaults` silently
+    // return null in production (the YAML/MD files aren't traced), so a fresh
+    // fund sees every schema marked "not yet seeded" and the schema editor loads
+    // empty content. The trace is keyed `/**` so every route that imports
+    // firm-schemas.ts gets the files — schemas page, agent stages, render job.
+    //
+    // NOTE: on Next 14 this must live under `experimental`. It became a
+    // top-level config key in Next 15 — move it out when upgrading.
+    outputFileTracingIncludes: {
+      '/**': ['./lib/memo-agent/defaults/**/*'],
+    },
+  },
+  // OAuth discovery lives at /.well-known/*, but Next's app router will not route
+  // a literal dot-prefixed directory — so the well-known paths are rewritten onto
+  // real routes under /api/oauth/metadata/.
+  //
+  // The path-suffixed variants matter: RFC 9728 says a client MAY probe
+  // /.well-known/oauth-protected-resource/<resource-path>, and Claude does exactly
+  // that for /api/mcp. Serving only the bare path would leave discovery failing
+  // for no visible reason.
+  async rewrites() {
+    return [
+      {
+        source: '/.well-known/oauth-authorization-server',
+        destination: '/api/oauth/metadata/authorization-server',
+      },
+      {
+        source: '/.well-known/oauth-authorization-server/:path*',
+        destination: '/api/oauth/metadata/authorization-server',
+      },
+      {
+        source: '/.well-known/oauth-protected-resource',
+        destination: '/api/oauth/metadata/protected-resource',
+      },
+      {
+        source: '/.well-known/oauth-protected-resource/:path*',
+        destination: '/api/oauth/metadata/protected-resource',
+      },
+    ]
   },
   async headers() {
     const securityHeaders = [
@@ -21,17 +61,18 @@ const nextConfig = {
     const noCacheHeaders = [
       { key: 'Cache-Control', value: 'no-store, no-cache, must-revalidate' },
       { key: 'CDN-Cache-Control', value: 'no-store' },
-      { key: 'Netlify-CDN-Cache-Control', value: 'no-store' },
     ]
 
     return [
-      // Security headers for pages and API routes only — exclude _next/static
-      // so Netlify CDN can serve JS/CSS chunks directly without interference.
+      // Security headers for pages and API routes only — exclude _next/static so the CDN can
+      // serve immutable JS/CSS chunks straight from cache without these headers in the way.
       {
         source: '/((?!_next/static).*)',
         headers: securityHeaders,
       },
-      // Prevent caching on auth and demo routes
+      // Prevent caching on auth and demo routes. /demo matters most: it is a client component
+      // with no dynamic server API, so nothing else stops it being prerendered and served
+      // stale — and a stale demo page is one that never runs its sign-in.
       { source: '/auth/:path*', headers: noCacheHeaders },
       { source: '/demo', headers: noCacheHeaders },
       { source: '/api/auth/:path*', headers: noCacheHeaders },

@@ -1,11 +1,20 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getUser } from '@/lib/supabase/server'
+import { resolvePageAccess, canViewPage } from '@/lib/access/page-gate'
 import { ArrowLeft } from 'lucide-react'
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const supabase = createClient()
+  // Runs BEFORE the page body, so it needs the same gate: the title is a company name, and a
+  // member without `portfolio` would otherwise read it off the browser tab on their way to being
+  // redirected. Falls back to the generic title rather than 404ing — metadata is not the place to
+  // decide whether the page exists.
+  const { data: { user } } = await supabase.auth.getUser()
+  const page = user ? await resolvePageAccess(user.id) : null
+  if (!page || !canViewPage(page, 'portfolio')) return { title: 'Company' }
+
   const { data } = await supabase.from('companies').select('name').eq('id', params.id).maybeSingle() as { data: { name: string } | null }
   return { title: data?.name ?? 'Company' }
 }
@@ -22,7 +31,7 @@ import { AnalystPanel } from '@/components/analyst-panel'
 import { CompanyDocuments } from './company-documents'
 import { CompanyInvestments } from './company-investments'
 import { CompanyInteractions } from './company-interactions'
-import { isFeatureVisible, DEFAULT_FEATURE_VISIBILITY } from '@/lib/types/features'
+import { DEFAULT_FEATURE_VISIBILITY } from '@/lib/types/features'
 import type { FeatureVisibilityMap } from '@/lib/types/features'
 
 function formatHighlightValue(value: number, metric: Metric, fundCurrency: string) {
@@ -54,8 +63,15 @@ export default async function CompanyDetailPage({
   params: { id: string }
 }) {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUser()
   if (!user) redirect('/auth')
+
+  // The company itself is `portfolio`. The per-panel checks further down decide which SECTIONS
+  // render (notes, interactions, investments each answer to their own domain) — but they were
+  // doing that on a page anyone in the fund could open, so a member denied portfolio still got the
+  // company and its metrics. The page needs its own gate before any of that.
+  const page = await resolvePageAccess(user.id)
+  if (!page || !canViewPage(page, 'portfolio')) redirect('/dashboard')
 
   const { data: company } = await supabase
     .from('companies')
@@ -65,24 +81,25 @@ export default async function CompanyDetailPage({
 
   if (!company) redirect('/dashboard')
 
-  const { data: membership } = await supabase
-    .from('fund_members')
-    .select('role')
-    .eq('fund_id', company.fund_id)
-    .eq('user_id', user.id)
-    .maybeSingle() as { data: { role: string } | null }
-
-  const isAdmin = membership?.role === 'admin'
+  const isAdmin = page.isAdmin
 
   // Fetch AI provider settings for the summary component
   const { data: fundSettings } = await supabase
     .from('fund_settings')
-    .select('claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, currency, file_storage_provider, google_drive_folder_id, dropbox_folder_path, feature_visibility')
+    .select('claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, currency, file_storage_provider, google_drive_folder_id, feature_visibility')
     .eq('fund_id', company.fund_id)
-    .maybeSingle() as { data: { claude_api_key_encrypted: string | null; openai_api_key_encrypted: string | null; default_ai_provider: string | null; currency: string | null; file_storage_provider: string | null; google_drive_folder_id: string | null; dropbox_folder_path: string | null; feature_visibility: Record<string, string> | null } | null }
+    .maybeSingle() as { data: { claude_api_key_encrypted: string | null; openai_api_key_encrypted: string | null; default_ai_provider: string | null; currency: string | null; file_storage_provider: string | null; google_drive_folder_id: string | null; feature_visibility: Record<string, string> | null } | null }
 
   const fundCurrency = fundSettings?.currency ?? 'USD'
   const featureVisibility = { ...DEFAULT_FEATURE_VISIBILITY, ...(fundSettings?.feature_visibility as Partial<FeatureVisibilityMap> | null) }
+
+  // These panels each belong to a domain, and their APIs are gated to it. Rendering one for a
+  // member without the grant would show an empty panel that 403s on load, so ask the resolver —
+  // the feature switch alone is only half the answer. (`page` is resolved above, where it decides
+  // whether this page renders at all.)
+  const showNotes = canViewPage(page, 'relationships', 'notes')
+  const showInvestments = canViewPage(page, 'portfolio', 'investments')
+  const showInteractions = canViewPage(page, 'relationships', 'interactions')
 
   const { data: metrics } = await supabase
     .from('metrics')
@@ -130,7 +147,7 @@ export default async function CompanyDetailPage({
     <CompanyPanelProvider companyId={company.id} userId={user.id} isAdmin={isAdmin}>
     <div className="p-4 md:p-8">
       {/* Header */}
-      <div className="mb-6 max-w-6xl">
+      <div className="mb-6 max-w-page">
         <Link
           href="/dashboard"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4"
@@ -151,8 +168,8 @@ export default async function CompanyDetailPage({
           {(company.industry ?? []).map((ind) => (
             <Badge key={ind} variant="outline">{ind}</Badge>
           ))}
-          {isFeatureVisible(featureVisibility, 'notes', isAdmin) && <ChatButton />}
-          <AnalystButton companyId={company.id} pushRight={!isFeatureVisible(featureVisibility, 'notes', isAdmin)} />
+          {showNotes && <ChatButton />}
+          <AnalystButton companyId={company.id} pushRight={!showNotes} />
         </div>
 
         {(latestMrr || latestCash) && (
@@ -177,7 +194,7 @@ export default async function CompanyDetailPage({
 
       {/* Content + Notes panel side by side */}
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        <div className="flex-1 min-w-0 max-w-6xl w-full [&>*:first-child]:mt-0">
+        <div className="flex-1 min-w-0 max-w-page w-full [&>*:first-child]:mt-0">
           {company.status !== 'exited' && company.status !== 'written-off' && (
             <>
               <CompanySummary
@@ -196,7 +213,7 @@ export default async function CompanyDetailPage({
             </>
           )}
 
-          {isFeatureVisible(featureVisibility, 'investments', isAdmin) && (
+          {showInvestments && (
             <CompanyInvestments companyId={company.id} companyStatus={company.status as CompanyStatus} portfolioGroups={company.portfolio_group ?? []} adminOnly={featureVisibility.investments === 'admin'} />
           )}
 
@@ -204,10 +221,9 @@ export default async function CompanyDetailPage({
             companyId={company.id}
             storageProvider={fundSettings?.file_storage_provider ?? null}
             googleDriveFolderId={fundSettings?.google_drive_folder_id ?? null}
-            dropboxFolderPath={fundSettings?.dropbox_folder_path ?? null}
           />
 
-          {isFeatureVisible(featureVisibility, 'interactions', isAdmin) && (
+          {showInteractions && (
             <CompanyInteractions companyId={company.id} adminOnly={featureVisibility.interactions === 'admin'} />
           )}
 
@@ -215,14 +231,14 @@ export default async function CompanyDetailPage({
             <div className="mt-6 space-y-3">
               {company.founders && (
                 <div>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-1">Founders</h3>
+                  <h3 className="text-base font-medium text-muted-foreground mb-1">Founders</h3>
                   <p className="text-sm">{company.founders}</p>
                 </div>
               )}
 
               {company.contact_email && company.contact_email.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-1">Contact{company.contact_email.length > 1 ? 's' : ''}</h3>
+                  <h3 className="text-base font-medium text-muted-foreground mb-1">Contact{company.contact_email.length > 1 ? 's' : ''}</h3>
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
                     {company.contact_email.map((email) => (
                       <p key={email} className="text-sm">
@@ -237,21 +253,21 @@ export default async function CompanyDetailPage({
 
               {company.overview && (
                 <div>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-1">Overview</h3>
+                  <h3 className="text-base font-medium text-muted-foreground mb-1">Overview</h3>
                   <p className="text-sm">{company.overview}</p>
                 </div>
               )}
 
               {company.why_invested && (
                 <div>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-1">Why We Invested</h3>
+                  <h3 className="text-base font-medium text-muted-foreground mb-1">Why We Invested</h3>
                   <p className="text-sm">{company.why_invested}</p>
                 </div>
               )}
 
               {company.current_update && (
                 <div>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-1">Current Business Update</h3>
+                  <h3 className="text-base font-medium text-muted-foreground mb-1">Current Business Update</h3>
                   <p className="text-sm">{company.current_update}</p>
                 </div>
               )}
@@ -259,7 +275,7 @@ export default async function CompanyDetailPage({
           )}
         </div>
 
-        {isFeatureVisible(featureVisibility, 'notes', isAdmin) && <CompanyNotesPanel />}
+        {showNotes && <CompanyNotesPanel />}
         <AnalystPanel />
       </div>
     </div>

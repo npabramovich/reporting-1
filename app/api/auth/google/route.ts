@@ -24,16 +24,29 @@ export async function GET(req: NextRequest) {
     }, { status: 400 })
   }
 
-  // Build the redirect URI from the request
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+  // Build the redirect URI. Google's OAuth requires HTTPS in production; if
+  // NEXT_PUBLIC_APP_URL was misconfigured as http://, upgrade it. Trailing
+  // slashes are stripped so the redirect URI matches what's registered.
+  let baseUrl = process.env.NEXT_PUBLIC_APP_URL
     ? process.env.NEXT_PUBLIC_APP_URL
     : process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000'
+  baseUrl = baseUrl.replace(/\/$/, '')
+  if (baseUrl.startsWith('http://') && !baseUrl.startsWith('http://localhost')) {
+    baseUrl = baseUrl.replace(/^http:\/\//, 'https://')
+  }
   const redirectUri = `${baseUrl}/api/auth/google/callback`
 
-  // Pass return_to in state so callback knows where to redirect
-  const returnTo = req.nextUrl.searchParams.get('return_to') || '/settings'
+  // Pass return_to in state so callback knows where to redirect.
+  // Cap the length and re-validate the open-redirect guard so a very long or
+  // malformed `return_to` query param can't blow past Google's URL-length
+  // limit on the auth request (silent OAuth failure) or smuggle a protocol-
+  // relative redirect target.
+  const rawReturnTo = req.nextUrl.searchParams.get('return_to') ?? ''
+  const returnTo = rawReturnTo.startsWith('/') && !rawReturnTo.startsWith('//')
+    ? rawReturnTo.slice(0, 200)
+    : '/settings'
   const state = Buffer.from(JSON.stringify({
     fund_id: membership.fund_id,
     return_to: returnTo,
@@ -43,9 +56,20 @@ export async function GET(req: NextRequest) {
     client_id: creds.clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly https://www.googleapis.com/auth/gmail.send',
+    // drive.readonly lets the app read any file the user can access in Drive
+    // — required for "import a folder by URL" to read the contents of files
+    // the user didn't explicitly pick via Google Picker. drive.file alone
+    // returns 403 on direct API calls to files the app didn't create.
+    // drive.file is also kept so files uploaded TO Drive by the app (e.g.
+    // rendered memo Google Docs) stay tracked as app-owned.
+    // gmail.send permits outbound email send for asks/letters.
+    scope: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly https://www.googleapis.com/auth/gmail.send',
     access_type: 'offline',
-    prompt: 'consent',
+    // `consent` forces the consent screen so refresh tokens are re-issued
+    // even if the user previously authorized. `select_account` forces the
+    // account picker first, useful when the browser has multiple Google
+    // sessions and the default isn't the one that should own the connection.
+    prompt: 'consent select_account',
     state,
   })
 

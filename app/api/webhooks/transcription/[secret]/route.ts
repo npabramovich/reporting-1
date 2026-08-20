@@ -1,0 +1,260 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { parseCallbackPayload } from '@/lib/transcription/deepgram'
+import { logAIUsage } from '@/lib/ai/usage'
+import { uploadTranscriptToDrive } from '@/lib/memo-agent/render/gdoc'
+import { parseDriveFolderUrl } from '@/lib/google/drive'
+import { dbError } from '@/lib/api-error'
+
+/**
+ * Deepgram callback endpoint. Receives the transcript for a prerecorded
+ * audio submission and:
+ *   1. Looks up the memo_agent_jobs row by external_job_id (Deepgram's
+ *      request_id) or by the tag we attached at submit time.
+ *   2. Writes the formatted transcript text into the diligence-documents
+ *      bucket and creates a new diligence_documents row of type
+ *      call_transcript (parse_status 'pending'), linked back to the
+ *      recording via source_document_id.
+ *   3. Bulk-inserts per-utterance turns into diligence_call_transcripts.
+ *   4. Marks the transcribe job success. The transcript is left as a
+ *      pending document — transcription is decoupled from memo ingest, so
+ *      a partner explicitly Processes the transcript when they want it in
+ *      the draft.
+ *
+ * Auth is a shared secret carried in the path; Deepgram's prerecorded
+ * callbacks aren't signed, so this is the simplest defensible scheme. Don't
+ * leak the URL — anyone with the secret can write transcript content to any
+ * job referenced by a tag they can guess.
+ */
+export async function POST(req: NextRequest, { params }: { params: { secret: string } }) {
+  const expected = process.env.TRANSCRIPTION_WEBHOOK_SECRET
+  if (!expected) {
+    return NextResponse.json({ error: 'TRANSCRIPTION_WEBHOOK_SECRET not configured' }, { status: 500 })
+  }
+  if (!timingSafeEqual(params.secret, expected)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const body = await req.json().catch(() => null)
+  if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+
+  const parsed = parseCallbackPayload(body)
+  if (!parsed.request_id && !parsed.external_ref) {
+    return NextResponse.json({ error: 'Callback missing request_id and tag' }, { status: 400 })
+  }
+
+  const admin = createAdminClient()
+
+  // Prefer the tag (our job id) — it's what we set; the Deepgram request_id
+  // is the secondary lookup if the tag was lost in transit.
+  let job: {
+    id: string
+    fund_id: string
+    deal_id: string
+    payload: Record<string, unknown>
+    status: string
+  } | null = null
+
+  if (parsed.external_ref) {
+    const { data } = await admin
+      .from('memo_agent_jobs')
+      .select('id, fund_id, deal_id, payload, status')
+      .eq('id', parsed.external_ref)
+      .maybeSingle()
+    job = (data as any) ?? null
+  }
+  if (!job && parsed.request_id) {
+    const { data } = await admin
+      .from('memo_agent_jobs')
+      .select('id, fund_id, deal_id, payload, status')
+      .eq('external_job_id', parsed.request_id)
+      .maybeSingle()
+    job = (data as any) ?? null
+  }
+  if (!job) return NextResponse.json({ error: 'No matching job' }, { status: 404 })
+
+  if (job.status === 'success') {
+    // Idempotency: if Deepgram retries, don't double-write.
+    return NextResponse.json({ ok: true, deduped: true })
+  }
+
+  const documentId = typeof job.payload?.document_id === 'string'
+    ? job.payload.document_id as string
+    : null
+  if (!documentId) {
+    await markFailed(admin, job.id, 'job payload missing document_id')
+    return NextResponse.json({ error: 'job payload missing document_id' }, { status: 400 })
+  }
+
+  const { data: recording } = await admin
+    .from('diligence_documents')
+    .select('id, file_name')
+    .eq('id', documentId)
+    .eq('fund_id', job.fund_id)
+    .maybeSingle()
+  if (!recording) {
+    await markFailed(admin, job.id, `recording document ${documentId} not found`)
+    return NextResponse.json({ error: 'recording not found' }, { status: 404 })
+  }
+
+  // Write the formatted transcript text into the diligence-documents bucket
+  // so existing readers (ingest pipeline, document download) can pick it up
+  // without special-casing.
+  const baseName = (recording as any).file_name as string
+  const transcriptName = `${stripExtension(baseName)}.transcript.txt`
+  const storagePath = `${job.deal_id}/transcripts/${Date.now()}_${sanitize(transcriptName)}`
+  const buffer = Buffer.from(parsed.full_text, 'utf8')
+
+  const { error: upErr } = await admin.storage
+    .from('diligence-documents')
+    .upload(storagePath, buffer, { contentType: 'text/plain; charset=utf-8', upsert: false })
+  if (upErr) {
+    await markFailed(admin, job.id, `transcript upload failed: ${upErr.message}`)
+    return dbError(upErr, 'transcription-webhook')
+  }
+
+  const { data: insertedDoc, error: insertErr } = await admin
+    .from('diligence_documents')
+    .insert({
+      deal_id: job.deal_id,
+      fund_id: job.fund_id,
+      storage_path: storagePath,
+      file_name: transcriptName,
+      file_format: 'txt',
+      file_size_bytes: buffer.length,
+      detected_type: 'call_transcript',
+      type_confidence: 'high',
+      // Pending, not parsed — transcription is decoupled from ingest. The
+      // transcript shows in the data room with a Process action the partner
+      // can run when they want it folded into the memo.
+      parse_status: 'pending',
+      source_document_id: documentId,
+    } as any)
+    .select('id')
+    .single()
+  if (insertErr || !insertedDoc) {
+    await admin.storage.from('diligence-documents').remove([storagePath]).catch(() => {})
+    await markFailed(admin, job.id, `transcript row insert failed: ${insertErr?.message ?? 'unknown'}`)
+    return dbError(insertErr ?? { message: 'insert failed' }, 'transcription-webhook')
+  }
+  const transcriptDocId = (insertedDoc as any).id as string
+
+  if (parsed.utterances.length > 0) {
+    const turnRows = parsed.utterances.map(u => ({
+      document_id: transcriptDocId,
+      deal_id: job!.deal_id,
+      fund_id: job!.fund_id,
+      speaker: u.speaker,
+      start_ms: u.start_ms,
+      end_ms: u.end_ms,
+      text: u.text,
+    }))
+    const { error: turnErr } = await (admin as any)
+      .from('diligence_call_transcripts')
+      .insert(turnRows)
+    if (turnErr) {
+      // Don't fail the whole webhook on turn-insert failure — the plain-text
+      // transcript is already saved and is what the ingest stage reads.
+      console.warn(`[transcription-webhook] turn insert failed: ${turnErr.message}`)
+    }
+  }
+
+  // Mark recording as transcribed so the data-room UI can show that state.
+  await admin
+    .from('diligence_documents')
+    .update({ parse_status: 'transcribed' } as any)
+    .eq('id', documentId)
+
+  // Mirror the transcript into the deal's Google Drive data-room folder so it
+  // lives alongside the recordings, not only in the database. Best-effort —
+  // the transcript is already saved in Supabase; a Drive failure must not
+  // fail the webhook.
+  try {
+    const { data: deal } = await admin
+      .from('diligence_deals')
+      .select('drive_folder_url')
+      .eq('id', job.deal_id)
+      .eq('fund_id', job.fund_id)
+      .maybeSingle()
+    const folderUrl = (deal as { drive_folder_url: string | null } | null)?.drive_folder_url ?? null
+    const driveFolderId = folderUrl ? parseDriveFolderUrl(folderUrl) : null
+    if (driveFolderId) {
+      const drive = await uploadTranscriptToDrive({
+        admin,
+        fundId: job.fund_id,
+        filename: transcriptName,
+        text: parsed.full_text,
+        folderId: driveFolderId,
+      })
+      if (drive.webViewLink) {
+        await admin
+          .from('diligence_documents')
+          .update({ drive_source_url: drive.webViewLink } as any)
+          .eq('id', transcriptDocId)
+      }
+    }
+  } catch (err) {
+    console.warn(`[transcription-webhook] Drive mirror failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // Transcription is decoupled from memo ingest — the transcript document is
+  // left pending for the partner to Process explicitly. No ingest job is
+  // enqueued here.
+
+  await admin
+    .from('memo_agent_jobs')
+    .update({
+      status: 'success',
+      finished_at: new Date().toISOString(),
+      progress_message: 'completed',
+      result: {
+        transcript_document_id: transcriptDocId,
+        utterances: parsed.utterances.length,
+        duration_seconds: parsed.duration_seconds,
+      } as any,
+    })
+    .eq('id', job.id)
+
+  // Record transcription in AI usage (per-minute billed, not token-based) so it
+  // shows up in the per-deal and fund-wide usage reports.
+  await logAIUsage(admin, {
+    fundId: job.fund_id,
+    dealId: job.deal_id,
+    provider: 'deepgram',
+    model: `deepgram/${process.env.DEEPGRAM_MODEL ?? 'nova-3'}`,
+    feature: 'transcription',
+    audioSeconds: Math.round(parsed.duration_seconds ?? 0),
+  })
+
+  return NextResponse.json({ ok: true, transcript_document_id: transcriptDocId })
+}
+
+async function markFailed(admin: ReturnType<typeof createAdminClient>, jobId: string, error: string) {
+  await admin
+    .from('memo_agent_jobs')
+    .update({
+      status: 'failed',
+      error,
+      finished_at: new Date().toISOString(),
+      progress_message: 'failed',
+    })
+    .eq('id', jobId)
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let mismatch = 0
+  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return mismatch === 0
+}
+
+// Storage keys must be ASCII-safe — Supabase rejects spaces, brackets, and
+// other characters common in recording filenames (e.g. "Call [PHI redacted]").
+// Used only for the object key; the human-readable file_name keeps the original.
+function sanitize(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200)
+}
+
+function stripExtension(name: string): string {
+  return name.replace(/\.[^.]+$/, '')
+}

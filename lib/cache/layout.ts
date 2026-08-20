@@ -1,6 +1,7 @@
 import { unstable_cache } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkForUpdate } from '@/lib/version'
+import { loadFofActive } from '@/lib/portfolio/fof'
 
 // Badge counts — short TTL (revalidated on mutation + 60s fallback)
 export const getReviewBadge = unstable_cache(
@@ -48,6 +49,36 @@ export const getPendingRequests = unstable_cache(
   { tags: ['pending-requests'], revalidate: 60 }
 )
 
+export const getPendingActionsBadge = unstable_cache(
+  async (fundId: string) => {
+    const admin = createAdminClient()
+    const { count } = await admin
+      .from('pending_actions' as any)
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .eq('fund_id', fundId)
+    return count ?? 0
+  },
+  ['pending-actions-badge'],
+  { tags: ['pending-actions-badge'], revalidate: 60 }
+)
+
+/**
+ * Is this a fund of funds? Derived — true when at least one holding is itself a fund. There is
+ * no setting; creating the first fund holding is what turns the FoF surfaces on. See
+ * lib/portfolio/fof.ts for why this is data-derived rather than a feature flag.
+ *
+ * Longer TTL: a fund gains its first fund holding roughly once, ever.
+ */
+export const getFofActive = unstable_cache(
+  async (fundId: string) => {
+    const admin = createAdminClient()
+    return loadFofActive(admin, fundId)
+  },
+  ['fof-active'],
+  { tags: ['fof-active'], revalidate: 300 }
+)
+
 // Fund data — longer TTL (rarely changes)
 export const getFundData = unstable_cache(
   async (fundId: string) => {
@@ -66,14 +97,15 @@ export const getFundData = unstable_cache(
 export const getFundSettings = unstable_cache(
   async (fundId: string) => {
     const admin = createAdminClient()
-    const { data } = await admin
+    // Cast: `theme` is a recently-added column not yet in the generated types.
+    const { data } = await (admin as any)
       .from('fund_settings')
       .select(
-        'currency, claude_api_key_encrypted, openai_api_key_encrypted, gemini_api_key_encrypted, ollama_base_url, default_ai_provider, analytics_fathom_site_id, analytics_ga_measurement_id, feature_visibility'
+        'currency, claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, analytics_fathom_site_id, analytics_ga_measurement_id, feature_visibility, theme, lp_portal_enabled'
       )
       .eq('fund_id', fundId)
       .maybeSingle()
-    return data
+    return data as any
   },
   ['fund-settings'],
   { tags: ['fund-settings'], revalidate: 300 }
@@ -101,4 +133,41 @@ export const getMembership = unstable_cache(
   },
   ['membership'],
   { tags: ['membership'], revalidate: 300 }
+)
+
+/**
+ * A user's per-domain grants, for the layout to resolve their effective access once and hand the
+ * result to the client (see components/access-context.tsx).
+ *
+ * Cached like the rest of the layout's reads, and tagged so revoking a grant can invalidate it.
+ * The cache is safe because it only drives WHAT THE NAV SHOWS: every API call re-resolves access
+ * live in the middleware, uncached, so a revoked grant stops working immediately even if a stale
+ * sidebar still offers the link.
+ */
+export const getDomainGrants = unstable_cache(
+  async (userId: string, fundId: string) => {
+    const admin = createAdminClient()
+    const [{ data: grants, error: grantsError }, { data: defaults, error: defaultsError }] = await Promise.all([
+      admin.from('fund_member_access' as any).select('domain, level').eq('fund_id', fundId).eq('user_id', userId),
+      admin.from('fund_domain_defaults' as any).select('domain, level').eq('fund_id', fundId),
+    ])
+
+    // THROW, don't return empty. An empty grant set is indistinguishable from "this user is
+    // allowed nothing", so swallowing the error would cache a transient blip AS A DENIAL for the
+    // full 300s — stripping the nav to two items for anyone whose request landed in that window,
+    // with no error anywhere to explain it. Failing loudly renders an error instead, and
+    // unstable_cache caches nothing.
+    const error = grantsError ?? defaultsError
+    if (error) {
+      console.error('[getDomainGrants] DB error:', error.message)
+      throw new Error(`Could not resolve access grants: ${error.message}`)
+    }
+
+    return {
+      grants: ((grants ?? []) as unknown) as { domain: string; level: string }[],
+      defaults: ((defaults ?? []) as unknown) as { domain: string; level: string }[],
+    }
+  },
+  ['domain-grants'],
+  { tags: ['membership', 'domain-grants'], revalidate: 300 }
 )

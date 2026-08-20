@@ -2,12 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, ChevronUp, ChevronDown, Lock } from 'lucide-react'
+import { Loader2, ChevronUp, ChevronDown, Lock, Pencil, Link2Off } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { useCurrency, formatCurrency, formatCurrencyFull } from '@/components/currency-context'
 import type { CompanyStatus } from '@/lib/types/database'
-import { xirr, type CashFlow } from '@/lib/xirr'
 import { AnalystToggleButton } from '@/components/analyst-button'
+import { AddCompanyButton } from '@/components/add-company-button'
+import { AddVehicleButton } from '@/components/add-vehicle-button'
+import { VehicleEditModal, VehicleLinkModal, type EditableVehicle } from '@/components/vehicle-edit-modal'
+import { InvestmentVehicleFilters } from '@/components/investments-vehicle-filters'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { PortfolioNotesProvider, PortfolioNotesButton, PortfolioNotesPanel } from '@/components/portfolio-notes'
 import { useFeatureVisibility } from '@/components/feature-visibility-context'
@@ -41,73 +44,6 @@ interface GroupSummary {
   irr: number | null
 }
 
-interface FundCashFlow {
-  id: string
-  portfolio_group: string
-  flow_date: string
-  flow_type: 'commitment' | 'called_capital' | 'distribution'
-  amount: number
-}
-
-interface FundGroupMetrics {
-  tvpi: number | null
-  dpi: number | null
-  rvpi: number | null
-  netIrr: number | null
-}
-
-function computeFundMetricsByGroup(
-  cashFlows: FundCashFlow[],
-  grossResidualByGroup: Map<string, number>,
-  configsByGroup: Record<string, { cashOnHand: number; carryRate: number; gpCommitPct: number }>
-): Map<string, FundGroupMetrics> {
-  // Group cash flows by portfolio_group
-  const byGroup = new Map<string, FundCashFlow[]>()
-  for (const cf of cashFlows) {
-    const list = byGroup.get(cf.portfolio_group) ?? []
-    list.push(cf)
-    byGroup.set(cf.portfolio_group, list)
-  }
-
-  const result = new Map<string, FundGroupMetrics>()
-  for (const [group, flows] of Array.from(byGroup.entries())) {
-    let called = 0
-    let distributions = 0
-    for (const cf of flows) {
-      if (cf.flow_type === 'called_capital') called += cf.amount
-      if (cf.flow_type === 'distribution') distributions += cf.amount
-    }
-
-    const grossResidual = grossResidualByGroup.get(group) ?? 0
-    const config = configsByGroup[group] ?? { cashOnHand: 0, carryRate: 0.20, gpCommitPct: 0 }
-    const grossAssets = grossResidual + config.cashOnHand
-
-    // GP commit portion of called capital is not subject to carry
-    const gpCapital = called * config.gpCommitPct
-    const lpCapital = called - gpCapital
-    const lpDistributions = distributions * (1 - config.gpCommitPct)
-    const lpRemainingCapital = lpCapital - lpDistributions
-    const estimatedCarry = Math.max(0, config.carryRate * (grossAssets * (1 - config.gpCommitPct) - lpRemainingCapital))
-    const netResidual = grossAssets - estimatedCarry
-    const totalValue = distributions + netResidual
-
-    const tvpi = called > 0 ? totalValue / called : null
-    const dpi = called > 0 ? distributions / called : null
-    const rvpi = called > 0 ? netResidual / called : null
-
-    // Net IRR
-    const xirrFlows: CashFlow[] = []
-    for (const cf of flows) {
-      if (cf.flow_type === 'called_capital') xirrFlows.push({ date: new Date(cf.flow_date), amount: -cf.amount })
-      if (cf.flow_type === 'distribution') xirrFlows.push({ date: new Date(cf.flow_date), amount: cf.amount })
-    }
-    if (netResidual > 0) xirrFlows.push({ date: new Date(), amount: netResidual })
-    const netIrr = xirrFlows.length >= 2 ? xirr(xirrFlows) : null
-
-    result.set(group, { tvpi, dpi, rvpi, netIrr })
-  }
-  return result
-}
 
 interface PortfolioData {
   totalInvested: number
@@ -162,8 +98,8 @@ function fmtIrr(val: number | null): string {
 }
 
 const STATUS_COLORS: Record<CompanyStatus, string> = {
-  active: 'text-green-600',
-  exited: 'text-blue-600',
+  active: 'text-success',
+  exited: 'text-info',
   'written-off': 'text-muted-foreground',
 }
 
@@ -218,69 +154,79 @@ export default function InvestmentsPage() {
   const [data, setData] = useState<PortfolioData | null>(null)
   const [loading, setLoading] = useState(true)
   const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [refreshKey, setRefreshKey] = useState(0) // bumped after adding a vehicle to re-fetch
 
   const [sortKey, setSortKey] = useState<SortKey>('totalValue')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [statusFilter, setStatusFilter] = useState('')
-  const [groupFilter, setGroupFilter] = useState('')
 
   const [groupSortKey, setGroupSortKey] = useState<GroupSortKey>('totalInvested')
   const [groupSortDir, setGroupSortDir] = useState<SortDir>('desc')
 
-  // Fund cash flows for computed LP metrics
-  const [fundCashFlows, setFundCashFlows] = useState<FundCashFlow[]>([])
-  const [groupConfigs, setGroupConfigs] = useState<Record<string, { cashOnHand: number; carryRate: number; gpCommitPct: number; vintage: number | null }>>({})
+  // Vintage year per vehicle. That is ALL this page takes from outside the investment data.
+  //
+  // It used to also show TVPI / DPI / RVPI / Net IRR here, computed client-side from hand-typed
+  // cash flows with an ESTIMATED carry haircut. Those are NET, fund-level metrics and they do
+  // not belong on a gross-investments sheet: this page reports what the portfolio did, before
+  // fund economics. The net numbers live on /funds, derived from the ledger, where carry is a
+  // real accrual rather than a guess — which is also how the carry estimate stopped being a
+  // problem on this page: it was deleted, not fixed.
+  const [vintages, setVintages] = useState<Map<string, number | null>>(new Map())
+  // Full vehicle registry rows, so a group row can be edited in place (name/type/vintage/active).
+  const [vehicleList, setVehicleList] = useState<Array<{ id: string; name: string; aliases: string[] | null; kind: string; active: boolean; vintage_year: number | null }>>([])
+  const [editingVehicle, setEditingVehicle] = useState<EditableVehicle | null>(null)
+  // A group string with no registry vehicle behind it — offer to link or register it rather than
+  // silently showing a row with no vintage and no edit.
+  const [linkingGroup, setLinkingGroup] = useState<string | null>(null)
+  // Filters. Default: hide empty (no-transaction) vehicles and hide GP/associate entities — the
+  // common view — but every combination is pickable.
+  const [selectedKinds, setSelectedKinds] = useState<Set<string>>(() => new Set(['fund', 'spv', 'direct', 'other']))
+  const [showEmpty, setShowEmpty] = useState(false)
 
   useEffect(() => {
     async function load() {
       setLoading(true)
       try {
-        const [invRes, cfRes, gcRes] = await Promise.all([
+        const [invRes, vehRes] = await Promise.all([
           fetch(`/api/portfolio/investments?asOf=${asOfDate}`),
-          fetch('/api/portfolio/fund-cash-flows'),
-          fetch('/api/portfolio/fund-group-config'),
+          fetch('/api/vehicles'),
         ])
         if (invRes.ok) setData(await invRes.json())
-        if (cfRes.ok) setFundCashFlows(await cfRes.json())
-        if (gcRes.ok) {
-          const configs = await gcRes.json()
-          const map: Record<string, { cashOnHand: number; carryRate: number; gpCommitPct: number; vintage: number | null }> = {}
-          for (const c of configs) {
-            map[c.portfolio_group] = {
-              cashOnHand: Number(c.cash_on_hand) || 0,
-              carryRate: c.carry_rate != null ? Number(c.carry_rate) : 0.20,
-              gpCommitPct: Number(c.gp_commit_pct) || 0,
-              vintage: c.vintage != null ? Number(c.vintage) : null,
-            }
+        if (vehRes.ok) {
+          const vs = await vehRes.json()
+          // Key the vintage by the vehicle's name AND every alias: the portfolio_group on a
+          // transaction is often an alias, not the canonical name, so a name-only map missed it.
+          setVehicleList(vs ?? [])
+          const norm = (s: string) => s.trim().toLowerCase()
+          const vmap = new Map<string, number | null>()
+          for (const v of (vs ?? []) as Array<{ name: string; aliases?: string[] | null; vintage_year: number | null }>) {
+            const vint = v.vintage_year ?? null
+            vmap.set(norm(v.name), vint)
+            for (const alias of (v.aliases ?? [])) vmap.set(norm(alias), vint)
           }
-          setGroupConfigs(map)
+          setVintages(vmap)
         }
       } finally {
         setLoading(false)
       }
     }
     load()
-  }, [asOfDate])
+  }, [asOfDate, refreshKey])
 
-  // Derive unique portfolio groups from data
-  const availableGroups = useMemo(() => {
-    if (!data) return []
-    const groups = new Set<string>()
-    for (const c of data.companies) {
-      for (const g of c.portfolioGroup) groups.add(g)
-    }
-    return Array.from(groups).sort()
-  }, [data])
+  // The registry vehicle behind a portfolio group (matched by name or alias), for in-place editing.
+  const vehicleForGroup = (group: string): EditableVehicle | null => {
+    const n = group.trim().toLowerCase()
+    const v = vehicleList.find(x => x.name.trim().toLowerCase() === n || (x.aliases ?? []).some(a => a.trim().toLowerCase() === n))
+    return v ? { id: v.id, name: v.name, kind: v.kind, vintage_year: v.vintage_year, active: v.active, aliases: v.aliases ?? [] } : null
+  }
 
-  // Compute LP metrics (TVPI/DPI/RVPI/Net IRR) from fund cash flows
-  const fundMetricsByGroup = useMemo(() => {
-    if (!data) return new Map<string, FundGroupMetrics>()
-    const grossResidualByGroup = new Map<string, number>()
-    for (const g of data.groups ?? []) {
-      grossResidualByGroup.set(g.group, g.unrealizedValue)
-    }
-    return computeFundMetricsByGroup(fundCashFlows, grossResidualByGroup, groupConfigs)
-  }, [fundCashFlows, data, groupConfigs])
+  // Whether a vehicle/group should be visible per the popover's vehicle-type selection. Shared by
+  // the group summary table and the companies table so both respect the same filter.
+  const groupIsVisible = (group: string) => {
+    const veh = vehicleForGroup(group)
+    if (veh && !selectedKinds.has(veh.kind)) return false
+    return true
+  }
 
   // Group-level totals for percentage columns
   const groupTotalsMap = useMemo(() => {
@@ -314,9 +260,7 @@ export default function InvestmentsPage() {
     if (statusFilter) {
       list = list.filter(c => c.status === statusFilter)
     }
-    if (groupFilter) {
-      list = list.filter(c => c.portfolioGroup.includes(groupFilter))
-    }
+    list = list.filter(c => c.portfolioGroup.length === 0 || c.portfolioGroup.some(g => groupIsVisible(g)))
 
     const dir = sortDir === 'asc' ? 1 : -1
 
@@ -333,24 +277,42 @@ export default function InvestmentsPage() {
 
     return list
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, statusFilter, groupFilter, sortKey, sortDir, groupTotalsMap])
+  }, [data, statusFilter, sortKey, sortDir, groupTotalsMap, selectedKinds, vehicleList])
 
   // Sort groups
   const sortedGroups = useMemo(() => {
-    if (!data || !data.groups || data.groups.length === 0) return []
+    const base = data?.groups ?? []
+    const norm = (s: string) => s.trim().toLowerCase()
+    let list: GroupSummary[] = [...base]
+    // "Show empty" adds a zero row for every registry vehicle with no transactions (matched by
+    // name/alias), so it can still be edited from here.
+    if (showEmpty) {
+      const groupKeys = new Set(base.map(g => norm(g.group)))
+      const isRep = (v: { name: string; aliases: string[] | null }) =>
+        groupKeys.has(norm(v.name)) || (v.aliases ?? []).some(a => groupKeys.has(norm(a)))
+      const extras: GroupSummary[] = vehicleList.filter(v => !isRep(v)).map(v => ({
+        group: v.name, totalInvested: 0, proceedsReceived: 0, proceedsEscrow: 0,
+        totalRealized: 0, unrealizedValue: 0, totalCostBasisExited: 0, moic: null, irr: null,
+      }))
+      list = [...base, ...extras]
+    }
+    // Type filter (a group's vehicle kind must be selected; an unmapped group has no kind, so it
+    // always shows) + the specific-vehicle picker.
+    list = list.filter(g => groupIsVisible(g.group))
+    if (list.length === 0) return []
     const dir = groupSortDir === 'asc' ? 1 : -1
-    return [...data.groups].sort((a, b) => {
+    return [...list].sort((a, b) => {
       if (groupSortKey === 'group') return dir * a.group.localeCompare(b.group)
       if (groupSortKey === 'vintage') {
-        const av = groupConfigs[a.group]?.vintage ?? 0
-        const bv = groupConfigs[b.group]?.vintage ?? 0
+        const av = vintages.get(a.group.trim().toLowerCase()) ?? 0
+        const bv = vintages.get(b.group.trim().toLowerCase()) ?? 0
         return dir * (av - bv)
       }
       const av = getGroupDerivedValue(a, groupSortKey)
       const bv = getGroupDerivedValue(b, groupSortKey)
       return dir * (av - bv)
     })
-  }, [data, groupSortKey, groupSortDir, groupConfigs])
+  }, [data, groupSortKey, groupSortDir, vintages, showEmpty, selectedKinds, vehicleList])
 
   // Group totals for footer
   const groupTotals = useMemo(() => {
@@ -454,18 +416,30 @@ export default function InvestmentsPage() {
   const heading = (
     <div className="mb-6 space-y-1">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.investments === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}Investments</h1>
+        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">{fv.investments === 'admin' && <Lock className="h-4 w-4 text-warning" />}Investments</h1>
         <div className="flex items-center gap-2"><PortfolioNotesButton /><AnalystToggleButton /></div>
       </div>
       <p className="text-sm text-muted-foreground">Portfolio-level investment positions and returns</p>
-      <div className="flex items-center gap-2 pt-2">
-        <span className="text-sm text-muted-foreground">As of</span>
-        <input
-          type="date"
-          value={asOfDate}
-          onChange={e => setAsOfDate(e.target.value)}
-          className="border rounded px-2 py-1 text-sm"
-        />
+      <div className="flex items-center gap-2 pt-3">
+        <AddCompanyButton />
+        <AddVehicleButton onCreated={() => setRefreshKey(k => k + 1)} />
+        <div className="ml-auto flex items-center gap-2">
+          <InvestmentVehicleFilters
+            selectedKinds={selectedKinds}
+            onToggleKind={k => setSelectedKinds(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n })}
+            showEmpty={showEmpty}
+            onToggleShowEmpty={() => setShowEmpty(v => !v)}
+            status={statusFilter}
+            onStatusChange={setStatusFilter}
+          />
+          <span className="text-sm text-muted-foreground">As of</span>
+          <input
+            type="date"
+            value={asOfDate}
+            onChange={e => setAsOfDate(e.target.value)}
+            className="border rounded px-2 py-1 text-sm"
+          />
+        </div>
       </div>
     </div>
   )
@@ -557,17 +531,16 @@ export default function InvestmentsPage() {
         </Card>
       </div>
 
-      {/* Group summary table — only shown when multiple groups exist */}
+      {/* Group summary table, only shown when multiple groups exist */}
       {sortedGroups.length > 0 && groupTotals && (
         <div className="mb-8">
-          <h2 className="text-sm font-medium text-muted-foreground mb-2">Portfolio Groups</h2>
           <div className="border rounded-lg overflow-x-auto">
             <table className="w-full text-sm whitespace-nowrap">
               <thead>
                 <tr className="border-b bg-muted">
                   <th className="text-left px-3 py-2 font-medium sticky left-0 bg-muted z-10">
                     <button onClick={() => handleGroupSort('group')} className="hover:text-foreground">
-                      Group<GroupSortIcon col="group" />
+                      Vehicle<GroupSortIcon col="group" />
                     </button>
                   </th>
                   <th className="text-center px-3 py-2 font-medium">
@@ -582,26 +555,35 @@ export default function InvestmentsPage() {
                       </button>
                     </th>
                   ))}
-                  <th className="text-right px-3 py-2 font-medium">TVPI</th>
-                  <th className="text-right px-3 py-2 font-medium">DPI</th>
-                  <th className="text-right px-3 py-2 font-medium">RVPI</th>
-                  <th className="text-right px-3 py-2 font-medium">Net IRR</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedGroups.map(g => {
-                  const fm = fundMetricsByGroup.get(g.group)
+                  const veh = vehicleForGroup(g.group)
                   return (
-                    <tr key={g.group} className="border-b last:border-b-0 hover:bg-muted/30">
-                      <td className="px-3 py-2 font-medium sticky left-0 bg-background z-10">{g.group || '(none)'}</td>
-                      <td className="px-3 py-2 text-center text-xs text-muted-foreground">{groupConfigs[g.group]?.vintage ?? '-'}</td>
+                    <tr key={g.group} className="group border-b last:border-b-0 hover:bg-muted/30">
+                      <td className="px-3 py-2 font-medium sticky left-0 bg-background z-10">
+                        <span className="inline-flex items-center gap-1.5">
+                          {g.group || '(none)'}
+                          {veh ? (
+                            <button onClick={() => setEditingVehicle(veh)} title="Edit vehicle" className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground">
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                          ) : g.group ? (
+                            <button
+                              onClick={() => setLinkingGroup(g.group)}
+                              title="No vehicle matches this group name — link or register it"
+                              className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground"
+                            >
+                              <Link2Off className="h-3 w-3" />
+                            </button>
+                          ) : null}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-center text-xs text-muted-foreground">{vintages.get(g.group.trim().toLowerCase()) ?? '-'}</td>
                       {numericColumns.map(col => (
-                        <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtVal(col.getValue(g), col.format)}</td>
+                        <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{fmtVal(col.getValue(g), col.format)}</td>
                       ))}
-                      <td className="px-3 py-2 text-right font-mono">{fmtMoic(fm?.tvpi ?? null)}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmtMoic(fm?.dpi ?? null)}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmtMoic(fm?.rvpi ?? null)}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmtIrr(fm?.netIrr ?? null)}</td>
                     </tr>
                   )
                 })}
@@ -612,16 +594,12 @@ export default function InvestmentsPage() {
                   <td className="px-3 py-2 sticky left-0 bg-muted z-10">Total</td>
                   <td className="px-3 py-2" />
                   {numericColumns.map(col => {
-                    if (col.format === 'irr') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtIrr(data.portfolioIRR)}</td>
-                    if (col.sortKey === 'moic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(groupTotals.moic)}</td>
-                    if (col.sortKey === 'realizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(realizedMoic(groupTotals))}</td>
-                    if (col.sortKey === 'unrealizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(unrealizedMoic(groupTotals))}</td>
-                    return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtVal(col.getValue(groupTotals), col.format)}</td>
+                    if (col.format === 'irr') return <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{fmtIrr(data.portfolioIRR)}</td>
+                    if (col.sortKey === 'moic') return <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{fmtMoic(groupTotals.moic)}</td>
+                    if (col.sortKey === 'realizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{fmtMoic(realizedMoic(groupTotals))}</td>
+                    if (col.sortKey === 'unrealizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{fmtMoic(unrealizedMoic(groupTotals))}</td>
+                    return <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{fmtVal(col.getValue(groupTotals), col.format)}</td>
                   })}
-                  <td className="px-3 py-2" />
-                  <td className="px-3 py-2" />
-                  <td className="px-3 py-2" />
-                  <td className="px-3 py-2" />
                 </tr>
               </tfoot>
               )}
@@ -629,32 +607,6 @@ export default function InvestmentsPage() {
           </div>
         </div>
       )}
-
-      {/* Filter bar */}
-      <div className="flex items-center gap-4 mb-4">
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          className="border rounded px-2 py-1 text-sm"
-        >
-          <option value="">All Statuses</option>
-          <option value="active">Active</option>
-          <option value="exited">Exited</option>
-          <option value="written-off">Written Off</option>
-        </select>
-        {availableGroups.length > 0 && (
-          <select
-            value={groupFilter}
-            onChange={e => setGroupFilter(e.target.value)}
-            className="border rounded px-2 py-1 text-sm"
-          >
-            <option value="">All Groups</option>
-            {availableGroups.map(g => (
-              <option key={g} value={g}>{g}</option>
-            ))}
-          </select>
-        )}
-      </div>
 
       {/* Company table */}
       <div className="border rounded-lg overflow-x-auto">
@@ -673,7 +625,7 @@ export default function InvestmentsPage() {
               </th>
               <th className="text-left px-3 py-2 font-medium">
                 <button onClick={() => handleSort('portfolioGroup')} className="hover:text-foreground">
-                  Group<SortIcon col="portfolioGroup" />
+                  Vehicle<SortIcon col="portfolioGroup" />
                 </button>
               </th>
               {companyColumns.map(col => (
@@ -710,10 +662,10 @@ export default function InvestmentsPage() {
                 {companyColumns.map(col => {
                   if (col.type === 'pct') {
                     const val = col.sortKey === 'pctUnrealized' ? pctUnr : pctTV
-                    return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{val != null ? `${(val * 100).toFixed(1)}%` : '-'}</td>
+                    return <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{val != null ? `${(val * 100).toFixed(1)}%` : '-'}</td>
                   }
                   const numCol = numericColumns[col.colIdx!]
-                  return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtVal(numCol.getValue(c), numCol.format)}</td>
+                  return <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{fmtVal(numCol.getValue(c), numCol.format)}</td>
                 })}
               </tr>
               )
@@ -727,11 +679,11 @@ export default function InvestmentsPage() {
               {companyColumns.map(col => {
                 if (col.type === 'pct') return <td key={col.sortKey} className="px-3 py-2" />
                 const numCol = numericColumns[col.colIdx!]
-                if (numCol.format === 'irr') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtIrr(data.portfolioIRR)}</td>
-                if (numCol.sortKey === 'moic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(totals.moic)}</td>
-                if (numCol.sortKey === 'realizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(realizedMoic(totals))}</td>
-                if (numCol.sortKey === 'unrealizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtMoic(unrealizedMoic(totals))}</td>
-                return <td key={col.sortKey} className="px-3 py-2 text-right font-mono">{fmtVal(numCol.getValue(totals), numCol.format)}</td>
+                if (numCol.format === 'irr') return <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{fmtIrr(data.portfolioIRR)}</td>
+                if (numCol.sortKey === 'moic') return <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{fmtMoic(totals.moic)}</td>
+                if (numCol.sortKey === 'realizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{fmtMoic(realizedMoic(totals))}</td>
+                if (numCol.sortKey === 'unrealizedMoic') return <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{fmtMoic(unrealizedMoic(totals))}</td>
+                return <td key={col.sortKey} className="px-3 py-2 text-right tabular-nums">{fmtVal(numCol.getValue(totals), numCol.format)}</td>
               })}
             </tr>
           </tfoot>
@@ -742,6 +694,21 @@ export default function InvestmentsPage() {
     <AnalystPanel />
     </div>
     </div>
+    {editingVehicle && (
+      <VehicleEditModal
+        vehicle={editingVehicle}
+        onClose={() => setEditingVehicle(null)}
+        onSaved={() => { setEditingVehicle(null); setRefreshKey(k => k + 1) }}
+      />
+    )}
+    {linkingGroup && (
+      <VehicleLinkModal
+        group={linkingGroup}
+        vehicles={vehicleList.map(v => ({ id: v.id, name: v.name, aliases: v.aliases ?? [] }))}
+        onClose={() => setLinkingGroup(null)}
+        onSaved={() => { setLinkingGroup(null); setRefreshKey(k => k + 1) }}
+      />
+    )}
     </PortfolioNotesProvider>
   )
 }

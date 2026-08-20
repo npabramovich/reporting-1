@@ -19,7 +19,6 @@ interface Props {
   companyId: string
   storageProvider?: string | null
   googleDriveFolderId?: string | null
-  dropboxFolderPath?: string | null
 }
 
 function formatFileSize(bytes: number): string {
@@ -30,21 +29,21 @@ function formatFileSize(bytes: number): string {
 
 function FileIcon({ fileType, source }: { fileType: string; source: string }) {
   if (source === 'email') {
-    return <Mail className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+    return <Mail className="h-3.5 w-3.5 text-info shrink-0" />
   }
   if (fileType === 'application/pdf' || fileType.endsWith('.pdf')) {
-    return <FileText className="h-3.5 w-3.5 text-red-500 shrink-0" />
+    return <FileText className="h-3.5 w-3.5 text-destructive shrink-0" />
   }
   if (fileType.startsWith('image/')) {
-    return <FileImage className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+    return <FileImage className="h-3.5 w-3.5 text-info shrink-0" />
   }
   if (fileType.includes('spreadsheet') || fileType.includes('excel') || fileType.includes('csv')) {
-    return <FileSpreadsheet className="h-3.5 w-3.5 text-green-600 shrink-0" />
+    return <FileSpreadsheet className="h-3.5 w-3.5 text-success shrink-0" />
   }
   return <File className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
 }
 
-export function CompanyDocuments({ companyId, storageProvider, googleDriveFolderId, dropboxFolderPath }: Props) {
+export function CompanyDocuments({ companyId, storageProvider, googleDriveFolderId }: Props) {
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -174,18 +173,6 @@ export function CompanyDocuments({ companyId, storageProvider, googleDriveFolder
                 className="underline underline-offset-4 hover:text-foreground"
               >
                 Google Drive
-              </a>.
-            </>
-          ) : storageProvider === 'dropbox' && dropboxFolderPath ? (
-            <>
-              Raw documents can be found in{' '}
-              <a
-                href={`https://www.dropbox.com/home${dropboxFolderPath}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline underline-offset-4 hover:text-foreground"
-              >
-                Dropbox
               </a>.
             </>
           ) : (

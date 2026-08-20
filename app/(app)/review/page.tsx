@@ -9,6 +9,7 @@ import { Check, X, Pencil, Loader2, Mail } from 'lucide-react'
 import { EmailReviewModal } from '@/components/email-review-modal'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
+import { EmptyState } from '@/components/ui/empty-state'
 
 interface ReviewItem {
   id: string
@@ -46,12 +47,12 @@ const ISSUE_LABELS: Record<string, string> = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  new_company_detected: 'bg-blue-100 text-blue-800 border-blue-200',
-  low_confidence: 'bg-amber-100 text-amber-800 border-amber-200',
-  ambiguous_period: 'bg-orange-100 text-orange-800 border-orange-200',
-  metric_not_found: 'bg-slate-100 text-slate-700 border-slate-200',
-  company_not_identified: 'bg-red-100 text-red-800 border-red-200',
-  duplicate_period: 'bg-purple-100 text-purple-800 border-purple-200',
+  new_company_detected: 'bg-info-subtle text-info border-info',
+  low_confidence: 'bg-warning-subtle text-warning border-warning',
+  ambiguous_period: 'bg-warning-subtle text-warning border-warning',
+  metric_not_found: 'bg-muted text-muted-foreground border-border',
+  company_not_identified: 'bg-destructive-subtle text-destructive border-destructive',
+  duplicate_period: 'bg-warning-subtle text-warning border-warning',
 }
 
 export default function ReviewPage() {
@@ -62,16 +63,19 @@ export default function ReviewPage() {
   const [editValue, setEditValue] = useState('')
   const [reviewModalEmailId, setReviewModalEmailId] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  // `silent` refetches without the spinner: after resolving an item the list is already correct
+  // optimistically, and blanking the page to a loader would be a worse answer than the one on
+  // screen. What it's really for is the OTHER list — see resolve().
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true)
     try {
       const res = await fetch('/api/review')
       if (!res.ok) throw new Error('Failed to load')
       setData(await res.json())
     } catch {
-      setData(null)
+      if (!opts?.silent) setData(null)
     } finally {
-      setLoading(false)
+      if (!opts?.silent) setLoading(false)
     }
   }, [])
 
@@ -103,6 +107,13 @@ export default function ReviewPage() {
             }
           : prev,
       )
+      // Resolving the LAST open item on an email flips that email to 'success' server-side
+      // (api/review/[id]/resolve), so the "Emails needing review" section below is now stale —
+      // it went on listing emails the server had already cleared, which read as work left undone
+      // while the sidebar's Review link (badge = items + emails) correctly vanished at zero.
+      // The optimistic edit above can't know that, because the promotion depends on rows this
+      // component never sees. Ask the server.
+      load({ silent: true })
     } catch {
       // ignore
     } finally {
@@ -119,7 +130,7 @@ export default function ReviewPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Review</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Items that need your attention — metrics AI wasn&apos;t sure about, unidentified companies, and more.
+            Items that need your attention, metrics AI wasn&apos;t sure about, unidentified companies, and more.
           </p>
         </div>
         <AnalystToggleButton />
@@ -134,9 +145,7 @@ export default function ReviewPage() {
       )}
 
       {!loading && items.length === 0 && (data?.needsReviewEmails ?? []).length === 0 && (
-        <div className="rounded-lg border border-dashed p-12 text-center">
-          <p className="text-muted-foreground">All clear — nothing to review.</p>
-        </div>
+        <EmptyState>All clear, nothing to review.</EmptyState>
       )}
 
       {!loading && items.length > 0 && (
@@ -147,7 +156,7 @@ export default function ReviewPage() {
             const hasValue = !!item.extracted_value
 
             return (
-              <div key={item.id} className="rounded-lg border bg-card p-4 space-y-3">
+              <div key={item.id} className="rounded-card border bg-card p-4 space-y-3">
                 {/* Header row */}
                 <div className="flex flex-wrap items-center gap-2">
                   <span
@@ -172,7 +181,7 @@ export default function ReviewPage() {
                   )}
                   {item.email && (
                     <span className="ml-auto text-xs text-muted-foreground">
-                      {item.email.subject ?? '(no subject)'} — {new Date(item.email.received_at).toLocaleDateString()}
+                      {item.email.subject ?? '(no subject)'}, {new Date(item.email.received_at).toLocaleDateString()}
                     </span>
                   )}
                 </div>
@@ -269,7 +278,7 @@ export default function ReviewPage() {
 
       {!loading && (data?.needsReviewEmails ?? []).length > 0 && (
         <div className="mt-6">
-          <h2 className="text-sm font-medium text-muted-foreground mb-3">
+          <h2 className="text-base font-medium text-muted-foreground mb-3">
             Emails needing review ({data!.needsReviewEmails.length})
           </h2>
           <div className="space-y-2">
@@ -277,10 +286,10 @@ export default function ReviewPage() {
               <button
                 key={email.id}
                 onClick={() => setReviewModalEmailId(email.id)}
-                className="w-full rounded-lg border bg-card p-4 text-left hover:bg-muted/30 transition-colors"
+                className="w-full rounded-card border bg-card p-4 text-left hover:bg-muted/30 transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <Mail className="h-4 w-4 text-amber-500 shrink-0" />
+                  <Mail className="h-4 w-4 text-warning shrink-0" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">
                       {email.subject || '(no subject)'}
@@ -291,11 +300,11 @@ export default function ReviewPage() {
                       {email.company ? (
                         <span>{email.company.name}</span>
                       ) : (
-                        <span className="text-amber-600">No company assigned</span>
+                        <span className="text-warning">No company assigned</span>
                       )}
                     </div>
                   </div>
-                  <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200 shrink-0">
+                  <Badge variant="outline" className="bg-warning-subtle text-warning border-warning shrink-0">
                     Needs Review
                   </Badge>
                 </div>

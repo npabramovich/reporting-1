@@ -80,10 +80,12 @@ export type Database = {
         Row: {
           company_id: string | null
           created_at: string
+          deal_id: string | null
           fund_id: string
           id: string
           message_count: number
           messages: Json
+          scope: string | null
           summary: string | null
           title: string
           updated_at: string
@@ -92,10 +94,12 @@ export type Database = {
         Insert: {
           company_id?: string | null
           created_at?: string
+          deal_id?: string | null
           fund_id: string
           id?: string
           message_count?: number
           messages?: Json
+          scope?: string | null
           summary?: string | null
           title?: string
           updated_at?: string
@@ -104,10 +108,12 @@ export type Database = {
         Update: {
           company_id?: string | null
           created_at?: string
+          deal_id?: string | null
           fund_id?: string
           id?: string
           message_count?: number
           messages?: Json
+          scope?: string | null
           summary?: string | null
           title?: string
           updated_at?: string
@@ -137,6 +143,7 @@ export type Database = {
           github_stars_checked_at: string | null
           global_inbound_address: string | null
           global_inbound_token: string | null
+          global_inbound_token_encrypted: string | null
           id: string
           installation_id: string
           updated_at: string | null
@@ -147,6 +154,7 @@ export type Database = {
           github_stars_checked_at?: string | null
           global_inbound_address?: string | null
           global_inbound_token?: string | null
+          global_inbound_token_encrypted?: string | null
           id?: string
           installation_id?: string
           updated_at?: string | null
@@ -157,6 +165,7 @@ export type Database = {
           github_stars_checked_at?: string | null
           global_inbound_address?: string | null
           global_inbound_token?: string | null
+          global_inbound_token_encrypted?: string | null
           id?: string
           installation_id?: string
           updated_at?: string | null
@@ -201,7 +210,6 @@ export type Database = {
           contact_email: string[] | null
           created_at: string | null
           current_update: string | null
-          dropbox_folder_path: string | null
           founded_year: number | null
           founders: string | null
           fund_id: string
@@ -224,7 +232,6 @@ export type Database = {
           contact_email?: string[] | null
           created_at?: string | null
           current_update?: string | null
-          dropbox_folder_path?: string | null
           founded_year?: number | null
           founders?: string | null
           fund_id: string
@@ -247,7 +254,6 @@ export type Database = {
           contact_email?: string[] | null
           created_at?: string | null
           current_update?: string | null
-          dropbox_folder_path?: string | null
           founded_year?: number | null
           founders?: string | null
           fund_id?: string
@@ -551,7 +557,9 @@ export type Database = {
       }
       email_requests: {
         Row: {
+          bcc: string | null
           body_html: string
+          cc: string | null
           created_at: string
           fund_id: string
           id: string
@@ -565,7 +573,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bcc?: string | null
           body_html: string
+          cc?: string | null
           created_at?: string
           fund_id: string
           id?: string
@@ -579,7 +589,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bcc?: string | null
           body_html?: string
+          cc?: string | null
           created_at?: string
           fund_id?: string
           id?: string
@@ -796,6 +808,73 @@ export type Database = {
           },
         ]
       }
+      fund_domain_defaults: {
+        Row: {
+          domain: string
+          fund_id: string
+          level: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          domain: string
+          fund_id: string
+          level: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          domain?: string
+          fund_id?: string
+          level?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_domain_defaults_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fund_member_access: {
+        Row: {
+          domain: string
+          fund_id: string
+          level: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          domain: string
+          fund_id: string
+          level: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          domain?: string
+          fund_id?: string
+          level?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_member_access_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fund_members: {
         Row: {
           created_at: string | null
@@ -847,18 +926,20 @@ export type Database = {
           claude_model: string
           created_at: string | null
           currency: string
+          deal_intake_enabled: boolean
+          deal_screening_prompt: string | null
+          deal_submission_token: string | null
+          deal_thesis: string | null
           default_ai_provider: string
+          memo_agent_monthly_token_cap: number | null
+          memo_agent_per_deal_token_cap: number | null
+          memo_agent_stage_models: Json | null
+          memo_agent_web_search_enabled: boolean
           disable_user_tracking: boolean
-          dropbox_app_key: string | null
-          dropbox_app_secret_encrypted: string | null
-          dropbox_folder_path: string | null
-          dropbox_refresh_token_encrypted: string | null
           encryption_key_encrypted: string | null
           feature_visibility: Json | null
           file_storage_provider: string | null
           fund_id: string
-          gemini_api_key_encrypted: string | null
-          gemini_model: string
           google_client_id: string | null
           google_client_secret_encrypted: string | null
           google_drive_folder_id: string | null
@@ -870,8 +951,6 @@ export type Database = {
           mailgun_inbound_domain: string | null
           mailgun_sending_domain: string | null
           mailgun_signing_key_encrypted: string | null
-          ollama_base_url: string | null
-          ollama_model: string
           openai_api_key_encrypted: string | null
           openai_model: string
           outbound_email_provider: string | null
@@ -882,6 +961,8 @@ export type Database = {
           resend_api_key_encrypted: string | null
           resolved_reviews_ttl_days: number | null
           retain_resolved_reviews: boolean | null
+          routing_confidence_threshold: number | null
+          routing_model: string | null
           system_email_from_address: string | null
           system_email_from_name: string | null
           updated_at: string | null
@@ -898,18 +979,20 @@ export type Database = {
           claude_model?: string
           created_at?: string | null
           currency?: string
+          deal_intake_enabled?: boolean
+          deal_screening_prompt?: string | null
+          deal_submission_token?: string | null
+          deal_thesis?: string | null
           default_ai_provider?: string
+          memo_agent_monthly_token_cap?: number | null
+          memo_agent_per_deal_token_cap?: number | null
+          memo_agent_stage_models?: Json | null
+          memo_agent_web_search_enabled?: boolean
           disable_user_tracking?: boolean
-          dropbox_app_key?: string | null
-          dropbox_app_secret_encrypted?: string | null
-          dropbox_folder_path?: string | null
-          dropbox_refresh_token_encrypted?: string | null
           encryption_key_encrypted?: string | null
           feature_visibility?: Json | null
           file_storage_provider?: string | null
           fund_id: string
-          gemini_api_key_encrypted?: string | null
-          gemini_model?: string
           google_client_id?: string | null
           google_client_secret_encrypted?: string | null
           google_drive_folder_id?: string | null
@@ -921,8 +1004,6 @@ export type Database = {
           mailgun_inbound_domain?: string | null
           mailgun_sending_domain?: string | null
           mailgun_signing_key_encrypted?: string | null
-          ollama_base_url?: string | null
-          ollama_model?: string
           openai_api_key_encrypted?: string | null
           openai_model?: string
           outbound_email_provider?: string | null
@@ -933,6 +1014,8 @@ export type Database = {
           resend_api_key_encrypted?: string | null
           resolved_reviews_ttl_days?: number | null
           retain_resolved_reviews?: boolean | null
+          routing_confidence_threshold?: number | null
+          routing_model?: string | null
           system_email_from_address?: string | null
           system_email_from_name?: string | null
           updated_at?: string | null
@@ -949,18 +1032,20 @@ export type Database = {
           claude_model?: string
           created_at?: string | null
           currency?: string
+          deal_intake_enabled?: boolean
+          deal_screening_prompt?: string | null
+          deal_submission_token?: string | null
+          deal_thesis?: string | null
           default_ai_provider?: string
+          memo_agent_monthly_token_cap?: number | null
+          memo_agent_per_deal_token_cap?: number | null
+          memo_agent_stage_models?: Json | null
+          memo_agent_web_search_enabled?: boolean
           disable_user_tracking?: boolean
-          dropbox_app_key?: string | null
-          dropbox_app_secret_encrypted?: string | null
-          dropbox_folder_path?: string | null
-          dropbox_refresh_token_encrypted?: string | null
           encryption_key_encrypted?: string | null
           feature_visibility?: Json | null
           file_storage_provider?: string | null
           fund_id?: string
-          gemini_api_key_encrypted?: string | null
-          gemini_model?: string
           google_client_id?: string | null
           google_client_secret_encrypted?: string | null
           google_drive_folder_id?: string | null
@@ -972,8 +1057,6 @@ export type Database = {
           mailgun_inbound_domain?: string | null
           mailgun_sending_domain?: string | null
           mailgun_signing_key_encrypted?: string | null
-          ollama_base_url?: string | null
-          ollama_model?: string
           openai_api_key_encrypted?: string | null
           openai_model?: string
           outbound_email_provider?: string | null
@@ -984,6 +1067,8 @@ export type Database = {
           resend_api_key_encrypted?: string | null
           resolved_reviews_ttl_days?: number | null
           retain_resolved_reviews?: boolean | null
+          routing_confidence_threshold?: number | null
+          routing_model?: string | null
           system_email_from_address?: string | null
           system_email_from_name?: string | null
           updated_at?: string | null
@@ -997,6 +1082,474 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      firm_schemas: {
+        Row: {
+          id: string
+          fund_id: string
+          schema_name: string
+          schema_version: string
+          yaml_content: string
+          parsed_content: Json | null
+          is_active: boolean
+          edit_note: string | null
+          edited_by: string | null
+          edited_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          fund_id: string
+          schema_name: string
+          schema_version: string
+          yaml_content: string
+          parsed_content?: Json | null
+          is_active?: boolean
+          edit_note?: string | null
+          edited_by?: string | null
+          edited_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          fund_id?: string
+          schema_name?: string
+          schema_version?: string
+          yaml_content?: string
+          parsed_content?: Json | null
+          is_active?: boolean
+          edit_note?: string | null
+          edited_by?: string | null
+          edited_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      diligence_deals: {
+        Row: {
+          id: string
+          fund_id: string
+          name: string
+          aliases: string[] | null
+          sector: string | null
+          stage_at_consideration: string | null
+          deal_status: string
+          current_memo_stage: string
+          lead_partner_id: string | null
+          promoted_company_id: string | null
+          drive_folder_url: string | null
+          notes_summary: string | null
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          fund_id: string
+          name: string
+          aliases?: string[] | null
+          sector?: string | null
+          stage_at_consideration?: string | null
+          deal_status?: string
+          current_memo_stage?: string
+          lead_partner_id?: string | null
+          promoted_company_id?: string | null
+          drive_folder_url?: string | null
+          notes_summary?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          fund_id?: string
+          name?: string
+          aliases?: string[] | null
+          sector?: string | null
+          stage_at_consideration?: string | null
+          deal_status?: string
+          current_memo_stage?: string
+          lead_partner_id?: string | null
+          promoted_company_id?: string | null
+          drive_folder_url?: string | null
+          notes_summary?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
+      diligence_documents: {
+        Row: {
+          id: string
+          deal_id: string
+          fund_id: string
+          storage_path: string
+          file_name: string
+          file_format: string
+          file_size_bytes: number | null
+          detected_type: string | null
+          type_confidence: string | null
+          parse_status: string
+          parse_notes: string | null
+          drive_file_id: string | null
+          drive_source_url: string | null
+          uploaded_by: string | null
+          uploaded_at: string
+        }
+        Insert: {
+          id?: string
+          deal_id: string
+          fund_id: string
+          storage_path: string
+          file_name: string
+          file_format: string
+          file_size_bytes?: number | null
+          detected_type?: string | null
+          type_confidence?: string | null
+          parse_status?: string
+          parse_notes?: string | null
+          drive_file_id?: string | null
+          drive_source_url?: string | null
+          uploaded_by?: string | null
+          uploaded_at?: string
+        }
+        Update: {
+          id?: string
+          deal_id?: string
+          fund_id?: string
+          storage_path?: string
+          file_name?: string
+          file_format?: string
+          file_size_bytes?: number | null
+          detected_type?: string | null
+          type_confidence?: string | null
+          parse_status?: string
+          parse_notes?: string | null
+          drive_file_id?: string | null
+          drive_source_url?: string | null
+          uploaded_by?: string | null
+          uploaded_at?: string
+        }
+        Relationships: []
+      }
+      diligence_memo_drafts: {
+        Row: {
+          id: string
+          deal_id: string
+          fund_id: string
+          draft_version: string
+          agent_version: string
+          ai_provider: string | null
+          ai_model: string | null
+          ingestion_output: Json | null
+          research_output: Json | null
+          qa_answers: Json | null
+          memo_draft_output: Json | null
+          is_draft: boolean
+          finalized_at: string | null
+          finalized_by: string | null
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          deal_id: string
+          fund_id: string
+          draft_version: string
+          agent_version: string
+          ai_provider?: string | null
+          ai_model?: string | null
+          ingestion_output?: Json | null
+          research_output?: Json | null
+          qa_answers?: Json | null
+          memo_draft_output?: Json | null
+          is_draft?: boolean
+          finalized_at?: string | null
+          finalized_by?: string | null
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          deal_id?: string
+          fund_id?: string
+          draft_version?: string
+          agent_version?: string
+          ai_provider?: string | null
+          ai_model?: string | null
+          ingestion_output?: Json | null
+          research_output?: Json | null
+          qa_answers?: Json | null
+          memo_draft_output?: Json | null
+          is_draft?: boolean
+          finalized_at?: string | null
+          finalized_by?: string | null
+          created_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
+      diligence_attention_items: {
+        Row: {
+          id: string
+          deal_id: string
+          draft_id: string | null
+          fund_id: string
+          kind: string
+          urgency: string
+          body: string
+          links: Json | null
+          status: string
+          resolution_note: string | null
+          resolved_by: string | null
+          resolved_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          deal_id: string
+          draft_id?: string | null
+          fund_id: string
+          kind: string
+          urgency: string
+          body: string
+          links?: Json | null
+          status?: string
+          resolution_note?: string | null
+          resolved_by?: string | null
+          resolved_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          deal_id?: string
+          draft_id?: string | null
+          fund_id?: string
+          kind?: string
+          urgency?: string
+          body?: string
+          links?: Json | null
+          status?: string
+          resolution_note?: string | null
+          resolved_by?: string | null
+          resolved_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      diligence_agent_sessions: {
+        Row: {
+          id: string
+          deal_id: string
+          fund_id: string
+          stage: string | null
+          title: string | null
+          messages: Json
+          ai_provider: string | null
+          ai_model: string | null
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          deal_id: string
+          fund_id: string
+          stage?: string | null
+          title?: string | null
+          messages?: Json
+          ai_provider?: string | null
+          ai_model?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          deal_id?: string
+          fund_id?: string
+          stage?: string | null
+          title?: string | null
+          messages?: Json
+          ai_provider?: string | null
+          ai_model?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
+      memo_agent_jobs: {
+        Row: {
+          id: string
+          fund_id: string
+          deal_id: string
+          draft_id: string | null
+          kind: string
+          status: string
+          payload: Json | null
+          result: Json | null
+          progress_message: string | null
+          error: string | null
+          attempts: number
+          enqueued_at: string
+          started_at: string | null
+          finished_at: string | null
+          enqueued_by: string | null
+          lock_version: number
+        }
+        Insert: {
+          id?: string
+          fund_id: string
+          deal_id: string
+          draft_id?: string | null
+          kind: string
+          status?: string
+          payload?: Json | null
+          result?: Json | null
+          progress_message?: string | null
+          error?: string | null
+          attempts?: number
+          enqueued_at?: string
+          started_at?: string | null
+          finished_at?: string | null
+          enqueued_by?: string | null
+          lock_version?: number
+        }
+        Update: {
+          id?: string
+          fund_id?: string
+          deal_id?: string
+          draft_id?: string | null
+          kind?: string
+          status?: string
+          payload?: Json | null
+          result?: Json | null
+          progress_message?: string | null
+          error?: string | null
+          attempts?: number
+          enqueued_at?: string
+          started_at?: string | null
+          finished_at?: string | null
+          enqueued_by?: string | null
+          lock_version?: number
+        }
+        Relationships: []
+      }
+      diligence_notes: {
+        Row: {
+          id: string
+          deal_id: string
+          fund_id: string
+          body: string
+          author_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          deal_id: string
+          fund_id: string
+          body: string
+          author_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          deal_id?: string
+          fund_id?: string
+          body?: string
+          author_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      style_anchor_memos: {
+        Row: {
+          id: string
+          fund_id: string
+          storage_path: string
+          file_name: string
+          file_format: string
+          file_size_bytes: number | null
+          title: string | null
+          anonymized: boolean
+          vintage_year: number | null
+          vintage_quarter: string | null
+          sector: string | null
+          deal_stage_at_writing: string | null
+          outcome: string | null
+          conviction_at_writing: string | null
+          voice_representativeness: string
+          authorship: string | null
+          author_initials: string | null
+          focus_attention_on: Json | null
+          deprioritize_in_this_memo: Json | null
+          partner_notes: string | null
+          extracted_text: string | null
+          extracted_at: string | null
+          uploaded_by: string | null
+          uploaded_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          fund_id: string
+          storage_path: string
+          file_name: string
+          file_format: string
+          file_size_bytes?: number | null
+          title?: string | null
+          anonymized?: boolean
+          vintage_year?: number | null
+          vintage_quarter?: string | null
+          sector?: string | null
+          deal_stage_at_writing?: string | null
+          outcome?: string | null
+          conviction_at_writing?: string | null
+          voice_representativeness?: string
+          authorship?: string | null
+          author_initials?: string | null
+          focus_attention_on?: Json | null
+          deprioritize_in_this_memo?: Json | null
+          partner_notes?: string | null
+          extracted_text?: string | null
+          extracted_at?: string | null
+          uploaded_by?: string | null
+          uploaded_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          fund_id?: string
+          storage_path?: string
+          file_name?: string
+          file_format?: string
+          file_size_bytes?: number | null
+          title?: string | null
+          anonymized?: boolean
+          vintage_year?: number | null
+          vintage_quarter?: string | null
+          sector?: string | null
+          deal_stage_at_writing?: string | null
+          outcome?: string | null
+          conviction_at_writing?: string | null
+          voice_representativeness?: string
+          authorship?: string | null
+          author_initials?: string | null
+          focus_attention_on?: Json | null
+          deprioritize_in_this_memo?: Json | null
+          partner_notes?: string | null
+          extracted_text?: string | null
+          extracted_at?: string | null
+          uploaded_by?: string | null
+          uploaded_at?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       funds: {
         Row: {
@@ -1034,6 +1587,150 @@ export type Database = {
         }
         Relationships: []
       }
+      inbound_deals: {
+        Row: {
+          assigned_to: string | null
+          co_founders: Json | null
+          company_domain: string | null
+          company_name: string | null
+          company_summary: string | null
+          company_url: string | null
+          created_at: string | null
+          email_id: string
+          extracted_data: Json | null
+          founder_email: string | null
+          founder_name: string | null
+          fund_id: string
+          id: string
+          industry: string | null
+          intro_source: string | null
+          prior_deal_id: string | null
+          promoted_diligence_id: string | null
+          raise_amount: string | null
+          referrer_email: string | null
+          referrer_name: string | null
+          stage: string | null
+          status: string
+          thesis_fit_analysis: string | null
+          thesis_fit_score: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          co_founders?: Json | null
+          company_domain?: string | null
+          company_name?: string | null
+          company_summary?: string | null
+          company_url?: string | null
+          created_at?: string | null
+          email_id: string
+          extracted_data?: Json | null
+          founder_email?: string | null
+          founder_name?: string | null
+          fund_id: string
+          id?: string
+          industry?: string | null
+          intro_source?: string | null
+          prior_deal_id?: string | null
+          promoted_diligence_id?: string | null
+          raise_amount?: string | null
+          referrer_email?: string | null
+          referrer_name?: string | null
+          stage?: string | null
+          status?: string
+          thesis_fit_analysis?: string | null
+          thesis_fit_score?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          co_founders?: Json | null
+          company_domain?: string | null
+          company_name?: string | null
+          company_summary?: string | null
+          company_url?: string | null
+          created_at?: string | null
+          email_id?: string
+          extracted_data?: Json | null
+          founder_email?: string | null
+          founder_name?: string | null
+          fund_id?: string
+          id?: string
+          industry?: string | null
+          intro_source?: string | null
+          prior_deal_id?: string | null
+          promoted_diligence_id?: string | null
+          raise_amount?: string | null
+          referrer_email?: string | null
+          referrer_name?: string | null
+          stage?: string | null
+          status?: string
+          thesis_fit_analysis?: string | null
+          thesis_fit_score?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      known_referrers: {
+        Row: {
+          added_by: string | null
+          created_at: string | null
+          email: string
+          fund_id: string
+          id: string
+          name: string | null
+          notes: string | null
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string | null
+          email: string
+          fund_id: string
+          id?: string
+          name?: string | null
+          notes?: string | null
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string | null
+          email?: string
+          fund_id?: string
+          id?: string
+          name?: string | null
+          notes?: string | null
+        }
+        Relationships: []
+      }
+      routing_corrections: {
+        Row: {
+          corrected_by: string | null
+          corrected_label: string
+          created_at: string | null
+          email_id: string
+          fund_id: string
+          id: string
+          original_label: string
+        }
+        Insert: {
+          corrected_by?: string | null
+          corrected_label: string
+          created_at?: string | null
+          email_id: string
+          fund_id: string
+          id?: string
+          original_label: string
+        }
+        Update: {
+          corrected_by?: string | null
+          corrected_label?: string
+          created_at?: string | null
+          email_id?: string
+          fund_id?: string
+          id?: string
+          original_label?: string
+        }
+        Relationships: []
+      }
       inbound_emails: {
         Row: {
           attachments_count: number | null
@@ -1049,6 +1746,11 @@ export type Database = {
           processing_status: string | null
           raw_payload: Json | null
           received_at: string | null
+          routed_to: string | null
+          routing_confidence: number | null
+          routing_label: string | null
+          routing_reasoning: string | null
+          routing_secondary_label: string | null
           subject: string | null
         }
         Insert: {
@@ -1065,6 +1767,11 @@ export type Database = {
           processing_status?: string | null
           raw_payload?: Json | null
           received_at?: string | null
+          routed_to?: string | null
+          routing_confidence?: number | null
+          routing_label?: string | null
+          routing_reasoning?: string | null
+          routing_secondary_label?: string | null
           subject?: string | null
         }
         Update: {
@@ -1081,6 +1788,11 @@ export type Database = {
           processing_status?: string | null
           raw_payload?: Json | null
           received_at?: string | null
+          routed_to?: string | null
+          routing_confidence?: number | null
+          routing_label?: string | null
+          routing_reasoning?: string | null
+          routing_secondary_label?: string | null
           subject?: string | null
         }
         Relationships: [
@@ -1170,11 +1882,14 @@ export type Database = {
       investment_transactions: {
         Row: {
           company_id: string
+          converts_from_txn_id: string | null
           cost_basis_exited: number | null
           created_at: string | null
           current_share_price: number | null
           exit_valuation: number | null
           fund_id: string
+          fx_rate: number | null
+          fx_value_change: number | null
           id: string
           interest_converted: number | null
           investment_cost: number | null
@@ -1185,6 +1900,7 @@ export type Database = {
           original_exit_valuation: number | null
           original_investment_cost: number | null
           original_latest_postmoney_valuation: number | null
+          original_position_value: number | null
           original_postmoney_valuation: number | null
           original_proceeds_per_share: number | null
           original_proceeds_received: number | null
@@ -1193,25 +1909,31 @@ export type Database = {
           ownership_pct: number | null
           portfolio_group: string | null
           postmoney_valuation: number | null
+          prior_fx_rate: number | null
           proceeds_escrow: number | null
           proceeds_per_share: number | null
           proceeds_received: number | null
           proceeds_written_off: number | null
           round_name: string | null
+          security_type: string | null
           share_price: number | null
           shares_acquired: number | null
           transaction_date: string | null
           transaction_type: string
           unrealized_value_change: number | null
           updated_at: string | null
+          valuation_change_source: string | null
         }
         Insert: {
           company_id: string
+          converts_from_txn_id?: string | null
           cost_basis_exited?: number | null
           created_at?: string | null
           current_share_price?: number | null
           exit_valuation?: number | null
           fund_id: string
+          fx_rate?: number | null
+          fx_value_change?: number | null
           id?: string
           interest_converted?: number | null
           investment_cost?: number | null
@@ -1222,6 +1944,7 @@ export type Database = {
           original_exit_valuation?: number | null
           original_investment_cost?: number | null
           original_latest_postmoney_valuation?: number | null
+          original_position_value?: number | null
           original_postmoney_valuation?: number | null
           original_proceeds_per_share?: number | null
           original_proceeds_received?: number | null
@@ -1230,25 +1953,31 @@ export type Database = {
           ownership_pct?: number | null
           portfolio_group?: string | null
           postmoney_valuation?: number | null
+          prior_fx_rate?: number | null
           proceeds_escrow?: number | null
           proceeds_per_share?: number | null
           proceeds_received?: number | null
           proceeds_written_off?: number | null
           round_name?: string | null
+          security_type?: string | null
           share_price?: number | null
           shares_acquired?: number | null
           transaction_date?: string | null
           transaction_type: string
           unrealized_value_change?: number | null
           updated_at?: string | null
+          valuation_change_source?: string | null
         }
         Update: {
           company_id?: string
+          converts_from_txn_id?: string | null
           cost_basis_exited?: number | null
           created_at?: string | null
           current_share_price?: number | null
           exit_valuation?: number | null
           fund_id?: string
+          fx_rate?: number | null
+          fx_value_change?: number | null
           id?: string
           interest_converted?: number | null
           investment_cost?: number | null
@@ -1259,6 +1988,7 @@ export type Database = {
           original_exit_valuation?: number | null
           original_investment_cost?: number | null
           original_latest_postmoney_valuation?: number | null
+          original_position_value?: number | null
           original_postmoney_valuation?: number | null
           original_proceeds_per_share?: number | null
           original_proceeds_received?: number | null
@@ -1267,17 +1997,20 @@ export type Database = {
           ownership_pct?: number | null
           portfolio_group?: string | null
           postmoney_valuation?: number | null
+          prior_fx_rate?: number | null
           proceeds_escrow?: number | null
           proceeds_per_share?: number | null
           proceeds_received?: number | null
           proceeds_written_off?: number | null
           round_name?: string | null
+          security_type?: string | null
           share_price?: number | null
           shares_acquired?: number | null
           transaction_date?: string | null
           transaction_type?: string
           unrealized_value_change?: number | null
           updated_at?: string | null
+          valuation_change_source?: string | null
         }
         Relationships: [
           {
@@ -2256,6 +2989,26 @@ export type IssueType          =
   | 'metric_not_found'
   | 'company_not_identified'
   | 'duplicate_period'
+  | 'deal_extraction'
+  | 'routing_low_confidence'
+  | 'multi_company_email'
+  | 'diligence_intake_pending'
+
+// 'deals' = a company pitching us (screening / dealflow → inbound_deals).
+// 'diligence' = an email about a company ALREADY in diligence; it is proposed
+// for that deal's data room and imported only once a human accepts it.
+export type RoutingLabel       = 'reporting' | 'interactions' | 'deals' | 'diligence' | 'other'
+export type RoutedTo           = 'reporting' | 'interactions' | 'deals' | 'diligence' | 'audit' | 'review'
+export type DiligenceIntakeStatus = 'pending' | 'accepted' | 'rejected'
+export type ThesisFitScore     = 'strong' | 'moderate' | 'weak' | 'out_of_thesis' | 'spam'
+export type DealStatus         = 'new' | 'reviewing' | 'advancing' | 'met' | 'diligence' | 'invested' | 'passed'
+// 'heartbeat' is a historical value: it was set only by the now-removed Heartbeat
+// integration and is kept here so existing inbound_deals rows with
+// intro_source='heartbeat' remain valid. It is deliberately absent from
+// VALID_INTRO_SOURCES in lib/claude/analyzeDeal.ts so the model can't label an
+// emailed pitch as having come from the community, and it can no longer be set
+// on new rows.
+export type IntroSource        = 'referral' | 'cold' | 'warm_intro' | 'accelerator' | 'demo_day' | 'event' | 'heartbeat' | 'other'
 export type ReviewResolution   = 'accepted' | 'rejected' | 'manually_corrected'
 export type EmailRequestStatus = 'draft' | 'sent' | 'failed'
 export type TransactionType    = 'investment' | 'proceeds' | 'unrealized_gain_change' | 'round_info'

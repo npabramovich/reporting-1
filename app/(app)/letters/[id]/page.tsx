@@ -7,7 +7,9 @@ import { Loader2, Lock, Sparkles, Copy, Check, Save, FileText, Download, Externa
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useFeatureVisibility } from '@/components/feature-visibility-context'
+import { useFeatureVisibility, useIsAdmin } from '@/components/feature-visibility-context'
+import { LpShareControl } from '@/components/lp-share-control'
+import { sanitizeBasicHtml } from '@/lib/sanitize'
 
 const DEFAULT_PROMPT_PLACEHOLDER = `## LP Letter Style Guide (Default)
 
@@ -29,9 +31,9 @@ const DEFAULT_PROMPT_PLACEHOLDER = `## LP Letter Style Guide (Default)
 ### Tone
 - Professional but not overly formal
 - First person plural ("We", "Our portfolio")
-- Data-forward — numbers first, narrative supports
-- Balanced — acknowledges both positives and challenges
-- Concise — no filler language`
+- Data-forward, numbers first, narrative supports
+- Balanced, acknowledges both positives and challenges
+- Concise, no filler language`
 
 interface CompanyNarrative {
   company_id: string
@@ -106,6 +108,7 @@ interface PortfolioPreviewData {
 
 export default function LetterEditorPage() {
   const fv = useFeatureVisibility()
+  const isAdmin = useIsAdmin()
   const router = useRouter()
   const params = useParams()
   const letterId = params.id as string
@@ -255,6 +258,9 @@ export default function LetterEditorPage() {
 
   const exportLetter = async (format: 'markdown' | 'docx' | 'google-docs') => {
     setExporting(format)
+    // Open the tab synchronously within the click so the browser doesn't block it
+    // as a popup (window.open after an await is commonly blocked).
+    const docWin = format === 'google-docs' ? window.open('about:blank', '_blank') : null
     try {
       const res = await fetch(`/api/lp-letters/${letterId}/export`, {
         method: 'POST',
@@ -263,6 +269,7 @@ export default function LetterEditorPage() {
       })
 
       if (!res.ok) {
+        docWin?.close()
         const err = await res.json().catch(() => ({ error: 'Export failed' }))
         alert(err.error ?? 'Export failed')
         return
@@ -270,7 +277,8 @@ export default function LetterEditorPage() {
 
       if (format === 'google-docs') {
         const { url } = await res.json()
-        window.open(url, '_blank')
+        if (docWin) docWin.location.href = url
+        else window.open(url, '_blank')
       } else {
         const blob = await res.blob()
         const url = URL.createObjectURL(blob)
@@ -282,6 +290,7 @@ export default function LetterEditorPage() {
         URL.revokeObjectURL(url)
       }
     } catch {
+      docWin?.close()
       alert('Export failed')
     } finally {
       setExporting(null)
@@ -355,14 +364,14 @@ export default function LetterEditorPage() {
 
   const narratives: CompanyNarrative[] = Array.isArray(letter.company_narratives) ? letter.company_narratives : []
   const hasContent = narratives.length > 0 || letter.full_draft
-  const tableHtml = liveTableHtml ?? letter.portfolio_table_html
+  const tableHtml = sanitizeBasicHtml(liveTableHtml ?? letter.portfolio_table_html)
 
   return (
     <div className="p-4 md:py-8 md:pl-8 md:pr-4 w-full">
       {/* Header */}
       <div className="mb-6 space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-          {fv.lp_letters === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}{letter.period_label}
+          {fv.lp_letters === 'admin' && <Lock className="h-4 w-4 text-warning" />}{letter.period_label}
         </h1>
         <p className="text-sm text-muted-foreground">{letter.portfolio_group}</p>
       </div>
@@ -407,10 +416,15 @@ export default function LetterEditorPage() {
               Google Docs
             </Button>
           )}
+          {/* Sharing into the portal is the portal's own switch — `lp_portal_access` was a second
+              key for the same idea and has been folded into `lp_portal`. */}
+          {isAdmin && (fv.lp_portal === 'everyone' || fv.lp_portal === 'admin') && (
+            <LpShareControl shareEndpoint={`/api/lp-letters/${letterId}/share`} />
+          )}
         </div>
       </div>
 
-      {/* Analyst prompt editor — only on Edit Company Summaries tab */}
+      {/* Analyst prompt editor, only on Edit Company Summaries tab */}
       {viewMode === 'sections' && <div className="rounded-lg border mb-4">
         <button
           onClick={() => setGlobalPromptOpen(!globalPromptOpen)}
@@ -461,7 +475,7 @@ export default function LetterEditorPage() {
       </div>}
 
       {!hasContent && !regeneratingAll && letter.status === 'generating' && (
-        <div className="rounded-lg border bg-muted/30 p-8 text-center space-y-3">
+        <div className="rounded-card border bg-muted/30 p-8 text-center space-y-3">
           <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
             Generation is in progress. This may take a few minutes...
@@ -471,7 +485,7 @@ export default function LetterEditorPage() {
       )}
 
       {!hasContent && !regeneratingAll && letter.status !== 'generating' && (
-        <div className="rounded-lg border border-dashed p-12 text-center space-y-3">
+        <div className="rounded-card border border-dashed p-12 text-center space-y-3">
           <FileText className="h-8 w-8 mx-auto text-muted-foreground" />
           {letter.generation_error ? (
             <>
@@ -494,7 +508,7 @@ export default function LetterEditorPage() {
       )}
 
       {regeneratingAll && (
-        <div className="rounded-lg border bg-muted/30 p-8 text-center space-y-3">
+        <div className="rounded-card border bg-muted/30 p-8 text-center space-y-3">
           <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
             Analyzing all companies. This may take a few minutes...
@@ -507,9 +521,9 @@ export default function LetterEditorPage() {
         <div className="space-y-6">
           {/* Company narratives */}
           {hasContent && narratives.map(n => (
-            <div key={n.company_id} className="rounded-lg border p-4">
+            <div key={n.company_id} className="rounded-card border p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-medium text-sm">{n.company_name}</h3>
+                <h3 className="font-medium text-base">{n.company_name}</h3>
                 <div className="flex items-center gap-1.5">
                   {editingNarrative !== n.company_id && (
                     <Button
@@ -657,15 +671,15 @@ export default function LetterEditorPage() {
           ) : previewData ? (
             <>
               {/* Fund metrics table */}
-              <div className="rounded-lg border p-4">
-                <h2 className="font-medium text-sm mb-3">Fund Summary</h2>
+              <div className="rounded-card border p-4">
+                <h2 className="font-medium text-base mb-3">Fund Summary</h2>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b bg-muted/50">
                         <th className="text-left px-2 py-1.5 font-semibold">Fund</th>
                         <th className="text-right px-2 py-1.5 font-semibold">Committed</th>
-                        <th className="text-right px-2 py-1.5 font-semibold">Paid In</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">Called</th>
                         <th className="text-right px-2 py-1.5 font-semibold">Distributions</th>
                         <th className="text-right px-2 py-1.5 font-semibold">FMV</th>
                         <th className="text-right px-2 py-1.5 font-semibold">DPI</th>
@@ -682,25 +696,25 @@ export default function LetterEditorPage() {
                         </td>
                         {previewData.fundMetrics ? (
                           <>
-                            <td className="text-right px-2 py-1.5 font-mono">{fmtCurrency(previewData.fundMetrics.committedCapital)}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{fmtCurrency(previewData.fundMetrics.paidInCapital)}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{fmtCurrency(previewData.fundMetrics.distributions)}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{fmtCurrency(previewData.fundMetrics.fmv)}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{previewData.fundMetrics.dpi != null ? `${previewData.fundMetrics.dpi.toFixed(2)}x` : '\u2014'}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{previewData.fundMetrics.rvpi != null ? `${previewData.fundMetrics.rvpi.toFixed(2)}x` : '\u2014'}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{previewData.fundMetrics.tvpi != null ? `${previewData.fundMetrics.tvpi.toFixed(2)}x` : '\u2014'}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{previewData.fundMetrics.irr != null ? `${(previewData.fundMetrics.irr * 100).toFixed(1)}%` : '\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{fmtCurrency(previewData.fundMetrics.committedCapital)}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{fmtCurrency(previewData.fundMetrics.paidInCapital)}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{fmtCurrency(previewData.fundMetrics.distributions)}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{fmtCurrency(previewData.fundMetrics.fmv)}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{previewData.fundMetrics.dpi != null ? `${previewData.fundMetrics.dpi.toFixed(2)}x` : '\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{previewData.fundMetrics.rvpi != null ? `${previewData.fundMetrics.rvpi.toFixed(2)}x` : '\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{previewData.fundMetrics.tvpi != null ? `${previewData.fundMetrics.tvpi.toFixed(2)}x` : '\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{previewData.fundMetrics.irr != null ? `${(previewData.fundMetrics.irr * 100).toFixed(1)}%` : '\u2014'}</td>
                           </>
                         ) : (
                           <>
-                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
-                            <td className="text-right px-2 py-1.5 font-mono">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{'\u2014'}</td>
+                            <td className="text-right px-2 py-1.5 tabular-nums">{'\u2014'}</td>
                           </>
                         )}
                       </tr>
@@ -711,8 +725,8 @@ export default function LetterEditorPage() {
 
               {/* Portfolio company table */}
               {tableHtml && (
-                <div className="rounded-lg border p-4">
-                  <h2 className="font-medium text-sm mb-3">Portfolio Companies</h2>
+                <div className="rounded-card border p-4">
+                  <h2 className="font-medium text-base mb-3">Portfolio Companies</h2>
                   <div
                     className="prose prose-sm dark:prose-invert max-w-none [&_table]:w-full [&_table]:text-xs [&_th]:px-2 [&_th]:py-1.5 [&_td]:px-2 [&_td]:py-1.5 [&_th]:border [&_td]:border [&_thead]:bg-muted/50"
                     dangerouslySetInnerHTML={{ __html: tableHtml }}
@@ -721,7 +735,7 @@ export default function LetterEditorPage() {
               )}
             </>
           ) : (
-            <div className="rounded-lg border border-dashed p-12 text-center">
+            <div className="rounded-card border border-dashed p-12 text-center">
               <p className="text-sm text-muted-foreground">No portfolio data available for this period.</p>
             </div>
           )}

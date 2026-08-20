@@ -9,7 +9,8 @@ import { encrypt } from '@/lib/crypto'
 import { randomBytes } from 'crypto'
 import { dbError } from '@/lib/api-error'
 import { logActivity } from '@/lib/activity'
-import { DEFAULT_FEATURE_VISIBILITY, FEATURES_WITH_OFF } from '@/lib/types/features'
+import { DEFAULT_FEATURE_VISIBILITY } from '@/lib/types/features'
+import { forgetFundCurrency } from '@/lib/accounting/currency'
 import { validateOllamaUrl } from '@/lib/validate-url'
 import type { FeatureKey, FeatureVisibility, FeatureVisibilityMap } from '@/lib/types/features'
 
@@ -31,7 +32,7 @@ export async function GET() {
 
   const [{ data: fund }, { data: settings }, { data: senders }] = await Promise.all([
     admin.from('funds').select('id, name, logo_url, address').eq('id', membership.fund_id).single(),
-    admin.from('fund_settings').select('postmark_inbound_address, postmark_webhook_token, postmark_webhook_token_encrypted, encryption_key_encrypted, retain_resolved_reviews, resolved_reviews_ttl_days, claude_api_key_encrypted, claude_model, ai_summary_prompt, google_refresh_token_encrypted, google_drive_folder_id, google_drive_folder_name, google_client_id, google_client_secret_encrypted, outbound_email_provider, asks_email_provider, approval_email_subject, approval_email_body, system_email_from_name, system_email_from_address, resend_api_key_encrypted, postmark_server_token_encrypted, inbound_email_provider, mailgun_inbound_domain, mailgun_signing_key_encrypted, mailgun_api_key_encrypted, mailgun_sending_domain, file_storage_provider, dropbox_app_key, dropbox_app_secret_encrypted, dropbox_refresh_token_encrypted, dropbox_folder_path, openai_api_key_encrypted, openai_model, default_ai_provider, gemini_api_key_encrypted, gemini_model, ollama_base_url, ollama_model, analytics_fathom_site_id, analytics_ga_measurement_id, currency, disable_user_tracking, feature_visibility').eq('fund_id', membership.fund_id).single(),
+    (admin as any).from('fund_settings').select('postmark_inbound_address, postmark_webhook_token, postmark_webhook_token_encrypted, encryption_key_encrypted, retain_resolved_reviews, resolved_reviews_ttl_days, claude_api_key_encrypted, claude_model, ai_summary_prompt, google_refresh_token_encrypted, google_drive_folder_id, google_drive_folder_name, google_client_id, google_client_secret_encrypted, outbound_email_provider, asks_email_provider, approval_email_subject, approval_email_body, system_email_from_name, system_email_from_address, resend_api_key_encrypted, postmark_server_token_encrypted, inbound_email_provider, mailgun_inbound_domain, mailgun_signing_key_encrypted, mailgun_api_key_encrypted, mailgun_sending_domain, file_storage_provider, openai_api_key_encrypted, openai_model, default_ai_provider, openrouter_api_key_encrypted, openrouter_model, openrouter_base_url, analytics_fathom_site_id, analytics_ga_measurement_id, currency, disable_user_tracking, feature_visibility, deal_thesis, deal_screening_prompt, deal_intake_enabled, deal_submission_token, lp_portal_enabled').eq('fund_id', membership.fund_id).single(),
     admin.from('authorized_senders').select('id, email, label, created_at').eq('fund_id', membership.fund_id).order('email'),
   ])
 
@@ -54,6 +55,33 @@ export async function GET() {
     }
   }
 
+  // Read on its own, tolerating a missing column. `affinity_mcp_enabled` ships in the
+  // Affinity migration, which a given deployment may not have run yet — and one absent
+  // column in the SELECT above would fail the whole query and take the entire settings
+  // page down with it.
+  let affinityMcpEnabled = false
+  try {
+    const { data: aff } = await (admin as any)
+      .from('fund_settings')
+      .select('affinity_mcp_enabled')
+      .eq('fund_id', membership.fund_id)
+      .maybeSingle()
+    affinityMcpEnabled = !!aff?.affinity_mcp_enabled
+  } catch { /* migration not applied — the feature is simply off */ }
+
+  // The master switch for the whole agent surface (MCP + REST + API keys + OAuth).
+  // Same tolerate-a-missing-column posture as above: a deployment that hasn't run
+  // the OAuth migration reads `false` rather than failing the settings page.
+  let agentApiEnabled = false
+  try {
+    const { data: agentRow } = await (admin as any)
+      .from('fund_settings')
+      .select('agent_api_enabled')
+      .eq('fund_id', membership.fund_id)
+      .maybeSingle()
+    agentApiEnabled = !!agentRow?.agent_api_enabled
+  } catch { /* migration not applied — the surface is simply off */ }
+
   return NextResponse.json({
     fundId: fund?.id,
     fundName: fund?.name,
@@ -62,14 +90,13 @@ export async function GET() {
     postmarkInboundAddress: settings?.postmark_inbound_address ?? '',
     postmarkWebhookToken: webhookToken,
     hasClaudeKey: !!settings?.claude_api_key_encrypted,
-    claudeModel: settings?.claude_model ?? 'claude-sonnet-4-5',
+    claudeModel: settings?.claude_model ?? 'claude-sonnet-4-6',
     hasOpenAIKey: !!settings?.openai_api_key_encrypted,
     openaiModel: settings?.openai_model ?? 'gpt-4o',
     defaultAIProvider: settings?.default_ai_provider ?? 'anthropic',
-    hasGeminiKey: !!settings?.gemini_api_key_encrypted,
-    geminiModel: settings?.gemini_model ?? 'gemini-2.0-flash',
-    ollamaBaseUrl: settings?.ollama_base_url ?? '',
-    ollamaModel: settings?.ollama_model ?? 'llama3.2',
+    hasOpenRouterKey: !!settings?.openrouter_api_key_encrypted,
+    openrouterModel: settings?.openrouter_model ?? '',
+    openrouterBaseUrl: settings?.openrouter_base_url ?? '',
     retainResolvedReviews: settings?.retain_resolved_reviews ?? true,
     resolvedReviewsTtlDays: settings?.resolved_reviews_ttl_days ?? null,
     senders: senders ?? [],
@@ -93,15 +120,20 @@ export async function GET() {
     hasMailgunApiKey: !!settings?.mailgun_api_key_encrypted,
     mailgunSendingDomain: settings?.mailgun_sending_domain ?? '',
     fileStorageProvider: settings?.file_storage_provider ?? null,
-    dropboxConnected: !!settings?.dropbox_refresh_token_encrypted,
-    hasDropboxCredentials: !!(settings?.dropbox_app_key && settings?.dropbox_app_secret_encrypted),
-    dropboxAppKey: settings?.dropbox_app_key ?? '',
-    dropboxFolderPath: settings?.dropbox_folder_path ?? null,
     analyticsFathomSiteId: settings?.analytics_fathom_site_id ?? null,
     analyticsGaMeasurementId: settings?.analytics_ga_measurement_id ?? null,
     currency: settings?.currency ?? 'USD',
     disableUserTracking: settings?.disable_user_tracking ?? false,
     featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY, ...(settings?.feature_visibility as Partial<FeatureVisibilityMap> | null) },
+    dealThesis: settings?.deal_thesis ?? null,
+    dealScreeningPrompt: settings?.deal_screening_prompt ?? null,
+    dealIntakeEnabled: settings?.deal_intake_enabled ?? false,
+    // Only the hash is stored, so the token itself can't be shown after minting — expose whether
+    // one is active; the plaintext URL is surfaced once, from the mint response.
+    hasSubmissionToken: !!settings?.deal_submission_token,
+    lpPortalEnabled: settings?.lp_portal_enabled ?? false,
+    affinityMcpEnabled,
+    agentApiEnabled,
     displayName: membership.display_name ?? '',
     isAdmin: membership.role === 'admin',
     userId: user.id,
@@ -130,7 +162,7 @@ export async function PATCH(req: NextRequest) {
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 404 })
 
   const body = await req.json()
-  const { fundName, fundLogo, fundAddress, postmarkInboundAddress, claudeApiKey, claudeModel, retainResolvedReviews, resolvedReviewsTtlDays, googleClientId, googleClientSecret, aiSummaryPrompt, displayName, outboundEmailProvider, asksEmailProvider, approvalEmailSubject, approvalEmailBody, systemEmailFromName, systemEmailFromAddress, resendApiKey, postmarkServerToken, inboundEmailProvider, mailgunInboundDomain, mailgunSigningKey, mailgunApiKey, mailgunSendingDomain, fileStorageProvider, dropboxAppKey, dropboxAppSecret, openaiApiKey, openaiModel, defaultAIProvider, geminiApiKey, geminiModel, ollamaBaseUrl, ollamaModel, analyticsFathomSiteId, analyticsGaMeasurementId, analyticsCustomHeadScript, currency, disableUserTracking, featureVisibility } = body
+  const { fundName, fundLogo, fundAddress, postmarkInboundAddress, claudeApiKey, claudeModel, retainResolvedReviews, resolvedReviewsTtlDays, googleClientId, googleClientSecret, aiSummaryPrompt, displayName, outboundEmailProvider, asksEmailProvider, approvalEmailSubject, approvalEmailBody, systemEmailFromName, systemEmailFromAddress, resendApiKey, postmarkServerToken, inboundEmailProvider, mailgunInboundDomain, mailgunSigningKey, mailgunApiKey, mailgunSendingDomain, fileStorageProvider, openaiApiKey, openaiModel, defaultAIProvider, openrouterApiKey, openrouterModel, openrouterBaseUrl, analyticsFathomSiteId, analyticsGaMeasurementId, analyticsCustomHeadScript, currency, disableUserTracking, featureVisibility, dealThesis, dealScreeningPrompt, dealIntakeEnabled, lpPortalEnabled, affinityMcpEnabled, agentApiEnabled } = body
 
   // Update display name on fund_members (any user can do this)
   if (displayName !== undefined) {
@@ -146,13 +178,15 @@ export async function PATCH(req: NextRequest) {
     systemEmailFromName !== undefined || systemEmailFromAddress !== undefined || resendApiKey !== undefined ||
     postmarkServerToken !== undefined || inboundEmailProvider !== undefined || mailgunInboundDomain !== undefined ||
     mailgunSigningKey !== undefined || mailgunApiKey !== undefined || mailgunSendingDomain !== undefined ||
-    fileStorageProvider !== undefined || dropboxAppKey !== undefined || dropboxAppSecret !== undefined ||
+    fileStorageProvider !== undefined ||
     openaiApiKey !== undefined || openaiModel !== undefined || defaultAIProvider !== undefined ||
-    geminiApiKey !== undefined || geminiModel !== undefined ||
-    ollamaBaseUrl !== undefined || ollamaModel !== undefined ||
+    openrouterApiKey !== undefined || openrouterModel !== undefined || openrouterBaseUrl !== undefined ||
     analyticsFathomSiteId !== undefined || analyticsGaMeasurementId !== undefined ||
     analyticsCustomHeadScript !== undefined || currency !== undefined ||
-    disableUserTracking !== undefined || featureVisibility !== undefined
+    disableUserTracking !== undefined || featureVisibility !== undefined ||
+    dealThesis !== undefined || dealScreeningPrompt !== undefined ||
+    dealIntakeEnabled !== undefined || lpPortalEnabled !== undefined || affinityMcpEnabled !== undefined ||
+    agentApiEnabled !== undefined
 
   if (hasAdminFields && membership.role !== 'admin') {
     return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
@@ -198,7 +232,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   if (claudeModel !== undefined) {
-    settingsUpdates.claude_model = claudeModel.trim() || 'claude-sonnet-4-5'
+    settingsUpdates.claude_model = claudeModel.trim() || 'claude-sonnet-4-6'
   }
 
   if (aiSummaryPrompt !== undefined) {
@@ -380,33 +414,6 @@ export async function PATCH(req: NextRequest) {
     settingsUpdates.file_storage_provider = fileStorageProvider || null
   }
 
-  // Update Dropbox app key
-  if (dropboxAppKey !== undefined) {
-    settingsUpdates.dropbox_app_key = dropboxAppKey?.trim() || null
-  }
-
-  // Update Dropbox app secret (encrypted)
-  if (dropboxAppSecret !== undefined && dropboxAppSecret.trim()) {
-    const kek = process.env.ENCRYPTION_KEY
-    if (!kek) return NextResponse.json({ error: 'Server misconfiguration: ENCRYPTION_KEY not set' }, { status: 500 })
-
-    const { data: existing } = await admin
-      .from('fund_settings')
-      .select('encryption_key_encrypted')
-      .eq('fund_id', membership.fund_id)
-      .single()
-
-    let dek: string
-    if (existing?.encryption_key_encrypted) {
-      const { decrypt } = await import('@/lib/crypto')
-      dek = decrypt(existing.encryption_key_encrypted, kek)
-    } else {
-      dek = randomBytes(32).toString('hex')
-      settingsUpdates.encryption_key_encrypted = encrypt(dek, kek)
-    }
-    settingsUpdates.dropbox_app_secret_encrypted = encrypt(dropboxAppSecret.trim(), dek)
-  }
-
   // Update OpenAI API key with envelope encryption
   if (openaiApiKey !== undefined && openaiApiKey.trim()) {
     const kek = process.env.ENCRYPTION_KEY
@@ -434,17 +441,15 @@ export async function PATCH(req: NextRequest) {
     settingsUpdates.openai_model = openaiModel.trim() || 'gpt-4o'
   }
 
-  // Update Gemini API key with envelope encryption
-  if (geminiApiKey !== undefined && geminiApiKey.trim()) {
+  // Update OpenRouter (OpenAI-compatible) settings — key uses envelope encryption.
+  if (openrouterApiKey !== undefined && openrouterApiKey.trim()) {
     const kek = process.env.ENCRYPTION_KEY
     if (!kek) return NextResponse.json({ error: 'Server misconfiguration: ENCRYPTION_KEY not set' }, { status: 500 })
-
     const { data: existing } = await admin
       .from('fund_settings')
       .select('encryption_key_encrypted')
       .eq('fund_id', membership.fund_id)
       .single()
-
     let dek: string
     if (existing?.encryption_key_encrypted) {
       const { decrypt } = await import('@/lib/crypto')
@@ -453,32 +458,25 @@ export async function PATCH(req: NextRequest) {
       dek = randomBytes(32).toString('hex')
       settingsUpdates.encryption_key_encrypted = encrypt(dek, kek)
     }
-    settingsUpdates.gemini_api_key_encrypted = encrypt(geminiApiKey.trim(), dek)
+    settingsUpdates.openrouter_api_key_encrypted = encrypt(openrouterApiKey.trim(), dek)
   }
-
-  // Update Gemini model
-  if (geminiModel !== undefined) {
-    settingsUpdates.gemini_model = geminiModel.trim() || 'gemini-2.0-flash'
+  if (openrouterModel !== undefined) {
+    settingsUpdates.openrouter_model = openrouterModel.trim() || null
   }
-
-  // Update Ollama settings
-  if (ollamaBaseUrl !== undefined) {
-    const trimmed = ollamaBaseUrl?.trim() || null
+  if (openrouterBaseUrl !== undefined) {
+    const trimmed = openrouterBaseUrl?.trim() || null
     if (trimmed) {
       const validation = validateOllamaUrl(trimmed)
       if (!validation.ok) {
         return NextResponse.json({ error: validation.error }, { status: 400 })
       }
     }
-    settingsUpdates.ollama_base_url = trimmed
-  }
-  if (ollamaModel !== undefined) {
-    settingsUpdates.ollama_model = ollamaModel.trim() || 'llama3.2'
+    settingsUpdates.openrouter_base_url = trimmed
   }
 
   // Update default AI provider
   if (defaultAIProvider !== undefined) {
-    const validProviders = ['anthropic', 'openai', 'gemini', 'ollama']
+    const validProviders = ['anthropic', 'openai', 'openrouter']
     if (!validProviders.includes(defaultAIProvider)) {
       return NextResponse.json({ error: 'Invalid AI provider.' }, { status: 400 })
     }
@@ -500,21 +498,59 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Unsupported currency code' }, { status: 400 })
     }
     settingsUpdates.currency = currency
+    // The ledger denominates every posting in the fund's currency and memoizes it. Drop the
+    // memo, or entries written for the rest of this process's life would carry the old one.
+    forgetFundCurrency(membership.fund_id)
   }
 
   if (disableUserTracking !== undefined) {
     settingsUpdates.disable_user_tracking = disableUserTracking
   }
 
+  if (dealThesis !== undefined) {
+    settingsUpdates.deal_thesis = dealThesis?.trim() || null
+  }
+  if (dealScreeningPrompt !== undefined) {
+    settingsUpdates.deal_screening_prompt = dealScreeningPrompt?.trim() || null
+  }
+  if (dealIntakeEnabled !== undefined) {
+    settingsUpdates.deal_intake_enabled = !!dealIntakeEnabled
+  }
+  if (lpPortalEnabled !== undefined) {
+    settingsUpdates.lp_portal_enabled = !!lpPortalEnabled
+  }
+  // Which Affinity transport the diligence assistant uses: Affinity's hosted MCP server
+  // (richer, live) or this app's three REST tools. Fund-wide, because it changes what
+  // every member's assistant can reach — but each member still authenticates with their
+  // OWN key, so nobody sees CRM records they couldn't open in Affinity themselves.
+  if (affinityMcpEnabled !== undefined) {
+    settingsUpdates.affinity_mcp_enabled = !!affinityMcpEnabled
+  }
+
+  // The master switch for the entire agent surface: the MCP endpoint (OAuth and
+  // static-key alike), the REST agent endpoint, API-key creation, and the OAuth
+  // consent screen. Admin-only (enforced by hasAdminFields above) and off by
+  // default — this is the switch that decides whether anything outside the app can
+  // read the ledger or post to it.
+  //
+  // Turning it OFF does not revoke keys or tokens; it makes them inert. Every
+  // request re-checks this flag, so the surface goes dark immediately and comes
+  // back exactly as it was if the admin changes their mind.
+  if (agentApiEnabled !== undefined) {
+    settingsUpdates.agent_api_enabled = !!agentApiEnabled
+  }
+
   // Update feature visibility
   if (featureVisibility !== undefined) {
+    // `hidden` stays accepted so stored rows keep working — it resolves identically to `off` and
+    // is no longer offered in the UI. `off` is accepted for EVERY feature now: it used to be
+    // silently dropped for all but four, which meant the button appeared to work and didn't.
     const validLevels: FeatureVisibility[] = ['everyone', 'admin', 'hidden', 'off']
     const validKeys = Object.keys(DEFAULT_FEATURE_VISIBILITY) as FeatureKey[]
     const merged: FeatureVisibilityMap = { ...DEFAULT_FEATURE_VISIBILITY }
     for (const [k, v] of Object.entries(featureVisibility)) {
       if (!validKeys.includes(k as FeatureKey)) continue
       if (!validLevels.includes(v as FeatureVisibility)) continue
-      if (v === 'off' && !FEATURES_WITH_OFF.includes(k as FeatureKey)) continue
       merged[k as FeatureKey] = v as FeatureVisibility
     }
     settingsUpdates.feature_visibility = merged

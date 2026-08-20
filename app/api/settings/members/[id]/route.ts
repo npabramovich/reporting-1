@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { sendApprovalEmail } from '@/lib/email'
+import { dbError } from '@/lib/api-error'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -56,7 +57,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       })
 
     if (memberError) {
-      return NextResponse.json({ error: memberError.message }, { status: 500 })
+      return dbError(memberError, 'settings-members')
     }
   }
 
@@ -70,7 +71,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .eq('id', params.id)
 
   if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 })
+    return dbError(updateError, 'settings-members')
   }
 
   // Send approval notification email (fire-and-forget)
@@ -134,7 +135,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     .eq('id', params.id)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return dbError(error, 'settings-members')
   }
 
   revalidateTag('membership')

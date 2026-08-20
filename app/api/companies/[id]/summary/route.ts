@@ -7,6 +7,7 @@ import type { ContentBlock } from '@/lib/ai/types'
 import { logAIUsage } from '@/lib/ai/usage'
 import { logActivity } from '@/lib/activity'
 import { buildCompanyContext } from '@/lib/ai/context-builder'
+import { hasAccess, loadAccessContext } from '@/lib/access/effective'
 import {
   extractAttachmentText,
   hydrateAttachments,
@@ -19,7 +20,7 @@ import { rateLimit } from '@/lib/rate-limit'
 async function verifyCompanyAccess(supabase: ReturnType<typeof createClient>, admin: ReturnType<typeof createAdminClient>, userId: string, companyId: string) {
   const { data: membership } = await admin
     .from('fund_members')
-    .select('fund_id')
+    .select('fund_id, role')
     .eq('user_id', userId)
     .maybeSingle()
 
@@ -34,7 +35,7 @@ async function verifyCompanyAccess(supabase: ReturnType<typeof createClient>, ad
   if (!company) return { error: NextResponse.json({ error: 'Not found' }, { status: 404 }) }
   if (company.fund_id !== membership.fund_id) return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
 
-  return { fundId: membership.fund_id }
+  return { fundId: membership.fund_id, role: membership.role }
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +134,7 @@ export async function POST(
   let providerOverride: import('@/lib/ai').ProviderType | undefined
   try {
     const body = await req.json()
-    const validProviders = ['anthropic', 'openai', 'gemini', 'ollama']
+    const validProviders = ['anthropic', 'openai']
     if (validProviders.includes(body.provider)) {
       providerOverride = body.provider
     }
@@ -147,8 +148,13 @@ export async function POST(
   const access = await verifyCompanyAccess(supabase, admin, user.id, params.id)
   if ('error' in access) return access.error
 
-  // Build shared context
-  const ctx = await buildCompanyContext(admin, params.id)
+  // Build shared context. Team notes are the `relationships` domain — a member who can draft a
+  // company summary is not thereby entitled to the team's internal commentary about it, and an
+  // AI summary is a very effective way to launder that distinction away.
+  const ctxAccess = await loadAccessContext(admin, access.fundId, user.id, access.role)
+  const ctx = await buildCompanyContext(admin, params.id, {
+    includeTeamNotes: hasAccess(ctxAccess, 'relationships', 'read', 'notes'),
+  })
   if (!ctx) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { company, currentPeriodLabel, metricsBlock, reportContentBlock, previousSummariesBlock, documentsBlock } = ctx
@@ -252,13 +258,13 @@ export async function POST(
 
   const DEFAULT_TASK_PROMPT = `Write a concise analyst summary covering:
 
-1. **Current Status** — How is the company performing right now? Reference specific numbers.
-2. **Trends** — What direction are the key metrics heading? Growth rates, acceleration or deceleration.
-3. **Progress & Positives** — What's going well? Milestones, improvements, or strong execution.
-4. **Challenges & Risks** — What concerns you? Declining metrics, missing data, red flags.
-5. **Key Follow-ups** — What should the investment team ask about or monitor next?
+1. **Current Status**, How is the company performing right now? Reference specific numbers.
+2. **Trends**, What direction are the key metrics heading? Growth rates, acceleration or deceleration.
+3. **Progress & Positives**, What's going well? Milestones, improvements, or strong execution.
+4. **Challenges & Risks**, What concerns you? Declining metrics, missing data, red flags.
+5. **Key Follow-ups**, What should the investment team ask about or monitor next?
 
-Keep it to 2-4 short paragraphs. Be direct and analytical, not promotional. Use specific numbers. Do not use markdown formatting — write in plain prose paragraphs.`
+Keep it to 2-4 short paragraphs. Be direct and analytical, not promotional. Use specific numbers. Do not use markdown formatting, write in plain prose paragraphs.`
 
   const taskPrompt = customPrompt ?? DEFAULT_TASK_PROMPT
 
@@ -304,7 +310,7 @@ ${documentsBlock}`
 === YOUR TASK ===
 ${taskPrompt}
 
-${previousSummariesBlock ? 'Build on your previous analysis — note what has changed since your last review. Avoid repeating the same observations unless they remain critical.' : 'This is the first analysis for this company, so base it entirely on the available data and report content.'}
+${previousSummariesBlock ? 'Build on your previous analysis, note what has changed since your last review. Avoid repeating the same observations unless they remain critical.' : 'This is the first analysis for this company, so base it entirely on the available data and report content.'}
 ${documentsBlock ? '\nYou also have access to supplementary documents (strategy decks, board materials, etc.) uploaded by the investment team. Reference these when relevant.' : ''}`
 
   // -----------------------------------------------------------------------

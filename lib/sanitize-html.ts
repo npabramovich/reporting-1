@@ -13,8 +13,9 @@ export function sanitizeHtml(html: string): string {
   // Remove self-closing / unclosed variants of the above
   sanitized = sanitized.replace(/<\/?(script|iframe|object|embed|form)\b[^>]*>/gi, '')
 
-  // Remove event handler attributes (on*)
-  sanitized = sanitized.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+  // Remove event handler attributes (on*). [\s/] also catches the `/` attribute
+  // separator (e.g. `<img src=x/onerror=…>`) that a bare `\s` would miss.
+  sanitized = sanitized.replace(/[\s/]+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
 
   return sanitized
 }

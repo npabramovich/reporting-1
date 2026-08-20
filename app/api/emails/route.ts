@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { InboundEmail, Company } from '@/lib/types/database'
 import { dbError } from '@/lib/api-error'
 
 const DEFAULT_PAGE_SIZE = 50
 const MAX_PAGE_SIZE = 1000
+const STALE_PROCESSING_MINUTES = 10
 
 type EmailListRow = Pick<
   InboundEmail,
@@ -17,6 +19,24 @@ export async function GET(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Scope stale-email cleanup to the user's fund
+  const admin = createAdminClient()
+  const { data: membership } = await admin
+    .from('fund_members')
+    .select('fund_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (membership) {
+    const staleCutoff = new Date(Date.now() - STALE_PROCESSING_MINUTES * 60 * 1000).toISOString()
+    await admin
+      .from('inbound_emails')
+      .update({ processing_status: 'failed', processing_error: 'Processing timed out. This can happen if the AI provider is slow or file storage is unreachable. Try reprocessing.' })
+      .eq('processing_status', 'processing')
+      .eq('fund_id', membership.fund_id)
+      .lt('received_at', staleCutoff)
+  }
 
   const sp = req.nextUrl.searchParams
   const status = sp.get('status')

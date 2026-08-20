@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { rateLimit } from '@/lib/rate-limit'
+import { dbError } from '@/lib/api-error'
 
 const URL_RE = /^https?:\/\/.+/i
 
@@ -26,7 +27,7 @@ export async function GET() {
     .eq('fund_id', membership.fund_id)
     .order('created_at', { ascending: true })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'compliance-links')
   return NextResponse.json(data ?? [])
 }
 
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'compliance-links')
   return NextResponse.json(data, { status: 201 })
 }
 
@@ -123,7 +124,7 @@ export async function PATCH(req: NextRequest) {
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'compliance-links')
   return NextResponse.json(data)
 }
 
@@ -149,6 +150,6 @@ export async function DELETE(req: NextRequest) {
     .eq('id', id)
     .eq('fund_id', fundId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return dbError(error, 'compliance-links')
   return NextResponse.json({ ok: true })
 }

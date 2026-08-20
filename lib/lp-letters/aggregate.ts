@@ -105,6 +105,7 @@ export async function aggregatePortfolioData(
     .from('companies')
     .select('id, name, status, stage, industry, overview, why_invested, current_update')
     .eq('fund_id', fundId)
+    .eq('holding_type', 'company')   // fund holdings have their own surfaces
     .eq('status', 'active')
     .order('name') as { data: {
       id: string; name: string; status: string; stage: string | null
@@ -123,14 +124,16 @@ export async function aggregatePortfolioData(
       proceeds_received: number | null; proceeds_escrow: number | null
       cost_basis_exited: number | null; current_share_price: number | null
       shares_acquired: number | null; unrealized_value_change: number | null
-      portfolio_group: string[] | null
+      // NOTE: scalar text on investment_transactions (only companies.portfolio_group
+      // is text[]). Must be compared with ===, never .includes() — on a string that
+      // is a substring test, and "<X> SPV II" contains "<X> SPV".
+      portfolio_group: string | null
     }[] | null }
 
   // Determine which companies belong to this portfolio group
   const companyIdsInGroup = new Set<string>()
   for (const t of allTransactions ?? []) {
-    const groups = t.portfolio_group ?? []
-    if (groups.includes(portfolioGroup)) {
+    if (t.portfolio_group === portfolioGroup) {
       companyIdsInGroup.add(t.company_id)
     }
   }
@@ -140,7 +143,9 @@ export async function aggregatePortfolioData(
   const { data: companyGroupAssignments } = await admin
     .from('companies')
     .select('id, portfolio_group')
-    .eq('fund_id', fundId) as { data: { id: string; portfolio_group: string[] | null }[] | null }
+    .eq('fund_id', fundId)
+    // fund holdings have their own surfaces
+    .eq('holding_type', 'company') as { data: { id: string; portfolio_group: string[] | null }[] | null }
 
   for (const c of companyGroupAssignments ?? []) {
     if (c.portfolio_group?.includes(portfolioGroup)) {
@@ -155,6 +160,7 @@ export async function aggregatePortfolioData(
     .from('companies')
     .select('id, name, status, stage, industry, overview, why_invested, current_update')
     .eq('fund_id', fundId)
+    .eq('holding_type', 'company')   // fund holdings have their own surfaces
     .in('status', ['exited', 'written-off']) as { data: typeof allCompanies }
 
   const allGroupCompanies = [
@@ -197,15 +203,12 @@ export async function aggregatePortfolioData(
       }
     }
 
-    // Filter to transactions in this portfolio group
-    const groupTxns = txns.filter(t => {
-      const groups = t.portfolio_group ?? []
-      return groups.includes(portfolioGroup)
-    })
+    // Filter to transactions in this portfolio group (exact match — see the note above)
+    const groupTxns = txns.filter(t => t.portfolio_group === portfolioGroup)
     // Also include company-wide unrealized_gain_change/round_info (no portfolio_group) for share price
     const companyWideTxns = txns.filter(t =>
       (t.transaction_type === 'unrealized_gain_change' || t.transaction_type === 'round_info') &&
-      (!t.portfolio_group || t.portfolio_group.length === 0)
+      !t.portfolio_group
     )
     const relevantTxns = [...groupTxns, ...companyWideTxns.filter(t => !groupTxns.includes(t))]
 
