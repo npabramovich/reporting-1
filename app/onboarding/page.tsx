@@ -156,9 +156,9 @@ function OnboardingContent() {
   }
 
   const confirmedBanner = emailConfirmed ? (
-    <Alert className="mb-6 border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
-      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-      <AlertDescription className="text-green-800 dark:text-green-200">
+    <Alert className="mb-6 border-success/40 bg-success-subtle">
+      <CheckCircle2 className="h-4 w-4 text-success" />
+      <AlertDescription className="text-success">
         Your email has been confirmed. You&apos;re all set to get started.
       </AlertDescription>
     </Alert>
@@ -272,7 +272,7 @@ function JoinFundScreen({
 
             {requested ? (
               <div className="text-center py-4">
-                <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
+                <CheckCircle2 className="h-8 w-8 text-success mx-auto mb-2" />
                 <p className="font-medium">Request sent</p>
                 <p className="text-sm text-muted-foreground">Redirecting...</p>
               </div>
@@ -423,7 +423,7 @@ function Step1({ onComplete }: { onComplete: (fundId: string, webhookToken: stri
             </Button>
           </div>
           {testResult === 'success' && (
-            <p className="text-sm text-green-600 flex items-center gap-1">
+            <p className="text-sm text-success flex items-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5" /> Connected successfully
             </p>
           )}
@@ -847,7 +847,7 @@ function Step4({
       <CardContent className="space-y-5">
         {googleConnected ? (
           <div className="flex items-center gap-3 p-4 rounded-lg border bg-muted/50">
-            <CheckCircle2 className="h-6 w-6 text-emerald-500 shrink-0" />
+            <CheckCircle2 className="h-6 w-6 text-success shrink-0" />
             <div>
               <p className="font-medium text-sm">Google Drive connected</p>
               <p className="text-xs text-muted-foreground">

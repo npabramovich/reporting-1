@@ -241,7 +241,7 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
           <p className="text-sm text-destructive mt-3">{error}</p>
         )}
         {warning && (
-          <p className="text-sm text-amber-600 mt-3">{warning}</p>
+          <p className="text-sm text-warning mt-3">{warning}</p>
         )}
       </div>
     )
@@ -396,7 +396,7 @@ export function CompanySummary({ companyId, fundId, hasClaudeKey, hasOpenAIKey, 
         <p className="text-sm text-destructive mt-3 pt-3 border-t">{error}</p>
       )}
       {warning && (
-        <p className="text-sm text-amber-600 mt-3 pt-3 border-t">{warning}</p>
+        <p className="text-sm text-warning mt-3 pt-3 border-t">{warning}</p>
       )}
     </div>
   )

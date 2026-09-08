@@ -16,7 +16,7 @@ import { AnalystPanel } from '@/components/analyst-panel'
 
 function DashboardSkeleton() {
   return (
-    <div className="flex flex-col lg:flex-row gap-6 items-start mt-6 w-full max-w-7xl animate-pulse">
+    <div className="flex flex-col lg:flex-row gap-6 items-start mt-6 w-full max-w-page animate-pulse">
       <div className="flex-1 w-full space-y-4">
         {/* Metric cards skeleton */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -192,7 +192,7 @@ async function DashboardContent({ user, isAdmin }: { user: any; isAdmin: boolean
   return (
     <DashboardNotesLayout userId={user.id} isAdmin={isAdmin} companies={companiesWithInvestments.map(c => ({ id: c.id, name: c.name }))}>
       <div className="flex flex-col lg:flex-row gap-6 items-start mt-6">
-        <div className="flex-1 min-w-0 max-w-7xl w-full">
+        <div className="flex-1 min-w-0 max-w-page w-full">
           <DashboardCompanies companies={companiesWithInvestments} allGroups={allGroups} />
         </div>
         <DashboardNotesPanel />

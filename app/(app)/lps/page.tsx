@@ -169,7 +169,7 @@ export default function LPsPage() {
       <div className="mb-6 space-y-1">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            {fv.lps === 'admin' && <Lock className="h-4 w-4 text-amber-500" />}LPs
+            {fv.lps === 'admin' && <Lock className="h-4 w-4 text-warning" />}LPs
           </h1>
           <div className="flex items-center gap-2">
             <PortfolioNotesButton />
@@ -255,7 +255,7 @@ export default function LPsPage() {
               </button>}
               {isAdmin && <button
                 onClick={e => { e.stopPropagation(); setDeleteConfirmId(s.id); setDeleteConfirmText('') }}
-                className="text-muted-foreground hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Delete snapshot"
               >
                 <Trash2 className="h-4 w-4" />
@@ -271,7 +271,7 @@ export default function LPsPage() {
       <div className="mt-8">
         <div className="flex items-center gap-2 mb-3">
           <h3 className="text-base font-medium text-muted-foreground">GP Entity Ownership</h3>
-          {fv.gp_economics === 'admin' && <Lock className="h-3.5 w-3.5 text-amber-500" />}
+          {fv.gp_economics === 'admin' && <Lock className="h-3.5 w-3.5 text-warning" />}
         </div>
         <p className="text-xs text-muted-foreground mb-3">
           Map investor entities to their ownership in GP-managed entities (e.g. associates or co-invest vehicles). GP entity investments are excluded from totals to avoid double-counting.

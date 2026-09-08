@@ -219,7 +219,7 @@ export function TeamSection({ isAdmin, featureVisibility }: { isAdmin: boolean; 
               )}
               {inviteLink && (
                 <div className="mt-2">
-                  <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">
+                  <p className="text-sm font-medium text-warning mb-1">
                     Member added! Copy and share this invite link if they did not receive an email:
                   </p>
                   <div className="flex items-center gap-2">
