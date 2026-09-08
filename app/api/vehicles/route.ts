@@ -6,16 +6,17 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess, assertReadAccess } from '@/lib/api-helpers'
 import { retagPortfolioGroup } from '@/lib/vehicles'
 import { dbError } from '@/lib/api-error'
+import { VEHICLE_KINDS } from '@/lib/vehicle-kinds'
 
 // Fund-wide investment-vehicle registry (fund_vehicles). Vehicles are used across
 // LP snapshots, portfolio, compliance, and accounting — so management lives here,
 // not under the optional Accounting section.
 
-const KINDS = ['fund', 'spv', 'direct', 'associate', 'other']
+const KINDS: readonly string[] = VEHICLE_KINDS
 
 // GET — all of the fund's vehicles (for the management UI).
 export async function GET() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -44,7 +45,7 @@ export async function GET() {
 
 // POST — create a vehicle. { name, kind? }
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
 // Renaming cascades the string across every vehicle-scoped table (pre-Phase-2);
 // the old name is kept as an alias so stray legacy rows still map back.
 export async function PATCH(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

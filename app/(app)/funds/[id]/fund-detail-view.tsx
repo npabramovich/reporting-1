@@ -14,6 +14,10 @@ import { AnalystToggleButton } from '@/components/analyst-button'
 import { AccountingBody } from '@/components/accounting-chrome'
 import { Card, CardContent } from '@/components/ui/card'
 import { Metric as MetricBox } from '@/components/ui/metric'
+import {
+  ChartCard, EmptyPlot, AXIS, tooltipStyle, HUE, SLICE, sliceFill,
+  INVEST_NEW, INVEST_FOLLOW, GAINS_HUE, PROCEEDS_HUE,
+} from '@/components/fund-chart-kit'
 
 // The fund detail (lead) page. Everything here is READ-ONLY and derived — the same numbers as the
 // /funds overview (fund-economics), the schedule of investments (statements), and the growth
@@ -34,9 +38,15 @@ interface SoiRow {
   // Per-company value breakdown (tracker rows). invested = gross deployed; distributions = realized
   // proceeds; totalValue = distributions + fairValue (residual).
   invested?: number; distributions?: number; totalValue?: number
+  /** Present on tracker rows. Lets an exited, proceeds-only bar be labelled. */
+  status?: 'active' | 'exited' | 'written-off'
+  /** invested, split by lib/accounting/soi.ts. new + followOn === invested. */
+  investedNew?: number; investedFollowOn?: number
 }
 interface Soi {
-  rows: SoiRow[]; totalCost: number; totalFairValue: number; netAssets: number
+  rows: SoiRow[];
+  /** Fully-realized companies — not on the schedule, but part of the ITD picture. */
+  realizedRows?: SoiRow[]; totalCost: number; totalFairValue: number; netAssets: number
   source: 'tracker' | 'ledger'; byIndustry: SoiGroup[]; byGeography: SoiGroup[]; byAssetType: SoiGroup[]
 }
 interface TsPoint {
@@ -50,33 +60,6 @@ interface TsPoint {
 interface Timeseries { points: TsPoint[]; hasGross: boolean }
 
 type Lens = 'lp' | 'fund'
-
-// Categorical hues, assigned in FIXED order from the theme's chart ramp (never cycled).
-const HUE = {
-  chart1: 'hsl(var(--chart-1))',
-  chart2: 'hsl(var(--chart-2))',
-  chart3: 'hsl(var(--chart-3))',
-  chart4: 'hsl(var(--chart-4))',
-  chart5: 'hsl(var(--chart-5))',
-  ink: 'hsl(var(--foreground))',
-  muted: 'hsl(var(--muted-foreground))',
-  surface: 'hsl(var(--background))',
-}
-// Pie slices sit side by side in every combination, so they need the ALL-PAIRS
-// palette, not the adjacent-pairs one the stacked bars use. Only four slots clear
-// that bar in both light and dark (see the note in globals.css) — hence four
-// categorical hues and then "Other" in muted ink. Fixed order, never cycled: a
-// slice keeps its colour as the mix changes.
-const SLICE = ['hsl(var(--cat-1))', 'hsl(var(--cat-4))', 'hsl(var(--cat-5))', 'hsl(var(--cat-6))']
-const sliceFill = (i: number) => SLICE[i] ?? HUE.muted
-
-// Invested capital reads as one hue split by intensity: new = solid, follow-on = a
-// lighter tint of the same slot (so the pairing holds in either theme). Gains and
-// proceeds take their own slots, distinct from it and from each other.
-const INVEST_NEW = HUE.chart3
-const INVEST_FOLLOW = 'hsl(var(--chart-3) / 0.5)'
-const GAINS_HUE = HUE.chart1
-const PROCEEDS_HUE = HUE.chart2
 
 const moic = (v: number | null | undefined) => (v == null ? '—' : `${v.toFixed(2)}x`)
 const irrPct = (v: number | null | undefined) => {
@@ -126,6 +109,38 @@ export function FundDetailView({ vehicle, vehicleId }: { vehicle: string; vehicl
   // so its charts stay on the gross (deal-level) view only. This is the switch for that everywhere.
   const isAccounting = econ?.source === 'ledger'
 
+  // WHICH BASIS THE RATIOS ARE ON.
+  //
+  // rollUp's TVPI/DPI/IRR come from CAPITAL ACCOUNTS in both the 'ledger' and 'events' cases —
+  // both are LP-level, so both are already net of fees. The only deal-level (gross) numbers live
+  // in the timeseries. A vehicle with no capital accounts at all has null ratios, and for it the
+  // honest answer is the gross triple, not three dashes.
+  const lastTs = ts?.points[ts.points.length - 1] ?? null
+  const grossTvpi = lastTs && lastTs.investedCapital > 0
+    ? (lastTs.proceeds + lastTs.portfolioValue) / lastTs.investedCapital : null
+  const grossDpi = lastTs && lastTs.investedCapital > 0 ? lastTs.proceeds / lastTs.investedCapital : null
+  const grossIrr = lastTs?.grossIrr ?? null
+  const hasNet = !!m && m.tvpi != null
+  const basis: 'net' | 'fund' | 'gross' =
+    !hasNet && ts?.hasGross ? 'gross' : effectiveLens === 'lp' ? 'net' : 'fund'
+  const prefix = basis === 'net' ? 'Net ' : basis === 'gross' ? 'Gross ' : 'Fund '
+  const basisNote =
+    basis === 'net'
+      ? 'Net to LP — after management fees, expenses and accrued carried interest.'
+      : basis === 'gross'
+        ? 'Gross, deal level — portfolio cash flows and carrying value, before fund fees and expenses.'
+        : 'Whole fund — after fees and expenses, before carried interest is carved to the GP.'
+  const showTvpi = basis === 'gross' ? grossTvpi : m?.tvpi ?? null
+  const showDpi = basis === 'gross' ? grossDpi : m?.dpi ?? null
+  const netIrr = basis === 'gross' ? null : m?.irr ?? null
+  // The ONE case where the row mixes bases: a vehicle that HAS capital accounts but whose net
+  // IRR is null for want of time spread (a single-cutover tracking vehicle pins the terminal
+  // value to the contribution date, so no rate exists). Each box is labelled, and a real number
+  // the GP can act on beats a dash.
+  const irrIsGross = netIrr == null && grossIrr != null
+  const showIrr = netIrr ?? grossIrr
+  const irrLabel = irrIsGross ? 'Gross IRR' : `${prefix}IRR`
+
   // The page body — loading, not-found, or the metrics + charts. Rendered inside
   // <AccountingBody> below, so the Analyst panel slides in beside it while the header above
   // stays full width.
@@ -150,10 +165,16 @@ export function FundDetailView({ vehicle, vehicleId }: { vehicle: string; vehicl
         <MetricBox label="Uncalled" value={fmt(m.uncalled)} />
         <MetricBox label="Distributed" value={fmt(m.distributions)} />
         <MetricBox label="NAV" value={fmt(m.nav)} />
-        <MetricBox label="TVPI" value={moic(m.tvpi)} />
-        <MetricBox label="DPI" value={moic(m.dpi)} />
-        <MetricBox label="IRR" value={irrPct(m.irr)} />
+        <MetricBox label={`${prefix}TVPI`} value={moic(showTvpi)} />
+        <MetricBox label={`${prefix}DPI`} value={moic(showDpi)} />
+        <MetricBox label={irrLabel} value={irrPct(showIrr)} />
       </div>
+
+      {/* "Net of fees, gross of carry" is not recoverable from a three-letter label. */}
+      <p className="-mt-3 text-xs text-muted-foreground">
+        {basisNote}
+        {irrIsGross && ' IRR is shown gross — the capital accounts do not span enough time to derive a net rate.'}
+      </p>
 
       {/* Growth over time — two charts. Hidden entirely (rather than shown as an empty box) when the
           vehicle has no dated ledger activity — e.g. it isn't kept on fund accounting. */}
@@ -166,17 +187,20 @@ export function FundDetailView({ vehicle, vehicleId }: { vehicle: string; vehicl
 
       {/* Investment breakdown — from the schedule of investments (tracker rows). Hidden entirely
           when the vehicle tracks no per-company detail, rather than showing an empty placeholder. */}
-      {soi && soi.source === 'tracker' && soi.rows.length > 0 && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <BreakdownChart title="By industry" groups={soi.byIndustry} fmt={fmt} fmtFull={fmtFull} />
-          <BreakdownChart
-            title={soi.byAssetType.length > 1 ? 'By asset type' : 'By geography'}
-            groups={soi.byAssetType.length > 1 ? soi.byAssetType : soi.byGeography}
-            fmt={fmt}
-            fmtFull={fmtFull}
-          />
-          <div className="lg:col-span-2">
-            <TopHoldings rows={soi.rows} fmt={fmt} fmtFull={fmtFull} />
+      {soi && soi.source === 'tracker' && (soi.rows.length > 0 || (soi.realizedRows?.length ?? 0) > 0) && (
+        <div className="space-y-4">
+          {/* Realized companies are NOT on the schedule (ASC 946 reports holdings), but this
+              chart ranks on invested capital and proceeds inception-to-date — where an exited
+              company is exactly the row you most want to see. */}
+          <TopHoldings rows={[...soi.rows, ...(soi.realizedRows ?? [])]} fmt={fmt} fmtFull={fmtFull} />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <BreakdownChart title="By industry" groups={soi.byIndustry} fmt={fmt} fmtFull={fmtFull} />
+            <BreakdownChart
+              title={soi.byAssetType.length > 1 ? 'By asset type' : 'By geography'}
+              groups={soi.byAssetType.length > 1 ? soi.byAssetType : soi.byGeography}
+              fmt={fmt}
+              fmtFull={fmtFull}
+            />
           </div>
         </div>
       )}
@@ -232,35 +256,6 @@ export function FundDetailView({ vehicle, vehicleId }: { vehicle: string; vehicl
       <AccountingBody>{body}</AccountingBody>
     </>
   )
-}
-
-// ── Shared pieces ───────────────────────────────────────────────────────────
-
-function ChartCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <Card>
-      <CardContent className="pt-4 pb-4 px-4">
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <p className="text-sm font-medium">{title}</p>
-          {action}
-        </div>
-        {children}
-      </CardContent>
-    </Card>
-  )
-}
-
-const AXIS = { fontSize: 11 } as const
-const tooltipStyle = {
-  borderRadius: '6px',
-  border: '1px solid hsl(var(--border))',
-  backgroundColor: 'hsl(var(--popover))',
-  color: 'hsl(var(--popover-foreground))',
-  fontSize: '12px',
-} as const
-
-function EmptyPlot({ label }: { label: string }) {
-  return <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">{label}</div>
 }
 
 // ── Fund cash flows per period: signed bars, proceeds up / capital deployed down ──
@@ -548,12 +543,13 @@ function BreakdownChart({
   )
 }
 
-// ── Largest holdings — horizontal bars, with a toggle for the value dimension ──
+// ── Portfolio — horizontal bars, with toggles for the metric and bar scale ────────
 
 // At the holding (deal) level, realized cash is PROCEEDS. "Distributions" is a net/LP concept that
 // only appears under the net-metrics toggle — and an LP-tracking vehicle has no net metrics at all —
 // so this gross, per-company chart always says proceeds.
 type HoldingMetric = 'total' | 'invested' | 'residual' | 'proceeds'
+type HoldingBarMode = 'value' | 'share'
 
 const HOLDING_METRICS: { key: HoldingMetric; label: string }[] = [
   { key: 'total', label: 'Total value' },
@@ -573,6 +569,11 @@ function holdingParts(r: SoiRow) {
   const invested = r.invested ?? r.cost
   return {
     invested,
+    // Fall back to treating the whole position as new capital when the split is absent, so an
+    // older cached payload renders one honest bar rather than an empty one.
+    investedNew: r.investedNew ?? invested,
+    investedFollowOn: r.investedFollowOn ?? 0,
+    exited: r.status === 'exited' || r.status === 'written-off',
     proceeds,
     residual,
     // Unrealized gain on the still-held position: residual value above invested cost. Can be
@@ -598,36 +599,63 @@ function holdingSegments(h: Holding, metric: HoldingMetric): { label: string; va
     if (metric === 'total') segs.push({ label: 'Proceeds', value: h.proceeds, color: HOLDING_HUE.proceeds })
     return segs
   }
-  const color = metric === 'invested' ? HOLDING_HUE.invested : HOLDING_HUE.proceeds
-  return [{ label: metric, value: h[metric], color }]
+  if (metric === 'invested') {
+    // New = solid, follow-on = the 50% tint of the same slot, so the pairing holds in either
+    // theme. Same hues the cash-flows chart uses for the same distinction.
+    return [
+      { label: 'New capital', value: h.investedNew, color: INVEST_NEW },
+      { label: 'Follow-on', value: h.investedFollowOn, color: INVEST_FOLLOW },
+    ]
+  }
+  return [{ label: 'Proceeds', value: h.proceeds, color: HOLDING_HUE.proceeds }]
 }
 
 function TopHoldings({
   rows, fmt, fmtFull,
 }: { rows: SoiRow[]; fmt: (v: number) => string; fmtFull: (v: number) => string }) {
   const [metric, setMetric] = useState<HoldingMetric>('total')
+  const [barMode, setBarMode] = useState<HoldingBarMode>('value')
 
   // "Largest holdings by X": rank every company on the selected metric, largest first. No cap —
   // the whole portfolio is shown.
   const ranked = useMemo(() => {
     const parts = rows.map(r => ({ name: r.name, ...holdingParts(r) }))
-    return parts.sort((a, b) => b[metric] - a[metric])
+    // Rows with nothing to show on THIS metric are dropped: an exited company has no residual
+    // value, and a tail of zero-width bars is noise, not information.
+    return parts.filter(h => h[metric] > 0).sort((a, b) => b[metric] - a[metric])
   }, [rows, metric])
   const max = ranked.reduce((mx, h) => Math.max(mx, h[metric]), 0)
-  const fundTotal = rows.reduce((s, r) => s + holdingParts(r)[metric], 0)
+  const fundTotal = ranked.reduce((s, h) => s + h[metric], 0)
   if (ranked.length === 0) return null
 
   const toggle = (
-    <div className="inline-flex rounded-md border p-0.5 text-xs">
-      {HOLDING_METRICS.map(mo => (
-        <button
-          key={mo.key}
-          onClick={() => setMetric(mo.key)}
-          className={`px-2 py-1 rounded ${metric === mo.key ? 'bg-muted font-medium' : 'text-muted-foreground'}`}
-        >
-          {mo.label}
-        </button>
-      ))}
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="inline-flex rounded-md border p-0.5 text-xs" role="group" aria-label="Holding metric">
+        {HOLDING_METRICS.map(mo => (
+          <button
+            type="button"
+            key={mo.key}
+            aria-pressed={metric === mo.key}
+            onClick={() => setMetric(mo.key)}
+            className={`px-2 py-1 rounded ${metric === mo.key ? 'bg-muted font-medium' : 'text-muted-foreground'}`}
+          >
+            {mo.label}
+          </button>
+        ))}
+      </div>
+      <div className="inline-flex rounded-md border p-0.5 text-xs" role="group" aria-label="Bar scale">
+        {(['value', 'share'] as const).map(mode => (
+          <button
+            type="button"
+            key={mode}
+            aria-pressed={barMode === mode}
+            onClick={() => setBarMode(mode)}
+            className={`px-2 py-1 rounded capitalize ${barMode === mode ? 'bg-muted font-medium' : 'text-muted-foreground'}`}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
     </div>
   )
 
@@ -645,10 +673,15 @@ function TopHoldings({
             { label: 'Invested capital', color: HOLDING_HUE.invested },
             { label: 'Unrealized gains', color: HOLDING_HUE.residual },
           ]
-        : []
+        : metric === 'invested'
+          ? [
+              { label: 'New capital', color: INVEST_NEW },
+              { label: 'Follow-on', color: INVEST_FOLLOW },
+            ]
+          : []
 
   return (
-    <ChartCard title="Largest holdings" action={toggle}>
+    <ChartCard title="Portfolio" action={toggle}>
       {legendItems.length > 0 && (
         <div className="mb-3 flex items-center gap-4 text-xs text-muted-foreground">
           {legendItems.map(item => (
@@ -658,14 +691,34 @@ function TopHoldings({
           ))}
         </div>
       )}
+      <div className="mb-1 flex items-center gap-3 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+        <div className="w-40 shrink-0" />
+        <div className="flex-1 min-w-0" />
+        <div className="w-24 shrink-0 text-right">Total</div>
+        <div className="w-12 shrink-0 text-right">Share</div>
+      </div>
       <div className="space-y-2">
         {ranked.map(h => (
           <div key={h.name} className="flex items-center gap-3 text-sm">
-            <div className="w-40 shrink-0 truncate" title={h.name}>{h.name}</div>
+            <div className="w-40 shrink-0 flex items-center gap-1.5 min-w-0" title={h.name}>
+              <span className="truncate">{h.name}</span>
+              {h.exited && (
+                <span className="shrink-0 rounded-sm border px-1 text-[10px] leading-4 text-muted-foreground">Exited</span>
+              )}
+            </div>
             <div className="flex-1 min-w-0">
               <div className="h-4 rounded-sm bg-muted/50 overflow-hidden flex">
                 {holdingSegments(h, metric).map(seg => (
-                  <div key={seg.label} className="h-full" style={{ width: max && seg.value > 0 ? `${(seg.value / max) * 100}%` : '0%', background: seg.color }} />
+                  <div
+                    key={seg.label}
+                    className="h-full"
+                    style={{
+                      width: (barMode === 'value' ? max : fundTotal) && seg.value > 0
+                        ? `${(seg.value / (barMode === 'value' ? max : fundTotal)) * 100}%`
+                        : '0%',
+                      background: seg.color,
+                    }}
+                  />
                 ))}
               </div>
             </div>

@@ -27,6 +27,11 @@ import { loadPostedLedger, loadOwnership, loadEntityNames } from './load'
 import type { FundPosition } from '@/lib/portfolio/fof-metrics'
 import { loadFofData, ledgerCarryingByHolding } from '@/lib/portfolio/fof-load'
 import { fofCloseIssues } from '@/lib/portfolio/fof-valuation'
+import { quoteCloseIssues, type PriceFeed, type PriceObservation, type QuotedPosition } from '@/lib/portfolio/quotes'
+import { walletCloseIssues, type Wallet, type WalletBalance } from '@/lib/portfolio/wallets'
+import { lotIssues, isLotMethod, type LotMethod } from '@/lib/portfolio/lots'
+import { buildSoiPositions, type SoiCompany } from './soi'
+import { fundCurrency } from './currency'
 import { accountIdByCode, ensureCapitalAccounts, persistEntry } from './persist'
 import { allocateAmount } from './allocation'
 import { postingsInPeriod } from './statements'
@@ -55,6 +60,11 @@ import { vehicleIdByName } from './vehicle-id'
 import { loadStrandedCapital } from './pooled-capital-check'
 import { roundCents } from './ledger'
 import type { Account, JournalEntry, Posting } from './types'
+import { ACTUAL_BOOK } from './books'
+import { closesToOwnerEquity } from '@/lib/vehicle-kinds'
+import { vehicleKindByName } from './vehicle-domain'
+import { ownerCloseEntries } from './close-owner'
+import { ownerNoun } from './vocab'
 
 /** The undistributed-earnings bridge. */
 const BRIDGE_CODE = '3200'
@@ -74,6 +84,7 @@ const SUBTYPE_TO_SOURCE: Record<string, string> = {
   realized_gain: 'realized_gain',
   unrealized: 'valuation',
   interest_income: 'income',
+  portfolio_income: 'income',
   equity_method: 'income',
 }
 
@@ -100,6 +111,13 @@ export interface ClosePreview {
   categories: CloseCategory[]
   /** Basis used to split each category across partners. */
   basis: AllocationBasis
+  /**
+   * 'partners' allocates each category across the partners by basis — a fund. 'owner' rolls net
+   * income into a single equity account with no allocation — a management company or an
+   * individual (lib/vehicle-kinds.ts closesToOwnerEquity). Categories carry no partner lines
+   * in owner mode.
+   */
+  mode: 'partners' | 'owner'
   warnings: string[]
 }
 
@@ -131,16 +149,22 @@ export async function previewClose(
     return { error: 'This period overlaps an already-closed period — reopen it first' }
   }
 
-  const [{ accounts, postings, capitalPostings }, owners, names, basis, terms, commitmentEvents] = await Promise.all([
+  const [{ accounts, postings, capitalPostings }, owners, names, basis, terms, commitmentEvents, kind] = await Promise.all([
     loadPostedLedger(admin, fundId, group),
     loadOwnership(admin, fundId, group),
     loadEntityNames(admin, fundId, group),
     loadAllocationBasis(admin, fundId, group),
     loadPartnerTerms(admin, fundId, group),
     loadCommitmentEvents(admin, fundId, group),
+    vehicleKindByName(admin, fundId, group),
   ])
 
   const warnings: string[] = []
+
+  // OWNER MODE. A management company or an individual has no partners: net income rolls into
+  // one equity account and there is nothing to split, so the partner basis below is not
+  // loaded into anything and its "nobody to allocate to" refusal does not apply.
+  const ownerMode = closesToOwnerEquity(kind)
 
   // The basis amount per partner, as of the PERIOD END — not today. Closing an old
   // period must use the commitments (or balances) that were in force then.
@@ -153,7 +177,7 @@ export async function previewClose(
     // resolveCommitmentMap's events-if-any-positive-else-scalar core, as of the period end.
     // Old periods must use the commitments in force THEN. Warn only when there is no event
     // history at all (migration not pushed), since we then silently rely on the scalar.
-    if (commitmentEvents.length === 0) {
+    if (commitmentEvents.length === 0 && !ownerMode) {
       warnings.push('No commitment history found — falling back to each partner’s current commitment. Push the commitment-events migration to allocate historical periods correctly.')
     }
     basisAmounts = Array.from(
@@ -161,8 +185,8 @@ export async function previewClose(
     ).map(([lpEntityId, commitment]) => ({ lpEntityId, basisAmount: commitment }))
   }
 
-  const eligible = basisAmounts.filter(b => b.basisAmount > 0)
-  if (eligible.length === 0) {
+  const eligible = ownerMode ? [] : basisAmounts.filter(b => b.basisAmount > 0)
+  if (!ownerMode && eligible.length === 0) {
     return { error: basis === 'capital_balance'
       ? 'No partner has a positive capital balance at the period end — nothing to allocate on'
       : 'No partners with a commitment — nothing to allocate to' }
@@ -191,19 +215,28 @@ export async function previewClose(
     const capitalEffect = roundCents(-debitSide)
     if (capitalEffect === 0) continue
 
-    // Terms are per CATEGORY: a partner excluded from management fee still bears its
-    // share of expenses and still receives its share of gains.
-    const weights = allocationWeights(eligible, terms, sourceType as AllocationCategory)
-    if (weights.length === 0) {
-      warnings.push(`No partner participates in ${CATEGORY_LABELS[sourceType] ?? sourceType} — it cannot be allocated and will be skipped.`)
-      continue
-    }
-    const excluded = eligible.length - weights.length
-    if (excluded > 0) {
-      warnings.push(`${excluded} partner(s) excluded from ${CATEGORY_LABELS[sourceType] ?? sourceType}; their share is redistributed across the rest.`)
+    // Owner mode: the category rolls into one equity account, no lines to split.
+    let lines: CloseCategory['lines'] = []
+    if (!ownerMode) {
+      // Terms are per CATEGORY: a partner excluded from management fee still bears its
+      // share of expenses and still receives its share of gains.
+      const weights = allocationWeights(eligible, terms, sourceType as AllocationCategory)
+      if (weights.length === 0) {
+        warnings.push(`No partner participates in ${CATEGORY_LABELS[sourceType] ?? sourceType} — it cannot be allocated and will be skipped.`)
+        continue
+      }
+      const excluded = eligible.length - weights.length
+      if (excluded > 0) {
+        warnings.push(`${excluded} partner(s) excluded from ${CATEGORY_LABELS[sourceType] ?? sourceType}; their share is redistributed across the rest.`)
+      }
+      const split = allocateAmount(capitalEffect, weights)
+      lines = Array.from(split.entries()).map(([lpEntityId, amount]) => ({
+        lpEntityId,
+        name: names.get(lpEntityId) ?? lpEntityId,
+        amount: roundCents(amount),
+      }))
     }
 
-    const split = allocateAmount(capitalEffect, weights)
     categories.push({
       sourceType,
       label: CATEGORY_LABELS[sourceType] ?? sourceType,
@@ -214,11 +247,7 @@ export async function previewClose(
           return { code: a.code, name: a.name, amount: roundCents(amount) }
         })
         .filter(a => a.amount !== 0),
-      lines: Array.from(split.entries()).map(([lpEntityId, amount]) => ({
-        lpEntityId,
-        name: names.get(lpEntityId) ?? lpEntityId,
-        amount: roundCents(amount),
-      })),
+      lines,
     })
   }
 
@@ -243,7 +272,7 @@ export async function previewClose(
     )
   }
 
-  return { periodStart, periodEnd, netIncome, categories, basis, warnings }
+  return { periodStart, periodEnd, netIncome, categories, basis, mode: ownerMode ? 'owner' : 'partners', warnings }
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +363,8 @@ export interface CloseThroughPreview {
   months: ClosePreview[]
   totalNetIncome: number
   basis: AllocationBasis
+  /** See ClosePreview.mode. */
+  mode: 'partners' | 'owner'
   readiness: CloseReadiness
   warnings: string[]
 }
@@ -366,6 +397,176 @@ async function loadFofCloseInputs(
   }
 }
 
+/**
+ * The quoted half of the close's inputs — positions priced by a feed rather than by a round.
+ *
+ * Returns null for a fund that has no feeds, so a purely private book runs exactly the query
+ * count it ran before and none of this code path executes. Same shape as the FoF loader above,
+ * for the same reason: the check itself is pure, and lives in lib/portfolio/quotes.ts.
+ */
+async function loadQuoteCloseInputs(
+  admin: SupabaseClient,
+  fundId: string,
+  group: string,
+  asOf: string,
+): Promise<{
+  positions: QuotedPosition[]
+  feeds: PriceFeed[]
+  observations: PriceObservation[]
+  currency: string
+} | null> {
+  const { data: feedRows } = await (admin as any)
+    .from('price_feeds')
+    .select('*')
+    .eq('fund_id', fundId)
+  const feeds = ((feedRows as any[]) ?? []).map(f => ({
+    id: f.id,
+    companyId: f.company_id,
+    kind: f.kind,
+    symbol: f.symbol,
+    exchange: f.exchange,
+    quoteCurrency: f.quote_currency,
+    quoteScale: Number(f.quote_scale ?? 1),
+    activeFrom: f.active_from,
+    activeUntil: f.active_until,
+    restrictionUntil: f.restriction_until,
+    restrictionDiscount: f.restriction_discount == null ? null : Number(f.restriction_discount),
+  })) as PriceFeed[]
+  if (feeds.length === 0) return null
+
+  const [{ data: obsRows }, { data: txnRows }, { data: companyRows }, ledger, currency] = await Promise.all([
+    (admin as any).from('price_observations').select('*').eq('fund_id', fundId).lte('as_of_date', asOf),
+    (admin as any).from('investment_transactions').select('*').eq('fund_id', fundId),
+    (admin as any).from('companies').select('*').eq('fund_id', fundId),
+    loadPostedLedger(admin, fundId, group, asOf),
+    fundCurrency(admin, fundId),
+  ])
+
+  const observations = ((obsRows as any[]) ?? []).map(o => ({
+    feedId: o.feed_id,
+    asOfDate: o.as_of_date,
+    price: Number(o.price),
+    basis: o.basis,
+  })) as PriceObservation[]
+
+  // Transactions are cut at the period end BEFORE the roll-up sees them. Without this the
+  // position would be valued on share counts — and splits — that had not happened yet, so a
+  // re-close of an earlier period would not reproduce.
+  const upTo = ((txnRows as any[]) ?? []).filter(t => !t.transaction_date || t.transaction_date <= asOf)
+  // buildSoiPositions runs through computeSummary, so `shares` arrives SPLIT-ADJUSTED — which is
+  // what a quote must be multiplied by (lib/splits.ts).
+  const soi = buildSoiPositions(upTo, ((companyRows as any[]) ?? []) as SoiCompany[], group, new Date(asOf))
+  const carrying = ledgerCarryingByHolding(ledger.accounts, ledger.postings)
+
+  const positions: QuotedPosition[] = soi.map(p => ({
+    companyId: p.companyId,
+    name: p.name,
+    shares: p.shares ?? 0,
+    ledgerCarrying: carrying.get(p.companyId) ?? 0,
+  }))
+
+  return { positions, feeds, observations, currency }
+}
+
+/**
+ * Watched wallets and what the chain says they hold.
+ *
+ * Returns null for a fund with no wallets, so a book holding no digital assets runs the query
+ * count it ran before. Same posture as the FoF and quoted loaders above.
+ */
+async function loadWalletCloseInputs(
+  admin: SupabaseClient,
+  fundId: string,
+  group: string,
+  asOf: string,
+): Promise<{
+  positions: { companyId: string; name: string; units: number }[]
+  wallets: Wallet[]
+  balances: WalletBalance[]
+} | null> {
+  const { data: walletRows } = await (admin as any)
+    .from('crypto_wallets').select('*').eq('fund_id', fundId)
+  const rows = ((walletRows as any[]) ?? [])
+  if (rows.length === 0) return null
+
+  const wallets: Wallet[] = rows.map(w => ({
+    id: w.id,
+    companyId: w.company_id,
+    chain: w.chain,
+    address: w.address,
+    label: w.label,
+    active: w.active !== false,
+    verifiedAt: w.verified_at,
+    verificationMethod: w.verification_method,
+  }))
+
+  const [{ data: balRows }, { data: txnRows }, { data: companyRows }] = await Promise.all([
+    (admin as any).from('crypto_wallet_balances').select('*').eq('fund_id', fundId).lte('as_of_date', asOf),
+    (admin as any).from('investment_transactions').select('*').eq('fund_id', fundId),
+    (admin as any).from('companies').select('*').eq('fund_id', fundId),
+  ])
+
+  const balances: WalletBalance[] = ((balRows as any[]) ?? []).map(b => ({
+    walletId: b.wallet_id,
+    asOfDate: b.as_of_date,
+    units: Number(b.units),
+    blockHeight: b.block_height,
+  }))
+
+  // Cut the history at the period end, then read the units through the same roll-up everything
+  // else uses — so the quantity compared against the chain is SPLIT-ADJUSTED and matches what
+  // the schedule of investments reports for the same date.
+  const upTo = ((txnRows as any[]) ?? []).filter(t => !t.transaction_date || t.transaction_date <= asOf)
+  const soi = buildSoiPositions(upTo, ((companyRows as any[]) ?? []) as SoiCompany[], group, new Date(asOf))
+  const positions = soi.map(p => ({ companyId: p.companyId, name: p.name, units: p.shares ?? 0 }))
+
+  return { positions, wallets, balances }
+}
+
+/**
+ * Disposals whose recorded cost basis disagrees with the fund's own lot policy.
+ *
+ * Loaded per HOLDING rather than in one pass, because lots are consumed per holding and pooling
+ * them across the portfolio would let a sale of one asset draw basis from another.
+ *
+ * Returns an empty list for a fund with no unit-bearing disposals, which is most funds — a
+ * venture book exits whole positions and records the basis outright.
+ */
+async function loadLotIssues(
+  admin: SupabaseClient,
+  fundId: string,
+  group: string,
+  asOf: string,
+): Promise<string[]> {
+  const [{ data: settings }, { data: txnRows }, { data: companyRows }] = await Promise.all([
+    (admin as any).from('fund_settings').select('lot_method').eq('fund_id', fundId).maybeSingle(),
+    (admin as any).from('investment_transactions').select('*').eq('fund_id', fundId),
+    (admin as any).from('companies').select('id, name, holding_type').eq('fund_id', fundId),
+  ])
+  const raw = (settings as any)?.lot_method
+  const method: LotMethod = isLotMethod(raw) ? raw : 'fifo'
+
+  const upTo = ((txnRows as any[]) ?? []).filter(t => !t.transaction_date || t.transaction_date <= asOf)
+  const names = new Map(((companyRows as any[]) ?? []).map(c => [c.id as string, c.name as string]))
+
+  const byCompany = new Map<string, any[]>()
+  for (const t of upTo) {
+    // Company-wide rows carry no vehicle; vehicle-tagged rows must match this one, or a sale in
+    // one fund would consume lots bought by another.
+    if (t.portfolio_group && t.portfolio_group !== group) continue
+    if (!byCompany.has(t.company_id)) byCompany.set(t.company_id, [])
+    byCompany.get(t.company_id)!.push(t)
+  }
+
+  const out: string[] = []
+  for (const [companyId, txns] of Array.from(byCompany.entries())) {
+    for (const issue of lotIssues(txns, method, names.get(companyId) ?? 'A holding')) {
+      out.push(issue.message)
+    }
+  }
+  return out
+}
+
 /** Pre-close checks over the whole span. */
 async function checkReadiness(
   admin: SupabaseClient,
@@ -379,6 +580,7 @@ async function checkReadiness(
   const [{ data: drafts }, { data: bankTxns }] = await Promise.all([
     admin.from('journal_entries' as any)
       .select('id, entry_date')
+      .eq('book', ACTUAL_BOOK)
       .eq('fund_id', fundId).eq('vehicle_id', vehicleId)
       .eq('status', 'draft')
       .gte('entry_date', start).lte('entry_date', end),
@@ -405,8 +607,10 @@ async function checkReadiness(
 
   // Capital stranded on the pooled account means the allocation has nowhere to land for
   // those partners: the close would compute each partner's share from capital balances that
-  // read 0, and lock the period on top of the result. Block, don't warn.
-  const stranded = await loadStrandedCapital(admin, fundId, group)
+  // read 0, and lock the period on top of the result. Block, don't warn. Not a question an
+  // owner's-equity vehicle can be asked — it has one equity account and no partners.
+  const kind = await vehicleKindByName(admin, fundId, group)
+  const stranded = closesToOwnerEquity(kind) ? { stranded: false, message: '' } : await loadStrandedCapital(admin, fundId, group)
   if (stranded.stranded) {
     blockers.push(
       `LP capital is not attributed to partner accounts. ${stranded.message} ` +
@@ -423,6 +627,33 @@ async function checkReadiness(
     blockers.push(...issues.blockers)
     warnings.push(...issues.warnings)
   }
+
+  // Quoted positions. Skipped entirely for a fund with no price feeds, so a private book is
+  // unaffected — same posture as the FoF block above.
+  const quoted = await loadQuoteCloseInputs(admin, fundId, group, end)
+  if (quoted) {
+    const issues = quoteCloseIssues(
+      quoted.positions, quoted.feeds, quoted.observations, end, quoted.currency,
+    )
+    blockers.push(...issues.blockers)
+    warnings.push(...issues.warnings)
+  }
+
+  // Watched wallets. Warnings only, never blockers — see lib/portfolio/wallets.ts for why a
+  // quantity disagreement is a decision the fund makes rather than a stop.
+  const walletInputs = await loadWalletCloseInputs(admin, fundId, group, end)
+  if (walletInputs) {
+    const issues = walletCloseIssues(
+      walletInputs.positions, walletInputs.wallets, walletInputs.balances, end,
+    )
+    blockers.push(...issues.blockers)
+    warnings.push(...issues.warnings)
+  }
+
+  // Cost basis on partial disposals. Warnings, not blockers: the recorded figure is what the
+  // books use and a fund may have a deliberate reason for it, so this reports the disagreement
+  // rather than overruling it. See lib/portfolio/lots.ts.
+  warnings.push(...await loadLotIssues(admin, fundId, group, end))
 
   if (bankRows.length > 0) {
     const total = roundCents(bankRows.reduce((s, t) => s + Number(t.amount), 0))
@@ -525,6 +756,7 @@ export async function previewCloseThrough(
     warnings.push('No P&L activity in this span — closing will lock the books without allocating anything.')
   }
   const basis = months[0]?.basis ?? 'commitment'
+  const mode = months[0]?.mode ?? 'partners'
   const readiness = await checkReadiness(admin, fundId, group, start, endDate)
 
   return {
@@ -533,6 +765,7 @@ export async function previewCloseThrough(
     months,
     totalNetIncome: roundCents(months.reduce((s, m) => s + m.netIncome, 0)),
     basis,
+    mode,
     readiness,
     warnings,
   }
@@ -652,10 +885,39 @@ export async function closePeriodWithAllocation(
     periodId = (periodRow as any).id
   }
   const sourceRef = `close:${periodId}`
+  const entryIds: string[] = []
+
+  // 2 (owner mode). One entry per category, net income to the single equity account — a
+  // management company's members' capital or an individual's owner's capital. No partner
+  // lines, no carry, no associate economics: none of those exist for these kinds.
+  if (preview.mode === 'owner') {
+    const { data: ownerAcct } = await admin
+      .from('chart_of_accounts' as any)
+      .select('id')
+      .eq('fund_id', fundId).eq('vehicle_id', vehicleId)
+      .eq('subtype', 'members_capital')
+      .maybeSingle()
+    if (!ownerAcct) {
+      await admin.from('fiscal_periods' as any).delete().eq('id', periodId).eq('fund_id', fundId)
+      return { error: "No owner's capital account (subtype members_capital) on this chart — seed the chart for this vehicle's kind first" }
+    }
+    const kind = await vehicleKindByName(admin, fundId, group)
+    const entries = ownerCloseEntries(preview.categories, {
+      fundId, bridgeId, ownerCapitalId: (ownerAcct as any).id, periodStart, periodEnd, sourceRef, label, ownerNoun: ownerNoun(kind),
+    })
+    for (const entry of entries) {
+      const result = await persistEntry(admin, fundId, group, userId, entry, 'posted')
+      if ('error' in result) {
+        await reopenPeriodWithReversal(admin, fundId, group, periodId)
+        await admin.from('fiscal_periods' as any).delete().eq('id', periodId).eq('fund_id', fundId)
+        return { error: `Close failed (${entry.memo}): ${result.error}` }
+      }
+      entryIds.push(result.entryId)
+    }
+  }
 
   // 2. Post one allocation entry per category, tagged so reopening can find them.
-  const entryIds: string[] = []
-  for (const cat of preview.categories) {
+  for (const cat of preview.mode === 'owner' ? [] : preview.categories) {
     const postings: Posting[] = [
       // The bridge takes the whole category; each partner takes their share.
       { accountId: bridgeId, amount: roundCents(cat.capitalEffect), currency: 'USD', lpEntityId: null },
@@ -709,7 +971,9 @@ export async function closePeriodWithAllocation(
   //
   // Without this, every LP's NAV overstates what they would actually receive by the GP's share
   // of the unrealized gain.
-  const carryResult = await accrueCarry(admin, fundId, group, userId, periodEnd, sourceRef)
+  const carryResult = preview.mode === 'owner'
+    ? { entryId: undefined as string | undefined }
+    : await accrueCarry(admin, fundId, group, userId, periodEnd, sourceRef)
   if ('error' in carryResult) {
     await reopenPeriodWithReversal(admin, fundId, group, periodId)
     await admin.from('fiscal_periods' as any).delete().eq('id', periodId).eq('fund_id', fundId)
@@ -723,7 +987,9 @@ export async function closePeriodWithAllocation(
   // each line filed into its matching capital-account bucket and allocated to members. Self-
   // contained: uses this close's own source_ref, reconciles to the served-fund target per line, and
   // reverses with the ordinary vehicle-scoped reopen. A no-op for a normal fund vehicle.
-  const earnedResult = await accrueAssociateEconomics(admin, fundId, group, userId, periodEnd, sourceRef)
+  const earnedResult = preview.mode === 'owner'
+    ? { entryIds: [] as string[] }
+    : await accrueAssociateEconomics(admin, fundId, group, userId, periodEnd, sourceRef)
   if ('error' in earnedResult) {
     await reopenPeriodWithReversal(admin, fundId, group, periodId)
     await admin.from('fiscal_periods' as any).delete().eq('id', periodId).eq('fund_id', fundId)
@@ -783,9 +1049,9 @@ async function removeSupersededPeriods(
     if (p.status === 'closed') continue
 
     const [{ count: entryCount }, { count: closeCount }] = await Promise.all([
-      admin.from('journal_entries' as any).select('id', { count: 'exact', head: true })
+      admin.from('journal_entries' as any).select('id', { count: 'exact', head: true }).eq('book', ACTUAL_BOOK)
         .eq('fund_id', fundId).eq('period_id', p.id),
-      admin.from('journal_entries' as any).select('id', { count: 'exact', head: true })
+      admin.from('journal_entries' as any).select('id', { count: 'exact', head: true }).eq('book', ACTUAL_BOOK)
         .eq('fund_id', fundId).eq('source_ref', `close:${p.id}`),
     ])
     if ((entryCount ?? 0) > 0 || (closeCount ?? 0) > 0) continue
@@ -1114,13 +1380,14 @@ export async function loadCloseEntries(
   const { data: entries } = await admin
     .from('journal_entries' as any)
     .select('id, entry_date, memo, source_type')
+    .eq('book', ACTUAL_BOOK)
     .eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('source_ref', `close:${periodId}`).eq('status', 'posted')
     .order('entry_date', { ascending: true })
   const entryRows = (entries as any[]) ?? []
   if (entryRows.length === 0) return []
 
   const [{ data: postings }, { data: accts }, { data: ents }] = await Promise.all([
-    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, lp_entity_id').eq('fund_id', fundId).in('journal_entry_id', entryRows.map(e => e.id)),
+    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount, lp_entity_id').eq('book', ACTUAL_BOOK).eq('fund_id', fundId).in('journal_entry_id', entryRows.map(e => e.id)),
     admin.from('chart_of_accounts' as any).select('id, code, name').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
     admin.from('lp_entities' as any).select('id, entity_name').eq('fund_id', fundId),
   ])
@@ -1233,6 +1500,7 @@ async function voidCloseEntries(
   const { data: entries, error: findErr } = await admin
     .from('journal_entries' as any)
     .select('id')
+    .eq('book', ACTUAL_BOOK)
     .eq('fund_id', fundId)
     .eq('vehicle_id', vehicleId)
     .eq('source_ref', `close:${periodId}`)

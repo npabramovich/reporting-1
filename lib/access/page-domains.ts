@@ -34,7 +34,7 @@ export interface PageDomain {
    * The gate this page calls, when it isn't the standard `canViewPage(page, '<domain>')`.
    * Section guards resolve the same context for a whole subtree.
    */
-  gate?: 'requireAccountingAccess'
+  gate?: 'requireAccountingAccess' | 'requireVehicleAccess'
 }
 
 /** Keyed by path under app/(app), without the trailing /page.tsx. */
@@ -44,6 +44,8 @@ export const PAGE_DOMAINS: Record<string, PageDomain> = {
   // The company page: the panels inside it (notes, interactions, investments) each ask for their
   // own domain, but the company and its metrics are portfolio.
   'companies/[id]': { domain: 'portfolio' },
+  // Portfolio update search — the Company Updates corpus (reporting email), not the mailbox.
+  'company-updates': { domain: 'portfolio' },
   // The mailbox is portfolio intake, not deal flow — see ROUTE_DOMAINS['api/emails'].
   'emails/[id]': { domain: 'portfolio' },
 
@@ -82,22 +84,31 @@ export const PAGE_DOMAINS: Record<string, PageDomain> = {
   // every accounting API and redirected off every accounting page — pinned against now by
   // tests/route-gates-honour-grants.test.ts.
   'funds': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]/bank': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]/capital-accounts': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]/capital-accounts/[lpEntityId]': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]/fof-quarter': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]/fof-report': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]/journal': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]/migrate': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]/opening-balances': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]/periods': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]/schedule-of-investments': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]/statements': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/[id]/status': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/fof-quarter': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/fof-report': { domain: 'accounting', gate: 'requireAccountingAccess' },
-  'funds/migrate': { domain: 'accounting', gate: 'requireAccountingAccess' },
+  // Three pages in one route, and the domain recorded here is what they share — `accounting`,
+  // the minimum to open any of them:
+  //   - a section slug in the `[id]` slot is the firm-wide landing (requireAccountingAccess),
+  //   - an entity id is that entity's lead page (requireVehicleAccess),
+  //   - and when that entity is a MANAGEMENT COMPANY the gate demands `management_company` too.
+  // The registry maps one domain per page; the second half of a page that straddles two is gated
+  // in the page's own path, which for every entity page is app/(app)/funds/guard.ts.
+  'funds/[id]': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/bank': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/capital-accounts': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/construction': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/capital-accounts/[lpEntityId]': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/fof-quarter': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/fof-report': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/journal': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/ledger': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  // Gated in the page itself on the domain AND the tax_reporting feature: every route behind it
+  // is feature-gated, so the page must not render when the feature is off.
+  'funds/[id]/tax': { domain: 'accounting', feature: 'tax_reporting', gate: 'requireVehicleAccess' },
+  'funds/[id]/migrate': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/opening-balances': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/periods': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/schedule-of-investments': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/statements': { domain: 'accounting', gate: 'requireVehicleAccess' },
+  'funds/[id]/status': { domain: 'accounting', gate: 'requireVehicleAccess' },
 
   // ── Administration ─────────────────────────────────────────────────────────
   'usage': { domain: 'admin' },
@@ -112,6 +123,8 @@ export const PAGE_DOMAINS: Record<string, PageDomain> = {
 export const UNGATED_PAGES: Record<string, string> = {
   'accounting/[[...rest]]': 'Pure redirect to /funds for old deep links. Renders nothing.',
   'companies': 'Pure redirect to /dashboard. Renders nothing.',
+  'funds/[id]/text': 'Pure redirect to the journal page’s plain-text tab. Renders nothing; the journal page gates.',
+  'manco/[[...rest]]': 'Pure redirect into /funds — management companies are entities in that section now. Renders nothing.',
   'lps/live': 'Pure redirect to /lps — the live report became the LPs landing page.',
   'support': 'Static product documentation. No fund data, no queries, same for every reader.',
 }

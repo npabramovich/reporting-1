@@ -9,13 +9,13 @@ import { proRataDistribution, declareDistribution, listDistributions } from '@/l
 
 // GET — declared distributions for the vehicle, newest first.
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const gate = await assertReadAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
-  const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
   return NextResponse.json(await listDistributions(admin, gate.fundId, group))
 }
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 //   declare: { distributionDate, description?, lines: [{ lpEntityId, amount }] }
 //            → Dr each partner's capital, Cr 2300 Distributions payable
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
   if (body?.action === 'preview') {
@@ -43,10 +43,22 @@ export async function POST(req: NextRequest) {
   }
 
   if (body?.action === 'declare') {
+    // Character is optional: omitting it leaves the distribution uncharacterised, which is a
+    // legitimate state and the one every pre-existing row is in. Supplying a partial split is
+    // not — declareDistribution refuses anything that doesn't sum to the declared total.
+    const c = body?.character
     const result = await declareDistribution(admin, gate.fundId, group, user.id, {
       distributionDate: String(body?.distributionDate ?? ''),
       description: body?.description ?? null,
       lines: Array.isArray(body?.lines) ? body.lines : [],
+      kind: body?.kind,
+      character: c
+        ? {
+            returnOfCapital: Number(c.returnOfCapital ?? 0),
+            realizedGain: Number(c.realizedGain ?? 0),
+            income: Number(c.income ?? 0),
+          }
+        : undefined,
     })
     if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 })
     return NextResponse.json(result)

@@ -8,23 +8,37 @@ import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { exportLedgerText, postLedgerText } from '@/lib/accounting/text-ledger-run'
 
 // GET — the vehicle's ledger serialized to plain-text double-entry.
+//   ?asOf=YYYY-MM-DD   only entries on or before that date
+//   ?download=1        as a text file rather than JSON
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const gate = await assertReadAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
-  const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
+  const sp = req.nextUrl.searchParams
+  const group = await resolveGroupOr400(admin, gate, sp.get('group'))
   if (group instanceof NextResponse) return group
 
-  return NextResponse.json({ text: await exportLedgerText(admin, gate.fundId, group) })
+  const asOf = sp.get('asOf')
+  const text = await exportLedgerText(admin, gate.fundId, group, asOf && /^\d{4}-\d{2}-\d{2}$/.test(asOf) ? asOf : undefined)
+  if (sp.get('download')) {
+    const filename = `ledger-${group}${asOf ? `-${asOf}` : ''}`.replace(/[^a-zA-Z0-9\-]/g, '-')
+    return new NextResponse(text, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}.txt"`,
+      },
+    })
+  }
+  return NextResponse.json({ text })
 }
 
 // POST — parse authored text and persist each balanced entry.
 // Body: { text, status?: 'draft'|'posted', group? }
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -32,7 +46,7 @@ export async function POST(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
   const text: string = (body?.text ?? '').toString()

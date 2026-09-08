@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { assertWriteAccess } from '@/lib/api-helpers'
 
 /**
  * Download an attachment from an inbound email. Linked from the deal-detail
@@ -9,16 +10,18 @@ import { createAdminClient } from '@/lib/supabase/admin'
  * Security model:
  *   - Auth: caller must be a member of the fund that owns the email.
  *   - Index is validated against `raw_payload.Attachments[]`.
- *   - We use Supabase Storage's signed-URL `download` option, which sets
- *     `Content-Disposition: attachment` server-side. That forces the browser
- *     to save the file rather than render it inline — defends against MIME
- *     confusion attacks where a submitter claimed `text/html` (or similar)
- *     on the attachment and would otherwise execute scripts in the partner's
- *     authenticated session.
+ *   - Downloads use Supabase Storage's signed-URL `download` option. Explicit
+ *     inline requests are honored only for PDFs and a small raster-image
+ *     allowlist; every other MIME type is still forced to download. This keeps
+ *     HTML/SVG and MIME-confusion payloads out of an inline browser context.
  *   - Signed URLs are short-lived (60s) so they can't be leaked or shared.
  */
-export async function GET(_req: NextRequest, { params }: { params: { id: string; index: string } }) {
-  const supabase = createClient()
+export async function GET(
+  req: NextRequest,
+  props: { params: Promise<{ id: string; index: string }> }
+) {
+  const params = await props.params;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -60,16 +63,56 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string;
     return NextResponse.json({ error: 'Storage path mismatch' }, { status: 400 })
   }
 
-  // Force Content-Disposition: attachment on the signed URL so the browser
-  // saves rather than renders. The filename passed here ends up in the
+  // Force unsafe types to download. The filename passed here ends up in the
   // header verbatim, so sanitize it to plain ASCII-safe characters.
   const downloadName = (att.Name ?? 'attachment').replace(/[^\w.\-]/g, '_').slice(0, 200)
+  const wantsInline = req.nextUrl.searchParams.get('disposition') === 'inline'
+  const inlineSafe = att.ContentType === 'application/pdf' || /^image\/(png|jpeg|gif|webp)$/.test(att.ContentType ?? '')
   const { data: signed, error } = await admin.storage
     .from('email-attachments')
-    .createSignedUrl(att.StoragePath, 60, { download: downloadName })
+    .createSignedUrl(att.StoragePath, 60, wantsInline && inlineSafe ? undefined : { download: downloadName })
   if (error || !signed) {
     return NextResponse.json({ error: error?.message ?? 'Failed to sign URL' }, { status: 500 })
   }
 
   return NextResponse.redirect(signed.signedUrl, 302)
+}
+
+export async function DELETE(
+  req: NextRequest,
+  props: { params: Promise<{ id: string; index: string }> }
+) {
+  const params = await props.params;
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = createAdminClient()
+  const writeCheck = await assertWriteAccess(admin, user.id)
+  if (writeCheck instanceof NextResponse) return writeCheck
+
+  const idx = Number.parseInt(params.index, 10)
+  if (!Number.isInteger(idx) || idx < 0 || idx > 99) {
+    return NextResponse.json({ error: 'Invalid attachment index' }, { status: 400 })
+  }
+
+  const requestedKey = req.nextUrl.searchParams.get('key')
+  const { data: deleted, error: deleteError } = await (supabase as any).rpc(
+    'delete_email_attachment',
+    { p_email_id: params.id, p_attachment_index: idx, p_attachment_key: requestedKey }
+  ) as { data: { storage_path?: string | null } | null; error: { message: string } | null }
+  if (deleteError) {
+    const notFound = deleteError.message.includes('not found')
+    return NextResponse.json({ error: deleteError.message }, { status: notFound ? 404 : 400 })
+  }
+
+  const storagePath = deleted?.storage_path ?? null
+  if (storagePath?.startsWith(`${params.id}/`)) {
+    const { error: removeError } = await admin.storage.from('email-attachments').remove([storagePath])
+    if (removeError) {
+      console.error(`[attachment-delete] Orphaned storage object ${storagePath}:`, removeError)
+    }
+  }
+
+  return NextResponse.json({ ok: true })
 }

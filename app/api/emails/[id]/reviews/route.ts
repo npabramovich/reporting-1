@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidateTag } from 'next/cache'
+import { expireTag } from '@/lib/cache/tags'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
@@ -12,15 +12,15 @@ type ReviewRow = Pick<
 > & {
   companies: Pick<Company, 'id' | 'name'> | null
   metrics: Pick<Metric, 'id' | 'name' | 'unit' | 'value_type'> | null
-  inbound_emails: Pick<InboundEmail, 'id' | 'subject' | 'received_at' | 'from_address'> | null
+  inbound_emails: Pick<InboundEmail, 'id' | 'subject' | 'received_at' | 'from_address'> & {
+    diligence_deal_id: string | null
+  } | null
 }
 
 // GET — returns unresolved reviews for a specific email
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient()
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -30,7 +30,7 @@ export async function GET(
       id, issue_type, extracted_value, context_snippet, created_at,
       companies ( id, name ),
       metrics ( id, name, unit, value_type ),
-      inbound_emails ( id, subject, received_at, from_address )
+      inbound_emails ( id, subject, received_at, from_address, diligence_deal_id )
     `)
     .eq('email_id', params.id)
     .is('resolution', null)
@@ -60,11 +60,9 @@ export async function GET(
 }
 
 // POST — bulk actions on reviews for an email
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient()
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -142,7 +140,7 @@ export async function POST(
       .in('processing_status', ['needs_review', 'processing', 'failed', 'not_processed'])
   }
 
-  revalidateTag('review-badge')
+  expireTag('review-badge')
 
   return NextResponse.json({ ok: true, resolved: reviews?.length ?? 0 })
 }

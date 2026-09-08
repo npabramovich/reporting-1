@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
-import type { AIProvider, AIModel, AIResult, CreateMessageParams, CreateChatParams, ContentBlock } from './types'
+import { effortForModel } from './model-families'
+import type { AIProvider, AIModel, AIResult, CreateMessageParams, CreateChatParams, ContentBlock, AIEffort } from './types'
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI
@@ -23,11 +24,15 @@ export class OpenAIProvider implements AIProvider {
 
     messages.push({ role: 'user', content: userContent })
 
-    const response = await this.client.chat.completions.create({
-      model: params.model,
-      max_tokens: params.maxTokens,
-      messages,
-    })
+    const response = await this.client.chat.completions.create(
+      {
+        model: params.model,
+        max_tokens: params.maxTokens,
+        ...reasoningEffort(params.model, params.effort),
+        messages,
+      },
+      { signal: params.signal },
+    )
 
     return {
       text: response.choices[0]?.message?.content ?? '',
@@ -50,11 +55,15 @@ export class OpenAIProvider implements AIProvider {
       messages.push({ role: m.role, content: m.content })
     }
 
-    const response = await this.client.chat.completions.create({
-      model: params.model,
-      max_tokens: params.maxTokens,
-      messages,
-    })
+    const response = await this.client.chat.completions.create(
+      {
+        model: params.model,
+        max_tokens: params.maxTokens,
+        ...reasoningEffort(params.model, params.effort),
+        messages,
+      },
+      { signal: params.signal },
+    )
 
     return {
       text: response.choices[0]?.message?.content ?? '',
@@ -104,6 +113,12 @@ export class OpenAIProvider implements AIProvider {
       .sort((a, b) => b.created - a.created)
       .map(m => ({ id: m.id, name: m.id }))
   }
+}
+
+// `reasoning_effort` is a reasoning-model parameter; the chat models before it reject the field.
+function reasoningEffort(model: string, effort: AIEffort | undefined): { reasoning_effort?: 'low' | 'medium' | 'high' } {
+  const accepted = effortForModel('openai', model, effort)
+  return accepted && accepted !== 'max' ? { reasoning_effort: accepted } : {}
 }
 
 function toOpenAIContent(blocks: ContentBlock[]): OpenAI.ChatCompletionContentPart[] {

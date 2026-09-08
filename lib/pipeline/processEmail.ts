@@ -17,6 +17,11 @@ import { extractInteraction } from '@/lib/claude/extractInteraction'
 import { classifyEmail, detectForward, type SenderFlags, type AttachmentDescriptor } from '@/lib/pipeline/classifyEmail'
 import { isAuthorizedSender } from '@/lib/pipeline/isAuthorizedSender'
 import { loadActiveDiligenceDeals, matchDiligenceDeal } from '@/lib/pipeline/matchDiligenceDeal'
+import {
+  captureCompanyUpdate,
+  removeCompanyUpdate,
+  updateCompanyUpdatePeriod,
+} from '@/lib/company-updates/capture'
 import type { Json, IssueType, ProcessingStatus } from '@/lib/types/database'
 
 type Supabase = ReturnType<typeof createAdminClient>
@@ -41,6 +46,7 @@ export interface PostmarkPayload {
     Content?: string
     ContentLength: number
     StoragePath?: string
+    ContentError?: string
   }>
 }
 
@@ -53,7 +59,8 @@ export async function runPipeline(
   emailId: string,
   fundId: string,
   payload: PostmarkPayload,
-  fundMember?: { userId: string } | null
+  fundMember?: { userId: string } | null,
+  options?: { forcedRoute?: 'reporting' | 'interactions' },
 ): Promise<void> {
   const warnings: string[] = []
 
@@ -64,22 +71,31 @@ export async function runPipeline(
   // acted on (active routing) or merely recorded (shadow mode — when
   // deal_intake_enabled is false). A classifier failure must never break the
   // existing reporting/interactions pipeline; on error we fall through.
-  const dealsSettings = await loadDealsSettings(supabase, fundId)
-  let routingDecision: RoutingDecision = 'shadow'
+  let routingDecision: RoutingDecision = options?.forcedRoute ?? 'shadow'
   let classification: ClassificationResultStored | null = null
-  try {
-    // Classifier runs on the deal_classify feature model (defaults to a fast
-    // model; honors a per-feature override and the legacy routing_model field).
-    const cls = await getFeatureProvider(supabase, fundId, 'deal_classify')
-    classification = await classifyAndStore(
-      supabase, emailId, fundId, payload, extracted.emailBody, fundMember,
-      cls.provider, cls.providerType, cls.model, null
-    )
-    if (classification) {
-      routingDecision = decideRoute(classification, dealsSettings)
+  if (!options?.forcedRoute) {
+    const dealsSettings = await loadDealsSettings(supabase, fundId)
+    try {
+      // Classifier runs on the deal_classify feature model (defaults to a fast
+      // model; honors a per-feature override and the legacy routing_model field).
+      const cls = await getFeatureProvider(supabase, fundId, 'deal_classify')
+      classification = await classifyAndStore(
+        supabase, emailId, fundId, payload, extracted.emailBody, fundMember,
+        cls.provider, cls.providerType, cls.model, null
+      )
+      if (classification) {
+        routingDecision = decideRoute(classification, dealsSettings)
+      }
+    } catch (err) {
+      console.error('[pipeline] Classifier failed (non-blocking):', err)
     }
-  } catch (err) {
-    console.error('[pipeline] Classifier failed (non-blocking):', err)
+  }
+
+  const isPortfolioReporting = routingDecision === 'shadow' || routingDecision === 'reporting'
+  if (!isPortfolioReporting) {
+    // Company Updates is a projection of the reporting mailbox. A reroute must remove the parent
+    // row so artifact and chunk cascades cannot leave stale searchable content behind.
+    await removeCompanyUpdate(supabase, { emailId, fundId })
   }
 
   // Branch on classifier decision when intake is enabled.
@@ -121,7 +137,7 @@ export async function runPipeline(
       context_snippet:
         `Matched to a deal in diligence (${classification.diligence_match_basis ?? 'classifier'}, ` +
         `confidence ${classification.confidence.toFixed(2)}). ${classification.reasoning} ` +
-        `Accept it to add the email and its attachments to the deal's data room.`,
+        `Add it to the deal's data room, or process it as portfolio reporting if the company is no longer in diligence.`,
     })
 
     await finalizeEmail(supabase, emailId, { status: 'needs_review' })
@@ -151,7 +167,12 @@ export async function runPipeline(
   // Shadow mode OR explicit reporting/interactions decision → existing flow.
   // Persist routed_to so /emails UI can show the active destination.
   const fallbackRouted = routingDecision === 'shadow' ? 'reporting' : routingDecision
-  await supabase.from('inbound_emails').update({ routed_to: fallbackRouted }).eq('id', emailId)
+  const { error: routeUpdateError } = await supabase
+    .from('inbound_emails')
+    .update({ routed_to: fallbackRouted })
+    .eq('id', emailId)
+    .eq('fund_id', fundId)
+  if (routeUpdateError) throw new Error(`Could not persist email route: ${routeUpdateError.message}`)
 
   // Inbound analysis / portfolio tracking runs on the 'portfolio' feature model
   // (company identification, metric extraction, interaction extraction).
@@ -225,6 +246,17 @@ export async function runPipeline(
     return
   }
 
+  // Capture primary evidence before the configured-metric branch. This deliberately runs for
+  // identified reporting emails even when the company has no metrics configured.
+  if (isPortfolioReporting) {
+    await captureCompanyUpdate(supabase, {
+      emailId,
+      fundId,
+      companyId: companyId!,
+      payload,
+    })
+  }
+
   // Step 6: Extract metrics
   const metrics = await getMetrics(supabase, companyId!)
 
@@ -240,7 +272,10 @@ export async function runPipeline(
       console.error('[pipeline] File storage save failed (non-blocking):', msg)
       warnings.push(describeStorageError(msg))
     }
-    await finalizeEmail(supabase, emailId, { status: 'not_processed', metricsExtracted: 0, warnings })
+    // The email was identified and filed successfully even if this company has no configured
+    // metrics yet. "Skipped" is a human decision; lack of metric definitions is not a failure to
+    // process and should not hide the email from the company's reporting history.
+    await finalizeEmail(supabase, emailId, { status: 'success', metricsExtracted: 0, warnings })
     if (fundMember) {
       try {
         await maybeExtractInteraction(supabase, fundId, emailId, companyId, fundMember.userId, payload, extracted.emailBody, provider, providerType, model)
@@ -272,6 +307,14 @@ export async function runPipeline(
     model,
     { admin: supabase, fundId }
   )
+
+  if (isPortfolioReporting) {
+    await updateCompanyUpdatePeriod(supabase, {
+      emailId,
+      fundId,
+      period: metricsResult.reporting_period,
+    })
+  }
 
   // Store the raw Claude response
   await supabase

@@ -10,13 +10,13 @@ import { resolvePeriod, customPeriod, type PeriodPreset } from '@/lib/accounting
 // Optional ?preset= / ?start=&end= scopes the period roll-forward; the inception-to-date
 // roll-forward is always returned alongside it.
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const gate = await assertReadAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
-  const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
   const sp = req.nextUrl.searchParams

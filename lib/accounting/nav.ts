@@ -4,10 +4,17 @@
 
 import {
   Landmark, Users, ScrollText, Gauge,
-  Lock, Layers, FileText,
+  Lock, Layers, FileText, Target, Table2, Upload, ClipboardList, Settings2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { Domain } from '@/lib/access/domains'
+import type { FeatureKey } from '@/lib/types/features'
+import type { VehicleKind } from '@/lib/vehicle-kinds'
+
+/** The sections a vehicle of `kind` shows. Null kind (a legacy vehicle) shows a fund's. */
+export function sectionsForKind(sections: AccountingSection[], kind: string | null | undefined): AccountingSection[] {
+  return sections.filter(s => !s.hideFor || !kind || !s.hideFor.includes(kind as VehicleKind))
+}
 
 export interface AccountingSection {
   href: string
@@ -20,6 +27,15 @@ export interface AccountingSection {
    * member who reconciles the bank isn't thereby entitled to. Omitted = accounting.
    */
   domain?: Domain
+  /** A feature switch the page needs on top of its domain (tax reporting ships off). */
+  feature?: FeatureKey
+  /**
+   * Vehicle kinds this page is hidden for — the ones it has no meaning on. An individual has no
+   * capital accounts or portfolio to construct; a GP entity has no schedule of investments.
+   * Hidden means hidden from the nav; the page itself still gates on access and renders what
+   * the data supports, so a URL is not a hole.
+   */
+  hideFor?: VehicleKind[]
   /** Only for a fund of funds — DERIVED from the data (at least one holding is a fund),
    *  never a setting. Consumers filter on it; see lib/portfolio/fof.ts. */
   requiresFof?: boolean
@@ -45,6 +61,7 @@ export const ACCOUNTING_SECTIONS: AccountingSection[] = [
     desc: "Per-partner roll-forward and commitments, plus called and unfunded. Issue capital calls and publish LP capital statements.",
     // Named partners and their commitments — the same tier as the LPs section, reached from here.
     domain: 'lp_capital',
+    hideFor: ['individual', 'manco'],
   },
   // NOTE: /funds/lp-events is deliberately NOT listed — it now redirects here. LP
   // capital events are not a separate destination: they are one of the two producers a
@@ -58,6 +75,15 @@ export const ACCOUNTING_SECTIONS: AccountingSection[] = [
     icon: ScrollText,
     desc: 'Plain-text double-entry journal entries. Create, view, unpost, and edit all journal entries.',
   },
+  {
+    href: '/funds/ledger',
+    label: 'General ledger',
+    icon: Table2,
+    desc: 'One account at a time: the balance carried in, every posting with what it was booked against, and the running balance.',
+  },
+  // NOTE: /funds/text is deliberately NOT listed. Plain-text authoring is a TAB on the journal
+  // page (?tab=text), not a destination of its own: it writes the same entries the journal
+  // lists, and a second page for a second way of typing them was one more place to look.
   // NOTE: /funds/opening-balances is deliberately NOT listed. It only applies to
   // the "cutover" onboarding path, and is linked from the setup card there. On a
   // full-history vehicle, opening balances are derived from the reconstructed ledger —
@@ -78,25 +104,35 @@ export const ACCOUNTING_SECTIONS: AccountingSection[] = [
     icon: Layers,
     desc: 'Schedule of investments, commitments and liquidity, and per-fund performance for the underlying funds.',
     requiresFof: true,
+    hideFor: ['individual', 'associate', 'manco'],
   },
-  {
-    href: '/funds/migrate',
-    label: 'Migrate from QuickBooks',
-    icon: Landmark,
-    desc: 'Import a QuickBooks general ledger, map its accounts to this chart, and tie every period out before cutting over.',
-  },
+  // NOTE: /funds/migrate is deliberately NOT listed. Importing a QuickBooks general
+  // ledger is a one-time event at the start of a vehicle's life, not a place you work —
+  // so it's linked from Admin, alongside the rest of the onboarding.
   {
     href: '/funds/fof-quarter',
     label: 'Quarterly close (funds)',
     icon: Layers,
     desc: 'Paste the quarter\u2019s underlying-fund figures, confirm the notices, and book the period-end marks.',
     requiresFof: true,
+    hideFor: ['individual', 'associate', 'manco'],
   },
   {
     href: '/funds/schedule-of-investments',
     label: 'Schedule of investments',
     icon: Layers,
     desc: 'Each investment at cost and fair value, with its share of net assets.',
+    hideFor: ['associate', 'manco'],
+  },
+  {
+    href: '/funds/construction',
+    label: 'Portfolio construction',
+    icon: Target,
+    desc: 'How much investable capital is left, how many more deals fit, and what exit the portfolio needs to return the fund.',
+    // Any investing entity can forecast what its holdings have to return — an SPV's one deal, an
+    // individual's angel book, a GP entity's fund stake. Only a management company, which holds
+    // no portfolio at all, has nothing to construct.
+    hideFor: ['manco'],
   },
   {
     href: '/funds/statements',
@@ -104,4 +140,34 @@ export const ACCOUNTING_SECTIONS: AccountingSection[] = [
     icon: FileText,
     desc: 'Balance sheet, income statement, statement of cash flows, and statement of changes in partners capital.',
   },
+  {
+    href: '/funds/tax',
+    label: 'Tax',
+    icon: Landmark,
+    desc: 'The year’s book-to-tax adjustments, adjusting entries, K-1 package, partner tax forms, and the tax package for the preparer.',
+    feature: 'tax_reporting',
+    hideFor: ['manco'],
+  },
 ]
+
+/**
+ * The subpages a fund has that the nav does NOT list — reached from Admin or from a setup card,
+ * but still a real `/funds/<id>/<slug>` page, and so still in need of a firm-wide landing that
+ * says which vehicle you mean. Same shape as a section so the landing can name them the same way.
+ */
+export const UNLISTED_SECTIONS: AccountingSection[] = [
+  { href: '/funds/migrate', label: 'QuickBooks import', icon: Upload, desc: 'Bring a vehicle\u2019s QuickBooks general ledger in as its opening history.' },
+  { href: '/funds/opening-balances', label: 'Opening balances', icon: ClipboardList, desc: 'Book a vehicle\u2019s balances at its cutover date.' },
+  { href: '/funds/allocation-terms', label: 'Allocation terms', icon: Settings2, desc: 'How a vehicle\u2019s income and expenses are shared between its partners.', domain: 'lp_capital' },
+]
+
+/** Does an entity of `kind` have the `/funds/<id>/<slug>` page? Unknown slugs are assumed real. */
+export function hasSectionForKind(slug: string, kind: string | null | undefined): boolean {
+  const s = sectionForSlug(slug)
+  return !s || sectionsForKind([s], kind).length > 0
+}
+
+/** The section (listed or not) behind a `/funds/<slug>` URL segment, or null for an unknown slug. */
+export function sectionForSlug(slug: string): AccountingSection | null {
+  return [...ACCOUNTING_SECTIONS, ...UNLISTED_SECTIONS].find(s => s.href === `/funds/${slug}`) ?? null
+}

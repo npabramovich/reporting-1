@@ -12,11 +12,9 @@ type MetricValueRow = Pick<
 
 type ReviewRow = Pick<ParsingReview, 'id' | 'issue_type' | 'resolution' | 'resolved_at' | 'extracted_value'>
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient()
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -119,11 +117,9 @@ export async function GET(
 }
 
 // PATCH — update email fields (e.g. assign company)
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient()
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -153,8 +149,6 @@ export async function PATCH(
   const body = await req.json()
   const { companyId, processing_status } = body as { companyId?: string; processing_status?: string }
 
-  const VALID_STATUSES = ['success', 'needs_review', 'failed', 'not_processed']
-
   const updates: Record<string, unknown> = {}
 
   if (companyId !== undefined) {
@@ -174,8 +168,10 @@ export async function PATCH(
   }
 
   if (processing_status !== undefined) {
-    if (!VALID_STATUSES.includes(processing_status)) {
-      return NextResponse.json({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` }, { status: 400 })
+    // Success, failure, and review are pipeline outcomes. The only manual
+    // override is intentionally declining to process an email.
+    if (processing_status !== 'not_processed') {
+      return NextResponse.json({ error: 'Emails can only be manually marked as skipped' }, { status: 400 })
     }
     updates.processing_status = processing_status
     // Clear error when manually changing status

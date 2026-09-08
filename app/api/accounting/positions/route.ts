@@ -21,13 +21,13 @@ import { loadPositions } from '@/lib/accounting/lp-positions'
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const gate = await assertReadAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
-  const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
   const positions = await loadPositions(admin, gate.fundId, group)
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -53,7 +53,7 @@ export async function PUT(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group)
+  const group = await resolveGroupOr400(admin, gate, body?.group)
   if (group instanceof NextResponse) return group
   const asOfDate = String(body?.asOfDate ?? '')
   if (!ISO.test(asOfDate)) return NextResponse.json({ error: 'asOfDate (YYYY-MM-DD) required' }, { status: 400 })
@@ -87,13 +87,13 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const gate = await assertWriteAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
-  const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
   const asOfDate = req.nextUrl.searchParams.get('asOfDate') ?? ''
   if (!ISO.test(asOfDate)) return NextResponse.json({ error: 'asOfDate required' }, { status: 400 })

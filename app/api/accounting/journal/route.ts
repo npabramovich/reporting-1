@@ -13,22 +13,31 @@ import { closedPeriodRanges, dateInAnyClosedPeriod } from '@/lib/accounting/peri
 import { fundCurrency } from '@/lib/accounting/currency'
 import { resolvePeriod, customPeriod, type PeriodPreset } from '@/lib/accounting/statement-period'
 import type { JournalEntry, Posting } from '@/lib/accounting/types'
+import { vendorInFund } from '@/lib/accounting/vendors'
+import { ACTUAL_BOOK, isLedgerBook, type LedgerBook } from '@/lib/accounting/books'
+import { reversalOf, reversalDateError } from '@/lib/accounting/reversal'
 
 // GET — the vehicle's journal entries with postings, or a single entry via ?id=.
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const gate = await assertReadAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
-  const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
   const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
+
+  // ?book=tax lists the book-to-tax adjusting entries instead of the ledger. Read-only from the
+  // journal's point of view: they are written and rewritten by the tax run (book-tax-run.ts).
+  const bookParam = req.nextUrl.searchParams.get('book')
+  const book: LedgerBook = isLedgerBook(bookParam) ? bookParam : ACTUAL_BOOK
 
   const base = admin
     .from('journal_entries' as any)
     .select('*, journal_postings(*)')
+    .eq('book', book)
     .eq('fund_id', gate.fundId)
     .eq('vehicle_id', vehicleId)
 
@@ -56,6 +65,10 @@ export async function GET(req: NextRequest) {
     ? [statusParam as string]
     : ['draft', 'posted']
 
+  // ?adjusting=1 lists only entries flagged adjusting — the AJE list; ?adjusting=0 only the rest.
+  const adjParam = sp.get('adjusting')
+  const adjusting = adjParam === '1' || adjParam === 'true' ? true : adjParam === '0' || adjParam === 'false' ? false : null
+
   const { data, error } = await admin.rpc('journal_search' as any, {
     p_fund_id: gate.fundId,
     p_vehicle_id: vehicleId,
@@ -65,6 +78,8 @@ export async function GET(req: NextRequest) {
     p_statuses: statuses,
     p_limit: limit,
     p_offset: offset,
+    p_book: book,
+    p_adjusting: adjusting,
   })
   if (error) return dbError(error, 'accounting-journal')
   return NextResponse.json(data ?? { entries: [], total: 0 })
@@ -73,7 +88,7 @@ export async function GET(req: NextRequest) {
 // PUT — replace a DRAFT entry's postings (and date/memo). Posted entries are
 // immutable; reverse or void them instead.
 export async function PUT(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -81,7 +96,7 @@ export async function PUT(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
   const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
 
@@ -92,11 +107,18 @@ export async function PUT(req: NextRequest) {
 
   const { data: existing } = await admin
     .from('journal_entries' as any)
-    .select('id, status, entry_date')
+    .select('id, status, entry_date, source_type')
+    .eq('book', ACTUAL_BOOK)
     .eq('id', id).eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId)
     .maybeSingle()
   if (!existing) return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
   if ((existing as any).status !== 'draft') return NextResponse.json({ error: 'Only draft entries can be edited — reverse or void a posted entry.' }, { status: 400 })
+  // The source type is kept unless the caller sets it: editing a bank-drafted capital call must
+  // not silently turn it into a "manual" entry that the roll-forward files under Other.
+  const sourceType: string = typeof body.sourceType === 'string' && body.sourceType ? body.sourceType : ((existing as any).source_type ?? 'manual')
+  const reference = typeof body.reference === 'string' && body.reference.trim() ? body.reference.trim().slice(0, 80) : null
+  // The payee. Absent leaves it alone; null clears it; an id must be one of this fund's vendors.
+  const vendorPatch = 'vendorId' in body ? { vendor_id: await vendorInFund(admin, gate.fundId, body.vendorId) } : {}
 
   // The fund's currency, never a client-supplied one. The ledger is denominated in a single
   // currency by design (see lib/accounting/currency.ts); accepting `p.currency` from the body
@@ -107,7 +129,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Each posting needs an accountId and a numeric amount' }, { status: 400 })
   }
   const newDate = entryDate || (existing as any).entry_date
-  const entry: JournalEntry = { fundId: gate.fundId, entryDate: newDate, memo: memo ?? null, sourceType: 'manual', postings: normalized }
+  const entry: JournalEntry = { fundId: gate.fundId, entryDate: newDate, memo: memo ?? null, sourceType, postings: normalized }
   try { assertBalanced(entry) } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }) }
 
   const closed = await closedPeriodRanges(admin, gate.fundId, group)
@@ -117,22 +139,23 @@ export async function PUT(req: NextRequest) {
 
   // Insert the new postings first, then drop the old ones — so a failure never
   // leaves the entry without lines.
-  const { data: oldRows } = await admin.from('journal_postings' as any).select('id').eq('journal_entry_id', id)
+  const { data: oldRows } = await admin.from('journal_postings' as any).select('id').eq('book', ACTUAL_BOOK).eq('journal_entry_id', id)
   const oldIds = ((oldRows as any[]) ?? []).map(r => r.id)
   const { error: insErr } = await admin.from('journal_postings' as any).insert(
     normalized.map(p => ({ fund_id: gate.fundId, portfolio_group: group, vehicle_id: vehicleId, journal_entry_id: id, account_id: p.accountId, amount: p.amount, currency: p.currency, lp_entity_id: p.lpEntityId ?? null }))
   )
   if (insErr) return dbError(insErr, 'accounting-journal-update')
   if (oldIds.length) await admin.from('journal_postings' as any).delete().in('id', oldIds)
-  await admin.from('journal_entries' as any).update({ entry_date: newDate, memo: memo ?? null }).eq('id', id).eq('fund_id', gate.fundId)
+  const adjustingPatch = typeof body.adjusting === 'boolean' ? { adjusting: body.adjusting } : {}
+  await admin.from('journal_entries' as any).update({ entry_date: newDate, memo: memo ?? null, source_type: sourceType, reference, ...adjustingPatch, ...vendorPatch }).eq('id', id).eq('fund_id', gate.fundId)
 
-  const { data: full } = await admin.from('journal_entries' as any).select('*, journal_postings(*)').eq('id', id).single()
+  const { data: full } = await admin.from('journal_entries' as any).select('*, journal_postings(*)').eq('id', id).eq('book', ACTUAL_BOOK).single()
   return NextResponse.json(full ?? { id })
 }
 
 // POST — create a balanced journal entry with its postings.
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -140,13 +163,14 @@ export async function POST(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json()
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
   const { entryDate, memo, sourceType, sourceRef, status, postings } = body
   if (!entryDate || !Array.isArray(postings) || postings.length === 0) {
     return NextResponse.json({ error: 'entryDate and at least one posting are required' }, { status: 400 })
   }
+  const reference = typeof body.reference === 'string' && body.reference.trim() ? body.reference.trim().slice(0, 80) : null
   // The fund's currency, never a client-supplied one. The ledger is denominated in a single
   // currency by design (see lib/accounting/currency.ts); accepting `p.currency` from the body
   // would let a posting balance against the wrong denomination.
@@ -156,11 +180,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Each posting needs an accountId and a numeric amount' }, { status: 400 })
   }
 
-  const entry: JournalEntry = { fundId: gate.fundId, entryDate, memo: memo ?? null, sourceType: sourceType ?? 'manual', sourceRef: sourceRef ?? null, postings: normalized }
+  const vendorId = await vendorInFund(admin, gate.fundId, body.vendorId)
+  const entry: JournalEntry = { fundId: gate.fundId, entryDate, memo: memo ?? null, sourceType: sourceType ?? 'manual', sourceRef: sourceRef ?? null, reference, adjusting: body.adjusting === true, vendorId, postings: normalized }
   const result = await persistEntry(admin, gate.fundId, group, user.id, entry, status === 'posted' ? 'posted' : 'draft')
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 })
 
-  const { data: full } = await admin.from('journal_entries' as any).select('*, journal_postings(*)').eq('id', result.entryId).single()
+  const { data: full } = await admin.from('journal_entries' as any).select('*, journal_postings(*)').eq('book', ACTUAL_BOOK).eq('id', result.entryId).single()
   return NextResponse.json(full ?? { id: result.entryId })
 }
 
@@ -173,7 +198,7 @@ export async function POST(req: NextRequest) {
 //            this to drafts via its Ignore action; the journal simply couldn't reach it.
 // All are refused if the entry falls in a closed period (reopen it first).
 export async function PATCH(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -181,23 +206,62 @@ export async function PATCH(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
   const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
 
   const { id, action } = body
-  if (!id || !['post', 'unpost', 'void'].includes(action)) {
-    return NextResponse.json({ error: "id and action ('post'|'unpost'|'void') are required" }, { status: 400 })
+  if (!id || !['post', 'unpost', 'void', 'reverse'].includes(action)) {
+    return NextResponse.json({ error: "id and action ('post'|'unpost'|'void'|'reverse') are required" }, { status: 400 })
   }
 
   const { data: existing } = await admin
     .from('journal_entries' as any)
-    .select('id, status, entry_date')
+    .select('id, status, entry_date, memo, source_type, reference, reversed_by, adjusting')
+    .eq('book', ACTUAL_BOOK)
     .eq('id', id).eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId)
     .maybeSingle()
   if (!existing) return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
 
   const status = (existing as any).status
+
+  // reverse → a dated contra-entry (lib/accounting/reversal.ts). The original stays posted and
+  // may sit in a CLOSED period — that is the case a reversal exists for — so the closed-period
+  // check applies to the reversal's date, not the original's. Lands as a draft unless asked to
+  // post, so the correction is seen before it hits the accounts.
+  if (action === 'reverse') {
+    const ex = existing as any
+    if (status !== 'posted') {
+      return NextResponse.json({ error: 'Only a posted entry can be reversed — a draft can be edited or discarded.' }, { status: 400 })
+    }
+    if (ex.reversed_by) {
+      // A discarded reversal draft leaves the link behind; only a live reversal blocks a second one.
+      const { data: prior } = await admin.from('journal_entries' as any).select('status').eq('book', ACTUAL_BOOK).eq('id', ex.reversed_by).maybeSingle()
+      if (prior && (prior as any).status !== 'void') {
+        return NextResponse.json({ error: 'That entry has already been reversed.' }, { status: 400 })
+      }
+    }
+    const reverseDate: string | undefined = body.reverseDate
+    const dateErr = reversalDateError(ex.entry_date, reverseDate)
+    if (dateErr) return NextResponse.json({ error: dateErr }, { status: 400 })
+    const closed = await closedPeriodRanges(admin, gate.fundId, group)
+    if (dateInAnyClosedPeriod(closed, reverseDate!)) {
+      return NextResponse.json({ error: 'The reversal date falls in a closed period — pick a date in an open one.' }, { status: 400 })
+    }
+    const { data: postingRows } = await admin
+      .from('journal_postings' as any)
+      .select('account_id, amount, currency, lp_entity_id')
+      .eq('book', ACTUAL_BOOK).eq('journal_entry_id', id)
+    const reversal = reversalOf({
+      id, fundId: gate.fundId, entryDate: ex.entry_date, memo: ex.memo, sourceType: ex.source_type, reference: ex.reference, adjusting: ex.adjusting === true,
+      postings: ((postingRows as any[]) ?? []).map(p => ({ accountId: p.account_id, amount: Number(p.amount), currency: p.currency ?? 'USD', lpEntityId: p.lp_entity_id ?? null })),
+    }, reverseDate!)
+    const reversalStatus = body.post === true ? 'posted' : 'draft'
+    const result = await persistEntry(admin, gate.fundId, group, user.id, reversal, reversalStatus)
+    if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 })
+    await admin.from('journal_entries' as any).update({ reversed_by: result.entryId }).eq('id', id).eq('fund_id', gate.fundId)
+    return NextResponse.json({ ok: true, reversalId: result.entryId, status: reversalStatus, reverseDate })
+  }
   if (action === 'post' && status !== 'draft') {
     return NextResponse.json({ error: 'Only a draft entry can be posted' }, { status: 400 })
   }

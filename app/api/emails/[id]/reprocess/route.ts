@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidateTag } from 'next/cache'
+import { expireTag } from '@/lib/cache/tags'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
@@ -9,11 +9,11 @@ import type { InboundEmail } from '@/lib/types/database'
 import { dbError } from '@/lib/api-error'
 import { rateLimit } from '@/lib/rate-limit'
 
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient()
+export const maxDuration = 300
+
+export async function POST(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -72,22 +72,43 @@ export async function POST(
     email.raw_payload as unknown as PostmarkPayload
   ) as unknown as PostmarkPayload
 
-  // Re-run pipeline asynchronously — return immediately
-  runPipeline(admin, emailId, fundId, hydratedPayload).catch(
-    async err => {
-      const raw = err instanceof Error ? err.message : String(err)
-      console.error(`[reprocess] Pipeline error for email ${emailId}:`, err)
-      const message = describePipelineError(raw)
-      await admin
-        .from('inbound_emails')
-        .update({ processing_status: 'failed', processing_error: message })
-        .eq('id', emailId)
-    }
-  )
+  const senderEmail = (hydratedPayload.FromFull?.Email ?? hydratedPayload.From ?? '').trim().toLowerCase()
+  const { data: memberRow } = await admin.rpc('is_fund_member_by_email', {
+    p_fund_id: fundId,
+    p_email: senderEmail,
+  })
+  const fundMember = (memberRow as any)?.[0]
+    ? { userId: (memberRow as any)[0].user_id as string }
+    : null
 
-  revalidateTag('review-badge')
+  // Keep the request alive until the pipeline reaches a terminal state. A
+  // fire-and-forget promise can be terminated when a serverless response ends.
+  try {
+    await runPipeline(admin, emailId, fundId, hydratedPayload, fundMember)
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err)
+    console.error(`[reprocess] Pipeline error for email ${emailId}:`, err)
+    const message = describePipelineError(raw)
+    await admin
+      .from('inbound_emails')
+      .update({ processing_status: 'failed', processing_error: message })
+      .eq('id', emailId)
+  }
 
-  return NextResponse.json({ ok: true, message: 'Reprocessing started' })
+  expireTag('review-badge')
+
+  const { data: result } = await admin
+    .from('inbound_emails')
+    .select('processing_status, processing_error')
+    .eq('id', emailId)
+    .maybeSingle()
+
+  return NextResponse.json({
+    ok: true,
+    message: 'Reprocessing finished',
+    processing_status: result?.processing_status ?? 'failed',
+    processing_error: result?.processing_error ?? null,
+  })
 }
 
 function describePipelineError(raw: string): string {

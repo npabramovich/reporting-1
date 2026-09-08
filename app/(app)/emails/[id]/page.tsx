@@ -7,14 +7,13 @@ import type { InboundEmail } from '@/lib/types/database'
 
 export const metadata: Metadata = { title: 'Email' }
 import { ChevronLeft } from 'lucide-react'
-import { ReprocessButton } from './reprocess-button'
-import { RerouteButton } from './reroute-button'
-import { ChangeStatusButton } from './change-status-button'
+import { ProcessingActions } from './processing-actions'
 import { UploadDocumentButton } from './upload-document-button'
 import { SaveToDriveButton } from './save-to-drive-button'
 import { CollapsibleJson } from './collapsible-json'
 import { ReviewItems } from './review-items'
 import { EmailMetricsSection } from './metrics-section'
+import { AttachmentList } from './attachment-list'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -80,8 +79,9 @@ function formatValue(mv: MetricRow, metric: MetricDef | null): string {
 // Page (server component)
 // ---------------------------------------------------------------------------
 
-export default async function EmailDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createClient()
+export default async function EmailDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient()
   const user = await getUser()
   if (!user) redirect('/auth')
 
@@ -153,7 +153,7 @@ export default async function EmailDetailPage({ params }: { params: { id: string
   const payload = email.raw_payload as Record<string, unknown> | null
   const textBody: string = (payload?.TextBody as string) ?? ''
   const attachments = (
-    payload?.Attachments as Array<{ Name: string; ContentType: string; ContentLength: number }>
+    payload?.Attachments as Array<{ Name: string; ContentType: string; ContentLength: number; StoragePath?: string; AttachmentId?: string }>
   ) ?? []
 
   const sv = STATUS_VARIANTS[email.processing_status ?? ''] ?? {
@@ -258,23 +258,7 @@ export default async function EmailDetailPage({ params }: { params: { id: string
 
       {/* Attachments */}
       {attachments.length > 0 && (
-        <section>
-          <h2 className="text-base font-semibold mb-2">Attachments ({attachments.length})</h2>
-          <div className="space-y-1.5">
-            {attachments.map((att, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3 text-sm rounded-md border px-3 py-2"
-              >
-                <span className="font-medium">{att.Name}</span>
-                <span className="text-muted-foreground text-xs">{att.ContentType}</span>
-                <span className="ml-auto text-muted-foreground text-xs tabular-nums">
-                  {Math.round(att.ContentLength / 1024)} KB
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
+        <AttachmentList emailId={email.id} attachments={attachments} />
       )}
 
       {/* Email body */}
@@ -296,16 +280,6 @@ export default async function EmailDetailPage({ params }: { params: { id: string
 
       {/* Actions */}
       <section className="pt-2 border-t space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-          <div>
-            <p className="text-sm font-medium">Change status</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Manually update the processing status of this email.
-            </p>
-          </div>
-          <ChangeStatusButton emailId={email.id} currentStatus={email.processing_status ?? 'pending'} />
-        </div>
-
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div>
             <p className="text-sm font-medium">Upload document</p>
@@ -330,16 +304,13 @@ export default async function EmailDetailPage({ params }: { params: { id: string
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div>
-            <p className="text-sm font-medium">Process email</p>
+            <p className="text-sm font-medium">Process or skip</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Runs the full pipeline on the stored payload. Existing reviews and metric
-              values from this email will be replaced.
+              Choose the destination yourself, let classification decide, or intentionally skip the email.
+              An explicit destination will not be overridden by classification.
             </p>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <RerouteButton emailId={email.id} currentTarget={(email as any).routed_to ?? null} />
-            <ReprocessButton emailId={email.id} />
-          </div>
+          <ProcessingActions emailId={email.id} />
         </div>
       </section>
     </div>

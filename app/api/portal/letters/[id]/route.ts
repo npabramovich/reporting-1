@@ -3,15 +3,16 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveLpAccess } from '@/lib/api-helpers'
 import { logLpAccessEvent } from '@/lib/lp-access-log'
-import { sanitizeBasicHtml } from '@/lib/sanitize'
+import { sanitizeLetterHtml } from '@/lib/sanitize'
 
 /**
  * LP portal — one shared, finalized LP letter. Isolation: resolveLpAccess →
  * the letter must be shared with one of the LP's investors → the fund's portal
  * must be on → the letter must be final.
  */
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const supabase = createClient()
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -42,7 +43,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   if (!letter || letter.status === 'generating') return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Defense-in-depth: scrub the GP-authored HTML before it reaches the LP browser.
-  letter.portfolio_table_html = sanitizeBasicHtml(letter.portfolio_table_html)
+  letter.portfolio_table_html = sanitizeLetterHtml(letter.portfolio_table_html)
 
   await logLpAccessEvent(admin, {
     fundId,

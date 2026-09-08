@@ -1,14 +1,14 @@
 import type { Metadata } from 'next'
-import { requireAccountingAccess } from '../../guard'
-import { resolveVehicleParam } from '../resolve'
+import { Suspense } from 'react'
+import { requireVehicleAccess } from '../../guard'
 import { FundSubpageChrome } from '@/components/fund-subpage-chrome'
 import { CapitalAccountsView } from '../../capital-accounts/view'
 
 export const metadata: Metadata = { title: 'Capital accounts' }
 
-export default async function CapitalAccountsPage({ params }: { params: { id: string } }) {
-  const { fundId } = await requireAccountingAccess()
-  const { vehicle, vehicleId } = await resolveVehicleParam(fundId, params.id)
+export default async function CapitalAccountsPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const { vehicle, vehicleId } = await requireVehicleAccess(params.id)
   return (
     <div className="pt-4 md:pt-8 pb-8 w-full">
       <FundSubpageChrome
@@ -17,7 +17,10 @@ export default async function CapitalAccountsPage({ params }: { params: { id: st
         vehicle={vehicle}
         vehicleId={vehicleId}
       >
-        <CapitalAccountsView />
+        {/* The view reads ?action= from the URL, which needs a boundary. */}
+        <Suspense fallback={null}>
+          <CapitalAccountsView />
+        </Suspense>
       </FundSubpageChrome>
     </div>
   )

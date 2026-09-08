@@ -11,13 +11,13 @@ import { fundTimeseries } from '@/lib/accounting/fund-timeseries'
 // fund detail page's growth and NAV-composition charts. Whole-fund, so no gp_economics carve-out
 // is needed — the carry/transfer reallocations net to zero across every partner.
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const gate = await assertReadAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
-  const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
   const asOf = req.nextUrl.searchParams.get('asOf') ?? undefined

@@ -5,8 +5,9 @@ import { createClient, getUser } from '@/lib/supabase/server'
 import { resolvePageAccess, canViewPage } from '@/lib/access/page-gate'
 import { ArrowLeft } from 'lucide-react'
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const supabase = createClient()
+export async function generateMetadata(props: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const params = await props.params;
+  const supabase = await createClient()
   // Runs BEFORE the page body, so it needs the same gate: the title is a company name, and a
   // member without `portfolio` would otherwise read it off the browser tab on their way to being
   // redirected. Falls back to the generic title rather than 404ing — metadata is not the place to
@@ -29,6 +30,7 @@ import { ChatButton, CompanyNotesPanel } from './company-notes'
 import { AnalystButton } from './company-analyst'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { CompanyDocuments } from './company-documents'
+import { CompanyUpdates } from './company-updates'
 import { CompanyInvestments } from './company-investments'
 import { CompanyInteractions } from './company-interactions'
 import { DEFAULT_FEATURE_VISIBILITY } from '@/lib/types/features'
@@ -57,12 +59,13 @@ function formatHighlightValue(value: number, metric: Metric, fundCurrency: strin
     : `${formatted} ${unit}`
 }
 
-export default async function CompanyDetailPage({
-  params,
-}: {
-  params: { id: string }
-}) {
-  const supabase = createClient()
+export default async function CompanyDetailPage(
+  props: {
+    params: Promise<{ id: string }>
+  }
+) {
+  const params = await props.params;
+  const supabase = await createClient()
   const user = await getUser()
   if (!user) redirect('/auth')
 
@@ -131,10 +134,15 @@ export default async function CompanyDetailPage({
     return data?.[0] ?? null
   }
 
-  const [mrrRow, cashRow] = await Promise.all([
+  const [mrrRow, cashRow, capturedUpdates] = await Promise.all([
     mrrMetric ? getLatestValue(mrrMetric.id) : null,
     cashMetric ? getLatestValue(cashMetric.id) : null,
+    // Once the company has captured Company Updates, that section owns reporting mail and the
+    // documents panel drops its legacy email listing. Until the backfill reaches a company, the
+    // legacy listing is still how its email history is reachable.
+    supabase.from('company_updates').select('id', { count: 'exact', head: true }).eq('company_id', params.id),
   ])
+  const hasCapturedUpdates = (capturedUpdates?.count ?? 0) > 0
 
   if (mrrRow && mrrMetric) {
     latestMrr = { value: mrrRow.value_number!, period: mrrRow.period_label, metric: mrrMetric }
@@ -199,7 +207,6 @@ export default async function CompanyDetailPage({
             <>
               <CompanySummary
                 companyId={company.id}
-                fundId={company.fund_id}
                 hasClaudeKey={!!fundSettings?.claude_api_key_encrypted}
                 hasOpenAIKey={!!fundSettings?.openai_api_key_encrypted}
                 defaultAIProvider={fundSettings?.default_ai_provider ?? 'anthropic'}
@@ -217,10 +224,16 @@ export default async function CompanyDetailPage({
             <CompanyInvestments companyId={company.id} companyStatus={company.status as CompanyStatus} portfolioGroups={company.portfolio_group ?? []} adminOnly={featureVisibility.investments === 'admin'} />
           )}
 
+          <div id="updates">
+            <CompanyUpdates companyId={company.id} />
+          </div>
+
           <CompanyDocuments
             companyId={company.id}
+            fundId={company.fund_id}
             storageProvider={fundSettings?.file_storage_provider ?? null}
             googleDriveFolderId={fundSettings?.google_drive_folder_id ?? null}
+            includeEmailHistory={!hasCapturedUpdates}
           />
 
           {showInteractions && (

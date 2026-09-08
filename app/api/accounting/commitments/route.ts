@@ -13,13 +13,13 @@ import { commitmentsAsOf, recordCommitmentChange } from '@/lib/accounting/terms'
 // Queries commitment_events directly (rather than the loadCommitmentEvents loader) because the
 // UI needs `id`/`transferId` to edit and delete events, which the loader's pure-logic shape omits.
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const gate = await assertReadAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
-  const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
   const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
 //   { lpEntityId, effectiveDate, amount, counterpartyEntityId }      → TRANSFER of
 //     commitment from the counterparty to lpEntityId (both legs written atomically).
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
   const result = await recordCommitmentChange(admin, gate.fundId, group, user.id, {
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
 // already-recorded event. A transfer leg refuses an amount change (delete + re-enter instead) but
 // allows date/memo, applied to BOTH legs so the pair stays consistent.
 export async function PATCH(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -101,7 +101,7 @@ export async function PATCH(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
   const id = body?.id
@@ -162,7 +162,7 @@ export async function PATCH(req: NextRequest) {
 // DELETE { id } — remove a wrongly-entered event. A transfer leg deletes BOTH legs sharing its
 // transfer_id, so the fund's total commitment can't drift.
 export async function DELETE(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -170,7 +170,7 @@ export async function DELETE(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
   const id = body?.id

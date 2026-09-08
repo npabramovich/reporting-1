@@ -16,6 +16,7 @@ import {
 } from './statements'
 import { loadPostedLedger, loadEntityNames, type SourcedPosting } from './load'
 import { buildSoiPositions, type SoiCompany } from './soi'
+import { withFairValueLevels, type PriceFeed, type PriceObservation } from '@/lib/portfolio/quotes'
 import { loadFofRaw, computeFofFromRaw, type FofRawData } from '@/lib/portfolio/fof-load'
 import { commitmentSchedule, performanceTable, type CommitmentSchedule, type PerformanceTable } from '@/lib/portfolio/fof-exhibits'
 import { valuationBasisNote, type ValuationBasisRow } from '@/lib/portfolio/fof-valuation'
@@ -23,6 +24,9 @@ import { computeCapitalAccounts, totalNav } from './capital-account'
 import { resolvePeriod, customPeriod, comparisonPeriods, type PeriodPreset, type StatementPeriod } from './statement-period'
 import { accountBalances, normalBalance } from './ledger'
 import type { Account } from './types'
+import { booksForBasis, basisFromParam, type StatementBasis } from './books'
+import { vehicleKindByName } from './vehicle-domain'
+import { equityLabel } from './vocab'
 
 /** The JSON body the statements route returns — the on-screen statement set. */
 export interface StatementPayload {
@@ -54,9 +58,23 @@ export interface StatementPackage {
   accounts: Account[]
   /** Postings within the period window, entry-tagged — the GL-detail rows. */
   inPeriodSourced: SourcedPosting[]
+  /**
+   * EVERY posted posting, entry-tagged — what the GL detail needs to carry a balance in at the
+   * window start and run it forward. Optional so a package assembled without it (older callers,
+   * test fixtures) still builds; the GL detail then opens every account at zero.
+   */
+  allSourced?: SourcedPosting[]
   /** Prior-period payloads, most-recent-first, present only when ?compare= was passed. */
   comparisons?: StatementPayload[]
+  /**
+   * 'book' (the actual ledger — the default and every existing caller) or 'tax' (actual plus the
+   * book-to-tax overlay, read together). Stated on the workbook cover and the PDF header so a
+   * file never leaves without saying which basis it is on.
+   */
+  basis?: StatementBasis
 }
+
+export { booksForBasis, basisFromParam, type StatementBasis }
 
 export interface LedgerData {
   accounts: Account[]
@@ -72,8 +90,15 @@ export interface LedgerData {
   /** Fund-of-funds positions as of the LATEST date; recomputed per window in computePayload.
    *  Empty for a fund that holds no funds. */
   fofRaw: FofRawData | null
+  /** Price feeds and their stored quotes, for ASC 820 leveling. Both empty for a fund that
+   *  holds nothing quoted, which levels every position at 3 — the correct answer. */
+  feeds: PriceFeed[]
+  observations: PriceObservation[]
   /** Min entryDate across postings — the inception bound for comparison stepping. */
   earliest: string | null
+  /** The vehicle's kind, for the words a statement uses (lib/accounting/vocab.ts). Null for a
+   *  legacy vehicle with no registry row, which reads as a fund. */
+  kind: string | null
 }
 
 /** Min entryDate across postings, ignoring nulls. */
@@ -87,9 +112,18 @@ export function earliestPostingDate(postings: { entryDate?: string | null }[]): 
 }
 
 /** One DB load, reused across every period window. */
-export async function loadLedgerData(admin: SupabaseClient, fundId: string, group: string): Promise<LedgerData> {
-  const [{ accounts, postings, capitalPostings, sourcedPostings }, names, { data: txns }, { data: companies }, fofRaw] = await Promise.all([
-    loadPostedLedger(admin, fundId, group),
+export async function loadLedgerData(
+  admin: SupabaseClient,
+  fundId: string,
+  group: string,
+  opts: { basis?: StatementBasis } = {},
+): Promise<LedgerData> {
+  const [
+    { accounts, postings, capitalPostings, sourcedPostings }, names,
+    { data: txns }, { data: companies }, fofRaw,
+    { data: feedRows }, { data: obsRows }, kind,
+  ] = await Promise.all([
+    loadPostedLedger(admin, fundId, group, undefined, undefined, undefined, booksForBasis(opts.basis ?? 'book')),
     loadEntityNames(admin, fundId, group),
     admin.from('investment_transactions' as any).select('*').eq('fund_id', fundId).order('transaction_date', { ascending: true }),
     // Every holding, fund and company alike: both carry 1100/1200 balances, so the SOI's
@@ -97,10 +131,33 @@ export async function loadLedgerData(admin: SupabaseClient, fundId: string, grou
     // holding_type — see SoiPosition.holdingType — rather than by excluding either here.
     admin.from('companies' as any).select('*').eq('fund_id', fundId),
     loadFofRaw(admin, fundId),
+    (admin as any).from('price_feeds').select('*').eq('fund_id', fundId),
+    (admin as any).from('price_observations').select('*').eq('fund_id', fundId),
+    vehicleKindByName(admin, fundId, group),
   ])
   return {
     accounts, postings, capitalPostings, sourcedPostings, names,
+    kind,
     fofRaw,
+    feeds: ((feedRows as any[]) ?? []).map(f => ({
+      id: f.id,
+      companyId: f.company_id,
+      kind: f.kind,
+      symbol: f.symbol,
+      exchange: f.exchange,
+      quoteCurrency: f.quote_currency,
+      quoteScale: Number(f.quote_scale ?? 1),
+      activeFrom: f.active_from,
+      activeUntil: f.active_until,
+      restrictionUntil: f.restriction_until,
+      restrictionDiscount: f.restriction_discount == null ? null : Number(f.restriction_discount),
+    })) as PriceFeed[],
+    observations: ((obsRows as any[]) ?? []).map(o => ({
+      feedId: o.feed_id,
+      asOfDate: o.as_of_date,
+      price: Number(o.price),
+      basis: o.basis,
+    })) as PriceObservation[],
     txns: (txns as any[]) ?? [],
     companies: (companies as any[]) ?? [],
     group,
@@ -120,10 +177,29 @@ export function computePayload(data: LedgerData, period: StatementPeriod): State
   const itdCapitalAccounts = computeCapitalAccounts(data.capitalPostings, { end: period.end })
   const nav = totalNav(itdCapitalAccounts)
 
-  const positions = buildSoiPositions(
-    data.txns, data.companies as SoiCompany[], data.group,
-    period.end ? new Date(period.end) : undefined,
+  // Levelled AS OF THE PERIOD END, not today: a position inside its lock-up at 31 March is
+  // Level 2 in the Q1 statements however unrestricted it has since become, and a company that
+  // listed in June is Level 3 in every statement struck before it.
+  //
+  // Built WITH realized companies, then PARTITIONED: `scheduleOfInvestments` receives only live
+  // holdings, so the statutory schedule, its subtotals and its ledger tie-out are unchanged.
+  // The realized ones ride along separately for inception-to-date consumers.
+  const allPositions = withFairValueLevels(
+    buildSoiPositions(
+      data.txns, data.companies as SoiCompany[], data.group,
+      period.end ? new Date(period.end) : undefined,
+      { includeRealized: true },
+    ),
+    // `?? []` because a LedgerData assembled before feeds existed genuinely has none, and no
+    // feeds is a MEANINGFUL state rather than a missing input: every position levels at 3.
+    data.feeds ?? [], data.observations ?? [],
+    period.end ?? new Date().toISOString().slice(0, 10),
   )
+  const isRealized = (p: { cost: number; fairValue: number }) => p.cost === 0 && p.fairValue === 0
+  const positions = allPositions.filter(p => !isRealized(p))
+  // pctOfNetAssets is 0 by construction: a realized position has no fair value to be a
+  // percentage of. Stated rather than left undefined, because SoiRow requires it.
+  const realizedRows = allPositions.filter(isRealized).map(p => ({ ...p, pctOfNetAssets: 0 }))
 
   const bal = accountBalances(cumulative)
   const gpEnding = data.gpAccount ? normalBalance(data.gpAccount, bal.get(data.gpAccount.id) ?? 0) : 0
@@ -132,9 +208,12 @@ export function computePayload(data: LedgerData, period: StatementPeriod): State
     period,
     asOf: period.end,
     trialBalance: trialBalance(data.accounts, cumulative),
-    balanceSheet: balanceSheet(data.accounts, cumulative),
+    balanceSheet: balanceSheet(data.accounts, cumulative, { equityLabel: equityLabel(data.kind) }),
     incomeStatement: incomeStatement(data.accounts, inPeriod),
-    scheduleOfInvestments: scheduleOfInvestments(data.accounts, cumulative, nav, positions),
+    scheduleOfInvestments: {
+      ...scheduleOfInvestments(data.accounts, cumulative, nav, positions),
+      realizedRows,
+    },
     changesInPartnersCapital: changesInPartnersCapital(capitalAccounts, data.names, gpEnding),
     // Absent for a fund holding no funds, so a non-FoF package is unchanged.
     ...(data.fofRaw ? { fof: fofExhibits(data.fofRaw, period.end) } : {}),
@@ -159,8 +238,15 @@ export async function buildStatementPackage(
   group: string,
   sp: URLSearchParams,
 ): Promise<StatementPackage> {
-  const data = await loadLedgerData(admin, fundId, group)
+  const data = await loadLedgerData(admin, fundId, group, { basis: basisFromParam(sp.get('basis')) })
+  return buildStatementPackageFromData(data, sp)
+}
 
+/**
+ * The same, over ledger data already in hand — for a caller that needs the package AND the raw
+ * ledger (the tax package builds the general ledger from the same load) without a second trip.
+ */
+export function buildStatementPackageFromData(data: LedgerData, sp: URLSearchParams): StatementPackage {
   const preset = sp.get('preset') as PeriodPreset | null
   const asOf = sp.get('asOf')
   const asOfDate = asOf && /^\d{4}-\d{2}-\d{2}$/.test(asOf) ? new Date(asOf) : undefined
@@ -178,7 +264,7 @@ export async function buildStatementPackage(
     comparisons = comparisonPeriods(period, count, data.earliest).map(p => computePayload(data, p))
   }
 
-  return { payload, accounts: data.accounts, inPeriodSourced, comparisons }
+  return { payload, accounts: data.accounts, inPeriodSourced, allSourced: data.sourcedPostings, comparisons, basis: basisFromParam(sp.get('basis')) }
 }
 
 /**

@@ -11,6 +11,7 @@ import { generateNoticePdf, type NoticeKind } from '@/lib/accounting/notice-pdf'
 import { lpCapitalSummary } from '@/lib/accounting/capital-calls'
 import { loadEntityNames } from '@/lib/accounting/load'
 import { displayFontOf } from '@/lib/theme'
+import { ACTUAL_BOOK } from '@/lib/accounting/books'
 
 export const runtime = 'nodejs'
 // Each notice launches headless Chrome; a vehicle with twenty partners needs room.
@@ -29,7 +30,7 @@ interface NoticeLine { lpEntityId: string; amount: number }
 // payable both decay as money moves, so deriving a notice from the ledger would restate what a
 // partner was told every time somebody paid.
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
   const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
 
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'That has no journal entry — it was never posted, so there is nothing to notice.' }, { status: 400 })
   }
   const { data: entry } = await admin
-    .from('journal_entries' as any).select('status').eq('id', journalEntryId).eq('fund_id', gate.fundId).maybeSingle()
+    .from('journal_entries' as any).select('status').eq('book', ACTUAL_BOOK).eq('id', journalEntryId).eq('fund_id', gate.fundId).maybeSingle()
   if ((entry as any)?.status !== 'posted') {
     return NextResponse.json({
       error: `Its journal entry is ${(entry as any)?.status ?? 'missing'}, not posted. Post it before sending notices — otherwise the notice states an amount the books don't carry.`,

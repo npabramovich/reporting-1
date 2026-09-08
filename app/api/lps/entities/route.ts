@@ -3,13 +3,14 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { dbError } from '@/lib/api-error'
+import { ACTUAL_BOOK } from '@/lib/accounting/books'
 
 // ---------------------------------------------------------------------------
 // GET — list all entities for this fund
 // ---------------------------------------------------------------------------
 
 export async function GET() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -40,7 +41,7 @@ export async function GET() {
 // ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
 // ---------------------------------------------------------------------------
 
 export async function PUT(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -148,7 +149,7 @@ export async function PUT(req: NextRequest) {
 // ---------------------------------------------------------------------------
 
 export async function DELETE(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -174,6 +175,7 @@ export async function DELETE(req: NextRequest) {
   const [{ count: postingCount }, { count: callLineCount }] = await Promise.all([
     admin.from('journal_postings' as any)
       .select('id', { count: 'exact', head: true })
+      .eq('book', ACTUAL_BOOK)
       .eq('fund_id', writeCheck.fundId)
       .eq('lp_entity_id', id),
     admin.from('capital_call_lines' as any)

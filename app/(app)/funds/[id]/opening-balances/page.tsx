@@ -1,15 +1,14 @@
 import type { Metadata } from 'next'
-import { requireAccountingAccess } from '../../guard'
-import { resolveVehicleParam } from '../resolve'
+import { requireVehicleAccess } from '../../guard'
 import { FundSubpageChrome } from '@/components/fund-subpage-chrome'
 import { OpeningBalancesView } from '../../opening-balances/view'
 import { SnapshotCutover } from '../../opening-balances/snapshot-cutover'
 
 export const metadata: Metadata = { title: 'Opening balances' }
 
-export default async function OpeningBalancesPage({ params }: { params: { id: string } }) {
-  const { fundId } = await requireAccountingAccess()
-  const { vehicle, vehicleId } = await resolveVehicleParam(fundId, params.id)
+export default async function OpeningBalancesPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const { vehicle, vehicleId } = await requireVehicleAccess(params.id)
   return (
     <div className="pt-4 md:pt-8 pb-8 w-full">
       <FundSubpageChrome

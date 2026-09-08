@@ -1,8 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { requireAccountingAccess } from '../../../guard'
-import { resolveVehicleParam } from '../../resolve'
+import { requireVehicleAccess } from '../../../guard'
 import { FundScopeSync } from '@/components/fund-subpage-chrome'
 import { FundSwitcher } from '@/components/accounting-vehicle'
 import { AnalystToggleButton } from '@/components/analyst-button'
@@ -11,14 +10,15 @@ import { LpStatementView } from '../../../capital-accounts/[lpEntityId]/view'
 
 export const metadata: Metadata = { title: 'LP capital statement' }
 
-export default async function LpStatementPage({
-  params, searchParams,
-}: {
-  params: { id: string; lpEntityId: string }
-  searchParams: { from?: string }
-}) {
-  const { fundId } = await requireAccountingAccess()
-  const { vehicle, vehicleId } = await resolveVehicleParam(fundId, params.id)
+export default async function LpStatementPage(
+  props: {
+    params: Promise<{ id: string; lpEntityId: string }>
+    searchParams: Promise<{ from?: string }>
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
+  const { vehicle, vehicleId } = await requireVehicleAccess(params.id)
   // Return to wherever the LP was opened from: the LP capital-accounts page marks its links
   // with `?from=lps`; everything else (the Funds capital-accounts table) uses the default.
   const fromLps = searchParams?.from === 'lps'

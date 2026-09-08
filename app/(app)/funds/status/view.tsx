@@ -2,14 +2,20 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Check, AlertTriangle, Ban, Info, ChevronRight, SlidersHorizontal, Lock, Plus, X, Pencil } from 'lucide-react'
+import { Loader2, Check, AlertTriangle, Ban, Info, ChevronRight, SlidersHorizontal, Lock, Landmark, Plus, X, Pencil, FileArchive } from 'lucide-react'
+import { TaxPackageLink } from '@/components/accounting/download-menu'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch, useFundSeg, useVehicle } from '@/components/accounting-vehicle'
 import { VehicleEditModal, type EditableVehicle } from '@/components/vehicle-edit-modal'
 import { AccountingSetup } from '../setup'
 import { DealCarryCard } from './deal-carry-card'
+import { BootstrapInvestmentsCard } from './bootstrap-investments'
+import { PriceFeedsPanel } from './price-feeds-panel'
+import { WalletsPanel } from './wallets-panel'
 import { CarryTerms } from '../allocation-terms/carry-terms'
 import { useCanRead } from '@/components/access-context'
+import { VEHICLE_KIND_LABELS } from '@/lib/vehicle-kinds'
+import { IntercompanyCard } from './intercompany-card'
 import { AllocationTermsView } from '../allocation-terms/view'
 import { CollapsibleSection } from '@/components/collapsible-section'
 import { ChartOfAccountsCard } from '@/components/accounting/chart-of-accounts-card'
@@ -47,6 +53,7 @@ export function StatusView() {
   const fmt = (v: number) => formatCurrencyPrice(v, currency)
   const lf = useLedgerFetch()
   const fundSeg = useFundSeg()
+  const { group } = useVehicle()
   // The status issues carry bare /funds/<page> hrefs (built server-side, where the URL's
   // vehicle id isn't known); rewrite them fund-first for the current vehicle.
   const fundHref = (href: string) => {
@@ -85,7 +92,6 @@ export function StatusView() {
           href="/lps/capital"
           className="flex items-center gap-3 rounded-card border p-3 transition-colors hover:bg-muted/30"
         >
-          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">LP capital tracking</p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -93,17 +99,13 @@ export function StatusView() {
               paid-in, distributions, NAV — on the LP capital tracking page.
             </p>
           </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         </Link>
         {/* Adopting fund accounting is the setup flow itself — seed the chart, book opening
             balances, then activate. The flip to the ledger is the LAST step of AccountingSetup
-            (guarded against an empty chart); there is no separate mode switch. */}
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            To move this vehicle to <strong>Fund Accounting</strong>, seed its chart of accounts and
-            book opening balances below, then use <strong>Activate fund accounting</strong> at the end.
-          </p>
-          <AccountingSetup alwaysShow />
-        </div>
+            (guarded against an empty chart); there is no separate mode switch. The box explains
+            itself, so there is no preamble above it. */}
+        <AccountingSetup alwaysShow />
       </div>
     )
   }
@@ -187,6 +189,11 @@ export function StatusView() {
         )}
       </div>
 
+      {/* The tracker holds positions the ledger has never been given. Sits with the issues
+          above because that is what it is — an outstanding one, carrying its own fix. It
+          renders to nothing the rest of the time. */}
+      <BootstrapInvestmentsCard />
+
       {/* Where the close got to, and what it would pick up next — the one thing you
           come to this page to find out. Amber when income is sitting unallocated,
           because until it's closed every partner's capital account understates. */}
@@ -242,12 +249,52 @@ export function StatusView() {
           <ChartOfAccountsCard />
         </CollapsibleSection>
 
+        {/* Marks infrastructure — which holdings take a price from a feed, and which wallets
+            are watched for on-chain balances. Both are set up once and then run themselves,
+            so they belong with the settings rather than on the schedule they feed. */}
+        <CollapsibleSection title="Price feeds" subtitle="Attach a quote source to a holding and store its marks">
+          <PriceFeedsPanel />
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Watched wallets" subtitle="On-chain addresses whose balances are reconciled against the ledger">
+          <WalletsPanel />
+        </CollapsibleSection>
+
         <CollapsibleSection
           title="Partners Detail"
           subtitle={`Splitting on ${s.close.basis === 'capital_balance' ? 'capital-account balance' : 'committed capital'} · who bears fees, expenses, and carry · commitment history`}
         >
           <AllocationTermsView />
         </CollapsibleSection>
+      </div>
+
+      {/* Migrating a QuickBooks general ledger happens once, at the start of a vehicle's life,
+          so it is linked from here instead of occupying a permanent sidebar slot. */}
+      <Link
+        href={fundHref('/funds/migrate')}
+        className="flex items-center gap-3 rounded-card border p-3 transition-colors hover:bg-muted/30"
+      >
+        <Landmark className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Migrate from QuickBooks</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Import a QuickBooks general ledger, map its accounts to this chart, and tie every period out before cutting over.
+          </p>
+        </div>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </Link>
+
+      {/* Charges between this vehicle and the firm's management company, seen from this side.
+          Renders nothing for a caller without the management-company grant or a firm without one. */}
+      <IntercompanyCard />
+
+      {/* The year's preparer bundle. Lives here beside the other once-a-year work; the same
+          control is in the statements page's Download menu. */}
+      <div className="flex items-start gap-3 rounded-card border p-3">
+        <FileArchive className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1 -mx-2 -my-1.5">
+          <TaxPackageLink group={group} />
+        </div>
       </div>
 
       {/* Deal-by-deal carry — a reference calculator for American vehicles. gp_economics, for the
@@ -258,9 +305,9 @@ export function StatusView() {
   )
 }
 
-const KIND_LABELS: Record<string, string> = {
-  fund: 'Fund', spv: 'SPV', direct: 'Direct deal', associate: 'GP / associate entity', other: 'Other',
-}
+// The one vocabulary, from lib/vehicle-kinds.ts — this file used to keep its own copy, which is
+// how a kind added there (manco, then individual) rendered here as a raw string.
+const KIND_LABELS: Record<string, string> = VEHICLE_KIND_LABELS
 
 /**
  * The vehicle's own record — name, type, vintage year, aliases, active — editable in place. Reads

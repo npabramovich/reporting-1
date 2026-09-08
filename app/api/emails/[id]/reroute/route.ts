@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidateTag } from 'next/cache'
+import { expireTag } from '@/lib/cache/tags'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runPipeline, type PostmarkPayload } from '@/lib/pipeline/processEmail'
@@ -10,9 +10,11 @@ import { rateLimit } from '@/lib/rate-limit'
 import { assertWriteAccess } from '@/lib/api-helpers'
 import { assertDomainAccess } from '@/lib/access/gate'
 import { domainForRerouteTarget, isRerouteTarget, type RerouteTarget } from '@/lib/access/reroute-targets'
+import { removeCompanyUpdate } from '@/lib/company-updates/capture'
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const supabase = createClient()
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -66,6 +68,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     admin.from('interactions').delete().eq('email_id', emailId).eq('fund_id', fundId),
     admin.from('metric_values').delete().eq('source_email_id', emailId).eq('fund_id', fundId),
     admin.from('parsing_reviews').delete().eq('email_id', emailId).eq('fund_id', fundId),
+    // Artifacts and chunks cascade from this projection row. The reporting destination below
+    // recreates it from the canonical source email; every other destination leaves it absent.
+    removeCompanyUpdate(admin, { emailId, fundId }),
   ])
 
   // Log the correction.
@@ -80,7 +85,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Update routed_to first; the destination pipeline may set this again on success.
   await admin
     .from('inbound_emails')
-    .update({ routed_to: target, processing_status: 'processing', processing_error: null, claude_response: null, metrics_extracted: 0 })
+    .update({
+      routed_to: target,
+      processing_status: 'processing',
+      processing_error: null,
+      claude_response: null,
+      metrics_extracted: 0,
+      diligence_deal_id: null,
+      diligence_intake_status: 'rejected',
+    } as any)
     .eq('id', emailId)
 
   const payload = (emailData as any).raw_payload as PostmarkPayload
@@ -90,7 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .from('inbound_emails')
       .update({ processing_status: 'not_processed', routed_to: 'audit' })
       .eq('id', emailId)
-    revalidateTag('fund-data')
+    expireTag('fund-data')
     return NextResponse.json({ ok: true })
   }
 
@@ -113,7 +126,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         .eq('id', emailId)
       return NextResponse.json({ error: msg }, { status: 500 })
     }
-    revalidateTag('fund-data')
+    expireTag('fund-data')
     return NextResponse.json({ ok: true })
   }
 
@@ -128,7 +141,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const hydrated = (await hydrateAttachments(payload as any)) as PostmarkPayload
   try {
-    await runPipeline(admin, emailId, fundId, hydrated, fundMember)
+    await runPipeline(admin, emailId, fundId, hydrated, fundMember, { forcedRoute: target })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     await admin
@@ -138,6 +151,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 
-  revalidateTag('fund-data')
+  expireTag('fund-data')
   return NextResponse.json({ ok: true })
 }

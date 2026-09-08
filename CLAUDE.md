@@ -54,6 +54,15 @@ create policy "Fund members read their fund's rows"
 -- (add insert/update/delete policies as the table requires)
 ```
 
+**The template above is for an ordinary table, and "ordinary" is the part to check.** A grant knows
+nothing about domains or features, so `grant ... to authenticated` on a table whose route is gated
+on a domain hands the data to exactly the members that gate refuses — from the browser console,
+with `NEXT_PUBLIC_SUPABASE_ANON_KEY`, no route involved. If a table's only reader is a gated route
+holding the service-role key (all of `lp_tax_forms`, `k1_*`, `tax_year_closes`, `received_k1s`),
+grant it to `service_role` alone, reads included, and write no `authenticated` policies — RLS then
+denies by default if a grant ever creeps back. `tests/tax-data-api-grants.test.ts` pins that set;
+`20260714000004_ledger_db_enforcement.sql` is the write-side precedent for the ledger.
+
 **Sequences:** this repo uses `uuid default gen_random_uuid()` for primary keys, so explicit sequences are rare. If you ever add one (`bigserial`, `serial`, `create sequence`), add `grant usage, select on sequence public.<name> to anon, authenticated, service_role;` alongside it.
 
 **Functions:** Postgres functions have a separate default-privileges model from tables and are not affected by the 2026 Data API grants rollout. SECURITY DEFINER functions still need `revoke execute from anon, authenticated, public` if you don't want unauthenticated callers (see `20260509000002_memo_agent_jobs_lockdown.sql` for the pattern).
@@ -74,7 +83,8 @@ This repo's owner runs `supabase db push` themselves. AI assistants only create 
 explicit `UNGATED_ROUTES` entry with the reason it needs no grant. `lib/access/route-domains.test.ts`
 fails when a route is in neither, so a new route cannot ship without answering the question.
 
-The gate itself is `gateApiRequest` in `middleware.ts` — it resolves every `/api` request through
+The gate itself is `gateApiRequest` in `proxy.ts` (Next 16 renamed `middleware` to `proxy`; same
+role, Node runtime) — it resolves every `/api` request through
 `effectiveAccess` before the handler runs (one round trip, via the `access_context` RPC). **Do not**
 re-implement a role check in a route and consider it done: the reason this model exists is that 137
 of 263 routes checked only fund membership and never looked at role. Add the registry entry; the
@@ -130,3 +140,13 @@ Every API route resolves `fund_id` from `auth.getUser()` → `fund_members` look
 ### Admin client vs user-context client
 
 Most write operations use `createAdminClient()` (service role) with manual `.eq('fund_id', ...)` filters. RLS is in place on most tables as a secondary defense but the dominant security boundary is application code, not RLS. When adding new endpoints, follow the same pattern: admin client for writes, manual fund scoping, RLS policies still recommended for defense in depth.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

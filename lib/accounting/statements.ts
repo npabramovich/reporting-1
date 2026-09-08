@@ -7,6 +7,7 @@ import { NORMAL_SIDE } from './types'
 import type { CapitalAccount } from './capital-account'
 import { ACTIVITY_FIELDS, emptyAccount } from './capital-account'
 import { apportionCents } from './allocation'
+import type { CompanyStatus } from '@/lib/types/database'
 
 function r(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100
@@ -121,12 +122,19 @@ export interface BalanceSheet {
  * the capital accounts yet — otherwise the balance sheet simply would not balance,
  * and `check` would silently carry the unclosed P&L.
  */
-export function balanceSheet(accounts: Account[], postings: Posting[]): BalanceSheet {
+export function balanceSheet(
+  accounts: Account[],
+  postings: Posting[],
+  /** The equity label — partners' capital for a fund, members' or owner's for the kinds without
+   *  partners (lib/accounting/vocab.ts). Defaults to the fund's, so every caller is unchanged. */
+  opts: { equityLabel?: string } = {},
+): BalanceSheet {
   const tb = trialBalance(accounts, postings)
   const assets = section('Assets', tb, 'asset')
   const liabilities = section('Liabilities', tb, 'liability')
+  const label = opts.equityLabel ?? "Partners' capital"
 
-  const capitalAccounts = section("Partners' capital", tb, 'equity')
+  const capitalAccounts = section(label, tb, 'equity')
   const income = section('Income', tb, 'income')
   const expenses = section('Expenses', tb, 'expense')
   const netIncome = r(income.total - expenses.total)
@@ -142,7 +150,7 @@ export function balanceSheet(accounts: Account[], postings: Posting[]): BalanceS
   // One line, no per-partner detail: that belongs in the statement of changes.
   const total = r(capitalAccounts.total + netIncome)
   const equity: StatementSection = {
-    label: "Partners' capital",
+    label,
     rows: [],
     total,
   }
@@ -187,17 +195,22 @@ export interface SoiRow {
   pctOfNetAssets: number
   // Present only when the row came from the portfolio tracker (source: 'tracker').
   companyId?: string
-  /** 'fund' for a fund-of-funds holding, so the view can render those as their own section
-   *  instead of a mixed table where half the columns are blank. */
-  holdingType?: 'company' | 'fund'
+  /** Sections the schedule so a fund holding or a token is not reported in a company table
+   *  with half its columns blank. */
+  holdingType?: 'company' | 'fund' | 'crypto'
   industry?: string | null
   country?: string | null
   stage?: string | null
+  /** So an inception-to-date consumer can label an exited row; a proceeds-only bar is
+   *  otherwise unreadable. Absent on ledger-sourced rows, which know no company status. */
+  status?: CompanyStatus
   assetType?: string
   shares?: number | null
   sharePrice?: number | null
   unrealized?: number
   moic?: number | null
+  /** ASC 820 fair value hierarchy. Undecorated rows read as Level 3. */
+  valuationLevel?: 1 | 2 | 3
   // Per-company value breakdown from the tracker (source: 'tracker' rows only).
   /** Gross capital deployed, before exits. */
   invested?: number
@@ -223,6 +236,16 @@ export interface SoiGroup {
 }
 export interface ScheduleOfInvestments {
   rows: SoiRow[]
+  /**
+   * Fully-realized companies — invested capital and proceeds, no remaining position.
+   *
+   * NOT part of the schedule: excluded from `rows`, from every subtotal, and from the ledger
+   * tie-out, because ASC 946 reports holdings. Present so an inception-to-date consumer (the
+   * fund detail page's Largest holdings chart) can show what the fund actually did. Populated
+   * by computePayload, which is the only caller that knows which positions were realized;
+   * `scheduleOfInvestments()` itself always returns it empty.
+   */
+  realizedRows: SoiRow[]
   totalCost: number
   totalFairValue: number
   netAssets: number
@@ -237,6 +260,9 @@ export interface ScheduleOfInvestments {
   byIndustry: SoiGroup[]
   byGeography: SoiGroup[]
   byAssetType: SoiGroup[]
+  /** ASC 820 leveling. EMPTY for a wholly private book, where every position is Level 3 and
+   *  the breakout would restate the total on a single line. */
+  byLevel: SoiGroup[]
 }
 
 function groupBy(rows: SoiRow[], key: (row: SoiRow) => string, netAssets: number): SoiGroup[] {
@@ -337,6 +363,9 @@ export function scheduleOfInvestments(
 
   return {
     rows,
+    // Always empty here. The partition needs to know which positions were realized, which only
+    // computePayload does — it builds them with `includeRealized` and splits before calling in.
+    realizedRows: [],
     totalCost,
     totalFairValue,
     netAssets: r(netAssets),
@@ -348,6 +377,13 @@ export function scheduleOfInvestments(
     byIndustry: fromTracker ? groupBy(rows, x => x.industry || 'Unclassified', netAssets) : [],
     byGeography: fromTracker ? groupBy(rows, x => x.country || 'Unclassified', netAssets) : [],
     byAssetType: fromTracker ? groupBy(rows, x => x.assetType || 'Unclassified', netAssets) : [],
+    // ASC 820 leveling. Emitted ONLY when something is above Level 3: a wholly private book is
+    // entirely Level 3 by construction, and a table restating the total on one line tells the
+    // reader nothing. The disclosure earns its place the moment one position is quoted, because
+    // then the reader cannot otherwise tell which is which.
+    byLevel: fromTracker && rows.some(x => (x.valuationLevel ?? 3) !== 3)
+      ? groupBy(rows, x => `Level ${x.valuationLevel ?? 3}`, netAssets)
+      : [],
   }
 }
 

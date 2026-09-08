@@ -11,7 +11,7 @@ import { bootstrapOpeningBalances } from '@/lib/accounting/bootstrap'
 // LP data already in the platform (paid-in − distributions per LP), as of a date.
 // Seeds the chart first if empty. Body: { entryDate, group? }
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
   const entryDate: string = body?.entryDate
   if (!entryDate) return NextResponse.json({ error: 'entryDate is required' }, { status: 400 })

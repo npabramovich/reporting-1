@@ -11,13 +11,13 @@ import { previewCloseThrough, closeThrough, reopenPeriodWithReversal, loadCloseE
 // GET — list a vehicle's fiscal periods, or (?entriesFor=<periodId>) the allocation
 // transactions a specific closed period posted.
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const gate = await assertReadAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
-  const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
   const entriesFor = req.nextUrl.searchParams.get('entriesFor')
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 //   { action: 'close',   endDate } → close every month through it, in order
 //   { action: 'reopen',  id }      → void that period's allocation, unlock (newest first)
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
   if (body?.action === 'preview') {

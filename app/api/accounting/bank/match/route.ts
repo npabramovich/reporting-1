@@ -9,13 +9,13 @@ import { bookCapitalCallFromInflow, bookDistributionFromOutflow, linkInflowToEnt
 
 // GET — capital-call entries an inflow can be matched to (unlinked, with amount).
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const gate = await assertReadAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
-  const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
   return NextResponse.json(await capitalCallCandidates(admin, gate.fundId, group))
 }
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 // with no lp_entity_id — money leaves the fund and no LP's capital account, statement, or
 // roll-forward ever records receiving it.
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   if (gate instanceof NextResponse) return gate
 
   const { id, mode, entryId, lpEntityId, perLp, group: bodyGroup } = await req.json().catch(() => ({}))
-  const group = await resolveGroupOr400(admin, gate.fundId, bodyGroup ?? req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, bodyGroup ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
 

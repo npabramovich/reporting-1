@@ -65,7 +65,10 @@ function AppShellInner({ headerNode, sidebarNode, children }: { headerNode: Reac
           <div className="flex-1">
             {children}
           </div>
-          <AppFooter />
+          {/* Not on the landing page. /start is a single centred composer that claims the
+              viewport, and the footer's row of links sat under it as a second, unrelated strip —
+              the one thing on the page that wasn't the page. Its links live on Support instead. */}
+          {pathname !== '/start' && <AppFooter />}
         </main>
       </div>
     </>

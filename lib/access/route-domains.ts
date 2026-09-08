@@ -69,6 +69,8 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   'api/accounting/fof-grid': { domain: 'accounting' },
   'api/accounting/fof-grid/confirm': { domain: 'accounting' },
   'api/accounting/fof-marks': { domain: 'accounting' },
+  // GET reads the plan, PUT writes it — `requiredLevel` derives read/write from the method.
+  'api/accounting/construction': { domain: 'accounting' },
   'api/accounting/fund-economics': { domain: 'accounting' },
   // QuickBooks migration. `mapping/discover` is its own route file and therefore needs its
   // own entry — route-domains.test.ts matches on the route path, not on a prefix.
@@ -78,11 +80,22 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   'api/accounting/quickbooks/import': { domain: 'accounting' },
   'api/accounting/quickbooks/tie-out': { domain: 'accounting' },
   'api/accounting/fund-timeseries': { domain: 'accounting' },
+  'api/accounting/crypto-wallets': { domain: 'accounting' },
+  'api/accounting/price-feeds': { domain: 'accounting' },
+  'api/accounting/quote-marks': { domain: 'accounting' },
   'api/accounting/investments': { domain: 'accounting' },
   'api/accounting/journal': { domain: 'accounting' },
   'api/accounting/journal/bulk-post': { domain: 'accounting' },
   'api/accounting/journal/bulk-void': { domain: 'accounting' },
+  // The journal as a file (CSV, Excel, or QuickBooks' Journal layout) — a read of the same rows.
+  'api/accounting/journal/export': { domain: 'accounting' },
+  'api/accounting/chart/export': { domain: 'accounting' },
   'api/accounting/attribute-lp-capital': { domain: 'accounting' },
+  // The standard entries (fee, expense, gain, revalue, distribution, carry) from their inputs —
+  // the agent's allocation tool, reachable from the journal's New entry menu. POST → write.
+  'api/accounting/allocation': { domain: 'accounting' },
+  // The account register: the same posted ledger the statements read, one account at a time.
+  'api/accounting/ledger': { domain: 'accounting' },
   'api/accounting/ledger-text': { domain: 'accounting' },
   'api/accounting/opening-balances': { domain: 'accounting' },
   'api/accounting/periods': { domain: 'accounting' },
@@ -91,12 +104,40 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   // The Excel workpaper export ships the exact same computed package as the statements
   // route, so it carries the same domain (accounting implies lp_capital via DOMAIN_META).
   'api/accounting/statements/export': { domain: 'accounting' },
+  'api/accounting/statements/pdf': { domain: 'accounting' },
+  // Realized gains by lot — the Schedule D input; fund-level, no per-partner figure in it.
+  'api/accounting/realized-gains': { domain: 'accounting' },
+  // Vendors (the payee dimension) and cash paid per vendor — the 1099 worksheet.
+  'api/accounting/vendors': { domain: 'accounting' },
+  'api/accounting/vendor-payments': { domain: 'accounting' },
+  // Every entity's books at a glance: closed through, trial balance, drafts, unmatched bank rows.
+  // Management companies appear only for a caller holding that grant — checked in the handler.
+  'api/accounting/firm': { domain: 'accounting' },
+  // The year's preparer bundle. `accounting` opens it; the K-1 workbook inside is added only
+  // after refuseWithoutCarryAccess passes in the handler, since a K-1 package contains the carry.
+  'api/accounting/tax-package': { domain: 'accounting' },
   'api/accounting/status': { domain: 'accounting' },
   'api/accounting/vehicles': { domain: 'accounting' },
   'api/accounting/vehicle-index': { domain: 'accounting' },
   'api/accounting/vehicle-settings': { domain: 'accounting' },
   'api/accounting/vehicle-gp-links': { domain: 'accounting' },
   'api/vehicles': { domain: 'accounting' },
+
+  // ── Management company ─────────────────────────────────────────────────────
+  // The firm's own operating entity, on its own books. A separate domain from `accounting`
+  // because a manco ledger carries firm payroll and partner compensation, and — unlike a K-1,
+  // which is derived from the capital accounts — none of it is legible from the fund's books.
+  // See DOMAIN_META.management_company.
+  //
+  // These four routes are the section's own. The shared ledger routes above (journal, bank,
+  // statements, chart, periods) can ALSO serve a management company, and there the grant is
+  // decided by the vehicle rather than the route: `resolveGroupOr400` refuses a manco to a caller
+  // who holds only `accounting`. That is the one place in this registry where the mapping below is
+  // a floor rather than the whole answer — see lib/accounting/vehicle-domain.ts.
+  'api/manco/vehicles': { domain: 'management_company' },
+  'api/manco/overview': { domain: 'management_company' },
+  'api/manco/setup': { domain: 'management_company' },
+  'api/manco/intercompany': { domain: 'management_company' },
 
   // ── GP economics — the carve-out. These used to sit behind the single `accounting` key,
   //    so anyone who could reconcile the bank could read the partners' carry.
@@ -110,6 +151,36 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   // The outbound mirror of capital-calls, and the same per-partner capital data.
   'api/accounting/distributions': { domain: 'lp_capital' },
   'api/accounting/commitments': { domain: 'lp_capital' },
+  // Book-to-tax adjustments. `accounting` rather than `lp_capital`: the payload is fund-level
+  // difference amounts and the entries they produce, not per-partner figures — the per-partner
+  // split arrives with the K-1 allocation. Gated on `tax_reporting` so a fund keeping books but
+  // not issuing K-1s never sees it.
+  'api/accounting/tax-adjustments': { domain: 'accounting', feature: 'tax_reporting' },
+  // Tax forms, unlike the adjustments above, are PER PARTNER — the payload is partner names,
+  // legal names, countries and TIN last-fours. That is lp_capital data, and gating it as
+  // `accounting` would let someone reconcile the bank read the partner register.
+  'api/accounting/tax-forms': { domain: 'lp_capital', feature: 'tax_reporting' },
+  // Per-partner K-1 lines and capital accounts — lp_capital for the same reason as tax-forms.
+  // AND gp_economics, checked in-handler (lib/tax/access.ts): one of the partners is the GP, whose
+  // K-1 is the carry by another name, and box 20AH is the carry recipient's recharacterised gain.
+  // The same figure capital-accounts withholds from an lp_capital-only caller. The registry maps
+  // one domain; the payload straddles two; the handler gates the second. Applies to k1-packages,
+  // its export and pdf, and state-worklist, which reports per-partner allocated income.
+  'api/accounting/k1-packages': { domain: 'lp_capital', feature: 'tax_reporting' },
+  // Read-level: exporting reports what the package already holds, it does not generate.
+  'api/accounting/k1-packages/export': { domain: 'lp_capital', feature: 'tax_reporting', level: 'read' },
+  // One partner's figures as a PDF — the same per-partner data, read-level.
+  'api/accounting/k1-packages/pdf': { domain: 'lp_capital', feature: 'tax_reporting', level: 'read' },
+  // Furnishing, and the consent that makes electronic furnishing valid. Per partner.
+  'api/accounting/k1-deliveries': { domain: 'lp_capital', feature: 'tax_reporting' },
+  // Which states have partners, and how much was allocated to each. Per-partner residence and
+  // income, so lp_capital.
+  'api/accounting/state-worklist': { domain: 'lp_capital', feature: 'tax_reporting', level: 'read' },
+  // The tax book's lock. `accounting` rather than `lp_capital`: closing a year is a books
+  // operation and its payload is state and blockers, not per-partner figures.
+  'api/accounting/tax-year': { domain: 'accounting', feature: 'tax_reporting' },
+  // Which underlying funds still owe us a K-1. Portfolio-level holdings, not partner data.
+  'api/accounting/received-k1s': { domain: 'accounting', feature: 'tax_reporting' },
   'api/accounting/entities': { domain: 'lp_capital' },
   'api/accounting/lp-events': { domain: 'lp_capital' },
   'api/accounting/lp-events/import': { domain: 'lp_capital' },
@@ -181,6 +252,15 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   'api/companies/[id]/metrics': { domain: 'portfolio' },
   'api/companies/[id]/metrics/[metricId]/values': { domain: 'portfolio' },
   'api/companies/[id]/summary': { domain: 'portfolio' },
+  // Company Updates: the durable, searchable projection of portfolio-reporting email. Reads are the
+  // company timeline, one update, one artifact's text/original file, portfolio search, and coverage
+  // stats — all portfolio. Starting a backfill is a fund-wide reprocessing cost, so it is `admin`.
+  'api/companies/[id]/updates': { domain: 'portfolio' },
+  'api/company-updates/[id]': { domain: 'portfolio' },
+  'api/company-updates/[id]/artifacts/[artifactId]': { domain: 'portfolio' },
+  'api/company-updates/search': { domain: 'portfolio' },
+  'api/company-updates/status': { domain: 'portfolio' },
+  'api/company-updates/backfill': { domain: 'admin', level: { GET: 'read', POST: 'write' } },
   'api/dashboard/table-data': { domain: 'portfolio' },
   'api/default-metrics': { domain: 'portfolio' },
   'api/default-metrics/[id]': { domain: 'portfolio' },
@@ -318,6 +398,8 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   'api/settings/deal-submission-token': { domain: 'admin' },
   'api/settings/drive': { domain: 'admin' },
   'api/settings/drive/folders': { domain: 'admin' },
+  'api/auth/google': { domain: 'admin' },
+  'api/auth/google/callback': { domain: 'admin' },
   'api/settings/senders': { domain: 'admin' },
   'api/settings/senders/[id]': { domain: 'admin' },
   'api/settings/site-content': { domain: 'admin' },
@@ -384,10 +466,20 @@ export const OPTIONAL_ROUTES = new Set<string>([
  * authenticates by some other means or serves no fund data — "it seemed fine" is not a reason.
  */
 export const UNGATED_ROUTES: Record<string, string> = {
+  // Stable native/external boundary. Each authenticated route accepts OAuth only and resolves
+  // the token owner's live fund membership and grants in-handler; metadata is public discovery.
+  'api/v1/meta': 'Public instance discovery; contains no fund-specific data.',
+  'api/v1/me': 'OAuth-only v1 endpoint with live principal access checks in-handler.',
+  'api/v1/chat': 'OAuth-only; shared Analyst orchestration enforces the token owner\'s live access.',
+  'api/v1/chat/stream': 'OAuth-only; same preparation and orchestration as /api/v1/chat, streamed.',
+  'api/v1/conversations': 'OAuth-only; queries are scoped to the token user and fund in-handler.',
+  'api/v1/conversations/[id]': 'OAuth-only; reads and deletes are scoped to token user and fund.',
+  'api/v1/pending-actions': 'OAuth-only; rows are fund-scoped and filtered by live domain access.',
+  'api/v1/pending-actions/[id]/approve': 'OAuth-only; requires token write scope and live domain write access.',
+  'api/v1/pending-actions/[id]/reject': 'OAuth-only; requires token write scope and live domain write access.',
+
   // Pre-authentication, or the act of authenticating.
   'api/auth/branding': 'Pre-auth: login page branding.',
-  'api/auth/google': 'OAuth start.',
-  'api/auth/google/callback': 'OAuth callback.',
   'api/auth/logout': 'Ends a session.',
   'api/auth/signup': 'Pre-auth by definition.',
   'api/setup': 'First-run bootstrap, before any fund exists.',
@@ -420,9 +512,12 @@ export const UNGATED_ROUTES: Record<string, string> = {
   'api/cron/deal-research': 'Cron: CRON_SECRET.',
   'api/cron/deals-digest': 'Cron: CRON_SECRET.',
   'api/cron/memo-agent-worker': 'Cron: CRON_SECRET.',
+  'api/cron/company-updates-ocr': 'Cron: CRON_SECRET.',
+  'api/cron/company-updates-backfill': 'Cron: CRON_SECRET.',
 
   // Inbound from third parties, authenticated by a token in the path or a provider signature.
-  'api/webhooks/transcription/[secret]': 'Inbound webhook: path secret.',
+  'api/webhooks/transcription/[token]': 'Inbound webhook: per-job single-use callback token in the path (SEC-010).',
+  'api/csp-report': 'Browser-sent CSP violation reports; no credential exists to require. Rate-limited per platform IP, body capped, fields allowlisted before logging.',
   'api/inbound-email': 'Inbound email webhook.',
   'api/inbound-email/mailgun': 'Inbound email webhook (Mailgun).',
   'api/public/submit/[token]': 'Public deal-submission form; path token.',

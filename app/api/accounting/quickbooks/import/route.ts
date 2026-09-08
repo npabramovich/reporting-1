@@ -8,7 +8,9 @@ import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
 import { accountIdByCode, persistEntry } from '@/lib/accounting/persist'
 import { BULK_BATCH } from '@/lib/accounting/journal-bulk'
 import { parseQbJournal } from '@/lib/accounting/quickbooks/parse-journal'
-import { buildEntries } from '@/lib/accounting/quickbooks/build-entries'
+import { buildEntries, qbVendorName } from '@/lib/accounting/quickbooks/build-entries'
+import { vendorResolver } from '@/lib/accounting/vendors'
+import { ACTUAL_BOOK } from '@/lib/accounting/books'
 
 /**
  * Step 3: import the Journal export as DRAFT journal entries.
@@ -23,7 +25,7 @@ import { buildEntries } from '@/lib/accounting/quickbooks/build-entries'
  * POST — { text, group?, dryRun?, sourceLabel? }
  */
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -36,7 +38,7 @@ export async function POST(req: NextRequest) {
   }
   const dryRun = !!body?.dryRun
 
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? null)
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? null)
   if (group instanceof NextResponse) return group
   const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
 
@@ -64,7 +66,18 @@ export async function POST(req: NextRequest) {
   })
 
   const accountIds = await accountIdByCode(admin, gate.fundId, group)
-  const { entries, skipped } = buildEntries(importable, mapping, accountIds, gate.fundId)
+
+  // The Name column becomes the entry's vendor. Vendors are created as needed — on a dry run too,
+  // which is deliberate: a vendor is a fund-level record, and seeing them appear is part of
+  // reviewing what the import would do.
+  const resolveVendor = vendorResolver(admin, gate.fundId)
+  const vendorIdByName = new Map<string, string>()
+  for (const name of Array.from(new Set(importable.map(qbVendorName).filter((n): n is string => !!n)))) {
+    const id = await resolveVendor(name)
+    if (id) vendorIdByName.set(name.toLowerCase(), id)
+  }
+
+  const { entries, skipped } = buildEntries(importable, mapping, accountIds, gate.fundId, vendorIdByName)
 
   // Which of these have we already imported? Batched: a decade of history is thousands of
   // refs, and one .in() of that size fails.
@@ -74,6 +87,7 @@ export async function POST(req: NextRequest) {
     const chunk = refs.slice(i, i + BULK_BATCH)
     const { data } = await admin.from('journal_entries' as any)
       .select('source_ref')
+      .eq('book', ACTUAL_BOOK)
       .eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId)
       .in('source_ref', chunk)
     for (const r of ((data as any[]) ?? [])) present.add(r.source_ref)
@@ -128,14 +142,14 @@ export async function POST(req: NextRequest) {
 
 // GET — the import history for this vehicle, so a third pass can see what the second did.
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const gate = await assertWriteAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
 
-  const group = await resolveGroupOr400(admin, gate.fundId, req.nextUrl.searchParams.get('group'))
+  const group = await resolveGroupOr400(admin, gate, req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
   const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
 

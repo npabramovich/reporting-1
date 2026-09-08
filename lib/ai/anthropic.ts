@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { effortForModel } from './model-families'
 import type {
   AIProvider, AIModel, AIResult, CreateMessageParams, CreateChatParams, ContentBlock,
-  CreateToolLoopParams, ToolLoopResult, ToolCallRecord,
+  CreateToolLoopParams, ToolLoopResult, ToolCallRecord, AIEffort,
 } from './types'
 
 // Anthropic's MCP connector — lets the API connect to a remote MCP server
@@ -44,13 +45,17 @@ export class AnthropicProvider implements AIProvider {
     // (large max_tokens + slow models like Opus, or long web-search runs).
     // `finalMessage()` reassembles the complete response so the rest of the
     // pipeline sees the same shape as the legacy non-streaming call.
-    const stream = this.client.messages.stream({
-      model: params.model,
-      max_tokens: params.maxTokens,
-      ...(systemBlocks ? { system: systemBlocks } : {}),
-      ...(tools ? { tools: tools as any } : {}),
-      messages: [{ role: 'user', content }],
-    })
+    const stream = this.client.messages.stream(
+      {
+        model: params.model,
+        max_tokens: params.maxTokens,
+        ...outputConfig(params.model, params.effort),
+        ...(systemBlocks ? { system: systemBlocks } : {}),
+        ...(tools ? { tools: tools as any } : {}),
+        messages: [{ role: 'user', content }],
+      },
+      { signal: params.signal },
+    )
     const response = await stream.finalMessage()
 
     // When web search runs server-side, the response interleaves
@@ -112,12 +117,16 @@ export class AnthropicProvider implements AIProvider {
     const systemBlocks = cacheableSystem(params.system)
 
     // Same streaming-required reason as createMessage above.
-    const stream = this.client.messages.stream({
-      model: params.model,
-      max_tokens: params.maxTokens,
-      ...(systemBlocks ? { system: systemBlocks } : {}),
-      messages,
-    })
+    const stream = this.client.messages.stream(
+      {
+        model: params.model,
+        max_tokens: params.maxTokens,
+        ...outputConfig(params.model, params.effort),
+        ...(systemBlocks ? { system: systemBlocks } : {}),
+        messages,
+      },
+      { signal: params.signal },
+    )
     const response = await stream.finalMessage()
 
     const text = response.content
@@ -195,9 +204,11 @@ export class AnthropicProvider implements AIProvider {
     let truncated = false
 
     for (let i = 0; i < maxIterations; i++) {
+      params.signal?.throwIfAborted()
       const request: any = {
         model: params.model,
         max_tokens: params.maxTokens,
+        ...outputConfig(params.model, params.effort),
         ...(systemBlocks ? { system: systemBlocks } : {}),
         ...(toolDefs.length > 0 ? { tools: toolDefs } : {}),
         messages,
@@ -216,10 +227,10 @@ export class AnthropicProvider implements AIProvider {
             url: s.url,
             ...(s.authorizationToken ? { authorization_token: s.authorizationToken } : {}),
           })),
-        })
+        }, { signal: params.signal })
         response = await stream.finalMessage()
       } else {
-        const stream = this.client.messages.stream(request)
+        const stream = this.client.messages.stream(request, { signal: params.signal })
         response = await stream.finalMessage()
       }
 
@@ -254,6 +265,7 @@ export class AnthropicProvider implements AIProvider {
       // in parallel.
       const results: Anthropic.ToolResultBlockParam[] = []
       for (const call of pending) {
+        params.signal?.throwIfAborted()
         const input = (call.input ?? {}) as Record<string, unknown>
         let resultText: string
         let isError = false
@@ -309,6 +321,13 @@ export class AnthropicProvider implements AIProvider {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .map(m => ({ id: m.id, name: m.display_name }))
   }
+}
+
+// The effort knob, only for models that have one — older models reject the field, and the
+// resolved "Auto" model may be any of them.
+function outputConfig(model: string, effort: AIEffort | undefined): { output_config?: { effort: AIEffort } } {
+  const accepted = effortForModel('anthropic', model, effort)
+  return accepted ? { output_config: { effort: accepted } } : {}
 }
 
 // Turn a system-prompt string into a single cached text block. Returns

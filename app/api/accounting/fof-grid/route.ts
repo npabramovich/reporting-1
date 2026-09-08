@@ -11,7 +11,7 @@ import { parseFofPaste, matchHoldings } from '@/lib/portfolio/fof-paste'
 
 // The quarterly grid: one row per fund holding, prefilled from the register.
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
  * the ledger until they are confirmed (POST /confirm).
  */
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  const group = await resolveGroupOr400(admin, gate.fundId, body?.group ?? null)
+  const group = await resolveGroupOr400(admin, gate, body?.group ?? null)
   if (group instanceof NextResponse) return group
   const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
 

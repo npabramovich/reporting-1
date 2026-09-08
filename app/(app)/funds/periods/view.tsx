@@ -5,6 +5,7 @@ import { Loader2, Lock, Unlock, AlertTriangle, ChevronRight } from 'lucide-react
 import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
+import { NoBooksState, useChartExists } from '@/components/accounting/no-books'
 
 interface Period { id: string; period_start: string; period_end: string; label: string | null; status: string; closed_at: string | null }
 interface CloseEntryLine { accountCode: string; accountName: string; lpName: string | null; amount: number }
@@ -36,6 +37,8 @@ interface Preview {
   months: MonthPreview[]
   totalNetIncome: number
   basis: string
+  /** 'owner' for a management company or an individual: net income to one equity account, no split. */
+  mode?: 'partners' | 'owner'
   readiness: Readiness
   warnings: string[]
 }
@@ -56,6 +59,7 @@ function quickEnds(): { key: string; label: string; end: string }[] {
 }
 
 export function PeriodsView() {
+  const hasChart = useChartExists()
   const currency = useCurrency()
   const fmt = (v: number) => formatCurrencyPrice(v, currency)
   const [periods, setPeriods] = useState<Period[]>([])
@@ -120,6 +124,11 @@ export function PeriodsView() {
     load()
   }
 
+  // A close allocates the ledger's income to partners; with no chart there is no ledger to close.
+  if (hasChart === false) {
+    return <NoBooksState>No accounts are set up for this entity yet, so there is nothing to close.</NoBooksState>
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="border rounded-card p-4 space-y-3">
@@ -165,8 +174,10 @@ export function PeriodsView() {
               across {preview.months.length} month{preview.months.length === 1 ? '' : 's'}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Split pro-rata by {preview.basis === 'capital_balance' ? 'capital-account balance' : 'commitment'} as of each month end.
-              Nothing is posted until you confirm.
+              {preview.mode === 'owner'
+                ? 'Rolled into the owner’s capital account — no partners, nothing to split.'
+                : `Split pro-rata by ${preview.basis === 'capital_balance' ? 'capital-account balance' : 'commitment'} as of each month end.`}
+              {' '}Nothing is posted until you confirm.
             </p>
           </div>
 
@@ -201,7 +212,7 @@ export function PeriodsView() {
                     <span className="tabular-nums text-xs">{fmt(cat.capitalEffect)}</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {cat.accounts.map(a => `${a.code} ${a.name}`).join(', ')} · {cat.lines.filter(l => l.amount !== 0).length} partners
+                    {cat.accounts.map(a => `${a.code} ${a.name}`).join(', ')} · {preview.mode === 'owner' ? 'to the owner’s capital' : `${cat.lines.filter(l => l.amount !== 0).length} partners`}
                   </p>
                 </div>
               ))}
