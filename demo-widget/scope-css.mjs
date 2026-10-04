@@ -104,7 +104,7 @@ export function scopeCss(css) {
  *
  * What it cannot stop is an UNLAYERED host rule on an element selector (`button { … }`), which
  * outweighs the app's `:where()`-scoped equivalent on source order alone; scripts/demo-styles.mjs
- * would show it. www.otheradmin.com has none.
+ * would show it. www.usewelden.com has none.
  */
 // Left out: anything whose own markup styles it. SVG presentation attributes (a rect's width, a
 // path's stroke) and the width/height attributes of images and other embedded media are

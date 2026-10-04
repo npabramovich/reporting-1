@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Generate the browser-tab icons from the mark, public/brand/otheradmin-mark.svg.
+ * Generate the browser-tab icons from the mark, public/brand/welden-mark.svg.
  *
  *   node scripts/generate-favicons.mjs
  *
@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const source = fs.readFileSync(path.join(root, 'public', 'brand', 'otheradmin-mark.svg'), 'utf8')
+const source = fs.readFileSync(path.join(root, 'public', 'brand', 'welden-mark.svg'), 'utf8')
 const viewBox = source.match(/viewBox="([^"]+)"/)[1]
 const paths = [...source.matchAll(/<path[^>]*\/>/g)].map(m => m[0]).join('')
 

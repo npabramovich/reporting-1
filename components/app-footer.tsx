@@ -23,7 +23,7 @@ function HemrockIcon({ className }: { className?: string }) {
  * The in-app footer: the product, the company, the source, the licence, and the legal
  * pages when the deployment names them (NEXT_PUBLIC_TERMS_URL / NEXT_PUBLIC_PRIVACY_URL;
  * lib/site-links.ts). The marketing page that used to add social links and a demo
- * button to this footer lives at www.otheradmin.com now.
+ * button to this footer lives at www.usewelden.com now.
  */
 export function AppFooter() {
   return (

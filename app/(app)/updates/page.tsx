@@ -111,7 +111,7 @@ npm install
             Or paste any new migration files from <span className="font-mono">supabase/migrations/</span> into the
             Supabase SQL Editor in filename order. Check the{' '}
             <a
-              href="https://github.com/tdavidson/otheradmin/releases"
+              href="https://github.com/tdavidson/welden/releases"
               target="_blank"
               rel="noopener noreferrer"
               className="text-foreground underline underline-offset-4 hover:text-foreground/80"

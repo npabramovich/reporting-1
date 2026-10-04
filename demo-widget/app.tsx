@@ -130,7 +130,7 @@ export function DemoApp({ data, fetch, initialPath = '/dashboard', onNavigate, e
           <AppShell
             fundName={data.snapshot.fund.name}
             fundLogo={null}
-            userEmail="viewer@otheradmin.demo"
+            userEmail="viewer@welden.demo"
             reviewBadge={0}
             notesBadge={0}
             pendingActionsBadge={0}
