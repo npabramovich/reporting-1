@@ -41,11 +41,11 @@ const HOST = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>
 window.__misses = []; window.__pending = 0;
 Promise.all(['snapshot','answers','pages','api'].map(f => fetch('/' + f + '.json').then(r => r.json()))).then(([snapshot, answers, pages, api]) => {
   const orig = window.fetch;
-  window.__demo = OtherAdminDemo.mount(document.getElementById('demo'), { snapshot, answers, pages, api, onMiss: k => window.__misses.push(k) });
+  window.__demo = WeldenDemo.mount(document.getElementById('demo'), { snapshot, answers, pages, api, onMiss: k => window.__misses.push(k) });
   // Count in-flight /api requests so the walker can wait for a page to settle.
   const wrapped = window.fetch;
   window.fetch = function (input, init) { const p = wrapped.call(this, input, init); const u = typeof input === 'string' ? input : input.url ?? String(input); if (u.includes('/api/')) { window.__pending++; p.finally(() => { window.__pending--; }); } return p; };
-  window.__routes = OtherAdminDemo.routes(snapshot, pages);
+  window.__routes = WeldenDemo.routes(snapshot, pages);
   window.__ready = true;
 });
 </script></body></html>`

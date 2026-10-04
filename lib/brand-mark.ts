@@ -1,5 +1,5 @@
-// The OtherAdmin mark: a disc cut by a diagonal, off-centre toward the top left, drawn as
-// its two pieces. public/brand/otheradmin-mark.svg is the source; this is the same drawing
+// The Welden mark: a disc cut by a diagonal, off-centre toward the top left, drawn as
+// its two pieces. public/brand/welden-mark.svg is the source; this is the same drawing
 // for code that renders it inline (components/brand-mark.tsx) or as an image
 // (app/api/pwa-icon). Its own module, free of imports, so a client component can take it.
 

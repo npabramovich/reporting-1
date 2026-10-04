@@ -259,7 +259,7 @@ function iconEntry(size: IconSize, maskable: boolean, variant: IconVariant) {
 }
 
 /**
- * The browser-tab icons, both generated from public/brand/otheradmin-mark.svg by
+ * The browser-tab icons, both generated from public/brand/welden-mark.svg by
  * scripts/generate-favicons.mjs. The .ico first and the SVG after it: a browser that reads
  * SVG takes the later link, and one that doesn't has the .ico.
  *
@@ -340,7 +340,7 @@ export function buildManifest(brand: PwaBrand): MetadataRoute.Manifest {
 /**
  * What an LP sees in an install prompt.
  *
- * An unbranded deployment would otherwise offer "OtherAdmin Investor Portal",
+ * An unbranded deployment would otherwise offer "Welden Investor Portal",
  * which reads as two products stapled together.
  */
 export function portalNameFor(name: string): string {

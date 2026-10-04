@@ -1,4 +1,4 @@
-# OtherAdmin — Fund accounting
+# Welden — Fund accounting
 
 - Project overview at [README](./README.md)
 - Detailed feature descriptions at [FEATURES](./FEATURES.md)

@@ -123,10 +123,10 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  const messageId = `<manual-${crypto.randomUUID()}@otheradmin.local>`
+  const messageId = `<manual-${crypto.randomUUID()}@welden.local>`
   const payload: PostmarkPayload & { From: string; To: string; FromFull: { Email: string; Name: string }; Subject: string; MessageID: string } = {
     From: founderEmail,
-    To: 'manual-entry@otheradmin.local',
+    To: 'manual-entry@welden.local',
     FromFull: { Email: founderEmail, Name: founderName },
     Subject: subject,
     TextBody: composedBody,

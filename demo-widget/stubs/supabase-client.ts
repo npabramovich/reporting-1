@@ -20,7 +20,7 @@ function chain(): any {
 export function createClient() {
   return {
     auth: {
-      getUser: async () => ({ data: { user: { id: 'demo-viewer', email: 'viewer@otheradmin.demo' } }, error: null }),
+      getUser: async () => ({ data: { user: { id: 'demo-viewer', email: 'viewer@welden.demo' } }, error: null }),
       getSession: async () => ({ data: { session: null }, error: null }),
       signOut: async () => ({ error: null }),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),

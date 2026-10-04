@@ -1,4 +1,4 @@
-# OtherAdmin — Feature descriptions
+# Welden — Feature descriptions
 
 - Project overview at [README](./README.md)
 - Detailed feature descriptions at [FEATURES](./FEATURES.md)

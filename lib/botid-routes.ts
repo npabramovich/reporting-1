@@ -16,7 +16,7 @@
  *
  * NOTE: neither is enforced yet — no server code calls `checkBotId()`. The only caller was the
  * shared-account demo sign-in (app/demo), retired when the public demo moved to
- * www.otheradmin.com/demo as a static widget. These are declarations waiting for their
+ * www.usewelden.com/demo as a static widget. These are declarations waiting for their
  * server-side call, deliberately left for their own change.
  */
 /**

@@ -1,4 +1,4 @@
-# OtherAdmin — Documentation and deployment
+# Welden — Documentation and deployment
 
 - Project overview at [README](./README.md)
 - Detailed feature descriptions at [FEATURES](./FEATURES.md)
@@ -37,8 +37,8 @@ Follow these steps in order. Each step builds on the previous one.
 Download the source code from Github, or clone to copy it to your own Github account:
 
 ```bash
-git clone https://github.com/tdavidson/otheradmin.git
-cd otheradmin
+git clone https://github.com/tdavidson/welden.git
+cd welden
 npm install
 ```
 
@@ -76,11 +76,11 @@ Next is to deploy the app to your chosen hosting provider. Netlify and Vercel ar
 
 **Option A: Netlify**
 
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/tdavidson/otheradmin)
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/tdavidson/welden)
 
 **Option B: Vercel**
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftdavidson%2Fotheradmin&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY,ENCRYPTION_KEY,NEXT_PUBLIC_APP_URL&envDescription=Required%20environment%20variables%20for%20Portfolio%20Reporting&project-name=portfolio-reporting)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftdavidson%2Fwelden&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY,ENCRYPTION_KEY,NEXT_PUBLIC_APP_URL&envDescription=Required%20environment%20variables%20for%20Portfolio%20Reporting&project-name=portfolio-reporting)
 
 After deploying, add these environment variables in your hosting platform's settings:
 
@@ -327,7 +327,7 @@ Then set the tunnel URL as your inbound webhook (e.g. `https://your-tunnel.ngrok
 
 ### Demo mode
 
-**[Try the demo](https://www.otheradmin.com/demo/)** — explore the platform with sample data, no signup required.
+**[Try the demo](https://www.usewelden.com/demo/)** — explore the platform with sample data, no signup required.
 
 ### AI Providers
 
@@ -378,7 +378,7 @@ The features that can be configured are: **Interactions** (CRM-style email loggi
 
 ### Updates
 
-The app includes a built-in update checker. It periodically compares your installed version against the latest [GitHub release](https://github.com/tdavidson/otheradmin/releases). When a newer version is available, admins will see an **Updates** link in the sidebar. Click it to see the current version, the latest version, release notes, and a link to the GitHub release.
+The app includes a built-in update checker. It periodically compares your installed version against the latest [GitHub release](https://github.com/tdavidson/welden/releases). When a newer version is available, admins will see an **Updates** link in the sidebar. Click it to see the current version, the latest version, release notes, and a link to the GitHub release.
 
 Non-admin users do not see the update indicator. The check runs against the public GitHub Releases API (no authentication required) and is cached for one hour.
 
@@ -390,4 +390,4 @@ Built by Taylor Davidson at [Hemrock](https://www.hemrock.com).
 
 For setup assistance, support, or questions: [hemrock.com/contact](https://www.hemrock.com/contact).
 
-For bug reports and feature requests: [GitHub Issues](https://github.com/tdavidson/otheradmin/issues).
+For bug reports and feature requests: [GitHub Issues](https://github.com/tdavidson/welden/issues).

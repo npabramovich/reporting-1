@@ -3,7 +3,7 @@
  *
  * One module so the footer, the support page, the sign-in pages and the settings
  * version card agree, and so a self-hoster can find every outbound link in one
- * place. The product is OtherAdmin; the company behind it is Hemrock. A fund's own
+ * place. The product is Welden; the company behind it is Hemrock. A fund's own
  * deployment has neither name in its UI beyond these links, which is the point of
  * the fund-themeable `--primary` and the fixed `--brand` (DESIGN.md).
  *
@@ -11,14 +11,14 @@
  * own terms, or none, and a link to someone else's is worse than no link. Unset
  * means the links do not render.
  */
-export const PRODUCT_NAME = 'OtherAdmin'
-export const PRODUCT_SITE = 'https://www.otheradmin.com'
-export const PRODUCT_DOCS = 'https://www.otheradmin.com/docs/'
-export const PRODUCT_REPO = 'https://github.com/tdavidson/otheradmin'
+export const PRODUCT_NAME = 'Welden'
+export const PRODUCT_SITE = 'https://www.usewelden.com'
+export const PRODUCT_DOCS = 'https://www.usewelden.com/docs/'
+export const PRODUCT_REPO = 'https://github.com/tdavidson/welden'
 export const PRODUCT_LICENSE = `${PRODUCT_REPO}/blob/main/LICENSE.md`
 export const PRODUCT_RELEASES = `${PRODUCT_REPO}/releases`
 export const PRODUCT_ISSUES = `${PRODUCT_REPO}/issues`
-export const PRODUCT_DEMO = 'https://www.otheradmin.com/demo/'
+export const PRODUCT_DEMO = 'https://www.usewelden.com/demo/'
 
 export const COMPANY_NAME = 'Hemrock'
 export const COMPANY_SITE = 'https://www.hemrock.com'

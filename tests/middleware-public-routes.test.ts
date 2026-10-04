@@ -53,7 +53,7 @@ afterEach(() => {
 })
 
 describe('middleware — anonymous access to the public surfaces', () => {
-  it('bounces a signed-out visitor off /demo — the public demo is www.otheradmin.com/demo now', async () => {
+  it('bounces a signed-out visitor off /demo — the public demo is www.usewelden.com/demo now', async () => {
     // The shared-account sign-in that lived here is retired: the demo is a static widget on the
     // marketing site with no session at all. Even with the old variables still set, /demo is
     // an ordinary signed-in path.
@@ -62,7 +62,7 @@ describe('middleware — anonymous access to the public surfaces', () => {
     expect(redirectedToAuth(await middleware(req('/demo')))).toBe(true)
   })
 
-  it('bounces a signed-out visitor off / — the marketing page lives on www.otheradmin.com now', async () => {
+  it('bounces a signed-out visitor off / — the marketing page lives on www.usewelden.com now', async () => {
     expect(redirectedToAuth(await middleware(req('/')))).toBe(true)
   })
 
@@ -152,7 +152,7 @@ describe('middleware — the PWA shell answers without a session', () => {
  * Where a signed-in member of the fund actually begins.
  *
  * `/` is the post-login destination — both auth callbacks default `next` to it — and since the
- * marketing page moved to www.otheradmin.com it has no page of its own: a GP with a session
+ * marketing page moved to www.usewelden.com it has no page of its own: a GP with a session
  * belongs on /start, not on a redirect chain through app/page.tsx.
  *
  * The redirect lives here rather than in the auth routes because those are not the only way in:
