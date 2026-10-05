@@ -75,7 +75,7 @@ computed style. It renders each page twice, so it is not in the publish workflow
 `app/`, `components/`, `lib/`, `demo-widget/`, the tokens or the Tailwind config, runs the
 check, and uploads `dist/*` as the assets of the rolling GitHub release `demo-widget-latest`.
 The marketing site's build downloads them from there and checks the manifest, so a change to
-any page reaches the demo on the site's next deploy. Set the `WELDEN_SITE_DEPLOY_HOOK`
+any page reaches the demo on the site's next deploy. Set the `ADMIN_SITE_DEPLOY_HOOK`
 secret to a Vercel deploy hook and the workflow triggers that deploy itself.
 
 ## Keeping the data current
