@@ -9,11 +9,11 @@ import { scopeCss, ROOT, FRAME, ROOT_RESET } from './scope-css.mjs'
 /**
  * The demo's stylesheet is the app's, rule for rule. Compile app/globals.css the way the app
  * does, scope it the way the widget build does, and check that the only change to any rule is
- * the one scope-css.mjs promises: the scope added to its selector, which weighs nothing. The
+ * the one scope-css.mjs promises: the scope added to its selector, which weighs the same two classes on every rule. The
  * declarations, the order and the specificity are the app's, so the demo renders as the app
  * does; scripts/demo-styles.mjs is the slower, in-browser proof of the same thing.
  */
-const SCOPE = `:where(.${ROOT},.${ROOT} *)`
+const SCOPE = `:is(.${ROOT}.${ROOT},.${ROOT}.${ROOT} *)`
 const ROOTS = new Set([':root', 'html', ':host', 'body'])
 
 async function appCss(): Promise<string> {
@@ -42,7 +42,7 @@ describe('the demo widget stylesheet', () => {
 
     // Every other rule: same order, same declarations, same selector once the scope is removed.
     const appRest = app.filter(r => !isRoot(r))
-    const demoRest = demo.filter(r => r.selector !== `.${ROOT}` && r.selector !== `.${FRAME}`)
+    const demoRest = demo.filter(r => r.selector !== `.${ROOT}.${ROOT}` && r.selector !== `.${ROOT}.${ROOT}.${FRAME}`)
     expect(demoRest.length).toBe(appRest.length)
     const problems: string[] = []
     appRest.forEach((a, i) => {
@@ -61,7 +61,7 @@ describe('the demo widget stylesheet', () => {
     // :root / html / body: every declaration lands on the widget's root (or, for body's
     // background and margin, its frame), except body's line-height: inherit, which the root
     // already has from html.
-    const landed = new Set(demo.filter(r => r.selector === `.${ROOT}` || r.selector === `.${FRAME}`).flatMap(decls))
+    const landed = new Set(demo.filter(r => r.selector === `.${ROOT}.${ROOT}` || r.selector === `.${ROOT}.${ROOT}.${FRAME}`).flatMap(decls))
     const missing = app.filter(isRoot).flatMap(decls).map(remToPx).filter(d => d !== 'line-height:inherit' && !landed.has(d))
     expect(missing).toEqual([])
   }, 60000)
