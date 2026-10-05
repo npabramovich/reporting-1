@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 
-const REPO = 'tdavidson/reporting'
+const REPO = 'tdavidson/portfolio'
 const STALE_MINUTES = 360 // refresh at most once every 6 hours
 
 /**

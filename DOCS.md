@@ -32,13 +32,13 @@ Designed as a single-tenant deployment per fund. You control your own data, your
 
 Follow these steps in order. Each step builds on the previous one.
 
-### Step 1: Download from Github or Clone the repository in Github 
+### Step 1: Download or clone the repository
 
-Download the source code from Github, or clone to copy it to your own Github account:
+Download the source code from GitHub, or clone it to your computer. To keep a copy in your own GitHub account, fork the repository first and clone your fork instead:
 
 ```bash
-git clone https://github.com/tdavidson/reporting.git
-cd reporting
+git clone https://github.com/tdavidson/portfolio.git
+cd portfolio
 npm install
 ```
 
@@ -76,11 +76,11 @@ Next is to deploy the app to your chosen hosting provider. Netlify and Vercel ar
 
 **Option A: Netlify**
 
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/tdavidson/reporting)
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/tdavidson/portfolio)
 
 **Option B: Vercel**
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftdavidson%2Freporting&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY,ENCRYPTION_KEY,NEXT_PUBLIC_APP_URL&envDescription=Required%20environment%20variables%20for%20Portfolio%20Reporting&project-name=portfolio-reporting)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftdavidson%2Fportfolio&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY,ENCRYPTION_KEY,NEXT_PUBLIC_APP_URL&envDescription=Required%20environment%20variables%20for%20Portfolio&project-name=portfolio)
 
 After deploying, add these environment variables in your hosting platform's settings:
 
@@ -377,7 +377,7 @@ The features that can be configured are: **Interactions** (CRM-style email loggi
 
 ### Updates
 
-The app includes a built-in update checker. It periodically compares your installed version against the latest [GitHub release](https://github.com/tdavidson/reporting/releases). When a newer version is available, admins will see an **Updates** link in the sidebar. Click it to see the current version, the latest version, release notes, and a link to the GitHub release.
+The app includes a built-in update checker. It periodically compares your installed version against the latest [GitHub release](https://github.com/tdavidson/portfolio/releases). When a newer version is available, admins will see an **Updates** link in the sidebar. Click it to see the current version, the latest version, release notes, and a link to the GitHub release.
 
 Non-admin users do not see the update indicator. The check runs against the public GitHub Releases API (no authentication required) and is cached for one hour.
 
@@ -389,4 +389,4 @@ Built by Taylor Davidson at [Hemrock](https://www.hemrock.com).
 
 For setup assistance, hosted deployments, or questions: [hemrock.com/contact](https://www.hemrock.com/contact).
 
-For bug reports and feature requests: [GitHub Issues](https://github.com/tdavidson/reporting/issues).
+For bug reports and feature requests: [GitHub Issues](https://github.com/tdavidson/portfolio/issues).

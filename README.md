@@ -1,4 +1,4 @@
-![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js) ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-97.6%25-3178C6?logo=typescript&logoColor=white) ![GitHub Stars](https://img.shields.io/github/stars/tdavidson/reporting?style=flat) ![License](https://img.shields.io/badge/license-Apache_2.0-blue)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js) ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-97.6%25-3178C6?logo=typescript&logoColor=white) ![GitHub Stars](https://img.shields.io/github/stars/tdavidson/portfolio?style=flat) ![License](https://img.shields.io/badge/license-Apache_2.0-blue)
 
 # Portfolio, by Hemrock
 
@@ -57,7 +57,7 @@ See [LICENSE](./LICENSE.md) for full terms.
 
 ## Quick start
 
-- **Clone the repo** — git clone https://github.com/tdavidson/reporting.git && npm install
+- **Clone the repo** — `git clone https://github.com/tdavidson/portfolio.git && cd portfolio && npm install`
 - **Create a Supabase project** — Copy your project URL, anon key, and service role key
 - **Generate an encryption key** — openssl rand -hex 32
 - **Deploy to Netlify or Vercel** — One-click deploy buttons available in the full guide
@@ -66,4 +66,4 @@ See [LICENSE](./LICENSE.md) for full terms.
 
 Full deployment guide with detailed steps, optional services, and local development setup: [DOCS](./DOCS.md)
 
-For setup assistance or hosted deployments: [hemrock.com/contact](https://www.hemrock.com/contact). For bug reports and feature requests: [GitHub Issues](https://github.com/tdavidson/reporting/issues).
+For setup assistance or hosted deployments: [hemrock.com/contact](https://www.hemrock.com/contact). For bug reports and feature requests: [GitHub Issues](https://github.com/tdavidson/portfolio/issues).
