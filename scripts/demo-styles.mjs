@@ -11,6 +11,9 @@
  *   B. the demo: the same DOM under dist/widget.css, inside demo-widget/check-host.css — a host
  *      page that tries to restyle everything, so a leak in either direction shows.
  *
+ * DEMO_HOST_CSS=<file> swaps check-host.css for a real host's stylesheet, such as hemrock.com's
+ * compiled CSS, to check the demo against the page it will actually sit in.
+ *
  * Both name the same font family through the variables each side really uses. Any property
  * that differs on any element is a failure: the demo is meant to be the app, not like it. The
  * workflow runs this before publishing.
@@ -56,7 +59,7 @@ const server = http.createServer((req, res) => {
   const host = url.searchParams.get('host')
   if (url.pathname === '/' && host) { res.writeHead(200, { 'content-type': 'text/html' }); return res.end(HOST[host](url.searchParams.get('route'))) }
   const file = url.pathname === '/app.css' ? path.join(tmp, 'app.css')
-    : url.pathname === '/check-host.css' ? path.join(root, 'demo-widget', 'check-host.css')
+    : url.pathname === '/check-host.css' ? (process.env.DEMO_HOST_CSS || path.join(root, 'demo-widget', 'check-host.css'))
     : path.join(dist, path.normalize(url.pathname))
   if (!file || !fs.existsSync(file)) { res.writeHead(404); return res.end() }
   res.writeHead(200, { 'content-type': types[path.extname(file)] ?? 'application/octet-stream' })
