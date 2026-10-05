@@ -1,8 +1,9 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import {
+  MARK_ICON_VIEWBOX,
   MARK_PATHS,
-  MARK_VIEWBOX,
+  MARK_STROKE,
   SURFACE_LIGHT_HEX,
   isIconSize,
   isIconVariant,
@@ -12,11 +13,11 @@ import {
   type IconVariant,
 } from '@/lib/pwa'
 
-// Home-screen and install icons, in the fund's accent. The same mark app/icon.tsx
-// draws for the browser tab, rendered large.
+// Home-screen and install icons, in the fund's accent. The same mark public/icon.svg
+// shows in the browser tab, rendered large.
 //
 // Node rather than edge (app/api/og uses edge): this reads the fund's theme through
-// loadPwaBrand, and app/icon.tsx already proves ImageResponse renders fine here.
+// loadPwaBrand.
 export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
@@ -38,13 +39,11 @@ export async function GET(req: NextRequest) {
   // drawings. portalFillHex is the ramp's 700 stop precisely so the knockout stays
   // legible on every accent; see lib/pwa.ts.
   const background = variant === 'portal' ? portalFillHex : SURFACE_LIGHT_HEX
-  const stroke = variant === 'portal' ? SURFACE_LIGHT_HEX : markHex
+  const fill = variant === 'portal' ? SURFACE_LIGHT_HEX : markHex
 
-  // Whole-pixel size and offset, and an even-pixel stroke, so the mark's edges cover
-  // whole pixels instead of straddling them. The stroke is also lighter than the Lucide
-  // glyph it comes from — a toolbar weight blown up to 512px closes the drawing in.
-  // markGeometry explains both.
-  const { markPx, padTop, padLeft, strokeUnits } = markGeometry(size, maskable)
+  // Whole-pixel size and offset, so the mark's edges aren't softened by a half-pixel
+  // shift. markGeometry explains it.
+  const { markPx, padTop, padLeft } = markGeometry(size, maskable)
 
   return new ImageResponse(
     (
@@ -65,15 +64,15 @@ export async function GET(req: NextRequest) {
           xmlns="http://www.w3.org/2000/svg"
           width={markPx}
           height={markPx}
-          viewBox={`0 0 ${MARK_VIEWBOX} ${MARK_VIEWBOX}`}
+          viewBox={MARK_ICON_VIEWBOX}
           fill="none"
-          stroke={stroke}
-          strokeWidth={strokeUnits}
-          strokeLinecap="round"
-          strokeLinejoin="round"
+          stroke={fill}
+          strokeWidth={MARK_STROKE.width}
+          strokeLinecap={MARK_STROKE.linecap}
+          strokeLinejoin={MARK_STROKE.linejoin}
         >
-          {MARK_PATHS.map(d => (
-            <path key={d} d={d} />
+          {MARK_PATHS.map(p => (
+            <path key={p.d} d={p.d} />
           ))}
         </svg>
       </div>

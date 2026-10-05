@@ -12,6 +12,8 @@ export interface SettingsData {
   fundName: string
   fundLogo: string | null
   fundAddress: string | null
+  signInLogo: string | null
+  signInTitle: string | null
   postmarkInboundAddress: string
   postmarkWebhookToken: string
   hasClaudeKey: boolean
