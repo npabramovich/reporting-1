@@ -61,7 +61,7 @@ async function main() {
   if (!fund) throw new Error(`No fund named ${JSON.stringify(FUND_NAME)}. Set DEMO_FUND_NAME.`)
   const fundId = fund.id
 
-  const [vehicles, companies, metrics, values, lps, deals, notes, interactions, investments] = await Promise.all([
+  const [vehicles, companies, metrics, values, lps, deals, notes, interactions, investments, positions] = await Promise.all([
     // fund_vehicles is not in the generated Database type yet; the rest of the codebase casts too.
     (admin as any).from('fund_vehicles').select('id, name, kind').eq('fund_id', fundId).order('name') as Promise<{ data: { id: string; name: string; kind: string | null }[] | null; error: unknown }>,
     admin.from('companies').select('id, name, aliases, industry, stage, status, overview, founders, why_invested, portfolio_group').eq('fund_id', fundId).order('name'),
@@ -73,8 +73,9 @@ async function main() {
     admin.from('company_notes').select('id, company_id, content, created_at').eq('fund_id', fundId).order('created_at', { ascending: false }).limit(30),
     admin.from('interactions').select('company_id, subject, summary, interaction_date').eq('fund_id', fundId).order('interaction_date', { ascending: false }).limit(30),
     admin.from('investment_transactions').select('company_id, portfolio_group, transaction_type, transaction_date, round_name, investment_cost, share_price, unrealized_value_change, current_share_price, notes').eq('fund_id', fundId).order('transaction_date'),
+    (admin as any).from('lp_investments').select('entity_id, portfolio_group').eq('fund_id', fundId) as Promise<{ data: { entity_id: string; portfolio_group: string }[] | null; error: unknown }>,
   ])
-  for (const r of [vehicles, companies, metrics, values, lps, deals, notes, interactions, investments]) if (r.error) throw r.error
+  for (const r of [vehicles, companies, metrics, values, lps, deals, notes, interactions, investments, positions]) if (r.error) throw r.error
 
   const valuesByMetric = new Map<string, DemoSnapshot['companies'][number]['metrics'][number]['values']>()
   for (const v of values.data ?? []) {
@@ -99,6 +100,11 @@ async function main() {
       })),
     })),
     lps: (lps.data ?? []).map(l => ({ id: l.id, name: l.name })),
+    // One URL per LP per vehicle for the capital statement page; a vehicle is named by its group.
+    lpPositions: [...new Map((positions.data ?? []).flatMap(p => {
+      const vehicleId = (vehicles.data ?? []).find(v => v.name === p.portfolio_group)?.id
+      return vehicleId ? [[`${vehicleId}/${p.entity_id}`, { vehicleId, lpEntityId: p.entity_id }] as const] : []
+    })).values()],
     deals: (deals.data ?? []).map(d => ({ ...d })),
     notes: (notes.data ?? []).map(n => ({ id: n.id, company_id: n.company_id, content: n.content, created_at: String(n.created_at).slice(0, 10) })),
     interactions: (interactions.data ?? []).map(i => ({ company_id: i.company_id, subject: i.subject ?? '', summary: i.summary ?? '', date: String(i.interaction_date).slice(0, 10) })),

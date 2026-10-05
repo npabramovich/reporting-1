@@ -65,7 +65,7 @@ export const ROUTES: DemoRoute[] = [
   { pattern: '/funds', section: 'funds' },
   { pattern: '/funds/:x', section: 'funds', hrefs: s => [...SECTION_SLUGS.map(slug => `/funds/${slug}`), ...s.vehicles.map(v => `/funds/${v.id}`)] },
   { pattern: '/funds/:id/:slug', section: 'funds', hrefs: s => s.vehicles.flatMap(v => SECTION_SLUGS.map(slug => `/funds/${v.id}/${slug}`)) },
-  { pattern: '/funds/:id/capital-accounts/:lpEntityId', section: 'funds', hrefs: () => [] },
+  { pattern: '/funds/:id/capital-accounts/:lpEntityId', section: 'funds', hrefs: s => (s.lpPositions ?? []).map(p => `/funds/${p.vehicleId}/capital-accounts/${p.lpEntityId}`) },
   // Settings and support
   { pattern: '/settings', section: 'settings' },
   { pattern: '/support', section: 'settings' },

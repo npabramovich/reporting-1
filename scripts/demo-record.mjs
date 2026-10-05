@@ -171,7 +171,17 @@ for (const href of routes) {
   console.log(`${href}  ${requests - before} requests${tabs.length ? `, ${tabs.length} tabs` : ''}`)
 }
 
-// 4. Ledger registers. The ledger opens empty until an account is picked, and the statements and
+// 4. LP capital statements open on YTD; record ITD too, the other window a visitor picks.
+for (const key of Object.keys(responses)) {
+  const m = key.match(/^GET \/api\/accounting\/lp-statement\?(.*)$/)
+  if (!m) continue
+  const qs = new URLSearchParams(m[1])
+  if (qs.get('preset') !== 'ytd') continue
+  qs.set('preset', 'itd')
+  await proxy(`/api/accounting/lp-statement?${qs}`)
+}
+
+// 5. Ledger registers. The ledger opens empty until an account is picked, and the statements and
 //    journal link every line to `ledger?account=<code>&preset=<ytd|itd>` — so record each
 //    account's register over both windows, or those clicks land on "Could not load".
 for (const key of Object.keys(responses)) {
