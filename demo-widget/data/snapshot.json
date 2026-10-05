@@ -1,6 +1,6 @@
 {
  "schemaVersion": 2,
- "generatedAt": "2026-09-24",
+ "generatedAt": "2026-10-05",
  "source": "the demo fund",
  "fund": {
   "name": "Welden Demo",
@@ -1289,6 +1289,48 @@
   {
    "id": "7355af33-8b62-4adc-8d11-c0c918f8e52c",
    "name": "Various Angels Fund II"
+  }
+ ],
+ "lpPositions": [
+  {
+   "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
+   "lpEntityId": "284cb747-2354-4cf1-8018-548eb5eac0f3"
+  },
+  {
+   "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
+   "lpEntityId": "7888b510-c3cf-40ab-b40a-586623662b83"
+  },
+  {
+   "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
+   "lpEntityId": "278ec0e3-2940-46f6-b651-5775726f9560"
+  },
+  {
+   "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
+   "lpEntityId": "a2636fbe-5a1e-4bf1-a600-c1d5e28631d5"
+  },
+  {
+   "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
+   "lpEntityId": "fcfff8e9-f323-497e-bcf1-15d2979a3a82"
+  },
+  {
+   "vehicleId": "d73f3df5-5a2f-4c34-b431-e6c8d71fd4e9",
+   "lpEntityId": "284cb747-2354-4cf1-8018-548eb5eac0f3"
+  },
+  {
+   "vehicleId": "d73f3df5-5a2f-4c34-b431-e6c8d71fd4e9",
+   "lpEntityId": "ed542a37-1fc6-4c19-bce8-992413009631"
+  },
+  {
+   "vehicleId": "d73f3df5-5a2f-4c34-b431-e6c8d71fd4e9",
+   "lpEntityId": "6a657357-5f5d-416f-81f3-35815df4ae69"
+  },
+  {
+   "vehicleId": "d73f3df5-5a2f-4c34-b431-e6c8d71fd4e9",
+   "lpEntityId": "278ec0e3-2940-46f6-b651-5775726f9560"
+  },
+  {
+   "vehicleId": "d73f3df5-5a2f-4c34-b431-e6c8d71fd4e9",
+   "lpEntityId": "4f57aefa-a42b-4293-9162-6b849f592dc8"
   }
  ],
  "deals": [

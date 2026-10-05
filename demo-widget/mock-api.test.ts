@@ -37,3 +37,19 @@ describe('demo mock API', () => {
     expect(body.accounts).toEqual(CHART)
   })
 })
+
+describe('demo mock API fallback', () => {
+  const statements = {
+    responses: {
+      'GET /api/accounting/lp-statement?group=Fund+I&lp=a&preset=ytd': { status: 200, body: { lp: 'a', preset: 'ytd' } },
+      'GET /api/accounting/lp-statement?group=Fund+I&lp=a&preset=itd': { status: 200, body: { lp: 'a', preset: 'itd' } },
+      'GET /api/accounting/lp-statement?group=Fund+I&lp=b&preset=ytd': { status: 200, body: { lp: 'b', preset: 'ytd' } },
+    },
+  } as unknown as DemoApi
+  const f = createDemoFetch({ snapshot: {} as DemoSnapshot, answers: { answers: [] } as unknown as DemoAnswers, api: statements })
+
+  it('keeps the same LP when only the period is unrecorded', async () => {
+    const body = await (await f('/api/accounting/lp-statement?lp=b&preset=last_quarter&group=Fund+I')).json()
+    expect(body.lp).toBe('b')
+  })
+})

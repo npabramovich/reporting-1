@@ -29,15 +29,28 @@ export function createDemoFetch({ snapshot, answers, api, onMiss, onWrite }: Dem
   const recorded = api?.responses ?? {}
   // The same path with a different query: the recorder walked the pages with their default
   // filters, and a visitor changing one still deserves rows rather than a blank table. The
-  // plainest recorded query stands in (the page's default), not whichever sorts first — the
-  // ledger also has a register per account, and a bare period change must not open one.
-  const byPath = new Map<string, string>()
-  const plainness = (key: string) => [(key.split('?')[1] ?? '').split('&').filter(Boolean).length, key.length]
+  // recording that shares the most query parameters with the request stands in — so a period
+  // change keeps the same LP's statement or the same account's register — then the plainest
+  // (the page's default), so a bare period change on the ledger does not open some account.
+  const byPath = new Map<string, string[]>()
   for (const key of Object.keys(recorded)) {
     const bare = key.split('?')[0]
-    const held = byPath.get(bare)
-    const [n, len] = plainness(key)
-    if (!held || n < plainness(held)[0] || (n === plainness(held)[0] && len < plainness(held)[1])) byPath.set(bare, key)
+    byPath.set(bare, [...(byPath.get(bare) ?? []), key])
+  }
+  const params = (key: string) => [...new URLSearchParams(key.split('?')[1] ?? '').entries()]
+  const closest = (bare: string, wanted: string): string | undefined => {
+    const want = new Set(params(wanted).map(([k, v]) => `${k}=${v}`))
+    let best: string | undefined, bestShared = -1, bestCount = Infinity
+    for (const key of byPath.get(bare) ?? []) {
+      const own = params(key)
+      const shared = own.filter(([k, v]) => want.has(`${k}=${v}`)).length
+      // A recording that pins something the request does not ask for (another LP, another
+      // account) is a worse stand-in than one that leaves it out.
+      const extra = own.filter(([k]) => !params(wanted).some(([w]) => w === k)).length
+      const score = shared - extra
+      if (score > bestShared || (score === bestShared && own.length < bestCount)) { best = key; bestShared = score; bestCount = own.length }
+    }
+    return best
   }
 
   return async (input, init) => {
@@ -52,7 +65,7 @@ export function createDemoFetch({ snapshot, answers, api, onMiss, onWrite }: Dem
     }
 
     const key = requestKey(method, url)
-    const hit = recorded[key] ?? recorded[byPath.get(`${method} ${path}`) ?? '']
+    const hit = recorded[key] ?? recorded[closest(`${method} ${path}`, key) ?? '']
     if (hit) return json(expand(hit.body, recorded), hit.status)
 
     const generic = fromSnapshot(path, snapshot)

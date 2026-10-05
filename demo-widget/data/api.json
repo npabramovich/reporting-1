@@ -1,6 +1,6 @@
 {
  "schemaVersion": 2,
- "recordedAt": "2026-09-24T09:15:18.180Z",
+ "recordedAt": "2026-10-05T09:23:04.668Z",
  "origin": "portfolio.hemrock.com",
  "responses": {
   "GET /api/accounting/bank/reconcile?group=Fund+I": {
@@ -606,7 +606,7 @@
        "unclassified": 0,
        "ending": 4935539.09
       },
-      "irr": 0.3511,
+      "irr": 0.3463,
       "beginning": 0,
       "contributions": 2395833.33,
       "distributions": 0,
@@ -661,7 +661,7 @@
        "unclassified": 0,
        "ending": 1974215.6
       },
-      "irr": 0.3511,
+      "irr": 0.3463,
       "beginning": 0,
       "contributions": 958333.33,
       "distributions": 0,
@@ -716,7 +716,7 @@
        "unclassified": 0,
        "ending": 7896862.49
       },
-      "irr": 0.3511,
+      "irr": 0.3463,
       "beginning": 0,
       "contributions": 3833333.34,
       "distributions": 0,
@@ -771,7 +771,7 @@
        "unclassified": 0,
        "ending": 5922646.88
       },
-      "irr": 0.3511,
+      "irr": 0.3463,
       "beginning": 0,
       "contributions": 2875000,
       "distributions": 0,
@@ -826,7 +826,7 @@
        "unclassified": 0,
        "ending": 2961323.44
       },
-      "irr": 0.3511,
+      "irr": 0.3463,
       "beginning": 0,
       "contributions": 1437500,
       "distributions": 0,
@@ -930,7 +930,7 @@
        "unclassified": 0,
        "ending": 3560175
       },
-      "irr": 0.4318,
+      "irr": 0.4261,
       "beginning": 0,
       "contributions": 1455000,
       "distributions": 0,
@@ -985,7 +985,7 @@
        "unclassified": 0,
        "ending": 4746900
       },
-      "irr": 0.4318,
+      "irr": 0.4261,
       "beginning": 0,
       "contributions": 1940000,
       "distributions": 0,
@@ -1040,7 +1040,7 @@
        "unclassified": 0,
        "ending": 1186725
       },
-      "irr": 0.4318,
+      "irr": 0.4261,
       "beginning": 0,
       "contributions": 485000,
       "distributions": 0,
@@ -1095,7 +1095,7 @@
        "unclassified": 0,
        "ending": 8307075
       },
-      "irr": 0.4318,
+      "irr": 0.4261,
       "beginning": 0,
       "contributions": 3395000,
       "distributions": 0,
@@ -1150,7 +1150,7 @@
        "unclassified": 0,
        "ending": 5933625
       },
-      "irr": 0.4318,
+      "irr": 0.4261,
       "beginning": 0,
       "contributions": 2425000,
       "distributions": 0,
@@ -2311,7 +2311,7 @@
      "uncalledCapital": 500000,
      "distributedCapital": 0,
      "waterfall": {
-      "asOf": "2026-09-24",
+      "asOf": "2026-10-05",
       "kind": "none",
       "carryRate": 0,
       "prefRate": 0,
@@ -2584,7 +2584,7 @@
      "uncalledCapital": 300000,
      "distributedCapital": 0,
      "waterfall": {
-      "asOf": "2026-09-24",
+      "asOf": "2026-10-05",
       "kind": "none",
       "carryRate": 0,
       "prefRate": 0,
@@ -2895,7 +2895,7 @@
        "dpi": 0,
        "rvpi": 2.0600510869565216,
        "tvpi": 2.0600510869565216,
-       "irr": 0.3509074430545538
+       "irr": 0.3461056536066622
       },
       "lp": {
        "committed": 12000000,
@@ -2907,7 +2907,7 @@
        "dpi": 0,
        "rvpi": 2.0600510869565216,
        "tvpi": 2.0600510869565216,
-       "irr": 0.3509074430545538
+       "irr": 0.3461056536066622
       }
      },
      {
@@ -2926,7 +2926,7 @@
        "dpi": 0,
        "rvpi": 2.446855670103093,
        "tvpi": 2.446855670103093,
-       "irr": 0.43162181162772945
+       "irr": 0.4259248209418678
       },
       "lp": {
        "committed": 10000000,
@@ -2938,7 +2938,7 @@
        "dpi": 0,
        "rvpi": 2.446855670103093,
        "tvpi": 2.446855670103093,
-       "irr": 0.43162181162772945
+       "irr": 0.4259248209418678
       }
      }
     ]
@@ -3365,6 +3365,28 @@
       "grossIrr": 0.4538945983722443,
       "netIrrFund": 0.348441477595171,
       "netIrrLp": 0.348441477595171
+     },
+     {
+      "period": "2026-12-31",
+      "label": "Q4 '26",
+      "calledCapital": 11500000,
+      "distributed": 0,
+      "contributions": 11500000,
+      "distributions": 0,
+      "operatingIncome": 55000,
+      "realizedGains": 0,
+      "unrealizedGains": 13285587.5,
+      "expenses": -1150000,
+      "other": 0,
+      "nav": 23690587.5,
+      "investedCapital": 8150000,
+      "newInvested": 3650000,
+      "followOnInvested": 4500000,
+      "proceeds": 0,
+      "portfolioValue": 21435587.5,
+      "grossIrr": 0.4078543687559142,
+      "netIrrFund": 0.31229932913958974,
+      "netIrrLp": 0.31229932913958974
      }
     ],
     "hasGross": true
@@ -3791,6 +3813,28 @@
       "grossIrr": 0.5548022442811235,
       "netIrrFund": 0.42869723327561193,
       "netIrrLp": 0.42869723327561193
+     },
+     {
+      "period": "2026-12-31",
+      "label": "Q4 '26",
+      "calledCapital": 9700000,
+      "distributed": 0,
+      "contributions": 9700000,
+      "distributions": 0,
+      "operatingIncome": 45000,
+      "realizedGains": 0,
+      "unrealizedGains": 14949500,
+      "expenses": -960000,
+      "other": 0,
+      "nav": 23734500,
+      "investedCapital": 6700000,
+      "newInvested": 1500000,
+      "followOnInvested": 5200000,
+      "proceeds": 0,
+      "portfolioValue": 21649500,
+      "grossIrr": 0.49928001159608054,
+      "netIrrFund": 0.3855675600708591,
+      "netIrrLp": 0.3855675600708591
      }
     ],
     "hasGross": true
@@ -6143,7 +6187,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -6159,7 +6203,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 1055000,
      "lines": [
@@ -7401,7 +7445,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -7417,7 +7461,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 885000,
      "lines": [
@@ -7674,7 +7718,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -7690,7 +7734,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -7742,7 +7786,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -7758,7 +7802,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -7845,7 +7889,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -7861,7 +7905,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 1850000,
      "lines": [],
@@ -7948,7 +7992,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -7964,7 +8008,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 600000,
      "lines": [
@@ -8052,7 +8096,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -8068,7 +8112,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 250000,
      "lines": [],
@@ -8172,7 +8216,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -8188,7 +8232,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 2000000,
      "lines": [
@@ -8310,7 +8354,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -8326,7 +8370,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 3400000,
      "lines": [],
@@ -8396,7 +8440,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -8412,7 +8456,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 2000000,
      "lines": [],
@@ -8533,7 +8577,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -8549,7 +8593,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 4000000,
      "lines": [
@@ -8637,7 +8681,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -8653,7 +8697,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 750000,
      "lines": [],
@@ -8705,7 +8749,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -8721,7 +8765,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -8773,7 +8817,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -8789,7 +8833,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -8908,7 +8952,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -8924,7 +8968,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 2952500,
      "lines": [
@@ -9004,7 +9048,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -9020,7 +9064,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -9100,7 +9144,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -9116,7 +9160,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [
@@ -9273,7 +9317,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -9289,7 +9333,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 2500000,
      "lines": [
@@ -9463,7 +9507,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -9479,7 +9523,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 9338087.5,
      "lines": [
@@ -9619,7 +9663,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -9635,7 +9679,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 1200000,
      "lines": [
@@ -9799,7 +9843,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -9815,7 +9859,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 11997000,
      "lines": [
@@ -9928,7 +9972,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -9944,7 +9988,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 247500,
      "lines": [],
@@ -9996,7 +10040,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10012,7 +10056,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10064,7 +10108,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10080,7 +10124,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10132,7 +10176,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10148,7 +10192,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10200,7 +10244,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10216,7 +10260,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10268,7 +10312,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10284,7 +10328,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10336,7 +10380,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10352,7 +10396,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10404,7 +10448,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10420,7 +10464,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10472,7 +10516,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10488,7 +10532,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10540,7 +10584,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10556,7 +10600,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10608,7 +10652,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10624,7 +10668,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10676,7 +10720,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10692,7 +10736,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10744,7 +10788,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10760,7 +10804,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10812,7 +10856,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10828,7 +10872,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -10880,7 +10924,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -10896,7 +10940,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -11323,7 +11367,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -11339,7 +11383,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [
@@ -11818,7 +11862,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -11834,7 +11878,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [
@@ -11938,7 +11982,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -11954,7 +11998,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -12006,7 +12050,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -12022,7 +12066,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -12074,7 +12118,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -12090,7 +12134,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -12142,7 +12186,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -12158,7 +12202,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -12210,7 +12254,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -12226,7 +12270,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -12278,7 +12322,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -12294,7 +12338,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -13585,7 +13629,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -13601,7 +13645,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 4685539.09,
      "lines": [
@@ -14873,7 +14917,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -14889,7 +14933,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 3380175,
      "lines": [
@@ -16198,7 +16242,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -16214,7 +16258,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 7496862.49,
      "lines": [
@@ -17486,7 +17530,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -17502,7 +17546,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 7887075,
      "lines": [
@@ -18774,7 +18818,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -18790,7 +18834,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 1126725,
      "lines": [
@@ -20062,7 +20106,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -20078,7 +20122,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 4506900,
      "lines": [
@@ -21387,7 +21431,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -21403,7 +21447,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 5622646.88,
      "lines": [
@@ -22712,7 +22756,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -22728,7 +22772,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 2811323.44,
      "lines": [
@@ -24000,7 +24044,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -24016,7 +24060,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 5633625,
      "lines": [
@@ -25325,7 +25369,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -25341,7 +25385,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 1874215.6,
      "lines": [
@@ -26411,7 +26455,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -26427,7 +26471,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": -12190587.5,
      "lines": [],
@@ -27479,7 +27523,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -27495,7 +27539,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": -14034500,
      "lines": [],
@@ -27547,7 +27591,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -27563,7 +27607,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -27615,7 +27659,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -27631,7 +27675,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -27735,7 +27779,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -27751,7 +27795,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 55000,
      "lines": [
@@ -27873,7 +27917,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -27889,7 +27933,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 45000,
      "lines": [
@@ -28070,7 +28114,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -28086,7 +28130,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 13285587.5,
      "lines": [
@@ -28267,7 +28311,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -28283,7 +28327,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 14949500,
      "lines": [
@@ -28363,7 +28407,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -28379,7 +28423,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -28431,7 +28475,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -28447,7 +28491,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -28806,7 +28850,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -28822,7 +28866,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 960000,
      "lines": [
@@ -29216,7 +29260,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -29232,7 +29276,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 800000,
      "lines": [
@@ -29439,7 +29483,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -29455,7 +29499,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 140000,
      "lines": [
@@ -29679,7 +29723,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -29695,7 +29739,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 120000,
      "lines": [
@@ -29817,7 +29861,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -29833,7 +29877,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 50000,
      "lines": [],
@@ -29903,7 +29947,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -29919,7 +29963,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 40000,
      "lines": [],
@@ -29971,7 +30015,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -29987,7 +30031,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -30039,7 +30083,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -30055,7 +30099,7 @@
      },
      "period": {
       "start": "2026-01-01",
-      "end": "2026-09-24"
+      "end": "2026-10-05"
      },
      "opening": 0,
      "lines": [],
@@ -30073,7 +30117,7 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
@@ -30088,13 +30132,3528 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
     "accounts": {
      "$same": "GET /api/accounting/ledger?account=1000&group=Fund+II&preset=itd#accounts"
     },
     "register": null
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+I&lp=278ec0e3-2940-46f6-b651-5775726f9560&preset=itd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "278ec0e3-2940-46f6-b651-5775726f9560",
+     "name": "Coastal University Endowment",
+     "partnerClass": "lp",
+     "commitment": 2500000,
+     "called": 2395833.33,
+     "funded": 2395833.33,
+     "outstanding": 104166.67,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 4935539.09
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 2395833.33,
+     "distributions": 0,
+     "managementFees": -200000,
+     "expenses": -39583.3,
+     "operatingIncome": 11458.33,
+     "realizedGains": 0,
+     "unrealizedGains": 2767830.73,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 4935539.09
+    },
+    "periodRollForward": {
+     "beginning": 0,
+     "contributions": 2395833.33,
+     "distributions": 0,
+     "managementFees": -200000,
+     "expenses": -39583.3,
+     "operatingIncome": 11458.33,
+     "realizedGains": 0,
+     "unrealizedGains": 2767830.73,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 4935539.09
+    },
+    "transactions": [
+     {
+      "date": "2022-03-15",
+      "memo": "Capital call #1 — RouteWise Seed + fee reserve",
+      "sourceType": "capital_call",
+      "amount": 104166.67,
+      "balance": 104166.67
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 91666.67
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Organizational expenses allocated to partners",
+      "sourceType": "organizational_expense",
+      "amount": -10416.66,
+      "balance": 81250.01
+     },
+     {
+      "date": "2022-06-30",
+      "memo": "June 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 68750.01
+     },
+     {
+      "date": "2022-09-30",
+      "memo": "September 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 56250.01
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 43750.01
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -7291.66,
+      "balance": 36458.35
+     },
+     {
+      "date": "2023-03-31",
+      "memo": "March 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 23958.35
+     },
+     {
+      "date": "2023-06-10",
+      "memo": "Capital call #2 — NovaTech Seed, RouteWise Series A, fees",
+      "sourceType": "capital_call",
+      "amount": 375000,
+      "balance": 398958.35
+     },
+     {
+      "date": "2023-06-30",
+      "memo": "June 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 386458.35
+     },
+     {
+      "date": "2023-07-31",
+      "memo": "July 2023 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 166666.46,
+      "balance": 553124.81
+     },
+     {
+      "date": "2023-09-30",
+      "memo": "September 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 540624.81
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -7291.66,
+      "balance": 533333.15
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 520833.15
+     },
+     {
+      "date": "2024-01-05",
+      "memo": "Capital call #3 — GreenLeaf Bio Seed + reserves",
+      "sourceType": "capital_call",
+      "amount": 208333.33,
+      "balance": 729166.48
+     },
+     {
+      "date": "2024-03-31",
+      "memo": "March 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 716666.48
+     },
+     {
+      "date": "2024-06-01",
+      "memo": "Capital call #4 — AdVantage Series A + reserves",
+      "sourceType": "capital_call",
+      "amount": 520833.33,
+      "balance": 1237499.81
+     },
+     {
+      "date": "2024-06-30",
+      "memo": "June 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 1224999.81
+     },
+     {
+      "date": "2024-09-01",
+      "memo": "Capital call #5 — NovaTech Series A follow-on + reserves",
+      "sourceType": "capital_call",
+      "amount": 416666.67,
+      "balance": 1641666.48
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 104166.67,
+      "balance": 1745833.15
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 1733333.15
+     },
+     {
+      "date": "2024-11-01",
+      "memo": "Capital call #6 — RouteWise Series B + reserves",
+      "sourceType": "capital_call",
+      "amount": 520833.33,
+      "balance": 2254166.48
+     },
+     {
+      "date": "2024-11-30",
+      "memo": "November 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 611110.41,
+      "balance": 2865276.89
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -7291.66,
+      "balance": 2857985.23
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 2845485.23
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 6250,
+      "balance": 2851735.23
+     },
+     {
+      "date": "2025-03-31",
+      "memo": "March 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 2839235.23
+     },
+     {
+      "date": "2025-06-30",
+      "memo": "June 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 2826735.23
+     },
+     {
+      "date": "2025-09-30",
+      "memo": "September 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 2814235.23
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 5208.33,
+      "balance": 2819443.56
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 2806943.56
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 1885887.19,
+      "balance": 4692830.75
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -7291.66,
+      "balance": 4685539.09
+     },
+     {
+      "date": "2026-01-20",
+      "memo": "Capital call #7 — wire from Coastal University Endowment",
+      "sourceType": "capital_call",
+      "amount": 250000,
+      "balance": 4935539.09
+     }
+    ],
+    "period": {
+     "preset": "itd",
+     "start": null,
+     "end": null,
+     "label": "Inception to date"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+I&lp=278ec0e3-2940-46f6-b651-5775726f9560&preset=ytd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "278ec0e3-2940-46f6-b651-5775726f9560",
+     "name": "Coastal University Endowment",
+     "partnerClass": "lp",
+     "commitment": 2500000,
+     "called": 2395833.33,
+     "funded": 2395833.33,
+     "outstanding": 104166.67,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 4935539.09
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 2395833.33,
+     "distributions": 0,
+     "managementFees": -200000,
+     "expenses": -39583.3,
+     "operatingIncome": 11458.33,
+     "realizedGains": 0,
+     "unrealizedGains": 2767830.73,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 4935539.09
+    },
+    "periodRollForward": {
+     "beginning": 4685539.09,
+     "contributions": 250000,
+     "distributions": 0,
+     "managementFees": 0,
+     "expenses": 0,
+     "operatingIncome": 0,
+     "realizedGains": 0,
+     "unrealizedGains": 0,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 4935539.09
+    },
+    "transactions": [
+     {
+      "date": "2026-01-20",
+      "memo": "Capital call #7 — wire from Coastal University Endowment",
+      "sourceType": "capital_call",
+      "amount": 250000,
+      "balance": 4935539.09
+     }
+    ],
+    "period": {
+     "preset": "ytd",
+     "start": "2026-01-01",
+     "end": "2026-10-05",
+     "label": "YTD 2026"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+I&lp=284cb747-2354-4cf1-8018-548eb5eac0f3&preset=itd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "284cb747-2354-4cf1-8018-548eb5eac0f3",
+     "name": "Hemrock Founders Capital LP",
+     "partnerClass": "lp",
+     "commitment": 4000000,
+     "called": 3833333.34,
+     "funded": 3833333.34,
+     "outstanding": 166666.66,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 7896862.49
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 3833333.34,
+     "distributions": 0,
+     "managementFees": -320000,
+     "expenses": -63333.35,
+     "operatingIncome": 18333.34,
+     "realizedGains": 0,
+     "unrealizedGains": 4428529.16,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 7896862.49
+    },
+    "periodRollForward": {
+     "beginning": 0,
+     "contributions": 3833333.34,
+     "distributions": 0,
+     "managementFees": -320000,
+     "expenses": -63333.35,
+     "operatingIncome": 18333.34,
+     "realizedGains": 0,
+     "unrealizedGains": 4428529.16,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 7896862.49
+    },
+    "transactions": [
+     {
+      "date": "2022-03-15",
+      "memo": "Capital call #1 — RouteWise Seed + fee reserve",
+      "sourceType": "capital_call",
+      "amount": 166666.66,
+      "balance": 166666.66
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 146666.66
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Organizational expenses allocated to partners",
+      "sourceType": "organizational_expense",
+      "amount": -16666.67,
+      "balance": 129999.99
+     },
+     {
+      "date": "2022-06-30",
+      "memo": "June 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 109999.99
+     },
+     {
+      "date": "2022-09-30",
+      "memo": "September 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 89999.99
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 69999.99
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -11666.67,
+      "balance": 58333.32
+     },
+     {
+      "date": "2023-03-31",
+      "memo": "March 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 38333.32
+     },
+     {
+      "date": "2023-06-10",
+      "memo": "Capital call #2 — NovaTech Seed, RouteWise Series A, fees",
+      "sourceType": "capital_call",
+      "amount": 600000,
+      "balance": 638333.32
+     },
+     {
+      "date": "2023-06-30",
+      "memo": "June 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 618333.32
+     },
+     {
+      "date": "2023-07-31",
+      "memo": "July 2023 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 266666.33,
+      "balance": 884999.65
+     },
+     {
+      "date": "2023-09-30",
+      "memo": "September 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 864999.65
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -11666.67,
+      "balance": 853332.98
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 833332.98
+     },
+     {
+      "date": "2024-01-05",
+      "memo": "Capital call #3 — GreenLeaf Bio Seed + reserves",
+      "sourceType": "capital_call",
+      "amount": 333333.34,
+      "balance": 1166666.32
+     },
+     {
+      "date": "2024-03-31",
+      "memo": "March 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 1146666.32
+     },
+     {
+      "date": "2024-06-01",
+      "memo": "Capital call #4 — AdVantage Series A + reserves",
+      "sourceType": "capital_call",
+      "amount": 833333.34,
+      "balance": 1979999.66
+     },
+     {
+      "date": "2024-06-30",
+      "memo": "June 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 1959999.66
+     },
+     {
+      "date": "2024-09-01",
+      "memo": "Capital call #5 — NovaTech Series A follow-on + reserves",
+      "sourceType": "capital_call",
+      "amount": 666666.66,
+      "balance": 2626666.32
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 166666.66,
+      "balance": 2793332.98
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 2773332.98
+     },
+     {
+      "date": "2024-11-01",
+      "memo": "Capital call #6 — RouteWise Series B + reserves",
+      "sourceType": "capital_call",
+      "amount": 833333.34,
+      "balance": 3606666.32
+     },
+     {
+      "date": "2024-11-30",
+      "memo": "November 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 977776.67,
+      "balance": 4584442.99
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -11666.67,
+      "balance": 4572776.32
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 4552776.32
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 10000,
+      "balance": 4562776.32
+     },
+     {
+      "date": "2025-03-31",
+      "memo": "March 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 4542776.32
+     },
+     {
+      "date": "2025-06-30",
+      "memo": "June 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 4522776.32
+     },
+     {
+      "date": "2025-09-30",
+      "memo": "September 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 4502776.32
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 8333.34,
+      "balance": 4511109.66
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -20000,
+      "balance": 4491109.66
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 3017419.5,
+      "balance": 7508529.16
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -11666.67,
+      "balance": 7496862.49
+     },
+     {
+      "date": "2026-01-20",
+      "memo": "Capital call #7 — wire from Hemrock Founders Capital LP",
+      "sourceType": "capital_call",
+      "amount": 400000,
+      "balance": 7896862.49
+     }
+    ],
+    "period": {
+     "preset": "itd",
+     "start": null,
+     "end": null,
+     "label": "Inception to date"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+I&lp=284cb747-2354-4cf1-8018-548eb5eac0f3&preset=ytd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "284cb747-2354-4cf1-8018-548eb5eac0f3",
+     "name": "Hemrock Founders Capital LP",
+     "partnerClass": "lp",
+     "commitment": 4000000,
+     "called": 3833333.34,
+     "funded": 3833333.34,
+     "outstanding": 166666.66,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 7896862.49
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 3833333.34,
+     "distributions": 0,
+     "managementFees": -320000,
+     "expenses": -63333.35,
+     "operatingIncome": 18333.34,
+     "realizedGains": 0,
+     "unrealizedGains": 4428529.16,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 7896862.49
+    },
+    "periodRollForward": {
+     "beginning": 7496862.49,
+     "contributions": 400000,
+     "distributions": 0,
+     "managementFees": 0,
+     "expenses": 0,
+     "operatingIncome": 0,
+     "realizedGains": 0,
+     "unrealizedGains": 0,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 7896862.49
+    },
+    "transactions": [
+     {
+      "date": "2026-01-20",
+      "memo": "Capital call #7 — wire from Hemrock Founders Capital LP",
+      "sourceType": "capital_call",
+      "amount": 400000,
+      "balance": 7896862.49
+     }
+    ],
+    "period": {
+     "preset": "ytd",
+     "start": "2026-01-01",
+     "end": "2026-10-05",
+     "label": "YTD 2026"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+I&lp=7888b510-c3cf-40ab-b40a-586623662b83&preset=itd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "7888b510-c3cf-40ab-b40a-586623662b83",
+     "name": "Northstar Family Office I LLC",
+     "partnerClass": "lp",
+     "commitment": 3000000,
+     "called": 2875000,
+     "funded": 2875000,
+     "outstanding": 125000,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 5922646.88
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 2875000,
+     "distributions": 0,
+     "managementFees": -240000,
+     "expenses": -47500,
+     "operatingIncome": 13750,
+     "realizedGains": 0,
+     "unrealizedGains": 3321396.88,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 5922646.88
+    },
+    "periodRollForward": {
+     "beginning": 0,
+     "contributions": 2875000,
+     "distributions": 0,
+     "managementFees": -240000,
+     "expenses": -47500,
+     "operatingIncome": 13750,
+     "realizedGains": 0,
+     "unrealizedGains": 3321396.88,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 5922646.88
+    },
+    "transactions": [
+     {
+      "date": "2022-03-15",
+      "memo": "Capital call #1 — RouteWise Seed + fee reserve",
+      "sourceType": "capital_call",
+      "amount": 125000,
+      "balance": 125000
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 110000
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Organizational expenses allocated to partners",
+      "sourceType": "organizational_expense",
+      "amount": -12500,
+      "balance": 97500
+     },
+     {
+      "date": "2022-06-30",
+      "memo": "June 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 82500
+     },
+     {
+      "date": "2022-09-30",
+      "memo": "September 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 67500
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 52500
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -8750,
+      "balance": 43750
+     },
+     {
+      "date": "2023-03-31",
+      "memo": "March 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 28750
+     },
+     {
+      "date": "2023-06-10",
+      "memo": "Capital call #2 — NovaTech Seed, RouteWise Series A, fees",
+      "sourceType": "capital_call",
+      "amount": 450000,
+      "balance": 478750
+     },
+     {
+      "date": "2023-06-30",
+      "memo": "June 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 463750
+     },
+     {
+      "date": "2023-07-31",
+      "memo": "July 2023 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 199999.75,
+      "balance": 663749.75
+     },
+     {
+      "date": "2023-09-30",
+      "memo": "September 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 648749.75
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -8750,
+      "balance": 639999.75
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 624999.75
+     },
+     {
+      "date": "2024-01-05",
+      "memo": "Capital call #3 — GreenLeaf Bio Seed + reserves",
+      "sourceType": "capital_call",
+      "amount": 250000,
+      "balance": 874999.75
+     },
+     {
+      "date": "2024-03-31",
+      "memo": "March 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 859999.75
+     },
+     {
+      "date": "2024-06-01",
+      "memo": "Capital call #4 — AdVantage Series A + reserves",
+      "sourceType": "capital_call",
+      "amount": 625000,
+      "balance": 1484999.75
+     },
+     {
+      "date": "2024-06-30",
+      "memo": "June 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 1469999.75
+     },
+     {
+      "date": "2024-09-01",
+      "memo": "Capital call #5 — NovaTech Series A follow-on + reserves",
+      "sourceType": "capital_call",
+      "amount": 500000,
+      "balance": 1969999.75
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 1954999.75
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 125000,
+      "balance": 2079999.75
+     },
+     {
+      "date": "2024-11-01",
+      "memo": "Capital call #6 — RouteWise Series B + reserves",
+      "sourceType": "capital_call",
+      "amount": 625000,
+      "balance": 2704999.75
+     },
+     {
+      "date": "2024-11-30",
+      "memo": "November 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 733332.5,
+      "balance": 3438332.25
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -8750,
+      "balance": 3429582.25
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 3414582.25
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 7500,
+      "balance": 3422082.25
+     },
+     {
+      "date": "2025-03-31",
+      "memo": "March 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 3407082.25
+     },
+     {
+      "date": "2025-06-30",
+      "memo": "June 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 3392082.25
+     },
+     {
+      "date": "2025-09-30",
+      "memo": "September 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 3377082.25
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 6250,
+      "balance": 3383332.25
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -15000,
+      "balance": 3368332.25
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 2263064.63,
+      "balance": 5631396.88
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -8750,
+      "balance": 5622646.88
+     },
+     {
+      "date": "2026-01-20",
+      "memo": "Capital call #7 — wire from Northstar Family Office I LLC",
+      "sourceType": "capital_call",
+      "amount": 300000,
+      "balance": 5922646.88
+     }
+    ],
+    "period": {
+     "preset": "itd",
+     "start": null,
+     "end": null,
+     "label": "Inception to date"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+I&lp=7888b510-c3cf-40ab-b40a-586623662b83&preset=ytd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "7888b510-c3cf-40ab-b40a-586623662b83",
+     "name": "Northstar Family Office I LLC",
+     "partnerClass": "lp",
+     "commitment": 3000000,
+     "called": 2875000,
+     "funded": 2875000,
+     "outstanding": 125000,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 5922646.88
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 2875000,
+     "distributions": 0,
+     "managementFees": -240000,
+     "expenses": -47500,
+     "operatingIncome": 13750,
+     "realizedGains": 0,
+     "unrealizedGains": 3321396.88,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 5922646.88
+    },
+    "periodRollForward": {
+     "beginning": 5622646.88,
+     "contributions": 300000,
+     "distributions": 0,
+     "managementFees": 0,
+     "expenses": 0,
+     "operatingIncome": 0,
+     "realizedGains": 0,
+     "unrealizedGains": 0,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 5922646.88
+    },
+    "transactions": [
+     {
+      "date": "2026-01-20",
+      "memo": "Capital call #7 — wire from Northstar Family Office I LLC",
+      "sourceType": "capital_call",
+      "amount": 300000,
+      "balance": 5922646.88
+     }
+    ],
+    "period": {
+     "preset": "ytd",
+     "start": "2026-01-01",
+     "end": "2026-10-05",
+     "label": "YTD 2026"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+I&lp=a2636fbe-5a1e-4bf1-a600-c1d5e28631d5&preset=itd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "a2636fbe-5a1e-4bf1-a600-c1d5e28631d5",
+     "name": "Pinecrest Foundation Charitable Trust",
+     "partnerClass": "lp",
+     "commitment": 1500000,
+     "called": 1437500,
+     "funded": 1437500,
+     "outstanding": 62500,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 2961323.44
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 1437500,
+     "distributions": 0,
+     "managementFees": -120000,
+     "expenses": -23750,
+     "operatingIncome": 6875,
+     "realizedGains": 0,
+     "unrealizedGains": 1660698.44,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 2961323.44
+    },
+    "periodRollForward": {
+     "beginning": 0,
+     "contributions": 1437500,
+     "distributions": 0,
+     "managementFees": -120000,
+     "expenses": -23750,
+     "operatingIncome": 6875,
+     "realizedGains": 0,
+     "unrealizedGains": 1660698.44,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 2961323.44
+    },
+    "transactions": [
+     {
+      "date": "2022-03-15",
+      "memo": "Capital call #1 — RouteWise Seed + fee reserve",
+      "sourceType": "capital_call",
+      "amount": 62500,
+      "balance": 62500
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 55000
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Organizational expenses allocated to partners",
+      "sourceType": "organizational_expense",
+      "amount": -6250,
+      "balance": 48750
+     },
+     {
+      "date": "2022-06-30",
+      "memo": "June 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 41250
+     },
+     {
+      "date": "2022-09-30",
+      "memo": "September 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 33750
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 26250
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -4375,
+      "balance": 21875
+     },
+     {
+      "date": "2023-03-31",
+      "memo": "March 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 14375
+     },
+     {
+      "date": "2023-06-10",
+      "memo": "Capital call #2 — NovaTech Seed, RouteWise Series A, fees",
+      "sourceType": "capital_call",
+      "amount": 225000,
+      "balance": 239375
+     },
+     {
+      "date": "2023-06-30",
+      "memo": "June 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 231875
+     },
+     {
+      "date": "2023-07-31",
+      "memo": "July 2023 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 99999.88,
+      "balance": 331874.88
+     },
+     {
+      "date": "2023-09-30",
+      "memo": "September 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 324374.88
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -4375,
+      "balance": 319999.88
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 312499.88
+     },
+     {
+      "date": "2024-01-05",
+      "memo": "Capital call #3 — GreenLeaf Bio Seed + reserves",
+      "sourceType": "capital_call",
+      "amount": 125000,
+      "balance": 437499.88
+     },
+     {
+      "date": "2024-03-31",
+      "memo": "March 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 429999.88
+     },
+     {
+      "date": "2024-06-01",
+      "memo": "Capital call #4 — AdVantage Series A + reserves",
+      "sourceType": "capital_call",
+      "amount": 312500,
+      "balance": 742499.88
+     },
+     {
+      "date": "2024-06-30",
+      "memo": "June 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 734999.88
+     },
+     {
+      "date": "2024-09-01",
+      "memo": "Capital call #5 — NovaTech Series A follow-on + reserves",
+      "sourceType": "capital_call",
+      "amount": 250000,
+      "balance": 984999.88
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 977499.88
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 62500,
+      "balance": 1039999.88
+     },
+     {
+      "date": "2024-11-01",
+      "memo": "Capital call #6 — RouteWise Series B + reserves",
+      "sourceType": "capital_call",
+      "amount": 312500,
+      "balance": 1352499.88
+     },
+     {
+      "date": "2024-11-30",
+      "memo": "November 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 366666.25,
+      "balance": 1719166.13
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -4375,
+      "balance": 1714791.13
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 1707291.13
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 3750,
+      "balance": 1711041.13
+     },
+     {
+      "date": "2025-03-31",
+      "memo": "March 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 1703541.13
+     },
+     {
+      "date": "2025-06-30",
+      "memo": "June 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 1696041.13
+     },
+     {
+      "date": "2025-09-30",
+      "memo": "September 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 1688541.13
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 3125,
+      "balance": 1691666.13
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 1684166.13
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 1131532.31,
+      "balance": 2815698.44
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -4375,
+      "balance": 2811323.44
+     },
+     {
+      "date": "2026-01-20",
+      "memo": "Capital call #7 — wire from Pinecrest Foundation Charitable Trust",
+      "sourceType": "capital_call",
+      "amount": 150000,
+      "balance": 2961323.44
+     }
+    ],
+    "period": {
+     "preset": "itd",
+     "start": null,
+     "end": null,
+     "label": "Inception to date"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+I&lp=a2636fbe-5a1e-4bf1-a600-c1d5e28631d5&preset=ytd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "a2636fbe-5a1e-4bf1-a600-c1d5e28631d5",
+     "name": "Pinecrest Foundation Charitable Trust",
+     "partnerClass": "lp",
+     "commitment": 1500000,
+     "called": 1437500,
+     "funded": 1437500,
+     "outstanding": 62500,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 2961323.44
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 1437500,
+     "distributions": 0,
+     "managementFees": -120000,
+     "expenses": -23750,
+     "operatingIncome": 6875,
+     "realizedGains": 0,
+     "unrealizedGains": 1660698.44,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 2961323.44
+    },
+    "periodRollForward": {
+     "beginning": 2811323.44,
+     "contributions": 150000,
+     "distributions": 0,
+     "managementFees": 0,
+     "expenses": 0,
+     "operatingIncome": 0,
+     "realizedGains": 0,
+     "unrealizedGains": 0,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 2961323.44
+    },
+    "transactions": [
+     {
+      "date": "2026-01-20",
+      "memo": "Capital call #7 — wire from Pinecrest Foundation Charitable Trust",
+      "sourceType": "capital_call",
+      "amount": 150000,
+      "balance": 2961323.44
+     }
+    ],
+    "period": {
+     "preset": "ytd",
+     "start": "2026-01-01",
+     "end": "2026-10-05",
+     "label": "YTD 2026"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+I&lp=fcfff8e9-f323-497e-bcf1-15d2979a3a82&preset=itd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "fcfff8e9-f323-497e-bcf1-15d2979a3a82",
+     "name": "Hemrock Angels Aggregator I LP",
+     "partnerClass": "lp",
+     "commitment": 1000000,
+     "called": 958333.33,
+     "funded": 958333.33,
+     "outstanding": 41666.67,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 1974215.6
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 958333.33,
+     "distributions": 0,
+     "managementFees": -80000,
+     "expenses": -15833.35,
+     "operatingIncome": 4583.33,
+     "realizedGains": 0,
+     "unrealizedGains": 1107132.29,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 1974215.6
+    },
+    "periodRollForward": {
+     "beginning": 0,
+     "contributions": 958333.33,
+     "distributions": 0,
+     "managementFees": -80000,
+     "expenses": -15833.35,
+     "operatingIncome": 4583.33,
+     "realizedGains": 0,
+     "unrealizedGains": 1107132.29,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 1974215.6
+    },
+    "transactions": [
+     {
+      "date": "2022-03-15",
+      "memo": "Capital call #1 — RouteWise Seed + fee reserve",
+      "sourceType": "capital_call",
+      "amount": 41666.67,
+      "balance": 41666.67
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 36666.67
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Organizational expenses allocated to partners",
+      "sourceType": "organizational_expense",
+      "amount": -4166.67,
+      "balance": 32500
+     },
+     {
+      "date": "2022-06-30",
+      "memo": "June 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 27500
+     },
+     {
+      "date": "2022-09-30",
+      "memo": "September 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 22500
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 17500
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -2916.67,
+      "balance": 14583.33
+     },
+     {
+      "date": "2023-03-31",
+      "memo": "March 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 9583.33
+     },
+     {
+      "date": "2023-06-10",
+      "memo": "Capital call #2 — NovaTech Seed, RouteWise Series A, fees",
+      "sourceType": "capital_call",
+      "amount": 150000,
+      "balance": 159583.33
+     },
+     {
+      "date": "2023-06-30",
+      "memo": "June 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 154583.33
+     },
+     {
+      "date": "2023-07-31",
+      "memo": "July 2023 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 66666.58,
+      "balance": 221249.91
+     },
+     {
+      "date": "2023-09-30",
+      "memo": "September 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 216249.91
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -2916.67,
+      "balance": 213333.24
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 208333.24
+     },
+     {
+      "date": "2024-01-05",
+      "memo": "Capital call #3 — GreenLeaf Bio Seed + reserves",
+      "sourceType": "capital_call",
+      "amount": 83333.33,
+      "balance": 291666.57
+     },
+     {
+      "date": "2024-03-31",
+      "memo": "March 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 286666.57
+     },
+     {
+      "date": "2024-06-01",
+      "memo": "Capital call #4 — AdVantage Series A + reserves",
+      "sourceType": "capital_call",
+      "amount": 208333.33,
+      "balance": 494999.9
+     },
+     {
+      "date": "2024-06-30",
+      "memo": "June 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 489999.9
+     },
+     {
+      "date": "2024-09-01",
+      "memo": "Capital call #5 — NovaTech Series A follow-on + reserves",
+      "sourceType": "capital_call",
+      "amount": 166666.67,
+      "balance": 656666.57
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 651666.57
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 41666.67,
+      "balance": 693333.24
+     },
+     {
+      "date": "2024-11-01",
+      "memo": "Capital call #6 — RouteWise Series B + reserves",
+      "sourceType": "capital_call",
+      "amount": 208333.33,
+      "balance": 901666.57
+     },
+     {
+      "date": "2024-11-30",
+      "memo": "November 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 244444.17,
+      "balance": 1146110.74
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -2916.67,
+      "balance": 1143194.07
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 1138194.07
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 2500,
+      "balance": 1140694.07
+     },
+     {
+      "date": "2025-03-31",
+      "memo": "March 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 1135694.07
+     },
+     {
+      "date": "2025-06-30",
+      "memo": "June 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 1130694.07
+     },
+     {
+      "date": "2025-09-30",
+      "memo": "September 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 1125694.07
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 2083.33,
+      "balance": 1127777.4
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -5000,
+      "balance": 1122777.4
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 754354.87,
+      "balance": 1877132.27
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -2916.67,
+      "balance": 1874215.6
+     },
+     {
+      "date": "2026-01-20",
+      "memo": "Capital call #7 — wire from Hemrock Angels Aggregator I LP",
+      "sourceType": "capital_call",
+      "amount": 100000,
+      "balance": 1974215.6
+     }
+    ],
+    "period": {
+     "preset": "itd",
+     "start": null,
+     "end": null,
+     "label": "Inception to date"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+I&lp=fcfff8e9-f323-497e-bcf1-15d2979a3a82&preset=ytd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "fcfff8e9-f323-497e-bcf1-15d2979a3a82",
+     "name": "Hemrock Angels Aggregator I LP",
+     "partnerClass": "lp",
+     "commitment": 1000000,
+     "called": 958333.33,
+     "funded": 958333.33,
+     "outstanding": 41666.67,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 1974215.6
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 958333.33,
+     "distributions": 0,
+     "managementFees": -80000,
+     "expenses": -15833.35,
+     "operatingIncome": 4583.33,
+     "realizedGains": 0,
+     "unrealizedGains": 1107132.29,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 1974215.6
+    },
+    "periodRollForward": {
+     "beginning": 1874215.6,
+     "contributions": 100000,
+     "distributions": 0,
+     "managementFees": 0,
+     "expenses": 0,
+     "operatingIncome": 0,
+     "realizedGains": 0,
+     "unrealizedGains": 0,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 1974215.6
+    },
+    "transactions": [
+     {
+      "date": "2026-01-20",
+      "memo": "Capital call #7 — wire from Hemrock Angels Aggregator I LP",
+      "sourceType": "capital_call",
+      "amount": 100000,
+      "balance": 1974215.6
+     }
+    ],
+    "period": {
+     "preset": "ytd",
+     "start": "2026-01-01",
+     "end": "2026-10-05",
+     "label": "YTD 2026"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+II&lp=278ec0e3-2940-46f6-b651-5775726f9560&preset=itd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "278ec0e3-2940-46f6-b651-5775726f9560",
+     "name": "Coastal University Endowment",
+     "partnerClass": "lp",
+     "commitment": 1500000,
+     "called": 1455000,
+     "funded": 1455000,
+     "outstanding": 45000,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 3560175
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 1455000,
+     "distributions": 0,
+     "managementFees": -120000,
+     "expenses": -24000,
+     "operatingIncome": 6750,
+     "realizedGains": 0,
+     "unrealizedGains": 2242425,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 3560175
+    },
+    "periodRollForward": {
+     "beginning": 0,
+     "contributions": 1455000,
+     "distributions": 0,
+     "managementFees": -120000,
+     "expenses": -24000,
+     "operatingIncome": 6750,
+     "realizedGains": 0,
+     "unrealizedGains": 2242425,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 3560175
+    },
+    "transactions": [
+     {
+      "date": "2022-01-10",
+      "memo": "Capital call #1 — Benchline Seed + fee reserve",
+      "sourceType": "capital_call",
+      "amount": 75000,
+      "balance": 75000
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 67500
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Organizational expenses allocated to partners",
+      "sourceType": "organizational_expense",
+      "amount": -6000,
+      "balance": 61500
+     },
+     {
+      "date": "2022-06-30",
+      "memo": "June 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 54000
+     },
+     {
+      "date": "2022-09-30",
+      "memo": "September 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 46500
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -4500,
+      "balance": 42000
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 34500
+     },
+     {
+      "date": "2023-03-31",
+      "memo": "March 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 27000
+     },
+     {
+      "date": "2023-04-01",
+      "memo": "Capital call #2 — Benchline Series A, TapFin Seed, fees",
+      "sourceType": "capital_call",
+      "amount": 270000,
+      "balance": 297000
+     },
+     {
+      "date": "2023-04-30",
+      "memo": "April 2023 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 135000,
+      "balance": 432000
+     },
+     {
+      "date": "2023-06-30",
+      "memo": "June 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 424500
+     },
+     {
+      "date": "2023-09-30",
+      "memo": "September 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 417000
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -4500,
+      "balance": 412500
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 405000
+     },
+     {
+      "date": "2024-03-31",
+      "memo": "March 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 397500
+     },
+     {
+      "date": "2024-04-15",
+      "memo": "Capital call #3 — Verdant Seed + reserves",
+      "sourceType": "capital_call",
+      "amount": 180000,
+      "balance": 577500
+     },
+     {
+      "date": "2024-06-30",
+      "memo": "June 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 570000
+     },
+     {
+      "date": "2024-08-01",
+      "memo": "Capital call #4 — Benchline Series B, Lattis Pre-Seed, reserves",
+      "sourceType": "capital_call",
+      "amount": 480000,
+      "balance": 1050000
+     },
+     {
+      "date": "2024-08-31",
+      "memo": "August 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 540000,
+      "balance": 1590000
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 1582500
+     },
+     {
+      "date": "2024-12-01",
+      "memo": "Capital call #5 — TapFin Series A + reserves",
+      "sourceType": "capital_call",
+      "amount": 270000,
+      "balance": 1852500
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 105000,
+      "balance": 1957500
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -4500,
+      "balance": 1953000
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 3750,
+      "balance": 1956750
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 1949250
+     },
+     {
+      "date": "2025-03-31",
+      "memo": "March 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 1941750
+     },
+     {
+      "date": "2025-06-30",
+      "memo": "June 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 1934250
+     },
+     {
+      "date": "2025-09-30",
+      "memo": "September 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 1926750
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 1462425,
+      "balance": 3389175
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -4500,
+      "balance": 3384675
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -7500,
+      "balance": 3377175
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 3000,
+      "balance": 3380175
+     },
+     {
+      "date": "2026-02-10",
+      "memo": "Capital call #6 — wire from Coastal University Endowment",
+      "sourceType": "capital_call",
+      "amount": 180000,
+      "balance": 3560175
+     }
+    ],
+    "period": {
+     "preset": "itd",
+     "start": null,
+     "end": null,
+     "label": "Inception to date"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+II&lp=278ec0e3-2940-46f6-b651-5775726f9560&preset=ytd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "278ec0e3-2940-46f6-b651-5775726f9560",
+     "name": "Coastal University Endowment",
+     "partnerClass": "lp",
+     "commitment": 1500000,
+     "called": 1455000,
+     "funded": 1455000,
+     "outstanding": 45000,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 3560175
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 1455000,
+     "distributions": 0,
+     "managementFees": -120000,
+     "expenses": -24000,
+     "operatingIncome": 6750,
+     "realizedGains": 0,
+     "unrealizedGains": 2242425,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 3560175
+    },
+    "periodRollForward": {
+     "beginning": 3380175,
+     "contributions": 180000,
+     "distributions": 0,
+     "managementFees": 0,
+     "expenses": 0,
+     "operatingIncome": 0,
+     "realizedGains": 0,
+     "unrealizedGains": 0,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 3560175
+    },
+    "transactions": [
+     {
+      "date": "2026-02-10",
+      "memo": "Capital call #6 — wire from Coastal University Endowment",
+      "sourceType": "capital_call",
+      "amount": 180000,
+      "balance": 3560175
+     }
+    ],
+    "period": {
+     "preset": "ytd",
+     "start": "2026-01-01",
+     "end": "2026-10-05",
+     "label": "YTD 2026"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+II&lp=284cb747-2354-4cf1-8018-548eb5eac0f3&preset=itd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "284cb747-2354-4cf1-8018-548eb5eac0f3",
+     "name": "Hemrock Founders Capital LP",
+     "partnerClass": "lp",
+     "commitment": 3500000,
+     "called": 3395000,
+     "funded": 3395000,
+     "outstanding": 105000,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 8307075
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 3395000,
+     "distributions": 0,
+     "managementFees": -280000,
+     "expenses": -56000,
+     "operatingIncome": 15750,
+     "realizedGains": 0,
+     "unrealizedGains": 5232325,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 8307075
+    },
+    "periodRollForward": {
+     "beginning": 0,
+     "contributions": 3395000,
+     "distributions": 0,
+     "managementFees": -280000,
+     "expenses": -56000,
+     "operatingIncome": 15750,
+     "realizedGains": 0,
+     "unrealizedGains": 5232325,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 8307075
+    },
+    "transactions": [
+     {
+      "date": "2022-01-10",
+      "memo": "Capital call #1 — Benchline Seed + fee reserve",
+      "sourceType": "capital_call",
+      "amount": 175000,
+      "balance": 175000
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 157500
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Organizational expenses allocated to partners",
+      "sourceType": "organizational_expense",
+      "amount": -14000,
+      "balance": 143500
+     },
+     {
+      "date": "2022-06-30",
+      "memo": "June 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 126000
+     },
+     {
+      "date": "2022-09-30",
+      "memo": "September 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 108500
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -10500,
+      "balance": 98000
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 80500
+     },
+     {
+      "date": "2023-03-31",
+      "memo": "March 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 63000
+     },
+     {
+      "date": "2023-04-01",
+      "memo": "Capital call #2 — Benchline Series A, TapFin Seed, fees",
+      "sourceType": "capital_call",
+      "amount": 630000,
+      "balance": 693000
+     },
+     {
+      "date": "2023-04-30",
+      "memo": "April 2023 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 315000,
+      "balance": 1008000
+     },
+     {
+      "date": "2023-06-30",
+      "memo": "June 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 990500
+     },
+     {
+      "date": "2023-09-30",
+      "memo": "September 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 973000
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -10500,
+      "balance": 962500
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 945000
+     },
+     {
+      "date": "2024-03-31",
+      "memo": "March 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 927500
+     },
+     {
+      "date": "2024-04-15",
+      "memo": "Capital call #3 — Verdant Seed + reserves",
+      "sourceType": "capital_call",
+      "amount": 420000,
+      "balance": 1347500
+     },
+     {
+      "date": "2024-06-30",
+      "memo": "June 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 1330000
+     },
+     {
+      "date": "2024-08-01",
+      "memo": "Capital call #4 — Benchline Series B, Lattis Pre-Seed, reserves",
+      "sourceType": "capital_call",
+      "amount": 1120000,
+      "balance": 2450000
+     },
+     {
+      "date": "2024-08-31",
+      "memo": "August 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 1260000,
+      "balance": 3710000
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 3692500
+     },
+     {
+      "date": "2024-12-01",
+      "memo": "Capital call #5 — TapFin Series A + reserves",
+      "sourceType": "capital_call",
+      "amount": 630000,
+      "balance": 4322500
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 245000,
+      "balance": 4567500
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -10500,
+      "balance": 4557000
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 8750,
+      "balance": 4565750
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 4548250
+     },
+     {
+      "date": "2025-03-31",
+      "memo": "March 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 4530750
+     },
+     {
+      "date": "2025-06-30",
+      "memo": "June 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 4513250
+     },
+     {
+      "date": "2025-09-30",
+      "memo": "September 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 4495750
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 3412325,
+      "balance": 7908075
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -10500,
+      "balance": 7897575
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -17500,
+      "balance": 7880075
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 7000,
+      "balance": 7887075
+     },
+     {
+      "date": "2026-02-10",
+      "memo": "Capital call #6 — wire from Hemrock Founders Capital LP",
+      "sourceType": "capital_call",
+      "amount": 420000,
+      "balance": 8307075
+     }
+    ],
+    "period": {
+     "preset": "itd",
+     "start": null,
+     "end": null,
+     "label": "Inception to date"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+II&lp=284cb747-2354-4cf1-8018-548eb5eac0f3&preset=ytd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "284cb747-2354-4cf1-8018-548eb5eac0f3",
+     "name": "Hemrock Founders Capital LP",
+     "partnerClass": "lp",
+     "commitment": 3500000,
+     "called": 3395000,
+     "funded": 3395000,
+     "outstanding": 105000,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 8307075
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 3395000,
+     "distributions": 0,
+     "managementFees": -280000,
+     "expenses": -56000,
+     "operatingIncome": 15750,
+     "realizedGains": 0,
+     "unrealizedGains": 5232325,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 8307075
+    },
+    "periodRollForward": {
+     "beginning": 7887075,
+     "contributions": 420000,
+     "distributions": 0,
+     "managementFees": 0,
+     "expenses": 0,
+     "operatingIncome": 0,
+     "realizedGains": 0,
+     "unrealizedGains": 0,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 8307075
+    },
+    "transactions": [
+     {
+      "date": "2026-02-10",
+      "memo": "Capital call #6 — wire from Hemrock Founders Capital LP",
+      "sourceType": "capital_call",
+      "amount": 420000,
+      "balance": 8307075
+     }
+    ],
+    "period": {
+     "preset": "ytd",
+     "start": "2026-01-01",
+     "end": "2026-10-05",
+     "label": "YTD 2026"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+II&lp=4f57aefa-a42b-4293-9162-6b849f592dc8&preset=itd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "4f57aefa-a42b-4293-9162-6b849f592dc8",
+     "name": "Hemrock Angels Aggregator II LP",
+     "partnerClass": "lp",
+     "commitment": 500000,
+     "called": 485000,
+     "funded": 485000,
+     "outstanding": 15000,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 1186725
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 485000,
+     "distributions": 0,
+     "managementFees": -40000,
+     "expenses": -8000,
+     "operatingIncome": 2250,
+     "realizedGains": 0,
+     "unrealizedGains": 747475,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 1186725
+    },
+    "periodRollForward": {
+     "beginning": 0,
+     "contributions": 485000,
+     "distributions": 0,
+     "managementFees": -40000,
+     "expenses": -8000,
+     "operatingIncome": 2250,
+     "realizedGains": 0,
+     "unrealizedGains": 747475,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 1186725
+    },
+    "transactions": [
+     {
+      "date": "2022-01-10",
+      "memo": "Capital call #1 — Benchline Seed + fee reserve",
+      "sourceType": "capital_call",
+      "amount": 25000,
+      "balance": 25000
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 22500
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Organizational expenses allocated to partners",
+      "sourceType": "organizational_expense",
+      "amount": -2000,
+      "balance": 20500
+     },
+     {
+      "date": "2022-06-30",
+      "memo": "June 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 18000
+     },
+     {
+      "date": "2022-09-30",
+      "memo": "September 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 15500
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -1500,
+      "balance": 14000
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 11500
+     },
+     {
+      "date": "2023-03-31",
+      "memo": "March 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 9000
+     },
+     {
+      "date": "2023-04-01",
+      "memo": "Capital call #2 — Benchline Series A, TapFin Seed, fees",
+      "sourceType": "capital_call",
+      "amount": 90000,
+      "balance": 99000
+     },
+     {
+      "date": "2023-04-30",
+      "memo": "April 2023 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 45000,
+      "balance": 144000
+     },
+     {
+      "date": "2023-06-30",
+      "memo": "June 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 141500
+     },
+     {
+      "date": "2023-09-30",
+      "memo": "September 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 139000
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -1500,
+      "balance": 137500
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 135000
+     },
+     {
+      "date": "2024-03-31",
+      "memo": "March 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 132500
+     },
+     {
+      "date": "2024-04-15",
+      "memo": "Capital call #3 — Verdant Seed + reserves",
+      "sourceType": "capital_call",
+      "amount": 60000,
+      "balance": 192500
+     },
+     {
+      "date": "2024-06-30",
+      "memo": "June 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 190000
+     },
+     {
+      "date": "2024-08-01",
+      "memo": "Capital call #4 — Benchline Series B, Lattis Pre-Seed, reserves",
+      "sourceType": "capital_call",
+      "amount": 160000,
+      "balance": 350000
+     },
+     {
+      "date": "2024-08-31",
+      "memo": "August 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 180000,
+      "balance": 530000
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 527500
+     },
+     {
+      "date": "2024-12-01",
+      "memo": "Capital call #5 — TapFin Series A + reserves",
+      "sourceType": "capital_call",
+      "amount": 90000,
+      "balance": 617500
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 35000,
+      "balance": 652500
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -1500,
+      "balance": 651000
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 1250,
+      "balance": 652250
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 649750
+     },
+     {
+      "date": "2025-03-31",
+      "memo": "March 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 647250
+     },
+     {
+      "date": "2025-06-30",
+      "memo": "June 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 644750
+     },
+     {
+      "date": "2025-09-30",
+      "memo": "September 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 642250
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 487475,
+      "balance": 1129725
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -1500,
+      "balance": 1128225
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -2500,
+      "balance": 1125725
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 1000,
+      "balance": 1126725
+     },
+     {
+      "date": "2026-02-10",
+      "memo": "Capital call #6 — wire from Hemrock Angels Aggregator II LP",
+      "sourceType": "capital_call",
+      "amount": 60000,
+      "balance": 1186725
+     }
+    ],
+    "period": {
+     "preset": "itd",
+     "start": null,
+     "end": null,
+     "label": "Inception to date"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+II&lp=4f57aefa-a42b-4293-9162-6b849f592dc8&preset=ytd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "4f57aefa-a42b-4293-9162-6b849f592dc8",
+     "name": "Hemrock Angels Aggregator II LP",
+     "partnerClass": "lp",
+     "commitment": 500000,
+     "called": 485000,
+     "funded": 485000,
+     "outstanding": 15000,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 1186725
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 485000,
+     "distributions": 0,
+     "managementFees": -40000,
+     "expenses": -8000,
+     "operatingIncome": 2250,
+     "realizedGains": 0,
+     "unrealizedGains": 747475,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 1186725
+    },
+    "periodRollForward": {
+     "beginning": 1126725,
+     "contributions": 60000,
+     "distributions": 0,
+     "managementFees": 0,
+     "expenses": 0,
+     "operatingIncome": 0,
+     "realizedGains": 0,
+     "unrealizedGains": 0,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 1186725
+    },
+    "transactions": [
+     {
+      "date": "2026-02-10",
+      "memo": "Capital call #6 — wire from Hemrock Angels Aggregator II LP",
+      "sourceType": "capital_call",
+      "amount": 60000,
+      "balance": 1186725
+     }
+    ],
+    "period": {
+     "preset": "ytd",
+     "start": "2026-01-01",
+     "end": "2026-10-05",
+     "label": "YTD 2026"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+II&lp=6a657357-5f5d-416f-81f3-35815df4ae69&preset=itd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "6a657357-5f5d-416f-81f3-35815df4ae69",
+     "name": "Greenfield County Employees Pension",
+     "partnerClass": "lp",
+     "commitment": 2000000,
+     "called": 1940000,
+     "funded": 1940000,
+     "outstanding": 60000,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 4746900
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 1940000,
+     "distributions": 0,
+     "managementFees": -160000,
+     "expenses": -32000,
+     "operatingIncome": 9000,
+     "realizedGains": 0,
+     "unrealizedGains": 2989900,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 4746900
+    },
+    "periodRollForward": {
+     "beginning": 0,
+     "contributions": 1940000,
+     "distributions": 0,
+     "managementFees": -160000,
+     "expenses": -32000,
+     "operatingIncome": 9000,
+     "realizedGains": 0,
+     "unrealizedGains": 2989900,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 4746900
+    },
+    "transactions": [
+     {
+      "date": "2022-01-10",
+      "memo": "Capital call #1 — Benchline Seed + fee reserve",
+      "sourceType": "capital_call",
+      "amount": 100000,
+      "balance": 100000
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 90000
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Organizational expenses allocated to partners",
+      "sourceType": "organizational_expense",
+      "amount": -8000,
+      "balance": 82000
+     },
+     {
+      "date": "2022-06-30",
+      "memo": "June 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 72000
+     },
+     {
+      "date": "2022-09-30",
+      "memo": "September 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 62000
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -6000,
+      "balance": 56000
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 46000
+     },
+     {
+      "date": "2023-03-31",
+      "memo": "March 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 36000
+     },
+     {
+      "date": "2023-04-01",
+      "memo": "Capital call #2 — Benchline Series A, TapFin Seed, fees",
+      "sourceType": "capital_call",
+      "amount": 360000,
+      "balance": 396000
+     },
+     {
+      "date": "2023-04-30",
+      "memo": "April 2023 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 180000,
+      "balance": 576000
+     },
+     {
+      "date": "2023-06-30",
+      "memo": "June 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 566000
+     },
+     {
+      "date": "2023-09-30",
+      "memo": "September 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 556000
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -6000,
+      "balance": 550000
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 540000
+     },
+     {
+      "date": "2024-03-31",
+      "memo": "March 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 530000
+     },
+     {
+      "date": "2024-04-15",
+      "memo": "Capital call #3 — Verdant Seed + reserves",
+      "sourceType": "capital_call",
+      "amount": 240000,
+      "balance": 770000
+     },
+     {
+      "date": "2024-06-30",
+      "memo": "June 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 760000
+     },
+     {
+      "date": "2024-08-01",
+      "memo": "Capital call #4 — Benchline Series B, Lattis Pre-Seed, reserves",
+      "sourceType": "capital_call",
+      "amount": 640000,
+      "balance": 1400000
+     },
+     {
+      "date": "2024-08-31",
+      "memo": "August 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 720000,
+      "balance": 2120000
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 2110000
+     },
+     {
+      "date": "2024-12-01",
+      "memo": "Capital call #5 — TapFin Series A + reserves",
+      "sourceType": "capital_call",
+      "amount": 360000,
+      "balance": 2470000
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 140000,
+      "balance": 2610000
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 5000,
+      "balance": 2615000
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -6000,
+      "balance": 2609000
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 2599000
+     },
+     {
+      "date": "2025-03-31",
+      "memo": "March 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 2589000
+     },
+     {
+      "date": "2025-06-30",
+      "memo": "June 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 2579000
+     },
+     {
+      "date": "2025-09-30",
+      "memo": "September 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 2569000
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 1949900,
+      "balance": 4518900
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -6000,
+      "balance": 4512900
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -10000,
+      "balance": 4502900
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 4000,
+      "balance": 4506900
+     },
+     {
+      "date": "2026-02-10",
+      "memo": "Capital call #6 — wire from Greenfield County Employees Pension",
+      "sourceType": "capital_call",
+      "amount": 240000,
+      "balance": 4746900
+     }
+    ],
+    "period": {
+     "preset": "itd",
+     "start": null,
+     "end": null,
+     "label": "Inception to date"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+II&lp=6a657357-5f5d-416f-81f3-35815df4ae69&preset=ytd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "6a657357-5f5d-416f-81f3-35815df4ae69",
+     "name": "Greenfield County Employees Pension",
+     "partnerClass": "lp",
+     "commitment": 2000000,
+     "called": 1940000,
+     "funded": 1940000,
+     "outstanding": 60000,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 4746900
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 1940000,
+     "distributions": 0,
+     "managementFees": -160000,
+     "expenses": -32000,
+     "operatingIncome": 9000,
+     "realizedGains": 0,
+     "unrealizedGains": 2989900,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 4746900
+    },
+    "periodRollForward": {
+     "beginning": 4506900,
+     "contributions": 240000,
+     "distributions": 0,
+     "managementFees": 0,
+     "expenses": 0,
+     "operatingIncome": 0,
+     "realizedGains": 0,
+     "unrealizedGains": 0,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 4746900
+    },
+    "transactions": [
+     {
+      "date": "2026-02-10",
+      "memo": "Capital call #6 — wire from Greenfield County Employees Pension",
+      "sourceType": "capital_call",
+      "amount": 240000,
+      "balance": 4746900
+     }
+    ],
+    "period": {
+     "preset": "ytd",
+     "start": "2026-01-01",
+     "end": "2026-10-05",
+     "label": "YTD 2026"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+II&lp=ed542a37-1fc6-4c19-bce8-992413009631&preset=itd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "ed542a37-1fc6-4c19-bce8-992413009631",
+     "name": "Northstar Family Office II LLC",
+     "partnerClass": "lp",
+     "commitment": 2500000,
+     "called": 2425000,
+     "funded": 2425000,
+     "outstanding": 75000,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 5933625
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 2425000,
+     "distributions": 0,
+     "managementFees": -200000,
+     "expenses": -40000,
+     "operatingIncome": 11250,
+     "realizedGains": 0,
+     "unrealizedGains": 3737375,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 5933625
+    },
+    "periodRollForward": {
+     "beginning": 0,
+     "contributions": 2425000,
+     "distributions": 0,
+     "managementFees": -200000,
+     "expenses": -40000,
+     "operatingIncome": 11250,
+     "realizedGains": 0,
+     "unrealizedGains": 3737375,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 5933625
+    },
+    "transactions": [
+     {
+      "date": "2022-01-10",
+      "memo": "Capital call #1 — Benchline Seed + fee reserve",
+      "sourceType": "capital_call",
+      "amount": 125000,
+      "balance": 125000
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 112500
+     },
+     {
+      "date": "2022-03-31",
+      "memo": "March 2022 close — Organizational expenses allocated to partners",
+      "sourceType": "organizational_expense",
+      "amount": -10000,
+      "balance": 102500
+     },
+     {
+      "date": "2022-06-30",
+      "memo": "June 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 90000
+     },
+     {
+      "date": "2022-09-30",
+      "memo": "September 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 77500
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -7500,
+      "balance": 70000
+     },
+     {
+      "date": "2022-12-31",
+      "memo": "December 2022 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 57500
+     },
+     {
+      "date": "2023-03-31",
+      "memo": "March 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 45000
+     },
+     {
+      "date": "2023-04-01",
+      "memo": "Capital call #2 — Benchline Series A, TapFin Seed, fees",
+      "sourceType": "capital_call",
+      "amount": 450000,
+      "balance": 495000
+     },
+     {
+      "date": "2023-04-30",
+      "memo": "April 2023 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 225000,
+      "balance": 720000
+     },
+     {
+      "date": "2023-06-30",
+      "memo": "June 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 707500
+     },
+     {
+      "date": "2023-09-30",
+      "memo": "September 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 695000
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -7500,
+      "balance": 687500
+     },
+     {
+      "date": "2023-12-31",
+      "memo": "December 2023 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 675000
+     },
+     {
+      "date": "2024-03-31",
+      "memo": "March 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 662500
+     },
+     {
+      "date": "2024-04-15",
+      "memo": "Capital call #3 — Verdant Seed + reserves",
+      "sourceType": "capital_call",
+      "amount": 300000,
+      "balance": 962500
+     },
+     {
+      "date": "2024-06-30",
+      "memo": "June 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 950000
+     },
+     {
+      "date": "2024-08-01",
+      "memo": "Capital call #4 — Benchline Series B, Lattis Pre-Seed, reserves",
+      "sourceType": "capital_call",
+      "amount": 800000,
+      "balance": 1750000
+     },
+     {
+      "date": "2024-08-31",
+      "memo": "August 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 900000,
+      "balance": 2650000
+     },
+     {
+      "date": "2024-09-30",
+      "memo": "September 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 2637500
+     },
+     {
+      "date": "2024-12-01",
+      "memo": "Capital call #5 — TapFin Series A + reserves",
+      "sourceType": "capital_call",
+      "amount": 450000,
+      "balance": 3087500
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 175000,
+      "balance": 3262500
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 6250,
+      "balance": 3268750
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -7500,
+      "balance": 3261250
+     },
+     {
+      "date": "2024-12-31",
+      "memo": "December 2024 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 3248750
+     },
+     {
+      "date": "2025-03-31",
+      "memo": "March 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 3236250
+     },
+     {
+      "date": "2025-06-30",
+      "memo": "June 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 3223750
+     },
+     {
+      "date": "2025-09-30",
+      "memo": "September 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 3211250
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Net unrealized gain / (loss) allocated to partners",
+      "sourceType": "valuation",
+      "amount": 2437375,
+      "balance": 5648625
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Partnership expenses allocated to partners",
+      "sourceType": "partnership_expense",
+      "amount": -7500,
+      "balance": 5641125
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Management fees allocated to partners",
+      "sourceType": "management_fee",
+      "amount": -12500,
+      "balance": 5628625
+     },
+     {
+      "date": "2025-12-31",
+      "memo": "December 2025 close — Operating income allocated to partners",
+      "sourceType": "income",
+      "amount": 5000,
+      "balance": 5633625
+     },
+     {
+      "date": "2026-02-10",
+      "memo": "Capital call #6 — wire from Northstar Family Office II LLC",
+      "sourceType": "capital_call",
+      "amount": 300000,
+      "balance": 5933625
+     }
+    ],
+    "period": {
+     "preset": "itd",
+     "start": null,
+     "end": null,
+     "label": "Inception to date"
+    }
+   }
+  },
+  "GET /api/accounting/lp-statement?group=Fund+II&lp=ed542a37-1fc6-4c19-bce8-992413009631&preset=ytd": {
+   "status": 200,
+   "body": {
+    "row": {
+     "lpEntityId": "ed542a37-1fc6-4c19-bce8-992413009631",
+     "name": "Northstar Family Office II LLC",
+     "partnerClass": "lp",
+     "commitment": 2500000,
+     "called": 2425000,
+     "funded": 2425000,
+     "outstanding": 75000,
+     "receivable": 0,
+     "fundedUnderflow": false,
+     "ending": 5933625
+    },
+    "rollForward": {
+     "beginning": 0,
+     "contributions": 2425000,
+     "distributions": 0,
+     "managementFees": -200000,
+     "expenses": -40000,
+     "operatingIncome": 11250,
+     "realizedGains": 0,
+     "unrealizedGains": 3737375,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 5933625
+    },
+    "periodRollForward": {
+     "beginning": 5633625,
+     "contributions": 300000,
+     "distributions": 0,
+     "managementFees": 0,
+     "expenses": 0,
+     "operatingIncome": 0,
+     "realizedGains": 0,
+     "unrealizedGains": 0,
+     "fxTranslation": 0,
+     "transfers": 0,
+     "carriedInterest": 0,
+     "unclassified": 0,
+     "ending": 5933625
+    },
+    "transactions": [
+     {
+      "date": "2026-02-10",
+      "memo": "Capital call #6 — wire from Northstar Family Office II LLC",
+      "sourceType": "capital_call",
+      "amount": 300000,
+      "balance": 5933625
+     }
+    ],
+    "period": {
+     "preset": "ytd",
+     "start": "2026-01-01",
+     "end": "2026-10-05",
+     "label": "YTD 2026"
+    }
    }
   },
   "GET /api/accounting/periods?group=Fund+I": {
@@ -31968,10 +35527,10 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
-    "asOf": "2026-09-24",
+    "asOf": "2026-10-05",
     "trialBalance": {
      "$same": "GET /api/accounting/statements?group=Fund+I&preset=itd#trialBalance"
     },
@@ -33203,10 +36762,10 @@
     "period": {
      "preset": "ytd",
      "start": "2026-01-01",
-     "end": "2026-09-24",
+     "end": "2026-10-05",
      "label": "YTD 2026"
     },
-    "asOf": "2026-09-24",
+    "asOf": "2026-10-05",
     "trialBalance": {
      "$same": "GET /api/accounting/statements?group=Fund+II&preset=itd#trialBalance"
     },
@@ -33926,7 +37485,7 @@
     }
    ]
   },
-  "GET /api/companies/2231479f-1bf3-4646-9173-abc5d31fd515/investments?asOf=2026-09-24": {
+  "GET /api/companies/2231479f-1bf3-4646-9173-abc5d31fd515/investments?asOf=2026-10-05": {
    "status": 200,
    "body": {
     "transactions": [
@@ -34098,7 +37657,7 @@
      "unrealizedValue": 4802500,
      "fmv": 4802500,
      "moic": 2.595945945945946,
-     "grossIrr": 0.5716773280800663,
+     "grossIrr": 0.562005434307554,
      "rounds": [
       {
        "roundName": "Seed",
@@ -34115,7 +37674,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 0.7598443523288202
+       "grossIrr": 0.7501879376383024
       },
       {
        "roundName": "Series A",
@@ -34132,7 +37691,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 0.41803695421329135
+       "grossIrr": 0.40996475751880856
       }
      ]
     },
@@ -34699,7 +38258,7 @@
     }
    ]
   },
-  "GET /api/companies/35dea40d-dd6f-4916-b566-deb40872d579/investments?asOf=2026-09-24": {
+  "GET /api/companies/35dea40d-dd6f-4916-b566-deb40872d579/investments?asOf=2026-10-05": {
    "status": 200,
    "body": {
     "transactions": [
@@ -34767,7 +38326,7 @@
      "unrealizedValue": 600000,
      "fmv": 600000,
      "moic": 1,
-     "grossIrr": 3.2574523850346094e-18,
+     "grossIrr": -5.3693826357693114e-17,
      "rounds": [
       {
        "roundName": "Seed",
@@ -34784,7 +38343,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 3.2574523850346094e-18
+       "grossIrr": -5.3693826357693114e-17
       }
      ]
     },
@@ -35052,7 +38611,7 @@
     }
    ]
   },
-  "GET /api/companies/8b396e22-1612-4737-8d09-5dbf593bb08f/investments?asOf=2026-09-24": {
+  "GET /api/companies/8b396e22-1612-4737-8d09-5dbf593bb08f/investments?asOf=2026-10-05": {
    "status": 200,
    "body": {
     "transactions": [
@@ -35120,7 +38679,7 @@
      "unrealizedValue": 250000,
      "fmv": 250000,
      "moic": 1,
-     "grossIrr": 1.0335406830248932e-17,
+     "grossIrr": -2.826972187804748e-17,
      "rounds": [
       {
        "roundName": "Pre-Seed",
@@ -35137,7 +38696,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 1.0335406830248932e-17
+       "grossIrr": -2.826972187804748e-17
       }
      ]
     },
@@ -35387,7 +38946,7 @@
     }
    ]
   },
-  "GET /api/companies/a67954cb-474b-404b-858b-49c240c22027/investments?asOf=2026-09-24": {
+  "GET /api/companies/a67954cb-474b-404b-858b-49c240c22027/investments?asOf=2026-10-05": {
    "status": 200,
    "body": {
     "transactions": [
@@ -35559,7 +39118,7 @@
      "unrealizedValue": 4500000,
      "fmv": 4500000,
      "moic": 2.25,
-     "grossIrr": 0.3990301271934601,
+     "grossIrr": 0.3933757089367841,
      "rounds": [
       {
        "roundName": "Seed",
@@ -35576,7 +39135,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 0.47825360246334736
+       "grossIrr": 0.4730016010086954
       },
       {
        "roundName": "Series A",
@@ -35593,7 +39152,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 0.329910516536587
+       "grossIrr": 0.32446240942355487
       }
      ]
     },
@@ -36258,7 +39817,7 @@
     }
    ]
   },
-  "GET /api/companies/b4870bad-ddd4-42d1-a300-7111899cf154/investments?asOf=2026-09-24": {
+  "GET /api/companies/b4870bad-ddd4-42d1-a300-7111899cf154/investments?asOf=2026-10-05": {
    "status": 200,
    "body": {
     "transactions": [
@@ -36482,7 +40041,7 @@
      "unrealizedValue": 12738087.5,
      "fmv": 12738087.5,
      "moic": 3.7464963235294118,
-     "grossIrr": 0.6015450273296391,
+     "grossIrr": 0.5941668783571745,
      "rounds": [
       {
        "roundName": "Seed",
@@ -36499,7 +40058,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 0.7496985813274084
+       "grossIrr": 0.7432241840407379
       },
       {
        "roundName": "Series A",
@@ -36516,7 +40075,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 0.5630849890864361
+       "grossIrr": 0.5565791538795851
       },
       {
        "roundName": "Series B",
@@ -36533,7 +40092,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 0.35803399748161663
+       "grossIrr": 0.3515463981311183
       }
      ]
     },
@@ -36975,7 +40534,7 @@
     }
    ]
   },
-  "GET /api/companies/d08a27bc-39e4-4fb1-a624-7a286d83e929/investments?asOf=2026-09-24": {
+  "GET /api/companies/d08a27bc-39e4-4fb1-a624-7a286d83e929/investments?asOf=2026-10-05": {
    "status": 200,
    "body": {
     "transactions": [
@@ -37095,7 +40654,7 @@
      "unrealizedValue": 3200000,
      "fmv": 3200000,
      "moic": 1.6,
-     "grossIrr": 0.22526650258962705,
+     "grossIrr": 0.22207189565903368,
      "rounds": [
       {
        "roundName": "Series A",
@@ -37112,7 +40671,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 0.22526650258962705
+       "grossIrr": 0.22207189565903368
       }
      ]
     },
@@ -37378,7 +40937,7 @@
     }
    ]
   },
-  "GET /api/companies/d1263d61-e648-4906-b991-f831fb74a186/investments?asOf=2026-09-24": {
+  "GET /api/companies/d1263d61-e648-4906-b991-f831fb74a186/investments?asOf=2026-10-05": {
    "status": 200,
    "body": {
     "transactions": [
@@ -37602,7 +41161,7 @@
      "unrealizedValue": 15997000,
      "fmv": 15997000,
      "moic": 3.99925,
-     "grossIrr": 0.6082923531477754,
+     "grossIrr": 0.600983655933631,
      "rounds": [
       {
        "roundName": "Seed",
@@ -37619,7 +41178,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 0.8697238836403304
+       "grossIrr": 0.8622732141678083
       },
       {
        "roundName": "Series A",
@@ -37636,7 +41195,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 0.5599941119399137
+       "grossIrr": 0.5540578786218702
       },
       {
        "roundName": "Series B",
@@ -37653,7 +41212,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 0.34257889580770473
+       "grossIrr": 0.3371175212078972
       }
      ]
     },
@@ -38152,7 +41711,7 @@
     }
    ]
   },
-  "GET /api/companies/d4fef540-f26b-426f-9aef-96144a6579ce/investments?asOf=2026-09-24": {
+  "GET /api/companies/d4fef540-f26b-426f-9aef-96144a6579ce/investments?asOf=2026-10-05": {
    "status": 200,
    "body": {
     "transactions": [
@@ -38272,7 +41831,7 @@
      "unrealizedValue": 997500,
      "fmv": 997500,
      "moic": 1.33,
-     "grossIrr": 0.11118468437560182,
+     "grossIrr": 0.10989550863177941,
      "rounds": [
       {
        "roundName": "Seed",
@@ -38289,7 +41848,7 @@
        "totalEscrow": 0,
        "escrowOutstanding": 0,
        "proceedsDate": null,
-       "grossIrr": 0.11118468437560182
+       "grossIrr": 0.10989550863177941
       }
      ]
     },
@@ -38485,7 +42044,7 @@
     "next_cursor": null,
     "match_mode": "none",
     "order": "newest",
-    "latency_ms": 156
+    "latency_ms": 187
    }
   },
   "GET /api/compliance": {
@@ -45762,166 +49321,14 @@
   "GET /api/lp-activity?days=90": {
    "status": 200,
    "body": {
-    "events": [
-     {
-      "id": "ea156a15-24c6-452a-9aeb-4ccfd97bee10",
-      "createdAt": "2026-06-30T15:00:27.97+00:00",
-      "eventType": "login",
-      "targetType": "portal",
-      "targetId": null,
-      "targetTitle": null,
-      "personId": "9063f980-092a-4d0d-b43a-036a2a6afb65",
-      "personName": "Northstar Family Office",
-      "personEmail": "northstar@lp.hemrock-demo.example.com",
-      "personKind": "lp",
-      "investorName": "Northstar Family Office"
-     },
-     {
-      "id": "326aab83-bac2-49b4-a3d5-5d6747cfe1dc",
-      "createdAt": "2026-06-30T15:00:27.97+00:00",
-      "eventType": "view",
-      "targetType": "snapshot",
-      "targetId": "9256fa69-c803-414b-92aa-68ed26f612a8",
-      "targetTitle": "Year End 2025",
-      "personId": "9063f980-092a-4d0d-b43a-036a2a6afb65",
-      "personName": "Northstar Family Office",
-      "personEmail": "northstar@lp.hemrock-demo.example.com",
-      "personKind": "lp",
-      "investorName": "Northstar Family Office"
-     },
-     {
-      "id": "988fc00f-424c-4921-a82b-b1f6d0914e0e",
-      "createdAt": "2026-06-30T15:00:27.97+00:00",
-      "eventType": "download",
-      "targetType": "document",
-      "targetId": "bf4c1a96-f151-4685-a149-caba076b0978",
-      "targetTitle": "Q4 2025 Capital Account Statement",
-      "personId": "9063f980-092a-4d0d-b43a-036a2a6afb65",
-      "personName": "Northstar Family Office",
-      "personEmail": "northstar@lp.hemrock-demo.example.com",
-      "personKind": "lp",
-      "investorName": "Northstar Family Office"
-     },
-     {
-      "id": "2807d6b3-ecfa-4e01-a0c1-f01771ee39a0",
-      "createdAt": "2026-06-29T15:00:27.97+00:00",
-      "eventType": "login",
-      "targetType": "portal",
-      "targetId": null,
-      "targetTitle": null,
-      "personId": "15efb848-6511-49fa-b525-f28522fb00c8",
-      "personName": "Alex Rivera",
-      "personEmail": "arivera@lp.hemrock-demo.example.com",
-      "personKind": "authorized_user",
-      "investorName": "Northstar Family Office"
-     },
-     {
-      "id": "9de79a4d-5cd1-4480-a73f-15b5c5993deb",
-      "createdAt": "2026-06-29T15:00:27.97+00:00",
-      "eventType": "view",
-      "targetType": "snapshot",
-      "targetId": "9256fa69-c803-414b-92aa-68ed26f612a8",
-      "targetTitle": "Year End 2025",
-      "personId": "15efb848-6511-49fa-b525-f28522fb00c8",
-      "personName": "Alex Rivera",
-      "personEmail": "arivera@lp.hemrock-demo.example.com",
-      "personKind": "authorized_user",
-      "investorName": "Northstar Family Office"
-     },
-     {
-      "id": "cc8ed4e0-dc59-47dc-85e2-0393d23c414b",
-      "createdAt": "2026-06-29T15:00:27.97+00:00",
-      "eventType": "download",
-      "targetType": "document",
-      "targetId": "eb8bd2c4-1cc6-4801-83f4-c46074efe84c",
-      "targetTitle": "Fund I Annual Report 2025",
-      "personId": "15efb848-6511-49fa-b525-f28522fb00c8",
-      "personName": "Alex Rivera",
-      "personEmail": "arivera@lp.hemrock-demo.example.com",
-      "personKind": "authorized_user",
-      "investorName": "Northstar Family Office"
-     },
-     {
-      "id": "209a12c2-ceff-4ce3-8e90-6d18c3dcd549",
-      "createdAt": "2026-06-28T15:00:27.97+00:00",
-      "eventType": "login",
-      "targetType": "portal",
-      "targetId": null,
-      "targetTitle": null,
-      "personId": "64260edf-b87e-4322-b946-63d96073e123",
-      "personName": "Coastal University Endowment",
-      "personEmail": "coastal@lp.hemrock-demo.example.com",
-      "personKind": "lp",
-      "investorName": "Coastal University Endowment"
-     },
-     {
-      "id": "14b6c02e-f21c-4fd0-8e25-27aaf7d32eb3",
-      "createdAt": "2026-06-28T15:00:27.97+00:00",
-      "eventType": "view",
-      "targetType": "snapshot",
-      "targetId": "9256fa69-c803-414b-92aa-68ed26f612a8",
-      "targetTitle": "Year End 2025",
-      "personId": "64260edf-b87e-4322-b946-63d96073e123",
-      "personName": "Coastal University Endowment",
-      "personEmail": "coastal@lp.hemrock-demo.example.com",
-      "personKind": "lp",
-      "investorName": "Coastal University Endowment"
-     },
-     {
-      "id": "7538347c-7af4-4202-8cc3-4a30d99f9fdc",
-      "createdAt": "2026-06-28T15:00:27.97+00:00",
-      "eventType": "download",
-      "targetType": "document",
-      "targetId": "eb8bd2c4-1cc6-4801-83f4-c46074efe84c",
-      "targetTitle": "Fund I Annual Report 2025",
-      "personId": "64260edf-b87e-4322-b946-63d96073e123",
-      "personName": "Coastal University Endowment",
-      "personEmail": "coastal@lp.hemrock-demo.example.com",
-      "personKind": "lp",
-      "investorName": "Coastal University Endowment"
-     }
-    ],
-    "people": [
-     {
-      "id": "9063f980-092a-4d0d-b43a-036a2a6afb65",
-      "name": "Northstar Family Office",
-      "email": "northstar@lp.hemrock-demo.example.com",
-      "kind": "lp",
-      "logins": 1,
-      "views": 1,
-      "downloads": 1,
-      "total": 3,
-      "lastSeen": "2026-06-30T15:00:27.97+00:00"
-     },
-     {
-      "id": "15efb848-6511-49fa-b525-f28522fb00c8",
-      "name": "Alex Rivera",
-      "email": "arivera@lp.hemrock-demo.example.com",
-      "kind": "authorized_user",
-      "logins": 1,
-      "views": 1,
-      "downloads": 1,
-      "total": 3,
-      "lastSeen": "2026-06-29T15:00:27.97+00:00"
-     },
-     {
-      "id": "64260edf-b87e-4322-b946-63d96073e123",
-      "name": "Coastal University Endowment",
-      "email": "coastal@lp.hemrock-demo.example.com",
-      "kind": "lp",
-      "logins": 1,
-      "views": 1,
-      "downloads": 1,
-      "total": 3,
-      "lastSeen": "2026-06-28T15:00:27.97+00:00"
-     }
-    ],
+    "events": [],
+    "people": [],
     "summary": {
-     "totalEvents": 9,
-     "logins": 3,
-     "views": 3,
-     "downloads": 3,
-     "activePeople": 3
+     "totalEvents": 0,
+     "logins": 0,
+     "views": 0,
+     "downloads": 0,
+     "activePeople": 0
     },
     "days": 90,
     "truncated": false
@@ -46380,7 +49787,7 @@
         "dpi": 0,
         "rvpi": 2.0601,
         "tvpi": 2.0601,
-        "irr": 0.3511
+        "irr": 0.3463
        },
        {
         "key": "278ec0e3-2940-46f6-b651-5775726f9560-Fund II",
@@ -46396,7 +49803,7 @@
         "dpi": 0,
         "rvpi": 2.4469,
         "tvpi": 2.4469,
-        "irr": 0.4318
+        "irr": 0.4261
        }
       ]
      },
@@ -46418,7 +49825,7 @@
         "dpi": 0,
         "rvpi": 2.4469,
         "tvpi": 2.4469,
-        "irr": 0.4318
+        "irr": 0.4261
        }
       ]
      },
@@ -46440,7 +49847,7 @@
         "dpi": 0,
         "rvpi": 2.0601,
         "tvpi": 2.0601,
-        "irr": 0.3511
+        "irr": 0.3463
        },
        {
         "key": "284cb747-2354-4cf1-8018-548eb5eac0f3-Fund II",
@@ -46456,7 +49863,7 @@
         "dpi": 0,
         "rvpi": 2.4469,
         "tvpi": 2.4469,
-        "irr": 0.4318
+        "irr": 0.4261
        }
       ]
      },
@@ -46478,7 +49885,7 @@
         "dpi": 0,
         "rvpi": 2.0601,
         "tvpi": 2.0601,
-        "irr": 0.3511
+        "irr": 0.3463
        },
        {
         "key": "ed542a37-1fc6-4c19-bce8-992413009631-Fund II",
@@ -46494,7 +49901,7 @@
         "dpi": 0,
         "rvpi": 2.4469,
         "tvpi": 2.4469,
-        "irr": 0.4318
+        "irr": 0.4261
        }
       ]
      },
@@ -46516,7 +49923,7 @@
         "dpi": 0,
         "rvpi": 2.0601,
         "tvpi": 2.0601,
-        "irr": 0.3511
+        "irr": 0.3463
        }
       ]
      },
@@ -46538,7 +49945,7 @@
         "dpi": 0,
         "rvpi": 2.0601,
         "tvpi": 2.0601,
-        "irr": 0.3511
+        "irr": 0.3463
        }
       ]
      },
@@ -46560,7 +49967,7 @@
         "dpi": 0,
         "rvpi": 2.4469,
         "tvpi": 2.4469,
-        "irr": 0.4318
+        "irr": 0.4261
        }
       ]
      }
@@ -46609,7 +50016,7 @@
       "dpi": 0,
       "rvpi": 2.0601,
       "tvpi": 2.0601,
-      "irr": 0.3511,
+      "irr": 0.3463,
       "entity_name": "Coastal University Endowment",
       "investor_id": "ad03d815-5fc8-4b16-abf4-89d3e302e8b9",
       "investor_name": "Coastal University Endowment"
@@ -46629,7 +50036,7 @@
       "dpi": 0,
       "rvpi": 2.0601,
       "tvpi": 2.0601,
-      "irr": 0.3511,
+      "irr": 0.3463,
       "entity_name": "Hemrock Founders Capital LP",
       "investor_id": "38771be0-9d97-485c-a925-cba8005744af",
       "investor_name": "Hemrock Founders Capital LP"
@@ -46649,7 +50056,7 @@
       "dpi": 0,
       "rvpi": 2.0601,
       "tvpi": 2.0601,
-      "irr": 0.3511,
+      "irr": 0.3463,
       "entity_name": "Northstar Family Office I LLC",
       "investor_id": "0c458157-e6b4-4b60-8742-5403da230ba7",
       "investor_name": "Northstar Family Office"
@@ -46669,7 +50076,7 @@
       "dpi": 0,
       "rvpi": 2.0601,
       "tvpi": 2.0601,
-      "irr": 0.3511,
+      "irr": 0.3463,
       "entity_name": "Pinecrest Foundation Charitable Trust",
       "investor_id": "a5d014b1-6724-4c40-a2c6-15ae95ce08ab",
       "investor_name": "Pinecrest Foundation"
@@ -46689,7 +50096,7 @@
       "dpi": 0,
       "rvpi": 2.0601,
       "tvpi": 2.0601,
-      "irr": 0.3511,
+      "irr": 0.3463,
       "entity_name": "Hemrock Angels Aggregator I LP",
       "investor_id": "11c02811-11ad-42c8-a298-4dc11c8c82f9",
       "investor_name": "Various Angels Fund I"
@@ -46709,7 +50116,7 @@
       "dpi": 0,
       "rvpi": 2.4469,
       "tvpi": 2.4469,
-      "irr": 0.4318,
+      "irr": 0.4261,
       "entity_name": "Coastal University Endowment",
       "investor_id": "ad03d815-5fc8-4b16-abf4-89d3e302e8b9",
       "investor_name": "Coastal University Endowment"
@@ -46729,7 +50136,7 @@
       "dpi": 0,
       "rvpi": 2.4469,
       "tvpi": 2.4469,
-      "irr": 0.4318,
+      "irr": 0.4261,
       "entity_name": "Hemrock Founders Capital LP",
       "investor_id": "38771be0-9d97-485c-a925-cba8005744af",
       "investor_name": "Hemrock Founders Capital LP"
@@ -46749,7 +50156,7 @@
       "dpi": 0,
       "rvpi": 2.4469,
       "tvpi": 2.4469,
-      "irr": 0.4318,
+      "irr": 0.4261,
       "entity_name": "Hemrock Angels Aggregator II LP",
       "investor_id": "7355af33-8b62-4adc-8d11-c0c918f8e52c",
       "investor_name": "Various Angels Fund II"
@@ -46769,7 +50176,7 @@
       "dpi": 0,
       "rvpi": 2.4469,
       "tvpi": 2.4469,
-      "irr": 0.4318,
+      "irr": 0.4261,
       "entity_name": "Greenfield County Employees Pension",
       "investor_id": "95c7ce90-5193-4f7f-b4ec-510d6c6760d5",
       "investor_name": "Greenfield Pension"
@@ -46789,7 +50196,7 @@
       "dpi": 0,
       "rvpi": 2.4469,
       "tvpi": 2.4469,
-      "irr": 0.4318,
+      "irr": 0.4261,
       "entity_name": "Northstar Family Office II LLC",
       "investor_id": "0c458157-e6b4-4b60-8742-5403da230ba7",
       "investor_name": "Northstar Family Office"
@@ -48318,14 +51725,14 @@
     "isLp": false
    }
   },
-  "GET /api/portfolio/fund-holdings?asOf=2026-09-24": {
+  "GET /api/portfolio/fund-holdings?asOf=2026-10-05": {
    "status": 200,
    "body": {
     "positions": [],
-    "asOf": "2026-09-24"
+    "asOf": "2026-10-05"
    }
   },
-  "GET /api/portfolio/investments?asOf=2026-09-24": {
+  "GET /api/portfolio/investments?asOf=2026-10-05": {
    "status": 200,
    "body": {
     "totalInvested": 14850000,
@@ -48333,7 +51740,7 @@
     "totalUnrealized": 43085087.5,
     "totalFMV": 43085087.5,
     "portfolioMOIC": 2.9013526936026937,
-    "portfolioIRR": 0.5061027624302094,
+    "portfolioIRR": 0.4993881836252794,
     "companies": [
      {
       "companyId": "d1263d61-e648-4906-b991-f831fb74a186",
@@ -48347,7 +51754,7 @@
       "unrealizedValue": 15997000,
       "fmv": 15997000,
       "moic": 3.99925,
-      "irr": 0.6082923531477754,
+      "irr": 0.600983655933631,
       "proceedsReceived": 0,
       "proceedsEscrow": 0,
       "totalCostBasisExited": 0
@@ -48364,7 +51771,7 @@
       "unrealizedValue": 12738087.5,
       "fmv": 12738087.5,
       "moic": 3.7464963235294118,
-      "irr": 0.6015450273296391,
+      "irr": 0.5941668783571745,
       "proceedsReceived": 0,
       "proceedsEscrow": 0,
       "totalCostBasisExited": 0
@@ -48381,7 +51788,7 @@
       "unrealizedValue": 4500000,
       "fmv": 4500000,
       "moic": 2.25,
-      "irr": 0.3990301271934601,
+      "irr": 0.3933757089367841,
       "proceedsReceived": 0,
       "proceedsEscrow": 0,
       "totalCostBasisExited": 0
@@ -48398,7 +51805,7 @@
       "unrealizedValue": 3200000,
       "fmv": 3200000,
       "moic": 1.6,
-      "irr": 0.22526650258962705,
+      "irr": 0.22207189565903368,
       "proceedsReceived": 0,
       "proceedsEscrow": 0,
       "totalCostBasisExited": 0
@@ -48415,7 +51822,7 @@
       "unrealizedValue": 4802500,
       "fmv": 4802500,
       "moic": 2.595945945945946,
-      "irr": 0.5716773280800663,
+      "irr": 0.562005434307554,
       "proceedsReceived": 0,
       "proceedsEscrow": 0,
       "totalCostBasisExited": 0
@@ -48432,7 +51839,7 @@
       "unrealizedValue": 997500,
       "fmv": 997500,
       "moic": 1.33,
-      "irr": 0.11118468437560182,
+      "irr": 0.10989550863177941,
       "proceedsReceived": 0,
       "proceedsEscrow": 0,
       "totalCostBasisExited": 0
@@ -48449,7 +51856,7 @@
       "unrealizedValue": 600000,
       "fmv": 600000,
       "moic": 1,
-      "irr": 3.2574523850346094e-18,
+      "irr": -5.3693826357693114e-17,
       "proceedsReceived": 0,
       "proceedsEscrow": 0,
       "totalCostBasisExited": 0
@@ -48466,7 +51873,7 @@
       "unrealizedValue": 250000,
       "fmv": 250000,
       "moic": 1,
-      "irr": 1.0335406830248932e-17,
+      "irr": -2.826972187804748e-17,
       "proceedsReceived": 0,
       "proceedsEscrow": 0,
       "totalCostBasisExited": 0
@@ -48482,7 +51889,7 @@
       "unrealizedValue": 21435587.5,
       "totalCostBasisExited": 0,
       "moic": 2.630133435582822,
-      "irr": 0.4572440074074655
+      "irr": 0.4511390015524084
      },
      {
       "group": "Fund II",
@@ -48493,7 +51900,7 @@
       "unrealizedValue": 21649500,
       "totalCostBasisExited": 0,
       "moic": 3.2312686567164177,
-      "irr": 0.5588264797195189
+      "irr": 0.551489885492274
      }
     ]
    }
@@ -48551,11 +51958,6 @@
    "body": {
     "quarters": [
      {
-      "label": "Q4 2025",
-      "year": 2025,
-      "quarter": 4
-     },
-     {
       "label": "Q1 2026",
       "year": 2026,
       "quarter": 1
@@ -48569,6 +51971,11 @@
       "label": "Q3 2026",
       "year": 2026,
       "quarter": 3
+     },
+     {
+      "label": "Q4 2026",
+      "year": 2026,
+      "quarter": 4
      }
     ],
     "data": [
@@ -48580,7 +51987,7 @@
         "status": "yes"
        },
        {
-        "status": "yes"
+        "status": "no"
        },
        {
         "status": "no"
@@ -48598,7 +52005,7 @@
         "status": "yes"
        },
        {
-        "status": "yes"
+        "status": "no"
        },
        {
         "status": "no"
@@ -48613,7 +52020,7 @@
       "companyName": "GreenLeaf Bio",
       "quarters": [
        {
-        "status": "yes"
+        "status": "no"
        },
        {
         "status": "no"
@@ -48631,7 +52038,7 @@
       "companyName": "Lattis",
       "quarters": [
        {
-        "status": "yes"
+        "status": "no"
        },
        {
         "status": "no"
@@ -48649,7 +52056,7 @@
       "companyName": "NovaTech",
       "quarters": [
        {
-        "status": "yes"
+        "status": "no"
        },
        {
         "status": "no"
@@ -48670,7 +52077,7 @@
         "status": "yes"
        },
        {
-        "status": "yes"
+        "status": "no"
        },
        {
         "status": "no"
@@ -48688,7 +52095,7 @@
         "status": "yes"
        },
        {
-        "status": "yes"
+        "status": "no"
        },
        {
         "status": "no"
@@ -48703,7 +52110,7 @@
       "companyName": "Verdant",
       "quarters": [
        {
-        "status": "yes"
+        "status": "no"
        },
        {
         "status": "no"
