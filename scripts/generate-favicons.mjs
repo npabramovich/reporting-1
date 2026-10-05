@@ -13,7 +13,8 @@
  *
  * The home-screen and install icons are not files: app/api/pwa-icon draws them from
  * MARK_PATHS in lib/brand-mark.ts, in the fund's accent. Re-run this and update MARK_PATHS
- * together when the mark changes. Commit the output.
+ * (and MARK_ICON_VIEWBOX, the same square this computes) together when the mark changes.
+ * Commit the output.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -22,7 +23,11 @@ import sharp from 'sharp'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const source = fs.readFileSync(path.join(root, 'public', 'brand', 'welden-mark.svg'), 'utf8')
-const viewBox = source.match(/viewBox="([^"]+)"/)[1]
+// The mark is wider than it is tall; an icon is square. Centre its box in a square whose
+// side is the longer dimension, rather than letting the renderer stretch or crop it.
+const [x, y, w, h] = source.match(/viewBox="([^"]+)"/)[1].split(/[\s,]+/).map(Number)
+const side = Math.max(w, h)
+const viewBox = `${x - (side - w) / 2} ${y - (side - h) / 2} ${side} ${side}`
 const paths = [...source.matchAll(/<path[^>]*\/>/g)].map(m => m[0]).join('')
 
 // --foreground in app/globals.css, light and dark (lib/pwa.ts DEFAULT_MARK_HEX is the first).
