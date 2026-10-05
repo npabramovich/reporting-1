@@ -44,7 +44,7 @@ export function AuthWordmark() {
   return (
     <div className="text-center">
       <Link href="/" className="inline-flex flex-col items-center gap-2 transition-opacity hover:opacity-80">
-        <BrandMark className="h-9 w-9 text-foreground" />
+        <BrandMark className="h-7 w-auto text-foreground" />
         <h1 className="text-lg font-semibold tracking-tight">welden</h1>
       </Link>
     </div>

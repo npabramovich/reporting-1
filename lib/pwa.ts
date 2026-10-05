@@ -67,10 +67,11 @@ export const APPLE_TOUCH_SIZES = [152, 167, 180] as const
 
 // The mark's paths live in lib/brand-mark.ts, which the auth screen can import without
 // pulling in this module's database client.
-export { MARK_PATHS, MARK_VIEWBOX } from '@/lib/brand-mark'
+export { MARK_ICON_VIEWBOX, MARK_PATHS, MARK_VIEWBOX } from '@/lib/brand-mark'
 
 /**
- * Fraction of the canvas the mark's viewBox takes. The disc itself is 7/8 of that box.
+ * Fraction of the canvas the mark's square viewBox takes. The glasses span its full width
+ * and about a third of its height.
  *
  * Android crops a maskable icon to whatever shape the launcher uses (circle, squircle,
  * teardrop) and only the middle 80% of the width is guaranteed to survive. Half of
@@ -92,7 +93,7 @@ export interface MarkGeometry {
  *
  * The padding is a whole number, computed here rather than left to flexbox centring,
  * which lands on a half pixel whenever the canvas and the mark disagree about parity
- * and softens every edge of the disc. So the mark takes the canvas's parity instead:
+ * and softens every edge of the mark. So the mark takes the canvas's parity instead:
  * size minus twice a whole-pixel pad, which is centred exactly.
  */
 export function markGeometry(size: number, maskable = false): MarkGeometry {

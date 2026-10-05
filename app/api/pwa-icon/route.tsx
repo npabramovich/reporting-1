@@ -1,8 +1,8 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import {
+  MARK_ICON_VIEWBOX,
   MARK_PATHS,
-  MARK_VIEWBOX,
   SURFACE_LIGHT_HEX,
   isIconSize,
   isIconVariant,
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   const background = variant === 'portal' ? portalFillHex : SURFACE_LIGHT_HEX
   const fill = variant === 'portal' ? SURFACE_LIGHT_HEX : markHex
 
-  // Whole-pixel size and offset, so the disc's edge isn't softened by a half-pixel
+  // Whole-pixel size and offset, so the mark's edges aren't softened by a half-pixel
   // shift. markGeometry explains it.
   const { markPx, padTop, padLeft } = markGeometry(size, maskable)
 
@@ -63,11 +63,11 @@ export async function GET(req: NextRequest) {
           xmlns="http://www.w3.org/2000/svg"
           width={markPx}
           height={markPx}
-          viewBox={`0 0 ${MARK_VIEWBOX} ${MARK_VIEWBOX}`}
+          viewBox={MARK_ICON_VIEWBOX}
           fill={fill}
         >
-          {MARK_PATHS.map(d => (
-            <path key={d} d={d} />
+          {MARK_PATHS.map(p => (
+            <path key={p.d} d={p.d} fillRule={p.fillRule} />
           ))}
         </svg>
       </div>

@@ -149,7 +149,7 @@ describe('buildManifest', () => {
 describe('markGeometry', () => {
   it('offsets the mark by whole pixels and centres it exactly, which flexbox does not', () => {
     // Centring puts the mark on a half pixel whenever the canvas and the mark disagree
-    // about parity, which softens the whole edge of the disc.
+    // about parity, which softens every edge of the mark.
     for (const size of ICON_SIZES) {
       for (const maskable of [false, true]) {
         const { markPx, padTop, padLeft } = markGeometry(size, maskable)
