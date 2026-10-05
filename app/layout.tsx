@@ -16,7 +16,7 @@ import { SURFACE_DARK_HEX, SURFACE_LIGHT_HEX, TAB_ICONS, appleTouchIcons } from 
 import './globals.css'
 
 // Inter is the default UI face — the brand guide's typeface, and what hemrock.com
-// and www.usewelden.com ship. globals.css points --font-sans at it.
+// and www.hemrock.com ship. globals.css points --font-sans at it.
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
 // Curated per-fund UI font options. Loaded as CSS variables so the per-fund theme

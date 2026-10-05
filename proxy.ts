@@ -71,7 +71,7 @@ export async function proxy(request: NextRequest) {
 
   const isAuthRoute = pathname.startsWith('/auth')
 
-  // The marketing page is not here any more (www.usewelden.com serves it), so `/` is only the
+  // The marketing page is not here any more (www.hemrock.com serves it), so `/` is only the
   // post-login destination: a signed-out visitor is bounced to /auth like any app route, and the
   // signed-in redirect below decides where a member begins.
   const isRootRoute = pathname === '/'

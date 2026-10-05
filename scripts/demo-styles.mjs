@@ -40,7 +40,7 @@ const FONT = ''
 
 const MOUNT = route => `<script type="module" src="/widget.js"></script><script type="module">
 Promise.all(['snapshot','answers','pages','api'].map(f=>fetch('/'+f+'.json').then(r=>r.json()))).then(([snapshot,answers,pages,api])=>{
-  window.__demo=WeldenDemo.mount(document.getElementById('demo'),{snapshot,answers,pages,api,chrome:'page',initialPath:${JSON.stringify(route)},onReady:()=>{window.__ready=true}});
+  window.__demo=PortfolioDemo.mount(document.getElementById('demo'),{snapshot,answers,pages,api,chrome:'page',initialPath:${JSON.stringify(route)},onReady:()=>{window.__ready=true}});
 });</script>`
 const HOST = {
   // The app's html and body: font variable on <html>, `font-sans` on <body>, as app/layout.tsx.

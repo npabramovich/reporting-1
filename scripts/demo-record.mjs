@@ -124,8 +124,8 @@ const proxied = async (href, init) => {
   } finally { window.__pending--; }
 };
 Promise.all(['snapshot','answers','pages','api'].map(f => fetch('/' + f + '.json').then(r => r.json()))).then(([snapshot, answers, pages, api]) => {
-  window.__demo = WeldenDemo.mount(document.getElementById('demo'), { snapshot, answers, pages, api, fetch: proxied });
-  window.__routes = WeldenDemo.routes(snapshot, pages);
+  window.__demo = PortfolioDemo.mount(document.getElementById('demo'), { snapshot, answers, pages, api, fetch: proxied });
+  window.__routes = PortfolioDemo.routes(snapshot, pages);
   window.__ready = true;
 });
 </script></body></html>`
@@ -203,11 +203,11 @@ server.close()
 
 // The demo shows the fund as DEMO_FUND_LABEL and the viewer as a demo address, as the snapshot
 // does, so whatever the install calls them never reaches the public page.
-const FUND_NAME = process.env.DEMO_FUND_NAME, FUND_LABEL = process.env.DEMO_FUND_LABEL ?? 'Welden Demo'
+const FUND_NAME = process.env.DEMO_FUND_NAME, FUND_LABEL = process.env.DEMO_FUND_LABEL ?? 'Portfolio Demo'
 const relabel = body => {
   let t = JSON.stringify(body)
   if (FUND_NAME) t = t.split(JSON.stringify(FUND_NAME).slice(1, -1)).join(FUND_LABEL)
-  t = t.split(EMAIL).join('viewer@welden.demo')
+  t = t.split(EMAIL).join('viewer@hemrock.demo')
   return JSON.parse(t)
 }
 for (const v of Object.values(responses)) v.body = relabel(v.body)

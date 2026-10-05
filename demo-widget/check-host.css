@@ -1,7 +1,7 @@
 /*
  * A hostile host page for scripts/demo-styles.mjs: what a real marketing site puts around the
  * widget, exaggerated so a leak cannot hide. The layered half is a Tailwind v4 site's base (the
- * shape of www.usewelden.com's); the unlayered half is inherited text styling on <body> and
+ * shape of www.hemrock.com's); the unlayered half is inherited text styling on <body> and
  * <html>, which reaches the widget through inheritance whatever the widget's specificity.
  */
 @layer base {
