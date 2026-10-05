@@ -6,7 +6,7 @@ Manage deal flow, portfolio reporting, fund operations, LPs, and accounting, wit
 
 Portfolio is an open-source operating platform for venture capital firms. Take a company from inbound screening and diligence through investment, portfolio monitoring, fund accounting, and LP reporting—all in one system. Turn on only the workflows you need, deploy on your own infrastructure, and use your own AI providers.
 
-![Public Home Page](public/screenshots/homepage.png)
+![Portfolio Dashboard](public/screenshots/dashboard.png)
 
 ## What it does
 
@@ -45,13 +45,13 @@ Most portfolio reporting platforms lock your data in their database, process it 
 
 This is a complete investment-firm operations platform you deploy on your own infrastructure — your database, your AI keys, your domain. It's open source under the Apache 2.0 license: free to use, modify, and run forever, for your own fund or commercially. No per-seat fees. No black-box AI training on your portfolio. No vendor lock-in.
 
-Built by Taylor Davidson at [Hemrock](https://www.hemrock.com). Built by a fund manager, for fund managers.
+Built by Taylor Davidson at [Hemrock](https://www.hemrock.com). Built by a fund manager, for fund managers. Product site and documentation: [hemrock.com/portfolio](https://www.hemrock.com/portfolio).
 
 ## Get started
 
-Free and open source under the Apache 2.0 license — use it, modify it, and deploy it on your own infrastructure and domain, for your own fund or commercially. [Try the demo](https://portfolio.hemrock.com/demo) with sample data, no signup required.
+Free and open source under the Apache 2.0 license — use it, modify it, and deploy it on your own infrastructure and domain, for your own fund or commercially. [Try the demo](https://www.hemrock.com/demo) with sample data, no signup required.
 
-Prefer not to run it yourself? Taylor offers paid **setup & support** (deployed on your own infrastructure and accounts) and a **hosted subscription**. [Contact Taylor](https://www.hemrock.com/contact) to discuss.
+Prefer not to run it yourself? Taylor offers paid **setup & support**: deployed on your own infrastructure and accounts, with onboarding and ongoing support. [Contact Taylor](https://www.hemrock.com/contact) to discuss.
 
 See [LICENSE](./LICENSE.md) for full terms.
 

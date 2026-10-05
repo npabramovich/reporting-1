@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Github, Scale, ExternalLink, Building2, ClipboardCheck, Mail, Upload, Send, Settings, MessageSquare, Monitor, PanelLeftClose, Sparkles, Shield, ShieldCheck, Handshake, Users, ArrowDownCircle, DollarSign, FileText, Briefcase, Crown, Lightbulb, Microscope } from 'lucide-react'
 import { AnalystToggleButton } from '@/components/analyst-button'
 import { AnalystPanel } from '@/components/analyst-panel'
+import { PRIVACY_URL, TERMS_URL } from '@/lib/site-links'
 
 export const metadata: Metadata = { title: 'Support' }
 
@@ -97,12 +98,16 @@ export default function SupportPage() {
                   <Scale className="h-3.5 w-3.5" />License
                 </a>
               </li>
-              <li>
-                <a href="https://www.hemrock.com/terms" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Terms</a>
-              </li>
-              <li>
-                <a href="https://www.hemrock.com/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Privacy</a>
-              </li>
+              {TERMS_URL && (
+                <li>
+                  <a href={TERMS_URL} target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Terms</a>
+                </li>
+              )}
+              {PRIVACY_URL && (
+                <li>
+                  <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Privacy</a>
+                </li>
+              )}
             </ul>
           </div>
 
@@ -182,8 +187,7 @@ export default function SupportPage() {
             >
               contact him for details
             </a>
-            . A hosted solution is also available to a select number of funds; reach out to Taylor
-            if that&apos;s of interest.
+            .
           </p>
         </div>
 
