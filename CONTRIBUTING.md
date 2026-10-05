@@ -5,7 +5,7 @@ reporting platform for fund managers, and contributions are welcome.
 
 ## Ways to contribute
 
-- **Report a bug or request a feature.** Open a [GitHub issue](https://github.com/tdavidson/reporting/issues).
+- **Report a bug or request a feature.** Open a [GitHub issue](https://github.com/tdavidson/portfolio/issues).
   Include your deployment setup (self-hosted, managed, hosted), steps to reproduce, and any relevant logs.
 - **Submit a fix or improvement.** Fork the repo, create a branch, and open a pull request.
 - **Improve the docs,** Corrections and clarifications to the README, `DOCS.md`, or `FEATURES.md` are just as valuable as code.
