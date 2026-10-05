@@ -63,7 +63,9 @@ jobs:
           files: demo-widget/dist/*
       - name: Rebuild the marketing site
         # Only when the Vercel deploy hook for tdavidson/content is set as a repo secret.
-        if: ${{ secrets.ADMIN_SITE_DEPLOY_HOOK != '' }}
         env:
           SITE_DEPLOY_HOOK: ${{ secrets.ADMIN_SITE_DEPLOY_HOOK }}
-        run: curl -fsS -X POST "$SITE_DEPLOY_HOOK" > /dev/null
+        run: |
+          if [ -n "$SITE_DEPLOY_HOOK" ]; then
+            curl -fsS -X POST "$SITE_DEPLOY_HOOK" > /dev/null
+          fi
