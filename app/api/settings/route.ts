@@ -14,6 +14,7 @@ import { forgetFundCurrency } from '@/lib/accounting/currency'
 import { isLotMethod, LOT_METHODS } from '@/lib/portfolio/lots'
 import { validateOllamaUrl } from '@/lib/validate-url'
 import type { FeatureKey, FeatureVisibility, FeatureVisibilityMap } from '@/lib/types/features'
+import { AUTH_TITLE_MAX } from '@/lib/auth-brand-shared'
 
 // GET — returns fund settings (safe fields only)
 export async function GET() {
@@ -79,6 +80,9 @@ export async function GET() {
     fundName: fund?.name,
     fundLogo: fund?.logo_url ?? null,
     fundAddress: fund?.address ?? null,
+    // Ship in 20261005120000_sign_in_branding.sql; absent, they read as unset.
+    signInLogo: settings?.sign_in_logo ?? null,
+    signInTitle: settings?.sign_in_title ?? null,
     postmarkInboundAddress: settings?.postmark_inbound_address ?? '',
     postmarkWebhookToken: webhookToken,
     hasClaudeKey: !!settings?.claude_api_key_encrypted,
@@ -156,7 +160,7 @@ export async function PATCH(req: NextRequest) {
   if (!membership) return NextResponse.json({ error: 'No fund found' }, { status: 404 })
 
   const body = await req.json()
-  const { fundName, fundLogo, fundAddress, postmarkInboundAddress, claudeApiKey, claudeModel, retainResolvedReviews, resolvedReviewsTtlDays, googleClientId, googleClientSecret, aiSummaryPrompt, displayName, outboundEmailProvider, asksEmailProvider, approvalEmailSubject, approvalEmailBody, systemEmailFromName, systemEmailFromAddress, resendApiKey, postmarkServerToken, inboundEmailProvider, mailgunInboundDomain, mailgunSigningKey, mailgunApiKey, mailgunSendingDomain, fileStorageProvider, openaiApiKey, openaiModel, defaultAIProvider, openrouterApiKey, openrouterModel, openrouterBaseUrl, analyticsFathomSiteId, analyticsGaMeasurementId, analyticsCustomHeadScript, currency, lotMethod, disableUserTracking, featureVisibility, dealThesis, dealScreeningPrompt, dealIntakeEnabled, lpPortalEnabled, affinityMcpEnabled, agentApiEnabled } = body
+  const { fundName, fundLogo, fundAddress, signInLogo, signInTitle, postmarkInboundAddress, claudeApiKey, claudeModel, retainResolvedReviews, resolvedReviewsTtlDays, googleClientId, googleClientSecret, aiSummaryPrompt, displayName, outboundEmailProvider, asksEmailProvider, approvalEmailSubject, approvalEmailBody, systemEmailFromName, systemEmailFromAddress, resendApiKey, postmarkServerToken, inboundEmailProvider, mailgunInboundDomain, mailgunSigningKey, mailgunApiKey, mailgunSendingDomain, fileStorageProvider, openaiApiKey, openaiModel, defaultAIProvider, openrouterApiKey, openrouterModel, openrouterBaseUrl, analyticsFathomSiteId, analyticsGaMeasurementId, analyticsCustomHeadScript, currency, lotMethod, disableUserTracking, featureVisibility, dealThesis, dealScreeningPrompt, dealIntakeEnabled, lpPortalEnabled, affinityMcpEnabled, agentApiEnabled } = body
 
   // Update display name on fund_members (any user can do this)
   if (displayName !== undefined) {
@@ -164,7 +168,8 @@ export async function PATCH(req: NextRequest) {
   }
 
   // All other settings require admin role
-  const hasAdminFields = fundName !== undefined || fundLogo !== undefined || fundAddress !== undefined || postmarkInboundAddress !== undefined ||
+  const hasAdminFields = fundName !== undefined || fundLogo !== undefined || fundAddress !== undefined ||
+    signInLogo !== undefined || signInTitle !== undefined || postmarkInboundAddress !== undefined ||
     claudeApiKey !== undefined || claudeModel !== undefined || retainResolvedReviews !== undefined ||
     resolvedReviewsTtlDays !== undefined || googleClientId !== undefined || googleClientSecret !== undefined ||
     aiSummaryPrompt !== undefined || outboundEmailProvider !== undefined || asksEmailProvider !== undefined ||
@@ -212,6 +217,30 @@ export async function PATCH(req: NextRequest) {
 
   // Update fund_settings
   const settingsUpdates: Record<string, unknown> = {}
+
+  // The sign-in screens' logo and text (components/auth-brand.tsx). Null clears either: no
+  // logo shows Hemrock's mark, no text shows none.
+  if (signInLogo !== undefined) {
+    if (signInLogo !== null) {
+      if (typeof signInLogo !== 'string' || !signInLogo.startsWith('data:image/')) {
+        return NextResponse.json({ error: 'Sign-in logo must be a data:image/ URL' }, { status: 400 })
+      }
+      if (signInLogo.length > 200 * 1024) {
+        return NextResponse.json({ error: 'Sign-in logo must be under 200KB' }, { status: 400 })
+      }
+    }
+    settingsUpdates.sign_in_logo = signInLogo
+  }
+  if (signInTitle !== undefined) {
+    if (signInTitle !== null && typeof signInTitle !== 'string') {
+      return NextResponse.json({ error: 'Sign-in text must be a string' }, { status: 400 })
+    }
+    const title = signInTitle?.trim() || null
+    if (title && title.length > AUTH_TITLE_MAX) {
+      return NextResponse.json({ error: `Sign-in text must be ${AUTH_TITLE_MAX} characters or fewer` }, { status: 400 })
+    }
+    settingsUpdates.sign_in_title = title
+  }
 
   if (postmarkInboundAddress !== undefined) {
     settingsUpdates.postmark_inbound_address = postmarkInboundAddress?.trim() || null
