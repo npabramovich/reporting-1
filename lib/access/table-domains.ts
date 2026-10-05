@@ -289,7 +289,7 @@ export const TABLE_RULES: Record<string, TableRule> = {
   k1_delivery_consents: { scope: 'service', note: 'A partner’s consent to electronic delivery — a legal fact, never manufacturable from a browser.' },
   reminder_deliveries: { scope: 'service', note: 'Which reminder thresholds were emailed; the ops-reminders cron is the only reader and writer.' },
   // ---- Deliberately public -------------------------------------------------------------------
-  site_content: { scope: 'public', note: 'Legacy: the in-app marketing page that read it moved to welden-site. Table kept; nothing reads or writes it.' },
+  site_content: { scope: 'public', note: 'Legacy: the in-app marketing page that read it moved to hemrock.com (tdavidson/content). Table kept; nothing reads or writes it.' },
 
   // ---- Left alone, with reasons ---------------------------------------------------------------
   funds: { scope: 'keep', note: 'Membership defines the tenant; its policy is the root of get_my_fund_ids and predates domains.' },

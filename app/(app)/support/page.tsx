@@ -67,7 +67,7 @@ export default function SupportPage() {
               </a>
               {' '}or open an issue on{' '}
               <a
-                href="https://github.com/tdavidson/welden"
+                href="https://github.com/tdavidson/reporting"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-foreground underline underline-offset-4 hover:text-foreground/80"
@@ -89,12 +89,12 @@ export default function SupportPage() {
                 </a>
               </li>
               <li>
-                <a href="https://github.com/tdavidson/welden" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 hover:text-foreground transition-colors">
+                <a href="https://github.com/tdavidson/reporting" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 hover:text-foreground transition-colors">
                   <Github className="h-3.5 w-3.5" />GitHub
                 </a>
               </li>
               <li>
-                <a href="https://github.com/tdavidson/welden/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 hover:text-foreground transition-colors">
+                <a href="https://github.com/tdavidson/reporting/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 hover:text-foreground transition-colors">
                   <Scale className="h-3.5 w-3.5" />License
                 </a>
               </li>
@@ -158,7 +158,7 @@ export default function SupportPage() {
             across the stack. The software can be downloaded and deployed on your own infrastructure
             from{' '}
             <a
-              href="https://github.com/tdavidson/welden"
+              href="https://github.com/tdavidson/reporting"
               target="_blank"
               rel="noopener noreferrer"
               className="text-foreground underline underline-offset-4 hover:text-foreground/80"
@@ -201,7 +201,7 @@ export default function SupportPage() {
           </p>
           <p className="text-muted-foreground mb-2">
             The license covers the source code and documentation. Per its trademark clause, it does not
-            grant rights to the &ldquo;Welden&rdquo;, &ldquo;Hemrock&rdquo; or &ldquo;Unstructured Ventures&rdquo; names or logos
+            grant rights to the &ldquo;Hemrock&rdquo; or &ldquo;Unstructured Ventures&rdquo; names or logos
             &mdash; if you fork or redeploy the software, please use your own branding.
           </p>
           <p className="text-muted-foreground">
@@ -214,7 +214,7 @@ export default function SupportPage() {
             </a>
             . Read the{' '}
             <a
-              href="https://github.com/tdavidson/welden/blob/main/LICENSE.md"
+              href="https://github.com/tdavidson/reporting/blob/main/LICENSE.md"
               target="_blank"
               rel="noopener noreferrer"
               className="text-foreground underline underline-offset-4 hover:text-foreground/80"
@@ -230,7 +230,7 @@ export default function SupportPage() {
           <p className="text-muted-foreground mb-2">
             You can download and deploy this platform for your own use under the terms of the{' '}
             <a
-              href="https://github.com/tdavidson/welden/blob/main/LICENSE.md"
+              href="https://github.com/tdavidson/reporting/blob/main/LICENSE.md"
               target="_blank"
               rel="noopener noreferrer"
               className="text-foreground underline underline-offset-4 hover:text-foreground/80"
@@ -563,7 +563,7 @@ export default function SupportPage() {
             For detailed technical setup instructions &mdash; configuring Supabase, environment
             variables, encryption keys, email providers, deployment, and more &mdash; see the{' '}
             <a
-              href="https://github.com/tdavidson/welden"
+              href="https://github.com/tdavidson/reporting"
               target="_blank"
               rel="noopener noreferrer"
               className="text-foreground underline underline-offset-4 hover:text-foreground/80"

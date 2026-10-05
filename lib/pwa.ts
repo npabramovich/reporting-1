@@ -67,11 +67,11 @@ export const APPLE_TOUCH_SIZES = [152, 167, 180] as const
 
 // The mark's paths live in lib/brand-mark.ts, which the auth screen can import without
 // pulling in this module's database client.
-export { MARK_ICON_VIEWBOX, MARK_PATHS, MARK_VIEWBOX } from '@/lib/brand-mark'
+export { MARK_ICON_VIEWBOX, MARK_PATHS, MARK_STROKE, MARK_VIEWBOX } from '@/lib/brand-mark'
 
 /**
- * Fraction of the canvas the mark's square viewBox takes. The glasses span its full width
- * and about a third of its height.
+ * Fraction of the canvas the mark's square viewBox takes. The mark spans its full width
+ * and about four-fifths of its height.
  *
  * Android crops a maskable icon to whatever shape the launcher uses (circle, squircle,
  * teardrop) and only the middle 80% of the width is guaranteed to survive. Half of
@@ -260,7 +260,7 @@ function iconEntry(size: IconSize, maskable: boolean, variant: IconVariant) {
 }
 
 /**
- * The browser-tab icons, both generated from public/brand/welden-mark.svg by
+ * The browser-tab icons, both generated from public/brand/hemrock-mark.svg by
  * scripts/generate-favicons.mjs. The .ico first and the SVG after it: a browser that reads
  * SVG takes the later link, and one that doesn't has the .ico.
  *
@@ -341,7 +341,7 @@ export function buildManifest(brand: PwaBrand): MetadataRoute.Manifest {
 /**
  * What an LP sees in an install prompt.
  *
- * An unbranded deployment would otherwise offer "Welden Investor Portal",
+ * An unbranded deployment would otherwise offer "Portfolio Investor Portal",
  * which reads as two products stapled together.
  */
 export function portalNameFor(name: string): string {

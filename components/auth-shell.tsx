@@ -39,13 +39,13 @@ export function AuthShell({
   )
 }
 
-/** The Welden mark + wordmark, linked home. */
+/** Hemrock's mark and the product name, linked home. */
 export function AuthWordmark() {
   return (
     <div className="text-center">
       <Link href="/" className="inline-flex flex-col items-center gap-2 transition-opacity hover:opacity-80">
-        <BrandMark className="h-7 w-auto text-foreground" />
-        <h1 className="text-lg font-semibold tracking-tight">welden</h1>
+        <BrandMark className="h-8 w-auto text-foreground" />
+        <h1 className="text-lg font-semibold tracking-tight">Portfolio</h1>
       </Link>
     </div>
   )

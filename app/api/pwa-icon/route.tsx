@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server'
 import {
   MARK_ICON_VIEWBOX,
   MARK_PATHS,
+  MARK_STROKE,
   SURFACE_LIGHT_HEX,
   isIconSize,
   isIconVariant,
@@ -64,10 +65,14 @@ export async function GET(req: NextRequest) {
           width={markPx}
           height={markPx}
           viewBox={MARK_ICON_VIEWBOX}
-          fill={fill}
+          fill="none"
+          stroke={fill}
+          strokeWidth={MARK_STROKE.width}
+          strokeLinecap={MARK_STROKE.linecap}
+          strokeLinejoin={MARK_STROKE.linejoin}
         >
           {MARK_PATHS.map(p => (
-            <path key={p.d} d={p.d} fillRule={p.fillRule} />
+            <path key={p.d} d={p.d} />
           ))}
         </svg>
       </div>

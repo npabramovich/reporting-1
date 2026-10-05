@@ -2,14 +2,14 @@
  * Export the demo fund for the public demo widget: demo-widget/data/snapshot.json and, as the
  * fund's viewer, every server page's data into demo-widget/data/pages.json.
  *
- *   DEMO_FUND_NAME="Welden Demo" DEMO_USER_EMAIL=… DEMO_USER_PASSWORD=… \
+ *   DEMO_FUND_NAME="Hemrock Ventures" DEMO_USER_EMAIL=… DEMO_USER_PASSWORD=… \
  *     npx tsx --env-file=.env.local scripts/demo-snapshot.ts
  *
  * Runs against the database in .env.local (service role) and reads only the one fund. The
  * snapshot is the shape demo-widget/types.ts describes; the pages are the output of every loader
  * in lib/pages/registry.ts, run with a client signed in as DEMO_USER_EMAIL (RLS applies) exactly
  * as the page would run it, keyed by the URL the page serves. Commit both; CI builds the widget
- * from them. The fund's own name is replaced by DEMO_FUND_LABEL (default "Welden Demo") so
+ * from them. The fund's own name is replaced by DEMO_FUND_LABEL (default "Portfolio Demo") so
  * the public widget never carries whatever the install happens to call it.
  *
  * Without DEMO_USER_EMAIL/DEMO_USER_PASSWORD only the snapshot is written.
@@ -30,8 +30,8 @@ import { PAGE_LOADERS, matchPattern } from '@/lib/pages/registry'
 import type { PageContext } from '@/lib/pages/context'
 import { DEMO_SCHEMA_VERSION, type DemoPages, type DemoSnapshot } from '@/demo-widget/types'
 
-const FUND_NAME = process.env.DEMO_FUND_NAME ?? 'Welden Demo'
-const FUND_LABEL = process.env.DEMO_FUND_LABEL ?? 'Welden Demo'
+const FUND_NAME = process.env.DEMO_FUND_NAME ?? 'Hemrock Ventures'
+const FUND_LABEL = process.env.DEMO_FUND_LABEL ?? 'Portfolio Demo'
 const OUT = path.join(process.cwd(), 'demo-widget', 'data', 'snapshot.json')
 const PAGES_OUT = path.join(process.cwd(), 'demo-widget', 'data', 'pages.json')
 

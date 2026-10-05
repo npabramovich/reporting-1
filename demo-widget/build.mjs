@@ -76,7 +76,7 @@ execFileSync(path.join(root, 'node_modules', '.bin', 'tailwindcss'), [
 
 // 3. Scope it (scope-css.mjs): same rules, same specificity, matching only inside the widget.
 const tw = fs.readFileSync(path.join(dist, 'tw.css'), 'utf8')
-const banner = `/* Welden demo widget: app/globals.css from welden ${pkg.version}, scoped to .${ROOT}. Built ${new Date().toISOString()}. */`
+const banner = `/* Portfolio demo widget: app/globals.css from reporting ${pkg.version}, scoped to .${ROOT}. Built ${new Date().toISOString()}. */`
 fs.writeFileSync(path.join(dist, 'widget.css'), `${banner}\n${ROOT_RESET}\n${scopeCss(tw)}`)
 fs.rmSync(path.join(dist, 'tw.css'))
 
@@ -101,13 +101,13 @@ const routes = allHrefs(snapshot, JSON.parse(fs.readFileSync(path.join(dist, 'pa
 fs.writeFileSync(path.join(dist, 'routes.json'), JSON.stringify(routes, null, 1) + '\n')
 const answers = JSON.parse(fs.readFileSync(path.join(dist, 'answers.json'), 'utf8'))
 const manifest = {
-  name: 'welden-demo-widget',
+  name: 'portfolio-demo-widget',
   version: pkg.version,
   builtAt: new Date().toISOString(),
   schemaVersion: snapshot.schemaVersion,
   answersSchemaVersion: answers.schemaVersion,
   answersGeneratedBy: answers.generatedBy,
-  global: 'WeldenDemo',
+  global: 'PortfolioDemo',
   files: ['widget.js', ...chunks, 'widget.css', 'snapshot.json', 'answers.json', 'pages.json', 'api.json', 'routes.json'],
 }
 fs.writeFileSync(path.join(dist, 'manifest.json'), JSON.stringify(manifest, null, 2))

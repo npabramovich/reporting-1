@@ -9,11 +9,11 @@ import type { AppFetch } from '@/components/app-runtime'
 
 /**
  * The public demo widget's entry point. Built by demo-widget/build.mjs into an ES module
- * (`widget.js`, loaded with `<script type="module">`) that sets the global `WeldenDemo` and
+ * (`widget.js`, loaded with `<script type="module">`) that sets the global `PortfolioDemo` and
  * pulls each section of the app from its own chunk on first use, plus a stylesheet. The
  * marketing site mounts it:
  *
- *   const demo = WeldenDemo.mount(el, { snapshot, answers, pages, api, chrome: 'page' })
+ *   const demo = PortfolioDemo.mount(el, { snapshot, answers, pages, api, chrome: 'page' })
  *   demo.navigate('/deals')
  *   demo.unmount()
  *
@@ -126,9 +126,9 @@ export function routes(snapshot: DemoSnapshot, pages?: DemoPages): string[] {
 }
 
 declare global {
-  interface Window { WeldenDemo?: { mount: typeof mount; routes: typeof routes; schemaVersion: number } }
+  interface Window { PortfolioDemo?: { mount: typeof mount; routes: typeof routes; schemaVersion: number } }
 }
 
 // The host reaches the widget through the global, not through the module's exports: a static
 // site can add a <script type="module"> but not import from it at build time.
-if (typeof window !== 'undefined') window.WeldenDemo = { mount, routes, schemaVersion }
+if (typeof window !== 'undefined') window.PortfolioDemo = { mount, routes, schemaVersion }
