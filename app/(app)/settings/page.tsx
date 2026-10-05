@@ -13,6 +13,7 @@ import { NotificationPreferencesSection } from './_sections/account/notification
 import { VersionSection } from './_sections/fund/version-section'
 import { CurrencySection } from './_sections/fund/currency-section'
 import { FundNameSection } from './_sections/fund/fund-name-section'
+import { SignInSection } from './_sections/fund/sign-in-section'
 import { AuthEmailTemplatesSection } from './_sections/fund/auth-email-templates-section'
 import { WhitelistSection } from './_sections/fund/whitelist-section'
 import { TeamSection } from './_sections/fund/team-section'
@@ -22,7 +23,6 @@ import { UsageTrackingSection } from './_sections/fund/usage-tracking-section'
 import { AIProvidersSection } from './_sections/platform/ai-providers-section'
 import { InboundEmailSection } from './_sections/platform/inbound-email-section'
 import { StorageSection } from './_sections/platform/storage-section'
-import { MarketingSection } from './_sections/platform/marketing-section'
 import { OutboundEmailSection } from './_sections/platform/outbound-email-section'
 import { RemindersSection } from './_sections/platform/reminders-section'
 import { SendersSection } from './_sections/platform/senders-section'
@@ -149,6 +149,7 @@ export default function SettingsPage() {
         <AdminSectionContext.Provider value={true}>
           <SettingsGroup label="Organization">
             <FundNameSection name={settings.fundName} logo={settings.fundLogo} address={settings.fundAddress} onSaved={load} />
+            <SignInSection logo={settings.signInLogo} title={settings.signInTitle} onSaved={load} />
             <Section title="Appearance">
               <AppearanceEditor />
             </Section>
@@ -215,7 +216,6 @@ export default function SettingsPage() {
               googleClientId={settings.googleClientId}
               onChanged={load}
             />
-            <MarketingSection />
             <Section title="Agent access">
               <LedgerAgentAccess isAdmin={settings.isAdmin} section="toggle" />
             </Section>
