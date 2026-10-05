@@ -1,5 +1,4 @@
-import Link from 'next/link'
-import { BrandMark } from '@/components/brand-mark'
+import { AuthWordmark } from '@/components/auth-brand'
 
 /**
  * The chrome for every signed-out, full-page screen: sign-in, sign-up, password reset,
@@ -10,8 +9,8 @@ import { BrandMark } from '@/components/brand-mark'
  * different product bolted on at the moment a user is being asked to hand an agent the
  * keys to their fund. That is the worst possible place to look unfamiliar.
  *
- * The wordmark links home. Someone who lands here from the demo and decides not to sign in
- * has no other way back to the marketing site.
+ * The mark links home. What it shows (a logo, and optionally a line of text) is the fund's
+ * choice in Settings → Fund; see components/auth-brand.tsx.
  */
 export function AuthShell({
   children,
@@ -35,18 +34,6 @@ export function AuthShell({
         {children}
         {footer}
       </div>
-    </div>
-  )
-}
-
-/** Hemrock's mark and the product name, linked home. */
-export function AuthWordmark() {
-  return (
-    <div className="text-center">
-      <Link href="/" className="inline-flex flex-col items-center gap-2 transition-opacity hover:opacity-80">
-        <BrandMark className="h-8 w-auto text-foreground" />
-        <h1 className="text-lg font-semibold tracking-tight">Portfolio</h1>
-      </Link>
     </div>
   )
 }

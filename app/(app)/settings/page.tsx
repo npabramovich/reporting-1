@@ -13,6 +13,7 @@ import { NotificationPreferencesSection } from './_sections/account/notification
 import { VersionSection } from './_sections/fund/version-section'
 import { CurrencySection } from './_sections/fund/currency-section'
 import { FundNameSection } from './_sections/fund/fund-name-section'
+import { SignInSection } from './_sections/fund/sign-in-section'
 import { AuthEmailTemplatesSection } from './_sections/fund/auth-email-templates-section'
 import { WhitelistSection } from './_sections/fund/whitelist-section'
 import { TeamSection } from './_sections/fund/team-section'
@@ -148,6 +149,7 @@ export default function SettingsPage() {
         <AdminSectionContext.Provider value={true}>
           <SettingsGroup label="Organization">
             <FundNameSection name={settings.fundName} logo={settings.fundLogo} address={settings.fundAddress} onSaved={load} />
+            <SignInSection logo={settings.signInLogo} title={settings.signInTitle} onSaved={load} />
             <Section title="Appearance">
               <AppearanceEditor />
             </Section>
