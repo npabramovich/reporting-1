@@ -16,11 +16,11 @@ describe('proposeMapping', () => {
     expect(p.confidence).not.toBe('none')
   })
 
-  it('maps an investment sub-account and flags the holding it implies', () => {
+  it('keeps an investment sub-account unresolved until its dedicated account exists', () => {
     // The key move: a per-fund investment account in QuickBooks IS the discovery of a
     // fund holding. The leaf name becomes the holding.
     const [p] = proposeMapping([qb('Investments:Acme Ventures III')], CHART)
-    expect(p.code).toBe('1100')
+    expect(p.code).toBeNull()
     expect(p.suggestsHolding).toBe('Acme Ventures III')
   })
 
@@ -125,10 +125,38 @@ describe('proposeMapping — management company charts', () => {
 
   it("leaves a fund's mappings alone — every manco rule is inert without the subtype", () => {
     expect(codeFor('Bank:Operating', FUND)).toBe('1000')
-    expect(codeFor('Investments:Acme Ventures III', FUND)).toBe('1100')
+    expect(codeFor('Investments:Acme Ventures III', FUND)).toBeNull()
     expect(codeFor('Audit Fees', FUND)).toBe('5100')
     // A fund chart has no salaries account, so a payroll line stays unmapped rather than landing
     // somewhere plausible-looking.
     expect(codeFor('Salaries', FUND)).toBeNull()
+  })
+})
+
+
+describe('migration account identity', () => {
+  it('maps each investment to its own account, never another investment or pooled cost', () => {
+    const chart = [...CHART,
+      { id: 'coin', code: '1100-coinbase', name: 'Investment — Coinbase', type: 'asset', subtype: 'investment', company_id: 'coinbase' },
+      { id: 'multi', code: '1100-multi', name: 'Investment — Multicoin Fund III', type: 'asset', subtype: 'investment', company_id: 'multi' },
+    ]
+    expect(proposeMapping([qb('Investments:Coinbase'), qb('Investments:Multicoin Fund III'), qb('Investments:Unknown')], chart).map(p => p.code))
+      .toEqual(['1100-coinbase', '1100-multi', null])
+  })
+
+  it('does not suggest an individual partner for generic partners capital', () => {
+    const chart = [{ id: 'lp', code: '3100-other', name: "Partners’ capital — Other LP", type: 'equity', subtype: 'lp_capital', lp_entity_id: 'other' }]
+    expect(proposeMapping([qb("Partners capital")], chart)[0].code).toBeNull()
+    chart.push({ id: 'pool', code: '3100', name: 'LP (unallocated)', type: 'equity', subtype: 'lp_capital', lp_entity_id: '' })
+    expect(proposeMapping([qb("Partners capital")], chart)[0].code).toBe('3100')
+  })
+
+  it('never maps accumulated amortization to amortization expense', () => {
+    expect(codeFor('Accumulated Amortization of Other Assets', MANCO)).toBeNull()
+    expect(codeFor('Amortization', MANCO)).toBe('5800')
+  })
+
+  it('does not suggest inactive accounts', () => {
+    expect(proposeMapping([qb('Cash')], CHART.map(a => ({ ...a, is_active: false })))[0].code).toBeNull()
   })
 })

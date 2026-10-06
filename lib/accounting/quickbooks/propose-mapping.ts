@@ -20,6 +20,9 @@ export interface ChartAccount {
   name: string
   type: string
   subtype: string | null
+  company_id?: string | null
+  lp_entity_id?: string | null
+  is_active?: boolean
 }
 
 export interface MappingProposal {
@@ -88,12 +91,30 @@ export function proposeMapping(
   qbAccounts: QbAccountSummary[],
   chart: ChartAccount[],
 ): MappingProposal[] {
+  chart = chart.filter(a => a.is_active !== false)
   const byName = new Map(chart.map(a => [norm(a.name), a]))
   const bySubtype = new Map<string, ChartAccount>()
-  for (const a of chart) if (a.subtype && !bySubtype.has(a.subtype)) bySubtype.set(a.subtype, a)
+  for (const a of chart) if (a.subtype && !a.company_id && !a.lp_entity_id && !a.code.includes('-') && !bySubtype.has(a.subtype)) bySubtype.set(a.subtype, a)
 
   return qbAccounts.map(({ account }) => {
     const holding = holdingFor(account)
+
+    // A holding must retain its own ledger identity, never fall back to pooled cost.
+    if (holding) {
+      const target = chart.find(a => a.company_id && a.subtype === 'investment' &&
+        [holding, `Investment — ${holding}`, `Investments at cost — ${holding}`, account].some(n => norm(n) === norm(a.name)))
+      return { qbAccount: account, code: target?.code ?? null,
+        confidence: target ? 'exact' as const : 'none' as const,
+        reason: target ? `Dedicated investment account for ${holding}.` : `Create or link ${holding} below to keep its investment balance separate.`,
+        suggestsHolding: holding }
+    }
+
+    // Accumulated amortization is a contra-asset, not amortization expense.
+    if (/accumulated.*(amorti[sz]|deprec)/i.test(account)) {
+      const target = chart.find(a => a.type === 'asset' && norm(a.name) === norm(account))
+      return { qbAccount: account, code: target?.code ?? null, confidence: target ? 'exact' as const : 'none' as const,
+        reason: 'Accumulated amortization/depreciation needs a separate contra-asset account.', suggestsHolding: null }
+    }
 
     // 1. Our account name, verbatim.
     const exact = byName.get(norm(leaf(account))) ?? byName.get(norm(account))
