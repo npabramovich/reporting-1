@@ -33,7 +33,8 @@ function esc(s: string): string {
 }
 
 /** Accounting convention: negatives in parentheses, a dash for exactly zero. */
-function money(v: number, currency: string): string {
+function money(v: number | null, currency: string): string {
+  if (v == null) return '—'
   if (Math.abs(v) < 0.005) return '—'
   const n = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   // Was `currency === 'USD' ? '$' : ''` — so a EUR fund's LP statement showed bare numbers with
@@ -64,7 +65,7 @@ export interface StatementPdfData {
   vehicle: string
   partnerName: string
   period: StatementPeriod
-  row: { commitment: number; called: number; funded: number; outstanding: number; receivable: number; ending: number }
+  row: { commitment: number; called: number | null; funded: number | null; outstanding: number | null; receivable: number | null; ending: number | null }
   periodRollForward: CapitalAccount
   rollForward: CapitalAccount
   transactions: { date: string; memo: string | null; sourceType: string | null; amount: number }[]
@@ -95,7 +96,7 @@ export interface StatementPdfData {
  */
 function fofSection(d: StatementPdfData): string {
   if (!d.fof) return ''
-  const m = (v: number) => money(v, d.currency)
+  const m = (v: number | null) => money(v, d.currency)
   const mult = (v: number | null) => (v === null || v === undefined ? '&mdash;' : `${v.toFixed(2)}x`)
   const th = 'padding:5px 8px;border-bottom:1px solid #e5e5e5;text-align:right;font-weight:600;'
   const thL = th.replace('right', 'left')
@@ -168,7 +169,7 @@ function fofSection(d: StatementPdfData): string {
 
 export function buildStatementHtml(d: StatementPdfData): string {
   const { currency, displayFont } = d
-  const m = (v: number) => money(v, currency)
+  const m = (v: number | null) => money(v, currency)
 
   // Only show a line if it moved in EITHER column — an SPV shouldn't print four empty rows.
   const lines = ACTIVITY_FIELDS.filter(
@@ -223,7 +224,7 @@ export function buildStatementHtml(d: StatementPdfData): string {
   const summary = [
     ['Commitment', m(d.row.commitment)],
     ['Called capital', m(d.row.called)],
-    ...(Math.abs(d.row.receivable) > 0.004
+    ...(Math.abs(d.row.receivable ?? 0) > 0.004
       ? [['— of which not yet funded', m(d.row.receivable)]]
       : []),
     ['Remaining to be called', m(d.row.outstanding)],

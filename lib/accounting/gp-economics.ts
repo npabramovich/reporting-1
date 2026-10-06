@@ -1,3 +1,5 @@
+import { loadPostedLedger } from './load'
+import { loadResolvedCommitments } from './terms'
 // GP / associate entity economics: who owns what, who holds carry points, and how much
 // carry each partner has accrued, been paid, and is still owed.
 //
@@ -66,9 +68,9 @@ export interface GpPartnerRow {
   /** Carry accrued to this partner — their share of the vehicle's carriedInterest bucket. */
   carryAccrued: number
   /** Carry actually paid out (the register). */
-  carryPaid: number
+  carryPaid: number | null
   /** accrued − paid. A mark, not a receivable. */
-  carryUnpaid: number
+  carryUnpaid: number | null
 }
 
 
@@ -78,13 +80,13 @@ export interface GpEconomics {
   basis: OwnershipBasis
   /** How carry paid is sourced: 'ledger' = derived from the associate's own books;
    *  'events' = the editable carry_payments table (LP tracking). */
-  source: 'ledger' | 'events'
+  source: 'ledger' | 'events' | 'mixed'
   /** The vehicle's own position on the fund's books, before the split. */
   associate: CapitalAccount
   partners: GpPartnerRow[]
   /** The carry-payment register — only for an LP-tracking ('events') vehicle; empty for ledger. */
   payments: CarryPayment[]
-  totals: { carryAccrued: number; carryPaid: number; carryUnpaid: number; ending: number }
+  totals: { carryAccrued: number; carryPaid: number | null; carryUnpaid: number | null; ending: number }
 }
 
 /**
@@ -170,7 +172,7 @@ export async function loadOwnershipBasis(
   // Same events-or-scalar resolution as every other commitment reader (resolveCommitmentMap).
   // source:'ledger' — GP ownership weights follow commitments/events, not pasted positions
   // (whether tracking-vehicle positions should feed GP ownership is a separate question).
-  const weights = resolveCommitmentMap({ source: 'ledger', owners, events, asOf })
+  const weights = await loadResolvedCommitments(admin, fundId, link.vehicle, asOf)
   if (Array.from(weights.values()).some(v => v > 0)) {
     return { basis: 'commitments', weights }
   }
@@ -230,9 +232,10 @@ export async function loadGpEconomics(
   // Carry PAID from whichever books this vehicle keeps (resolveCarryPaid, the carry seam):
   // ledger → carry_distribution postings on the associate's own books; tracking → the
   // carry_payments register. Unpaid = accrued − paid.
-  const { paidByLp, payments } = await resolveCarryPaid(admin, {
+  const { paidByLp, payments, unresolvedLpIds } = await resolveCarryPaid(admin, {
     source: own.source,
-    ownPostings: own.postings,
+    ownPostings: (await loadPostedLedger(admin, fundId, link.vehicle, asOf)).capitalPostings,
+    asOf,
     fundId,
     vehicleId: link.vehicleId,
   })
@@ -249,7 +252,7 @@ export async function loadGpEconomics(
     const m = members.find(x => x.lpEntityId === lpEntityId)
     const capital = split.get(lpEntityId) ?? emptyAccount()
     const carryAccrued = roundCents(capital.carriedInterest)
-    const carryPaid = roundCents(paidByLp.get(lpEntityId) ?? 0)
+    const carryPaid = unresolvedLpIds.has(lpEntityId) ? null : roundCents(paidByLp.get(lpEntityId) ?? 0)
     return {
       lpEntityId,
       name: names.get(lpEntityId) ?? lpEntityId,
@@ -260,7 +263,7 @@ export async function loadGpEconomics(
       capital,
       carryAccrued,
       carryPaid,
-      carryUnpaid: roundCents(carryAccrued - carryPaid),
+      carryUnpaid: carryPaid == null ? null : roundCents(carryAccrued - carryPaid),
     }
   }).sort((a, b) => a.name.localeCompare(b.name))
 
@@ -273,8 +276,8 @@ export async function loadGpEconomics(
     payments,
     totals: {
       carryAccrued: roundCents(partners.reduce((s, p) => s + p.carryAccrued, 0)),
-      carryPaid: roundCents(partners.reduce((s, p) => s + p.carryPaid, 0)),
-      carryUnpaid: roundCents(partners.reduce((s, p) => s + p.carryUnpaid, 0)),
+      carryPaid: partners.some(p => p.carryPaid == null) ? null : roundCents(partners.reduce((s, p) => s + p.carryPaid!, 0)),
+      carryUnpaid: partners.some(p => p.carryUnpaid == null) ? null : roundCents(partners.reduce((s, p) => s + p.carryUnpaid!, 0)),
       ending: roundCents(partners.reduce((s, p) => s + p.capital.ending, 0)),
     },
   }
@@ -340,9 +343,10 @@ export async function recordCarryPayment(
   admin: SupabaseClient,
   fundId: string,
   userId: string | null,
-  input: { vehicleId: string; lpEntityId: string; paidDate: string; amount: number; memo?: string },
+  input: { vehicleId: string; lpEntityId: string; paidDate: string; amount: number; memo?: string; journalEntryId?: string },
 ): Promise<{ id: string }> {
   if (!(input.amount > 0)) throw new Error('A carry payment must be a positive amount.')
+  await validateCarryLink(admin, fundId, input)
   const { data, error } = await (admin as any)
     .from('carry_payments')
     .insert({
@@ -352,6 +356,7 @@ export async function recordCarryPayment(
       paid_date: input.paidDate,
       amount: input.amount,
       memo: input.memo ?? null,
+      journal_entry_id: input.journalEntryId ?? null,
       created_by: userId,
     })
     .select('id')
@@ -368,4 +373,24 @@ export async function deleteCarryPayment(
   const { error } = await (admin as any)
     .from('carry_payments').delete().eq('fund_id', fundId).eq('id', id)
   if (error) throw new Error(error.message)
+}
+
+async function validateCarryLink(admin: SupabaseClient, fundId: string, input: { vehicleId: string; lpEntityId: string; paidDate: string; amount: number; journalEntryId?: string }) {
+  if (input.journalEntryId) {
+    const { data: entry, error } = await admin.from('journal_entries' as any).select('id, entry_date, source_type').eq('fund_id', fundId).eq('vehicle_id', input.vehicleId).eq('id', input.journalEntryId).eq('book', 'actual').eq('status', 'posted').maybeSingle()
+    if (error || !entry || (entry as any).source_type !== 'carry_distribution' || (entry as any).entry_date !== input.paidDate) throw new Error('Link a posted carry distribution on this entity with the same payment date.')
+    const { data: legs, error: legsError } = await admin.from('journal_postings' as any).select('amount, chart_of_accounts!inner(subtype)').eq('fund_id', fundId).eq('vehicle_id', input.vehicleId).eq('book', 'actual').eq('journal_entry_id', input.journalEntryId).eq('lp_entity_id', input.lpEntityId)
+    const amount = ((legs as any[]) ?? []).filter(p => p.chart_of_accounts?.subtype === 'lp_capital').reduce((sum, p) => sum + Number(p.amount), 0)
+    if (legsError || Math.abs(amount - input.amount) >= 0.005) throw new Error('The linked entry must have the same recipient and carry amount.')
+  }
+}
+
+export async function reconcileCarryPayment(admin: SupabaseClient, fundId: string, vehicleId: string, id: string, journalEntryId?: string, separate = false) {
+  const { data: payment, error } = await admin.from('carry_payments' as any).select('*').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('id', id).single()
+  if (error || !payment) throw new Error('Payment not found on this entity')
+  const p = payment as any
+  if (!journalEntryId && !separate) throw new Error('Choose a matching entry or identify this as a separate payment')
+  await validateCarryLink(admin, fundId, { vehicleId, lpEntityId: p.lp_entity_id, paidDate: p.paid_date, amount: Number(p.amount), journalEntryId })
+  const result = await admin.from('carry_payments' as any).update({ journal_entry_id: journalEntryId ?? null, separate_from_ledger: !journalEntryId && separate }).eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('id', id)
+  if (result.error) throw result.error
 }

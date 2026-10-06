@@ -1,3 +1,4 @@
+import { cashCapitalSource } from './cash-capital-source'
 // Server-side loaders that adapt DB rows into the pure-logic inputs. Kept out of
 // the route files so capital-accounts, reconciliation, and statements all derive
 // from the same posted-ledger snapshot. Everything is scoped to one vehicle
@@ -24,7 +25,8 @@ export async function fetchAllRows<T>(
 ): Promise<T[]> {
   const out: T[] = []
   for (let from = 0; ; from += page) {
-    const { data } = await make(from, from + page - 1)
+    const { data, error } = await make(from, from + page - 1)
+    if (error) throw error
     const rows = data ?? []
     out.push(...rows)
     if (rows.length < page) break
@@ -116,7 +118,6 @@ export function assembleLoadedLedger(fundId: string, rows: LedgerRows): LoadedLe
   // classify only simple cash/capital exchanges; non-cash and mixed adjustments
   // remain unclassified rather than presenting an accrual as incoming cash.
   const qbCashActivity = new Map<string, string>()
-  const accountById = new Map(accounts.map(a => [a.id, a]))
   const qbSplits = new Map<string, any[]>()
   for (const p of postingRows ?? []) {
     if (sourceByEntry.get(p.journal_entry_id) !== 'quickbooks') continue
@@ -125,12 +126,8 @@ export function assembleLoadedLedger(fundId: string, rows: LedgerRows): LoadedLe
     qbSplits.set(p.journal_entry_id, splits)
   }
   for (const [id, splits] of qbSplits) {
-    const cash = splits.filter(p => accountById.get(p.account_id)?.subtype === 'cash')
-    const capital = splits.filter(p => accountById.get(p.account_id)?.subtype === 'lp_capital')
-    if (!cash.length || !capital.length || cash.length + capital.length !== splits.length) continue
-    const incoming = cash.every(p => Number(p.amount) > 0) && capital.every(p => Number(p.amount) < 0)
-    const outgoing = cash.every(p => Number(p.amount) < 0) && capital.every(p => Number(p.amount) > 0)
-    if (incoming || outgoing) qbCashActivity.set(id, incoming ? 'contribution' : 'distribution')
+    const source = cashCapitalSource(splits.map(p => ({ accountId: p.account_id, amount: Number(p.amount) })), accounts)
+    if (source) qbCashActivity.set(id, source)
   }
 
   const postings: Posting[] = []
@@ -144,7 +141,7 @@ export function assembleLoadedLedger(fundId: string, rows: LedgerRows): LoadedLe
     postings.push({ accountId: p.account_id, amount, currency: p.currency ?? 'USD', lpEntityId: p.lp_entity_id ?? null, entryDate })
     sourcedPostings.push({ entryId: p.journal_entry_id, accountId: p.account_id, amount, currency: p.currency ?? 'USD', lpEntityId: p.lp_entity_id ?? null, sourceType, entryDate, memo: memoByEntry.get(p.journal_entry_id) ?? null })
     if (p.lp_entity_id && lpCapitalAccountIds.has(p.account_id)) {
-      capitalPostings.push({ lpEntityId: p.lp_entity_id, amount, sourceType: qbCashActivity.get(p.journal_entry_id) ?? sourceType, entryDate })
+      capitalPostings.push({ entryId: p.journal_entry_id, currency: p.currency, lpEntityId: p.lp_entity_id, amount, sourceType: qbCashActivity.get(p.journal_entry_id) ?? sourceType, entryDate })
     }
   }
 

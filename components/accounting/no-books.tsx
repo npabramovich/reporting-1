@@ -14,18 +14,21 @@ import { useLedgerFetch, useVehicleBase } from '@/components/accounting-vehicle'
  * and points at Admin, where the chart is set up.
  */
 export function NoBooksState({ children }: { children?: React.ReactNode }) {
+  const lf = useLedgerFetch()
   const base = useVehicleBase()
-  return (
-    <EmptyState
-      action={(
-        <Button size="sm" variant="outline" asChild>
-          <Link href={base ? `${base}/status` : '/funds/status'}>Set up the books in Admin</Link>
-        </Button>
-      )}
-    >
-      {children ?? 'No accounts are set up for this entity yet.'}
-    </EmptyState>
-  )
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function begin() {
+    setBusy(true); setError(null)
+    try {
+      const response = await lf('/api/accounting/chart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      if (!response.ok) throw new Error((await response.json()).error ?? 'Could not create accounts')
+      window.location.assign(base ? `${base}/journal` : '/funds/journal')
+    } catch (e) { setError((e as Error).message); setBusy(false) }
+  }
+  return <EmptyState action={<div className="flex gap-2"><Button size="sm" onClick={begin} disabled={busy}>{busy ? 'Preparing…' : 'Record a transaction'}</Button><Button size="sm" variant="outline" asChild><Link href={base ? `${base}/migrate` : '/funds/migrate'}>Import books</Link></Button></div>}>
+    {error ?? 'No accounting entries yet. Add a transaction or import your books to get started.'}
+  </EmptyState>
 }
 
 /**

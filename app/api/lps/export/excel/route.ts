@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { lpRatios } from '@/lib/lp-metrics'
 import { generateLiveReport } from '@/lib/accounting/live-report'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -110,25 +111,22 @@ export async function POST(req: NextRequest) {
     }
 
     let totalCommitment = 0
-    let totalPIC = 0
-    let totalDist = 0
-    let totalNav = 0
+    let totalPIC: number | null = 0
+    let totalDist: number | null = 0
+    let totalNav: number | null = 0
 
     for (const inv of invs) {
       const commitment = Number(inv.commitment) || 0
-      const pic = Number(inv.paid_in_capital) || Number(inv.called_capital) || 0
-      const dist = Number(inv.distributions) || 0
-      const nav = Number(inv.nav) || 0
-      const totalValue = Number(inv.total_value) || (dist + nav)
+      const pic = inv.paid_in_capital ?? inv.called_capital ?? null
+      const dist = inv.distributions ?? null
+      const nav = inv.nav ?? null
+      const totalValue = inv.total_value ?? (dist == null || nav == null ? null : Number(dist) + Number(nav))
       totalCommitment += commitment
-      totalPIC += pic
-      totalDist += dist
-      totalNav += nav
+      totalPIC = totalPIC == null || pic == null ? null : totalPIC + Number(pic)
+      totalDist = totalDist == null || dist == null ? null : totalDist + Number(dist)
+      totalNav = totalNav == null || nav == null ? null : totalNav + Number(nav)
 
-      const pctFunded = commitment > 0 ? pic / commitment : null
-      const dpi = pic > 0 ? dist / pic : null
-      const rvpi = pic > 0 ? nav / pic : null
-      const tvpi = dpi != null && rvpi != null ? dpi + rvpi : null
+      const { pctFunded, dpi, rvpi, tvpi } = lpRatios({ commitment, paidIn: pic ?? '', distributions: dist ?? '', nav })
       const irr = inv.irr != null ? Number(inv.irr) : null
 
       rows.push({
@@ -136,10 +134,10 @@ export async function POST(req: NextRequest) {
         Entity: inv.lp_entities?.entity_name ?? '',
         'Portfolio Group': inv.portfolio_group ?? '',
         Commitment: commitment,
-        'Paid-In Capital': pic,
-        Distributions: dist,
-        'Net Asset Balance': nav,
-        'Total Value': totalValue,
+        'Paid-In Capital': pic ?? '',
+        Distributions: dist ?? '',
+        'Net Asset Balance': nav ?? '',
+        'Total Value': totalValue ?? '',
         '% Funded': pctFunded != null ? Math.round(pctFunded * 10000) / 100 : '',
         DPI: dpi != null ? Math.round(dpi * 100) / 100 : '',
         RVPI: rvpi != null ? Math.round(rvpi * 100) / 100 : '',
@@ -150,21 +148,18 @@ export async function POST(req: NextRequest) {
 
     // Totals row for investor
     if (invs.length > 1) {
-      const tTotalValue = totalDist + totalNav
-      const tPctFunded = totalCommitment > 0 ? totalPIC / totalCommitment : null
-      const tDpi = totalPIC > 0 ? totalDist / totalPIC : null
-      const tRvpi = totalPIC > 0 ? totalNav / totalPIC : null
-      const tTvpi = tDpi != null && tRvpi != null ? tDpi + tRvpi : null
+      const tTotalValue = totalDist == null || totalNav == null ? null : totalDist + totalNav
+      const { pctFunded: tPctFunded, dpi: tDpi, rvpi: tRvpi, tvpi: tTvpi } = lpRatios({ commitment: totalCommitment, paidIn: totalPIC, distributions: totalDist, nav: totalNav })
 
       rows.push({
         Investor: `${investor.name}, Total`,
         Entity: '',
         'Portfolio Group': '',
         Commitment: totalCommitment,
-        'Paid-In Capital': totalPIC,
-        Distributions: totalDist,
-        'Net Asset Balance': totalNav,
-        'Total Value': tTotalValue,
+        'Paid-In Capital': totalPIC ?? '',
+        Distributions: totalDist ?? '',
+        'Net Asset Balance': totalNav ?? '',
+        'Total Value': tTotalValue ?? '',
         '% Funded': tPctFunded != null ? Math.round(tPctFunded * 10000) / 100 : '',
         DPI: tDpi != null ? Math.round(tDpi * 100) / 100 : '',
         RVPI: tRvpi != null ? Math.round(tRvpi * 100) / 100 : '',

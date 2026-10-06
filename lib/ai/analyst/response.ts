@@ -138,8 +138,20 @@ export function constructionSummaryBlock(value: unknown): AnalystPresentationBlo
       ...(value.timeline ? {
         timeline: (() => {
           const last = value.timeline.years[value.timeline.years.length - 1]
-          return { horizonYears: value.timeline.horizonYears, finalYear: last.calendarYear, dpi: last.dpi, tvpi: last.tvpi, netIrr: last.netIrr }
+          return {
+            horizonYears: value.timeline.horizonYears, finalYear: last.calendarYear,
+            dpi: last.dpi, tvpi: last.tvpi, netIrr: last.netIrr,
+            // Which measure these are. Without it the same three numbers mean either the LP's
+            // net-of-carry return or the fund's gross one, and nothing in the block says so.
+            netOfCarry: !!value.timelineNetOfCarry,
+          }
         })(),
+        ...(value.grossTimeline ? {
+          grossTimeline: (() => {
+            const last = value.grossTimeline.years[value.grossTimeline.years.length - 1]
+            return { horizonYears: value.grossTimeline.horizonYears, finalYear: last.calendarYear, dpi: last.dpi, tvpi: last.tvpi, netIrr: last.netIrr }
+          })(),
+        } : {}),
       } : {}),
       ...(value.simulation ? {
         simulation: {

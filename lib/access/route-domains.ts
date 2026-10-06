@@ -55,6 +55,7 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   'api/accounting/bank': { domain: 'accounting' },
   'api/accounting/bank/auto-match': { domain: 'accounting' },
   'api/accounting/bank/categorize': { domain: 'accounting' },
+  'api/accounting/bank/duplicates': { domain: 'accounting' },
   'api/accounting/bank/import': { domain: 'accounting' },
   'api/accounting/bank/match': { domain: 'accounting' },
   'api/accounting/bank/reconcile': { domain: 'accounting' },
@@ -147,6 +148,7 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
 
   // ── LP capital: identities, commitments, capital accounts ──────────────────
   'api/accounting/capital-accounts': { domain: 'lp_capital' },
+  'api/accounting/settlements': { domain: 'lp_capital' },
   'api/accounting/capital-calls': { domain: 'lp_capital' },
   // The outbound mirror of capital-calls, and the same per-partner capital data.
   'api/accounting/distributions': { domain: 'lp_capital' },

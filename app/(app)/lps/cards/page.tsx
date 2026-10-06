@@ -25,22 +25,23 @@ interface Payload {
   vehicleDates: { vehicle: string; date: string | null }[]
 }
 
-const ratio = (n: number, d: number): number | null => (d > 0 ? n / d : null)
+const add = (a: number | null, b: number | null): number | null => a == null || b == null ? null : a + b
+const ratio = (n: number | null, d: number | null): number | null => (n != null && d != null && d > 0 ? n / d : null)
 
 function totalsOf(rows: ReportCardRow[]): ReportCardTotals {
-  const t = rows.reduce((a, r) => ({
+  const t = rows.reduce<Pick<ReportCardTotals, 'commitment' | 'paidInCapital' | 'distributions' | 'nav' | 'totalValue'>>((a, r) => ({
     commitment: a.commitment + r.commitment,
-    paidInCapital: a.paidInCapital + r.paidInCapital,
-    distributions: a.distributions + r.distributions,
-    nav: a.nav + r.nav,
-    totalValue: a.totalValue + r.totalValue,
+    paidInCapital: add(a.paidInCapital, r.paidInCapital),
+    distributions: add(a.distributions, r.distributions),
+    nav: add(a.nav, r.nav),
+    totalValue: add(a.totalValue, r.totalValue),
   }), { commitment: 0, paidInCapital: 0, distributions: 0, nav: 0, totalValue: 0 })
   return {
     ...t,
     pctFunded: ratio(t.paidInCapital, t.commitment),
     dpi: ratio(t.distributions, t.paidInCapital),
     rvpi: ratio(t.nav, t.paidInCapital),
-    tvpi: ratio(t.distributions + t.nav, t.paidInCapital),
+    tvpi: ratio(add(t.distributions, t.nav), t.paidInCapital),
   }
 }
 

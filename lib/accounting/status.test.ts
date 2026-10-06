@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { vehicleStatus } from './status'
 import { loadPostedLedger, loadOwnership } from './load'
 import { vehicleKindByName } from './vehicle-domain'
-import { loadCapitalSource } from './capital-source'
-import { loadHistoryMode, loadAllocationBasis } from './terms'
+import { loadAllocationBasis } from './terms'
 import { loadStrandedCapital } from './pooled-capital-check'
 import { intercompanyBalances } from './intercompany'
 import { chartForVehicleKind } from './chart'
@@ -11,7 +10,7 @@ import { chartForVehicleKind } from './chart'
 vi.mock('./load', () => ({ loadPostedLedger: vi.fn(), loadOwnership: vi.fn() }))
 vi.mock('./vehicle-id', () => ({ vehicleIdByName: vi.fn().mockResolvedValue('vehicle-1') }))
 vi.mock('./vehicle-domain', () => ({ vehicleKindByName: vi.fn() }))
-vi.mock('./capital-source', () => ({ loadCapitalSource: vi.fn() }))
+vi.mock('./lp-positions', () => ({ loadPositions: vi.fn().mockResolvedValue([]) }))
 vi.mock('./terms', () => ({ loadHistoryMode: vi.fn(), loadAllocationBasis: vi.fn() }))
 vi.mock('./close', () => ({ nextCloseStart: vi.fn().mockResolvedValue('2026-01-01') }))
 vi.mock('./pooled-capital-check', () => ({ loadStrandedCapital: vi.fn() }))
@@ -32,22 +31,17 @@ beforeEach(() => {
   vi.mocked(loadPostedLedger).mockResolvedValue({ accounts: accounts(), postings: [], capitalPostings: [] } as any)
   vi.mocked(intercompanyBalances).mockResolvedValue([])
   vi.mocked(loadOwnership).mockResolvedValue([])
-  vi.mocked(loadHistoryMode).mockResolvedValue(null)
   vi.mocked(loadAllocationBasis).mockResolvedValue('capital_balance')
-  vi.mocked(loadCapitalSource).mockResolvedValue('events')
   vi.mocked(loadStrandedCapital).mockResolvedValue({ pooledPostings: 0, pooledAmount: 0, taggedPostings: 0, perLpAccounts: 0, stranded: false, message: null })
 })
 
 describe('management company accounting status', () => {
-  it('finishes setup with a complete chart without requiring LPs, a history mode, or entries', async () => {
+  it('shows management-company book health without requiring LPs or entries', async () => {
     const admin = adminWith()
     const s = await vehicleStatus(admin, 'firm', 'Management LLC')
-    expect(s.source).toBe('ledger')
-    expect(s.onboarded).toBe(true)
+    expect(s.setup.hasPostedEntries).toBe(false)
     expect(s.issues.map(i => i.title)).toEqual(['No posted entries yet'])
-    expect(loadCapitalSource).not.toHaveBeenCalled()
     expect(loadOwnership).not.toHaveBeenCalled()
-    expect(loadHistoryMode).not.toHaveBeenCalled()
     expect(loadStrandedCapital).not.toHaveBeenCalled()
     expect(admin.from).not.toHaveBeenCalledWith('investment_transactions')
   })
@@ -55,8 +49,7 @@ describe('management company accounting status', () => {
   it('keeps setup available when an existing chart lacks operating accounts', async () => {
     vi.mocked(loadPostedLedger).mockResolvedValue({ accounts: accounts().slice(0, 2), postings: [], capitalPostings: [] } as any)
     const s = await vehicleStatus(adminWith(), 'firm', 'Management LLC')
-    expect(s.onboarded).toBe(false)
-    expect(s.issues).toContainEqual(expect.objectContaining({ title: 'Accounting setup is incomplete', action: 'Set up accounting' }))
+    expect(s.issues).toContainEqual(expect.objectContaining({ title: 'No accounting records yet', action: 'Record a transaction' }))
   })
 
   it('reports draft entries, bank work, close progress, and net income going to members’ capital', async () => {
@@ -87,9 +80,7 @@ describe('management company accounting status', () => {
   it('keeps the existing LP setup requirements for funds', async () => {
     vi.mocked(vehicleKindByName).mockResolvedValue('fund')
     const s = await vehicleStatus(adminWith(), 'firm', 'Fund I')
-    expect(s.source).toBe('events')
-    expect(s.onboarded).toBe(false)
-    expect(s.issues.map(i => i.title)).toContain('Onboarding path not chosen')
+    expect(s.issues.map(i => i.title)).not.toContain('Onboarding path not chosen')
     expect(s.issues.map(i => i.title)).toContain('No partners yet')
     expect(intercompanyBalances).not.toHaveBeenCalled()
   })

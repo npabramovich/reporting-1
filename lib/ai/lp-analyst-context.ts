@@ -9,7 +9,7 @@ import { computeRow, type InvestmentRow } from '@/lib/lp-report-pdf'
  */
 
 const MAX_DOC_CHARS = 20_000
-const n = (v: number) => Math.round(v).toLocaleString('en-US')
+const n = (v: number | null) => v == null ? 'unknown' : Math.round(v).toLocaleString('en-US')
 
 export interface LpAnalystContext {
   documentsBlock: string

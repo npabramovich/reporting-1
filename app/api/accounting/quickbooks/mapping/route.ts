@@ -1,3 +1,5 @@
+import { chartForVehicleKind } from '@/lib/accounting/chart'
+import { vehicleKindByName } from '@/lib/accounting/vehicle-domain'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -62,6 +64,9 @@ export async function PUT(req: NextRequest) {
     .select('code, is_active').eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId)
   if (chartError) return NextResponse.json({ error: chartError.message }, { status: 500 })
   const codes = new Set(((chart as any[]) ?? []).filter(a => a.is_active !== false).map(a => a.code))
+  const existingCodes = new Set(((chart as any[]) ?? []).map(a => a.code))
+  const kind = await vehicleKindByName(admin, gate.fundId, group)
+  for (const account of chartForVehicleKind(kind)) if (!existingCodes.has(account.code)) codes.add(account.code)
   const invalid = rows.find((r: any) => !r.excluded && (!r.account_code || !codes.has(r.account_code)))
   if (invalid) return NextResponse.json({ error: `Choose an active account on ${group} for "${invalid.qb_account}".` }, { status: 400 })
 

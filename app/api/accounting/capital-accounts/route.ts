@@ -1,3 +1,4 @@
+import { reportingIrr } from '@/lib/accounting/reporting-irr'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -50,11 +51,11 @@ export async function GET(req: NextRequest) {
   // period one needs the pre-period history anyway to open with a carried-in balance.
   // `summary` and `calls` fold the old Capital calls page into this one — commitment,
   // called, funded, and unfunded were the duplicated half of it.
-  const [{ source, postings: capitalPostings }, names, classes, summary, calls, stranded] = await Promise.all([
-    loadCapitalPostings(admin, gate.fundId, group),
+  const [{ source, postings: capitalPostings, evidenceByLp }, names, classes, summary, calls, stranded] = await Promise.all([
+    loadCapitalPostings(admin, gate.fundId, group, period.end ?? undefined),
     loadEntityNames(admin, gate.fundId, group),
     loadEntityClasses(admin, gate.fundId, group),
-    lpCapitalSummary(admin, gate.fundId, group),
+    lpCapitalSummary(admin, gate.fundId, group, period.end ?? undefined),
     listCapitalCalls(admin, gate.fundId, group),
     // Capital sitting on the pooled account reaches no partner, which reads on this page as
     // a fund where nobody has contributed. Surface it rather than render the zeroes.
@@ -68,26 +69,14 @@ export async function GET(req: NextRequest) {
   // Per-LP Net IRR. Ledger: derive from each LP's dated flows + terminal NAV at the report date.
   // Events: the reported IRR pasted on the latest position.
   const irrByLp = new Map<string, number>()
-  if (source === 'ledger') {
-    const byLp = new Map<string, CapitalPosting[]>()
-    for (const p of capitalPostings) {
-      if (!p.lpEntityId) continue
-      const arr = byLp.get(p.lpEntityId) ?? []
-      arr.push(p); byLp.set(p.lpEntityId, arr)
-    }
-    const terminal = period.end ?? new Date().toISOString().slice(0, 10)
-    for (const [lp, ps] of Array.from(byLp.entries())) {
-      const v = lpIrr(ps, itdAccounts.get(lp)?.ending ?? 0, terminal)
-      if (v != null) irrByLp.set(lp, v)
-    }
-  } else {
-    const m = await latestPositionIrr(admin, gate.fundId, group, asOfRaw ?? undefined)
-    for (const [lp, v] of Array.from(m.entries())) irrByLp.set(lp, v)
+  for (const [lp, evidence] of evidenceByLp) {
+    const value = reportingIrr(capitalPostings.filter(p => p.lpEntityId === lp), itdAccounts.get(lp)?.ending ?? 0, evidence)
+    if (value != null) irrByLp.set(lp, value)
   }
 
   // Every partner with a commitment OR a capital account — a partner who has committed
   // but never been called still belongs on the roll-forward.
-  const lpIds = Array.from(new Set([...Array.from(itdAccounts.keys()), ...summary.map(s => s.lpEntityId)]))
+  const lpIds = Array.from(new Set([...Array.from(itdAccounts.keys()), ...summary.map(s => s.lpEntityId), ...Array.from(evidenceByLp.keys())]))
 
   const rows = lpIds
     .map(lpEntityId => {
@@ -96,13 +85,14 @@ export async function GET(req: NextRequest) {
       const zero = computeCapitalAccounts([{ lpEntityId, amount: 0, sourceType: 'manual' }]).get(lpEntityId)!
       return {
         lpEntityId,
+        evidence: evidenceByLp.get(lpEntityId),
         name: names.get(lpEntityId) ?? s?.name ?? lpEntityId,
         partnerClass: classes.get(lpEntityId) ?? s?.partnerClass ?? 'lp',
         commitment: s?.commitment ?? 0,
-        called: s?.called ?? 0,
-        funded: s?.funded ?? 0,
-        outstanding: s?.outstanding ?? 0,
-        receivable: s?.receivable ?? 0,
+        called: s ? s.called : null,
+        funded: s ? s.funded : null,
+        outstanding: s ? s.outstanding : null,
+        receivable: s ? s.receivable : null,
         fundedUnderflow: s?.fundedUnderflow ?? false,
         period: periodAccounts.get(lpEntityId) ?? null,
         itd: itd ?? zero,
@@ -116,7 +106,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     rows,
-    nav: totalNav(itdAccounts),
+    nav: rows.some(r => r.evidence?.values.nav === null) ? null : Array.from(evidenceByLp.values()).reduce((n, e) => n + (e.values.nav ?? 0), 0),
     period,
     calls,
     source,

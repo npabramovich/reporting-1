@@ -1,3 +1,7 @@
+import { capitalOperationKey, validCapitalDate, validCapitalAmounts } from './capital-operation-key'
+import { loadSettlementReviews } from './settlement-reviews'
+import { loadReportingCapital } from './reporting-capital'
+import { ensureVehicleAccounts } from './provision-accounts'
 // Capital-call register + reporting. A call recognizes contributed capital and a
 // receivable (chart 1300 "Due from LPs") when issued; funding clears it later.
 // Called/funded/outstanding all derive from the capital postings + the call register,
@@ -18,11 +22,8 @@
 //   committed → called → funded, with `outstanding` still to be called and `receivable`
 //   called but not yet in the bank. Total cash the LP still owes = outstanding + receivable.
 //
-// The reporting functions here go through `loadCapitalPostings`, NOT `loadPostedLedger`,
-// so they serve a capital-tracking-only vehicle (capital_source='events') as well as a
-// booked one. On an events vehicle the receivable is always empty — recognize-at-call is
-// a double-entry construct, and an event is recorded when the money moves — so called
-// and funded are the same thing there. That is the model, not a gap.
+// Reporting resolves dated observations and accounting evidence per partner. Reported capital
+// does not by itself establish receipts or receivables; unknown amounts remain unknown.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadPostedLedger, loadOwnership, loadEntityNames, loadEntityClasses } from './load'
@@ -37,8 +38,7 @@ import { vehicleIdByName } from './vehicle-id'
 import { roundCents } from './ledger'
 import { RECEIVABLE_CODE, DISTRIBUTION_PAYABLE_CODE } from './chart'
 import { ACTUAL_BOOK } from './books'
-import { applySettlements, registerStatus, settlementsFromPostings, type LineStatus, type RegisterStatus, type Settlement } from './settlement'
-import { loadCapitalSource } from './capital-source'
+import { reconcileSettlements, registerStatus, settlementsFromPostings, type LineStatus, type RegisterStatus, type Settlement } from './settlement'
 
 // Re-exported for the callers that have always imported it from here.
 export { RECEIVABLE_CODE }
@@ -63,6 +63,7 @@ export async function proRataCall(
 }
 
 export interface IssueCallInput {
+  requestKey?: string
   callDate: string
   /** When the money is due. Recorded at issue so a notice can't invent it later. */
   dueDate?: string | null
@@ -75,7 +76,7 @@ export interface IssueCallInput {
  * Issue a capital call: post the receivable/capital entry (Dr 1300 / Cr each LP's
  * capital) and record the call + its per-LP lines in the register.
  *
- * Capital-tracking vehicles record dated paid-in facts instead; they cannot issue calls.
+ * The first call provisions the required accounts; no activation step is needed.
  */
 export async function issueCapitalCall(
   admin: SupabaseClient,
@@ -84,17 +85,31 @@ export async function issueCapitalCall(
   userId: string | null,
   input: IssueCallInput
 ): Promise<{ callId: string; entryId: string | null } | { error: string }> {
+  if (!validCapitalAmounts(input.lines ?? [])) return { error: 'Call amounts must be finite nonnegative amounts in cents' }
   const lines = (input.lines ?? []).filter(l => l.lpEntityId && Number(l.amount) > 0)
   if (lines.length === 0) return { error: 'A call needs at least one LP with a positive amount' }
-  if (!input.callDate) return { error: 'A call date is required' }
+  if (!validCapitalDate(input.callDate)) return { error: 'A valid call date is required' }
+  if (input.dueDate && (!validCapitalDate(input.dueDate) || input.dueDate < input.callDate)) return { error: 'The due date must be valid and on or after the call date' }
 
   const perLp = new Map<string, number>()
   for (const l of lines) perLp.set(l.lpEntityId, roundCents((perLp.get(l.lpEntityId) ?? 0) + Number(l.amount)))
 
-  const source = await loadCapitalSource(admin, fundId, group)
-  if (source !== 'ledger') return { error: 'Capital calls require accounting for this vehicle.' }
-  let entryId: string | null = null
-  if (source === 'ledger') {
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  // REFUSE BEFORE ANYTHING IS WRITTEN. Every scoping below keys off this id, and a null one is
+  // not a wildcard — it is a hole: `request_key` cannot be unique across NULL vehicle_ids, the
+  // retry lookup below cannot match a NULL row, and `complete_capital_operation` would refuse the
+  // publication anyway, after a draft entry and a register row had already been written.
+  if (!vehicleId) return { error: `"${group}" is not in this fund's vehicle registry, so a capital call cannot be recorded against it` }
+  const requestKey = capitalOperationKey(input)
+  const { data: prior, error: priorError } = await admin.from('capital_calls' as any)
+    .select('id, status, journal_entry_id, capital_call_lines(id)').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('request_key', requestKey).maybeSingle()
+  if (priorError) return { error: priorError.message }
+  const previous = prior as any
+  if (previous?.status === 'issued') return { callId: previous.id, entryId: previous.journal_entry_id }
+  let entryId: string | null = previous?.journal_entry_id ?? null
+  let callId: string = previous?.id
+  if (!previous) {
+    await ensureVehicleAccounts(admin, fundId, group)
     const codes = await accountIdByCode(admin, fundId, group)
     const receivableId = codes.get(RECEIVABLE_CODE)
     if (!receivableId) return { error: `Seed the chart of accounts first (missing ${RECEIVABLE_CODE} Due from LPs)` }
@@ -106,49 +121,42 @@ export async function issueCapitalCall(
       capMap,
       receivableId
     )
-    const result = await persistEntry(admin, fundId, group, userId, entry, 'posted')
+    const result = await persistEntry(admin, fundId, group, userId, entry, 'draft')
     if ('error' in result) return { error: result.error }
     entryId = result.entryId
-  } else {
-    // The partners must at least exist in this fund — the same check ensureCapitalAccounts makes.
-    const { data: ents } = await admin.from('lp_entities' as any).select('id').eq('fund_id', fundId).in('id', Array.from(perLp.keys()))
-    const known = new Set(((ents as any[]) ?? []).map(e => e.id as string))
-    const foreign = Array.from(perLp.keys()).filter(id => !known.has(id))
-    if (foreign.length > 0) return { error: `Unknown LP for this fund: ${foreign.join(', ')}` }
+
+
+    const { data: call, error: callErr } = await admin
+      .from('capital_calls' as any)
+      .insert({
+        fund_id: fundId,
+        vehicle_id: vehicleId,
+        request_key: requestKey,
+        call_date: input.callDate,
+        due_date: input.dueDate || null,
+        description: input.description ?? null,
+        scope: input.scope,
+        status: 'draft',
+        journal_entry_id: entryId,
+        created_by: userId,
+      })
+      .select('id')
+      .single()
+    if (callErr) {
+      const { error: cleanupError } = await admin.rpc('discard_unregistered_capital_drafts' as any, { p_fund_id: fundId, p_vehicle_id: vehicleId, p_entry_ids: [entryId] })
+      return { error: `${callErr.message}${cleanupError ? `; draft cleanup failed: ${cleanupError.message}` : ''}` }
+    }
+    callId = (call as any).id
   }
 
-  const vehicleId = await vehicleIdByName(admin, fundId, group)
-  const { data: call, error: callErr } = await admin
-    .from('capital_calls' as any)
-    .insert({
-      fund_id: fundId,
-      vehicle_id: vehicleId,
-      call_date: input.callDate,
-      due_date: input.dueDate || null,
-      description: input.description ?? null,
-      scope: input.scope,
-      status: 'issued',
-      journal_entry_id: entryId,
-      created_by: userId,
-    })
-    .select('id')
-    .single()
-  if (callErr) return { error: callErr.message }
-  const callId = (call as any).id
-
-  const { error: lineErr } = await admin.from('capital_call_lines' as any).insert(
-    Array.from(perLp.entries()).map(([lpEntityId, amount]) => ({
-      call_id: callId,
-      fund_id: fundId,
-      vehicle_id: vehicleId,
-      lp_entity_id: lpEntityId,
-      amount,
-    }))
-  )
-  if (lineErr) return { error: lineErr.message }
-
+  const { error: finalizeError } = await admin.rpc('complete_capital_operation' as any, {
+    p_fund_id: fundId, p_vehicle_id: vehicleId, p_kind: 'call', p_register_id: callId, p_entry_ids: [entryId],
+    p_lines: Array.from(perLp.entries()).map(([lpEntityId, amount]) => ({ lpEntityId, amount })),
+  })
+  if (finalizeError) return { error: `Call remains a draft: ${finalizeError.message}` }
   return { callId, entryId }
 }
+
 
 /** The receivable (1300) balance per LP from the posted ledger. */
 export async function lpReceivableBalances(
@@ -221,6 +229,8 @@ export interface CapitalCallLineRow {
   status: LineStatus
   settledOn: string | null
   /** The most recent funding applied to the line, complete or not — what a receipt acknowledges. */
+  manualSettled?: number
+  settlementReview?: string
   lastSettlementOn: string | null
   /** The notice PDF published for this line, if any. */
   noticeDocumentId: string | null
@@ -242,9 +252,8 @@ export interface CapitalCallRow extends RegisterStatus {
 /**
  * The money that has moved against a vehicle's calls or distributions, by partner and date.
  *
- * Ledger vehicles read it off the receivable (fundings) or the payable (payments). A
- * capital-tracking vehicle has neither — its calls settle by hand, recorded on the line
- * itself — so the caller supplies those and this returns nothing.
+ * Accounting payments come from the receivable (fundings) or payable (payments).
+ * The caller reconciles these with any manually recorded line payments.
  */
 export async function loadSettlements(
   admin: SupabaseClient,
@@ -252,13 +261,11 @@ export async function loadSettlements(
   group: string,
   direction: 'receivable' | 'payable',
 ): Promise<Settlement[]> {
-  const source = await loadCapitalSource(admin, fundId, group)
-  if (source !== 'ledger') return []
-  const { accounts, postings } = await loadPostedLedger(admin, fundId, group)
+  const { accounts, sourcedPostings } = await loadPostedLedger(admin, fundId, group)
   const code = direction === 'receivable' ? RECEIVABLE_CODE : DISTRIBUTION_PAYABLE_CODE
   const account = accounts.find(a => a.code === code)
   if (!account) return []
-  return settlementsFromPostings(postings, account.id, direction)
+  return settlementsFromPostings(sourcedPostings, account.id, direction)
 }
 
 /** Issued calls (most recent first) with their per-LP lines and what has been funded against each. */
@@ -269,28 +276,29 @@ export async function listCapitalCalls(
   today: string = new Date().toISOString().slice(0, 10),
 ): Promise<CapitalCallRow[]> {
   const vehicleId = await vehicleIdByName(admin, fundId, group)
-  const [{ data: calls }, names, settlements] = await Promise.all([
+  const [{ data: calls }, names, settlements, reviews] = await Promise.all([
     admin
       .from('capital_calls' as any)
-      .select('id, call_date, due_date, call_number, description, scope, capital_call_lines(id, lp_entity_id, amount, notice_document_id, settled_amount, settled_on, ack_at, ack_wired_on, ack_reference, ack_note)')
+      .select('id, status, call_date, due_date, call_number, description, scope, capital_call_lines(id, lp_entity_id, amount, notice_document_id, settled_amount, settled_on, ack_at, ack_wired_on, ack_reference, ack_note)')
       .eq('fund_id', fundId)
       .eq('vehicle_id', vehicleId)
       .order('call_date', { ascending: false }),
     loadEntityNames(admin, fundId, group),
     loadSettlements(admin, fundId, group, 'receivable'),
+    loadSettlementReviews(admin, fundId, vehicleId, 'call'),
   ])
-  const rows = ((calls as any[]) ?? [])
+  const rows = ((calls as any[]) ?? []).filter(row => row.status !== 'draft')
 
   // Every line of every call goes through ONE FIFO pass, so a wire that covers two calls is
   // applied to both in order rather than counted against each.
   const registerLines = rows.flatMap(c => ((c.capital_call_lines as any[]) ?? []).map(l => ({
     id: l.id as string, lpEntityId: l.lp_entity_id as string, date: c.call_date as string, amount: Number(l.amount),
   })))
-  // A tracking vehicle's lines settle by hand: the recorded amount stands in for the ledger.
-  const manual: Settlement[] = rows.flatMap(c => ((c.capital_call_lines as any[]) ?? [])
+  // Manual payments belong to their recorded lines, even after books are imported.
+  const manual: (Settlement & { lineId: string })[] = rows.flatMap(c => ((c.capital_call_lines as any[]) ?? [])
     .filter(l => Number(l.settled_amount) > 0)
-    .map(l => ({ lpEntityId: l.lp_entity_id as string, date: (l.settled_on ?? c.call_date) as string, amount: Number(l.settled_amount) })))
-  const settledByLine = applySettlements(registerLines, settlements.length > 0 ? settlements : manual)
+    .map(l => ({ lineId: l.id as string, lpEntityId: l.lp_entity_id as string, date: (l.settled_on ?? c.call_date) as string, amount: Number(l.settled_amount) })))
+  const settledByLine = reconcileSettlements(registerLines, settlements, manual, reviews)
 
   return rows.map(c => {
     const lines: CapitalCallLineRow[] = ((c.capital_call_lines as any[]) ?? []).map(l => {
@@ -304,6 +312,8 @@ export async function listCapitalCalls(
         outstanding: s?.outstanding ?? Number(l.amount),
         status: s?.status ?? 'open',
         settledOn: s?.settledOn ?? null,
+        settlementReview: s?.settlementReview,
+        manualSettled: Number(l.settled_amount ?? 0),
         lastSettlementOn: s?.lastSettlementOn ?? null,
         noticeDocumentId: l.notice_document_id ?? null,
         ack: l.ack_at ? { at: l.ack_at, wiredOn: l.ack_wired_on ?? null, reference: l.ack_reference ?? null, note: l.ack_note ?? null } : null,
@@ -330,13 +340,13 @@ export interface LpCapitalRow {
   /** What the LP signed up for. */
   commitment: number
   /** What has been asked for so far. Capital is recognized here, not at funding. */
-  called: number
+  called: number | null
   /** What actually arrived: called − receivable. */
-  funded: number
+  funded: number | null
   /** Remaining to be CALLED: commitment − called. Disjoint from `receivable`. */
-  outstanding: number
+  outstanding: number | null
   /** Called but not yet in the bank (acct 1300). Always 0 on an events vehicle. */
-  receivable: number
+  receivable: number | null
   /**
    * `called − receivable` came out NEGATIVE, which is impossible for cash received. It means
    * this LP has a receivable but no reachable capital postings — almost always capital
@@ -345,40 +355,39 @@ export interface LpCapitalRow {
    */
   fundedUnderflow: boolean
   /** Capital-account ending balance (the LP's NAV). */
-  ending: number
+  ending: number | null
 }
 
 /** Per-LP commitment / called / funded / outstanding + ending capital (NAV). */
 export async function lpCapitalSummary(
   admin: SupabaseClient,
   fundId: string,
-  group: string
+  group: string,
+  asOf?: string,
 ): Promise<LpCapitalRow[]> {
   // One source-aware load: `postings` come from the ledger or from lp_capital_events
   // depending on the vehicle, and `receivableByLp` falls out of the same read (it is
   // always empty for an events vehicle).
-  const [{ source, postings: capitalPostings, receivableByLp }, owners, names, classes, posCommit, events] = await Promise.all([
-    loadCapitalPostings(admin, fundId, group),
-    loadOwnership(admin, fundId, group),
+  const [{ postings: capitalPostings, receivableByLp, commitmentByLp, evidenceByLp }, names, classes] = await Promise.all([
+    loadReportingCapital(admin, fundId, group, asOf),
     loadEntityNames(admin, fundId, group),
     loadEntityClasses(admin, fundId, group),
-    commitmentsFromPositions(admin, fundId, group),
-    loadCommitmentEvents(admin, fundId, group),
   ])
-  // ONE canonical commitment resolution (see resolveCommitmentMap): positions win for a tracking
-  // vehicle; otherwise the effective-dated event log, falling back to the scalar. This is what
-  // ended the old split where this page read the scalar while Allocation read the events.
-  const commitmentByLp = resolveCommitmentMap({ source, owners, events, positions: posCommit })
   const accountByLp = computeCapitalAccounts(capitalPostings)
 
   const ids = new Set<string>([
     ...Array.from(names.keys()),
     ...Array.from(commitmentByLp.keys()),
     ...Array.from(accountByLp.keys()),
+    ...Array.from(evidenceByLp.keys()),
   ])
 
   const rows: LpCapitalRow[] = Array.from(ids).map(lpEntityId => {
     const acct = accountByLp.get(lpEntityId)
+    const evidence = evidenceByLp.get(lpEntityId)
+    const commitment = commitmentByLp.get(lpEntityId) ?? 0
+    const called = evidence ? evidence.values.contributions : acct?.contributions ?? 0
+    const receivable = evidence?.basis === 'reported' && !receivableByLp.has(lpEntityId) ? null : receivableByLp.get(lpEntityId) ?? 0
     return {
       lpEntityId,
       name: names.get(lpEntityId) ?? lpEntityId,
@@ -389,7 +398,11 @@ export async function lpCapitalSummary(
         acct?.contributions ?? 0,
         receivableByLp.get(lpEntityId) ?? 0,
       ),
-      ending: roundCents(acct?.ending ?? 0),
+      called,
+      receivable,
+      funded: called == null || receivable == null ? null : Math.max(0, roundCents(called - receivable)),
+      outstanding: called == null ? null : roundCents(commitment - called),
+      ending: evidence ? evidence.values.nav : roundCents(acct?.ending ?? 0),
     }
   })
   return rows.sort((a, b) => a.name.localeCompare(b.name))
@@ -518,7 +531,7 @@ export async function lpStatement(
   lpEntityId: string,
   period?: CapitalPeriod
 ): Promise<LpStatement | { error: string }> {
-  const summary = await lpCapitalSummary(admin, fundId, group)
+  const summary = await lpCapitalSummary(admin, fundId, group, period?.end ?? undefined)
   const row = summary.find(r => r.lpEntityId === lpEntityId)
   if (!row) return { error: 'LP not found in this vehicle' }
 
@@ -533,9 +546,7 @@ export async function lpStatement(
   // The movements behind the roll-forward, from whichever producer this vehicle uses. Both
   // store debit-positive (like journal_postings), so a capital delta is the negated amount
   // either way.
-  const movements = source === 'ledger'
-    ? await ledgerMovements(admin, fundId, vehicleId, lpEntityId)
-    : positionMovements(capitalPostings, lpEntityId)
+  const movements = positionMovements(capitalPostings, lpEntityId)
   movements.sort((a, b) => a.date.localeCompare(b.date))
 
   // The statement lists activity IN THE PERIOD, under exactly that heading. This used to

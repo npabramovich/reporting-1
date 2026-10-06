@@ -151,6 +151,7 @@ export const AGENT_TOOL_MANIFEST: AgentToolMeta[] = [
       required: ['text'],
       properties: {
         text: { type: 'string', description: 'plain-text double-entry transactions' },
+        reviewToken: { type: 'string', description: 'Token returned by the import comparison. Supply only after presenting the differences and the user authorizes proceeding.' },
         status: { type: 'string', enum: ['draft', 'posted'], description: 'override the per-entry flag' },
       },
     },
@@ -178,6 +179,7 @@ export const AGENT_TOOL_MANIFEST: AgentToolMeta[] = [
       required: ['csv'],
       properties: {
         csv: { type: 'string', description: 'CSV/TSV with date, description, and amount (or debit/credit) columns' },
+        reviewToken: { type: 'string', description: 'Token returned by the import comparison. Supply only after presenting the differences and the user authorizes proceeding.' },
         source: { type: 'string', description: 'csv | plaid | ramp | quickbooks (default csv)' },
       },
     },

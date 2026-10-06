@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_ASSUMPTIONS } from './construction'
+import { applyLpWaterfall, constructionBaseline, forecastSchedule } from './construction-forecast'
 
 const mocks = vi.hoisted(() => ({
   resolveVehicle: vi.fn(),
@@ -67,6 +68,72 @@ describe('construction service', () => {
     mocks.resolveVehicle.mockResolvedValue('Fund II')
     mocks.fundEconomics.mockResolvedValue([economics])
     mocks.loadCarryTerms.mockResolvedValue({ kind: 'none', carryRate: 0, prefRate: 0, catchupRate: 1, prefCompounds: true, gpEntityId: null, recipients: [] })
+  })
+
+  it('uses reported capital for forecasts with or without unrelated ledger activity', async () => {
+    mocks.fundEconomics.mockResolvedValue([{ ...economics, fund: { ...economics.fund, distributions: 0 } }])
+    const { admin } = adminFixture({})
+    mocks.loadPostedLedger.mockResolvedValue({ accounts: [], postings: [], capitalPostings: [] })
+    const before = await getConstructionModel({ admin, fundId: 'fund-1' }, { vehicle: 'Fund II' })
+    mocks.loadPostedLedger.mockResolvedValue({ accounts: [], postings: [{ accountId: 'unrelated', amount: 1 }], capitalPostings: [] })
+    const after = await getConstructionModel({ admin, fundId: 'fund-1' }, { vehicle: 'Fund II' })
+    expect(before.actuals.capitalAvailable).toBe(true)
+    expect(after.actuals.capitalAvailable).toBe(true)
+    expect(after.actuals.nav).toBe(before.actuals.nav)
+    expect(after.actuals.calledCapital).toBe(before.actuals.calledCapital)
+  })
+
+  it('does not present incomplete capital as a supported net forecast', async () => {
+    mocks.fundEconomics.mockResolvedValue([{ ...economics, fund: { ...economics.fund, distributions: 0, nav: null } }])
+    mocks.loadPostedLedger.mockResolvedValue({ accounts: [], postings: [{ accountId: 'unrelated', amount: 1 }], capitalPostings: [] })
+    const { admin } = adminFixture({})
+    const model = await getConstructionModel({ admin, fundId: 'fund-1' }, { vehicle: 'Fund II' })
+    expect(model.actuals.capitalAvailable).toBe(false)
+    expect(model.actuals.waterfall).toBeUndefined()
+  })
+
+  it('headlines the same net-of-carry schedule the construction page does', async () => {
+    // forecast-section.tsx applies the vehicle's waterfall whenever capital figures are supported
+    // and carry is configured, and shows the LP-only schedule. The service returned the gross one,
+    // so the Analyst reported a fund-level figure in a field named netIrr while the page showed
+    // the net-of-carry number for the same fund and date.
+    mocks.fundEconomics.mockResolvedValue([{ ...economics, fund: { ...economics.fund, distributions: 500_000 } }])
+    mocks.loadCarryTerms.mockResolvedValue({ kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, prefCompounds: true, gpEntityId: null, recipients: [] })
+    mocks.loadPostedLedger.mockResolvedValue({ accounts: [], postings: [], capitalPostings: [] })
+    // A held position, so the forecast actually produces proceeds for the waterfall to split.
+    const held = '33333333-3333-4333-8333-333333333333'
+    const { admin } = adminFixture({
+      companies: [{ id: held, name: 'Held Co', status: 'active', stage: 'Seed', industry: [], portfolio_group: ['Fund II'] }],
+      transactions: [{ id: 't1', fund_id: 'fund-1', company_id: held, portfolio_group: 'Fund II', transaction_type: 'investment', transaction_date: '2024-01-01', investment_cost: 1_000_000, round_name: 'Seed', ownership_pct: 10, postmoney_valuation: 10_000_000 }],
+    })
+    const model = await getConstructionModel({ admin, fundId: 'fund-1' }, { vehicle: 'Fund II' })
+
+    expect(model.actuals.capitalAvailable).toBe(true)
+    expect(model.actuals.waterfall).toBeDefined()
+    expect(model.timelineNetOfCarry).toBe(true)
+    expect(model.timeline).not.toBeNull()
+    expect(model.grossTimeline).not.toBeNull()
+    // The page's own composition, reproduced from the same inputs.
+    const gross = forecastSchedule(model.forecast, model.assumptions, model.assumptions.pacing,
+      constructionBaseline(model.actuals, model.forecast, model.asOf.slice(0, 10)))
+    expect(model.timeline).toEqual(applyLpWaterfall(gross, model.actuals.waterfall))
+    expect(model.grossTimeline).toEqual(gross)
+    // And it is a different measure, not a relabelling of the same one: the LP's TVPI is lower
+    // than the fund's because the GP's share of the terminal NAV is not the LP's.
+    const net = model.timeline!.years.at(-1)!
+    const fund = model.grossTimeline!.years.at(-1)!
+    expect(net.tvpi).toBeLessThan(fund.tvpi!)
+    expect(net.nav).toBeLessThan(fund.nav)
+  })
+
+  it('headlines the gross schedule, flagged as such, when no carry is configured', async () => {
+    mocks.fundEconomics.mockResolvedValue([{ ...economics, fund: { ...economics.fund, distributions: 500_000 } }])
+    mocks.loadPostedLedger.mockResolvedValue({ accounts: [], postings: [], capitalPostings: [] })
+    const { admin } = adminFixture({})
+    const model = await getConstructionModel({ admin, fundId: 'fund-1' }, { vehicle: 'Fund II' })
+    expect(model.timelineNetOfCarry).toBe(false)
+    expect(model.grossTimeline).toBeNull()
+    expect(model.timeline).not.toBeNull()
   })
 
   it('maps stored snake_case assumptions to the canonical camelCase shape', () => {

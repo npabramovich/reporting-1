@@ -16,7 +16,8 @@
     "demo:record": "node scripts/demo-record.mjs",
     "demo:snapshot": "npx tsx --env-file=.env.local scripts/demo-snapshot.ts",
     "demo:answers": "npx tsx --env-file-if-exists=.env.local scripts/demo-answers.ts",
-    "demo:styles": "node scripts/demo-styles.mjs"
+    "demo:styles": "node scripts/demo-styles.mjs",
+    "sql:check:accounting": "node scripts/run-unified-accounting-sql-checks.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

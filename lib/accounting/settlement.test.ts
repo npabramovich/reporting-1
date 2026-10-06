@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applySettlements, registerStatus, settlementsFromPostings } from './settlement'
+import { reconcileSettlements, applySettlements, registerStatus, settlementsFromPostings } from './settlement'
 
 const line = (id: string, lpEntityId: string, date: string, amount: number) => ({ id, lpEntityId, date, amount })
 
@@ -73,5 +73,59 @@ describe('settlementsFromPostings', () => {
   it('reads fundings off the receivable and payments off the payable, by sign', () => {
     expect(settlementsFromPostings(postings, 'recv', 'receivable')).toEqual([{ lpEntityId: 'a', date: '2026-01-10', amount: 60 }])
     expect(settlementsFromPostings(postings, 'pay', 'payable')).toEqual([{ lpEntityId: 'a', date: '2026-02-09', amount: 50 }])
+  })
+})
+
+
+describe('reconcileSettlements', () => {
+  const lines = [line('a1', 'a', '2026-01-01', 100), line('a2', 'a', '2026-02-01', 100), line('b1', 'b', '2026-01-01', 100)]
+  const manual = [{ lineId: 'a2', lpEntityId: 'a', date: '2026-02-10', amount: 80 }]
+  it('preserves the exact manual line when another partner has imported payments', () => {
+    const result = reconcileSettlements(lines, [{ lpEntityId: 'b', date: '2026-02-10', amount: 100 }], manual)
+    expect(result.get('a1')?.settled).toBe(0)
+    expect(result.get('a2')).toMatchObject({ settled: 80, outstanding: 20 })
+    expect(result.get('a2')?.settlementReview).toBeUndefined()
+    expect(result.get('b1')?.settled).toBe(100)
+  })
+  it('does not add potentially duplicate representations, even when totals match', () => {
+    const result = reconcileSettlements(lines, [{ lpEntityId: 'a', date: '2026-02-10', amount: 80 }], manual)
+    expect(result.get('a1')?.settled).toBe(0)
+    expect(result.get('a2')?.settled).toBe(80)
+    expect(result.get('a2')?.settlementReview).toContain('reconciliation needed')
+  })
+  it('retains recorded allocations and exposes conflicting imported totals', () => {
+    const result = reconcileSettlements(lines, [{ lpEntityId: 'a', date: '2026-02-10', amount: 120 }], manual)
+    expect(result.get('a2')?.settled).toBe(80)
+    expect(result.get('a1')?.settlementReview).toContain('120.00')
+  })
+})
+
+describe('explicit payment links', () => {
+  const lines = [line('first', 'a', '2026-01-01', 100), line('second', 'a', '2026-02-01', 100)]
+  const manual = [{ lineId: 'second', lpEntityId: 'a', date: '2026-02-10', amount: 80 }]
+  const ledger = [{ entryId: 'wire', lpEntityId: 'a', date: '2026-02-10', amount: 120 }]
+  const review = { lineId: 'second', manualAmount: 80, manualDate: '2026-02-10', separateRemainder: false, links: [{ entryId: 'wire', amount: 80, entryAmount: 120, date: '2026-02-10' }] }
+  it('reserves matched amounts for their original line and applies only the remainder by FIFO', () => {
+    const result = reconcileSettlements(lines, ledger, manual, [review])
+    expect(result.get('second')).toMatchObject({ settled: 80, outstanding: 20 })
+    expect(result.get('second')?.settlementReview).toBeUndefined()
+    expect(result.get('first')?.settled).toBe(40)
+  })
+  it('includes explicitly confirmed separate payments once', () => {
+    const result = reconcileSettlements(lines, ledger, manual, [{ ...review, links: [], separateRemainder: true }])
+    expect(result.get('first')?.settled).toBe(100)
+    expect(result.get('second')?.settled).toBe(100)
+  })
+  it('reopens review if a linked entry changes, disappears, or the manual record changes', () => {
+    for (const payments of [[], [{ ...ledger[0], amount: 125 }], [{ ...ledger[0], date: '2026-02-11' }]]) {
+      expect(reconcileSettlements(lines, payments, manual, [review]).get('second')?.settlementReview).toBeTruthy()
+    }
+    expect(reconcileSettlements(lines, ledger, [{ ...manual[0], amount: 90 }], [review]).get('second')?.settlementReview).toBeTruthy()
+  })
+  it('nets split posting lines within one journal payment before matching', () => {
+    expect(settlementsFromPostings([
+      { accountId: 'receivable', lpEntityId: 'a', entryId: 'wire', amount: -100, entryDate: '2026-02-10' },
+      { accountId: 'receivable', lpEntityId: 'a', entryId: 'wire', amount: 20, entryDate: '2026-02-10' },
+    ], 'receivable', 'receivable')).toEqual([{ entryId: 'wire', lpEntityId: 'a', date: '2026-02-10', amount: 80 }])
   })
 })

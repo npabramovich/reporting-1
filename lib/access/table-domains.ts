@@ -61,7 +61,7 @@ export type TableRule =
    * the service role keeps them. Credentials, tokens, and infrastructure counters — nothing a
    * browser should be able to name, let alone select.
    */
-  | { scope: 'service'; note: string }
+  | { scope: 'service'; note: string; appendOnly?: true }
   /** Global reference data with no tenant: readable by any signed-in user, written by the service role. */
   | { scope: 'reference'; note: string }
   /** Deliberately world-readable. */
@@ -198,6 +198,8 @@ export const TABLE_RULES: Record<string, TableRule> = {
   partner_allocation_terms: { scope: 'fund', domain: 'lp_capital' },
 
   // ---- GP economics (carry is NOT structurally part of the ledger — see DOMAIN_META) --------
+  capital_settlement_review_history: { scope: 'service', appendOnly: true, note: 'Immutable history of scoped payment reconciliation decisions.' },
+  capital_settlement_reviews: { scope: 'service', note: 'Explicit payment links; validated atomically and accessed through tenant-scoped lp_capital routes.' },
   carry_payments: { scope: 'fund', domain: 'gp_economics' },
   vehicle_partner_ownership: { scope: 'fund', domain: 'gp_economics' },
   vehicle_gp_links: { scope: 'fund', domain: 'gp_economics' },

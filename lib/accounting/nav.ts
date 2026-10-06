@@ -63,12 +63,8 @@ export const ACCOUNTING_SECTIONS: AccountingSection[] = [
     domain: 'lp_capital',
     hideFor: ['individual', 'manco'],
   },
-  // NOTE: /funds/lp-events is deliberately NOT listed — it now redirects here. LP
-  // capital events are not a separate destination: they are one of the two producers a
-  // capital account can read from, so they belong ON the capital accounts page, and only
-  // for a vehicle that actually uses them (capital_source='events'). Surfacing them in
-  // the nav offered them to every vehicle, including the fully-booked ones where anything
-  // entered there is ignored.
+  // /funds/lp-events redirects to capital accounts. Reported balances are maintained
+  // alongside accounting evidence and do not need a separate navigation destination.
   {
     href: '/funds/journal',
     label: 'Journal',

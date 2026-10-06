@@ -25,12 +25,9 @@ import { EmptyState } from '@/components/ui/empty-state'
 interface Issue { level: 'blocker' | 'warning' | 'info'; title: string; detail: string; href?: string; action?: string }
 interface Status {
   vehicle: string
-  source: 'ledger' | 'events'
-  onboarded: boolean
   setup: {
     chartSeeded: boolean
     accountCount: number
-    historyMode: string | null
     hasPostedEntries: boolean
     partnerCount: number
     partnersWithCommitment: number
@@ -95,39 +92,8 @@ function EntityStatusView() {
   // branches below. It used to be editable only from the group table on /investments, which meant
   // the page named after a fund was the one place you couldn't correct the fund's own details.
 
-  // LP-only tracking: the whole ledger apparatus — trial balance, bank, partners, net assets,
-  // onboarding, the seed-the-chart prompts, the close, allocation terms, and the entry-drafting
-  // assistant — is meaningless without double-entry books. Show only the source switch and a
-  // pointer to where this vehicle's capital IS maintained.
-  if (!manco && s.source === 'events') {
-    return (
-      <div className="space-y-6">
-        <VehicleDetailsCard />
-        <Link
-          href="/lps/capital"
-          className="flex items-center gap-3 rounded-card border p-3 transition-colors hover:bg-muted/30"
-        >
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">LP capital tracking</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              This vehicle tracks limited-partner capital only. Maintain its positions — commitment,
-              paid-in, distributions, NAV — on the LP capital tracking page.
-            </p>
-          </div>
-          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-        </Link>
-        {/* Adopting fund accounting is the setup flow itself — seed the chart, book opening
-            balances, then activate. The flip to the ledger is the LAST step of AccountingSetup
-            (guarded against an empty chart); there is no separate mode switch. The box explains
-            itself, so there is no preamble above it. */}
-        <AccountingSetup alwaysShow onSetup={load} />
-      </div>
-    )
-  }
-
-  // The close gets its own summary card below, so it isn't duplicated up here.
   const cards: { label: string; value: string; hint?: string; href: string }[] = [
-    { label: manco ? 'Members’ capital' : 'Net assets', value: fmt(s.ledger.netAssets), hint: `${s.ledger.postedCount} posted entries`, href: '/funds/statements' },
+    { label: manco ? 'Members’ capital' : 'Net assets', value: s.setup.hasPostedEntries ? fmt(s.ledger.netAssets) : 'No entries yet', hint: `${s.ledger.postedCount} posted entries`, href: '/funds/statements' },
     manco
       ? { label: 'Books', value: `${s.setup.accountCount} accounts`, hint: `${s.ledger.draftCount} draft entries`, href: '/funds/journal' }
       : { label: 'Partners', value: String(s.setup.partnerCount), hint: `${s.setup.partnersWithCommitment} with a commitment`, href: '/funds/capital-accounts' },
@@ -157,17 +123,7 @@ function EntityStatusView() {
     <div className="space-y-6">
       <VehicleDetailsCard />
 
-      {/* Onboarding only shows while it's actually unfinished. */}
-      {!s.onboarded ? (
-        <AccountingSetup alwaysShow onSetup={load} />
-      ) : (
-        <div className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm text-muted-foreground">
-          <Check className="h-4 w-4 text-success" />
-          {manco
-            ? `Accounting is set up — ${s.setup.accountCount} accounts, ${s.ledger.postedCount} posted entries.`
-            : <>Onboarded — {s.setup.historyMode === 'full_history' ? 'rebuilt from full history' : 'started from a cutover balance'}, {s.setup.accountCount} accounts, {s.setup.partnerCount} partners.</>}
-        </div>
-      )}
+      <AccountingSetup />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {cards.map(c => (
@@ -269,18 +225,18 @@ function EntityStatusView() {
             so they belong with the settings rather than on the schedule they feed. */}
         {!manco && <>
         <CollapsibleSection title="Price feeds" subtitle="Attach a quote source to a holding and store its marks">
-          <PriceFeedsPanel />
+          <PriceFeedsPanel showHeader={false} />
         </CollapsibleSection>
 
         <CollapsibleSection title="Watched wallets" subtitle="On-chain addresses whose balances are reconciled against the ledger">
-          <WalletsPanel />
+          <WalletsPanel showHeader={false} />
         </CollapsibleSection>
 
         <CollapsibleSection
           title="Partners Detail"
           subtitle={`Splitting on ${s.close.basis === 'capital_balance' ? 'capital-account balance' : 'committed capital'} · who bears fees, expenses, and carry · commitment history`}
         >
-          <AllocationTermsView />
+          <AllocationTermsView showHeader={false} />
         </CollapsibleSection>
         </>}
       </div>

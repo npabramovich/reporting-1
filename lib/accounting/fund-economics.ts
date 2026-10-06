@@ -24,26 +24,25 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { roundCents } from './ledger'
-import { loadCapitalPostings } from './capital-source'
+import { reportingIrr } from './reporting-irr'
+import { loadReportingCapital } from './reporting-capital'
 import { computeCapitalAccounts, bucketForSourceType, emptyAccount, type CapitalAccount } from './capital-account'
-import { loadCommitmentEvents, resolveCommitmentMap } from './terms'
-import { commitmentsFromPositions } from './lp-positions'
-import { loadEntityNames, loadOwnership, listVehicles } from './load'
+import { loadEntityNames, listVehicles } from './load'
 import { vehicleIdByName } from './vehicle-id'
-import { loadFundPreload, vehicleCapitalPreload, commitmentEventsForGroup, type FundPreload } from './fund-preload'
+import { loadFundPreload, type FundPreload } from './fund-preload'
 import { xirr, type CashFlow } from '@/lib/xirr'
 import { lpRatios } from '@/lib/lp-metrics'
 
 export interface FundMetrics {
   committed: number
   /** Recognised capital. = called. May include unfunded calls. */
-  paidIn: number
+  paidIn: number | null
   /** Commitment not yet called. */
-  uncalled: number
-  distributions: number
+  uncalled: number | null
+  distributions: number | null
   /** Remaining capital — the partners' ending balances. Already net of accrued carry. */
-  nav: number
-  totalValue: number
+  nav: number | null
+  totalValue: number | null
   dpi: number | null
   rvpi: number | null
   tvpi: number | null
@@ -57,7 +56,7 @@ export interface VehicleEconomics {
   id: string | null
   /** The vehicle's vintage year, if recorded. Nothing derives this — it is stated. */
   vintageYear: number | null
-  source: 'ledger' | 'events'
+  source: 'ledger' | 'events' | 'mixed'
   lpCount: number
   /** Every partner. This is the fund. */
   fund: FundMetrics
@@ -125,12 +124,8 @@ export function rollUp(
 }
 
 /**
- * One vehicle's economics, from its books.
- *
- * Works for a `capital_source = 'events'` vehicle too: it goes through `loadCapitalPostings`,
- * which is the seam that serves both producers. A vehicle with no capital data at all comes
- * back with zeroes rather than being omitted — a fund overview that silently drops a vehicle
- * is worse than one that shows it empty.
+ * One vehicle's economics from shared capital evidence and investment records.
+ * Unsupported reported values remain unknown; empty vehicles remain visible.
  */
 export async function vehicleEconomics(
   admin: SupabaseClient,
@@ -142,10 +137,8 @@ export async function vehicleEconomics(
   // With a preload, ownership, entity names/classes, capital source and vintage come from the
   // one fund-wide read; without it (direct callers) each still loads per-vehicle as before.
   const idMap = preload?.idMap
-  const [{ source, postings }, commitmentEvents, owners, names, classes, vintage, id] = await Promise.all([
-    loadCapitalPostings(admin, fundId, group, asOf, idMap, preload ? vehicleCapitalPreload(preload, group) : undefined),
-    loadCommitmentEvents(admin, fundId, group, idMap, preload ? commitmentEventsForGroup(preload, group) : undefined),
-    preload ? Promise.resolve(preload.ownershipByGroup.get(group) ?? []) : loadOwnership(admin, fundId, group),
+  const [{ source, postings, commitmentByLp, evidenceByLp }, names, classes, vintage, id] = await Promise.all([
+    loadReportingCapital(admin, fundId, group, asOf, preload),
     preload ? Promise.resolve(preload.entityNames) : loadEntityNames(admin, fundId, group),
     preload ? Promise.resolve(preload.entityClasses) : loadEntityClasses(admin, fundId),
     preload ? Promise.resolve(preload.vintageByName.get(group) ?? null) : loadVintage(admin, fundId, group),
@@ -156,14 +149,6 @@ export async function vehicleEconomics(
 
   const accounts = computeCapitalAccounts(postings)
 
-  // Commitments via the one canonical resolver (resolveCommitmentMap): positions win for a
-  // tracking vehicle, else the effective-dated events, else the legacy scalar. Only fetch
-  // positions on the non-ledger path — a ledger vehicle never consults them.
-  const positionCommitments = source !== 'ledger'
-    ? await commitmentsFromPositions(admin, fundId, group, asOf, preload?.idMap, preload ? (preload.positionsByVehicleId.get(preload.idMap.get(group) ?? '') ?? []) : undefined)
-    : null
-  const commitmentByLp = resolveCommitmentMap({ source, owners, events: commitmentEvents, positions: positionCommitments, asOf })
-
   const asOfDate = asOf ? new Date(asOf) : new Date()
 
   // The IRR terminal (when the NAV is valued) must be dated when the NAV was actually STATED.
@@ -171,9 +156,7 @@ export async function vehicleEconomics(
   // NAV is stated as of its latest position date — using the report date instead spreads a large
   // TVPI over the months since and annualizes it to nonsense (a single cutover then has no time
   // spread and derives no IRR, which is the honest answer).
-  const lastPostingDate = postings.reduce((m, p) => (p.entryDate && p.entryDate > m ? p.entryDate : m), '')
-  const terminalDate = source === 'events' && lastPostingDate ? new Date(lastPostingDate) : asOfDate
-
+  const terminalDate = asOfDate
   // Dated flows, from the LP's point of view: a contribution is money out (negative), a
   // distribution is money back (positive).
   const flowsFor = (ids: Set<string> | null): CashFlow[] => {
@@ -197,7 +180,7 @@ export async function vehicleEconomics(
   // never called still belongs on the LP lens — otherwise `fund.committed` (which sums all
   // commitments) would not equal `lp.committed + gp.committed`. (Mirrors the union live-report
   // does for the same reason.)
-  const ids = Array.from(new Set([...Array.from(accounts.keys()), ...Array.from(commitmentByLp.keys())]))
+  const ids = Array.from(new Set([...Array.from(accounts.keys()), ...Array.from(commitmentByLp.keys()), ...Array.from(evidenceByLp.keys())]))
   const lpIds = new Set(ids.filter(id => (classes.get(id) ?? 'lp') !== 'gp'))
   const gpIds = new Set(ids.filter(id => (classes.get(id) ?? 'lp') === 'gp'))
 
@@ -214,15 +197,38 @@ export async function vehicleEconomics(
     Array.from(gpIds).reduce((s, id) => s + (accounts.get(id)?.carriedInterest ?? 0), 0)
   )
 
+  const metricsFor = (set: Set<string> | null): FundMetrics => {
+    const metrics = rollUp(pick(set), sumCommit(set), flowsFor(set), terminalDate)
+    const selected = ids.filter(id => !set || set.has(id))
+    const evidence = selected.map(id => evidenceByLp.get(id))
+    if (selected.length === 1) {
+      metrics.irr = reportingIrr(postings.filter(p => p.lpEntityId === selected[0]), metrics.nav ?? 0, evidence[0])
+    } else if (evidence.some(e => !e || !e.canCalculateIrr || e.conflict || e.missing.length > 0)) {
+      metrics.irr = null
+    }
+    const sumValues = (field: 'contributions' | 'distributions' | 'nav'): number | null => {
+      const values = evidence.map(e => e ? e.values[field] : 0)
+      return values.some(v => v == null) ? null : roundCents(values.reduce<number>((sum, v) => sum + v!, 0))
+    }
+    metrics.paidIn = sumValues('contributions')
+    metrics.distributions = sumValues('distributions')
+    metrics.nav = sumValues('nav')
+    metrics.totalValue = metrics.nav == null || metrics.distributions == null ? null : roundCents(metrics.nav + metrics.distributions)
+    metrics.uncalled = metrics.paidIn == null ? null : roundCents(metrics.committed - metrics.paidIn)
+    const ratios = lpRatios({ commitment: metrics.committed, paidIn: metrics.paidIn, distributions: metrics.distributions, nav: metrics.nav })
+    metrics.dpi = ratios.dpi; metrics.rvpi = ratios.rvpi; metrics.tvpi = ratios.tvpi
+    return metrics
+  }
+
   return {
     vehicle: group,
     id,
     vintageYear: vintage,
     source,
     lpCount: lpIds.size,
-    fund: rollUp(pick(null), sumCommit(null), flowsFor(null), terminalDate),
-    lp: rollUp(pick(lpIds), sumCommit(lpIds), flowsFor(lpIds), terminalDate),
-    gp: rollUp(pick(gpIds), sumCommit(gpIds), flowsFor(gpIds), terminalDate),
+    fund: metricsFor(null),
+    lp: metricsFor(lpIds),
+    gp: metricsFor(gpIds),
     carryAccrued,
   }
 }

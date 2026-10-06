@@ -32,6 +32,7 @@ export interface Account {
 }
 
 export interface Row extends Account {
+  evidence?: { missing: string[]; conflict: boolean; asOf: string | null; basis: string; values: { contributions: number | null; distributions: number | null; nav: number | null } }
   lpEntityId: string
   name: string
   partnerClass: string
@@ -172,7 +173,9 @@ export function CapitalRollforwardTable({
   const tDist = -(totals['distributions'] ?? shown.reduce((s, r) => s - acctOf(r).distributions, 0))
   const tEnd = totals['ending'] ?? shown.reduce((s, r) => s + acctOf(r).ending, 0)
 
+  const incomplete = shown.some(r => (r.evidence?.missing.length ?? 0) > 0)
   const metricTotal = (key: string): string => {
+    if (incomplete) return '—'
     switch (key) {
       case 'pctFunded': return pctX(ratio(commitTotals['called'] ?? 0, commitTotals['commitment'] ?? 0))
       case 'dpi': return moicX(ratio(tDist, commitTotals['called'] ?? 0))
@@ -207,8 +210,8 @@ export function CapitalRollforwardTable({
         <tfoot>
           <tr className="border-t bg-muted/30 font-semibold">
             <td className="px-3 py-2">Total</td>
-            {commitmentCols.map(c => <td key={c.key} className="px-3 py-2 text-right tabular-nums">{fmt(commitTotals[c.key])}</td>)}
-            {columns.map(c => <td key={c.key} className="px-3 py-2 text-right tabular-nums">{fmt(totals[c.key])}</td>)}
+            {commitmentCols.map(c => <td key={c.key} className="px-3 py-2 text-right tabular-nums">{shown.some(r => r[c.key] == null) ? '—' : fmt(commitTotals[c.key])}</td>)}
+            {columns.map(c => <td key={c.key} className="px-3 py-2 text-right tabular-nums">{incomplete ? '—' : fmt(totals[c.key])}</td>)}
             {metrics && METRIC_COLUMNS.map(c => <td key={c.key} className="px-3 py-2 text-right tabular-nums text-muted-foreground">{metricTotal(c.key)}</td>)}
             {editable && <td />}
           </tr>
@@ -268,6 +271,7 @@ function RollforwardRow({
   )
 
   const metricCell = (key: string) => {
+    if (r.evidence?.missing.length && key !== 'netIrr') return '—'
     switch (key) {
       case 'pctFunded': return pctX(ratio(r.called, r.commitment))
       case 'dpi': return moicX(ratio(distPos, r.called))
@@ -329,10 +333,10 @@ function RollforwardRow({
         </div>
       </td>
       {commitmentCols.map(c => (
-        <td key={c.key} className={`px-3 py-2 text-right tabular-nums ${Math.abs(r[c.key]) > 0.004 ? '' : 'text-muted-foreground'}`}>{fmt(r[c.key])}</td>
+        <td key={c.key} className={`px-3 py-2 text-right tabular-nums ${Math.abs(r[c.key]) > 0.004 ? '' : 'text-muted-foreground'}`}>{r[c.key] == null ? '—' : fmt(r[c.key])}</td>
       ))}
       {accountCols.map(c => (
-        <td key={c.key} className={`px-3 py-2 text-right tabular-nums ${c.key === 'ending' ? 'font-semibold' : ''} ${c.key === 'unclassified' && Math.abs(a[c.key]) > 0.004 ? 'text-warning' : ''}`}>{fmt(a[c.key])}</td>
+        <td key={c.key} className={`px-3 py-2 text-right tabular-nums ${c.key === 'ending' ? 'font-semibold' : ''} ${c.key === 'unclassified' && Math.abs(a[c.key]) > 0.004 ? 'text-warning' : ''}`}>{r.evidence?.missing.length ? (c.key === 'ending' && r.evidence.values.nav != null ? fmt(r.evidence.values.nav) : '—') : fmt(a[c.key])}</td>
       ))}
       {metrics && METRIC_COLUMNS.map(c => (
         <td key={c.key} className="px-3 py-2 text-right tabular-nums text-muted-foreground">{metricCell(c.key)}</td>

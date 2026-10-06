@@ -18,10 +18,17 @@
 // to the forecast proceeds — the accreting view is the more familiar picture, the flat one the more
 // honest one, and the page offers both.
 
-import type { ConstructionAssumptions, ConstructionResult, ConstructionWaterfallProjection, PacingAssumptions } from './construction'
+import type { ConstructionActuals, ConstructionAssumptions, ConstructionResult, ConstructionWaterfallProjection, PacingAssumptions } from './construction'
 import { projectFeesForYear, DEFAULT_PACING } from './construction'
 import { preferredTarget } from './carry'
 import { runWaterfall, type WaterfallState } from './waterfall'
+
+/** One forecast baseline for the page, API, and agent. No invented historical flow dates. */
+export function constructionBaseline(actuals: ConstructionActuals, model: ConstructionResult, asOf: string): ForecastBaseline {
+  return actuals.capitalAvailable === true
+    ? { asOf, calledCapital: actuals.calledCapital!, distributed: actuals.distributedCapital!, nav: actuals.nav, ...(actuals.cashBalance != null ? { cashBalance: actuals.cashBalance } : {}) }
+    : { asOf, calledCapital: model.capital.deployedTotal, distributed: model.returns.positions.reduce((sum, position) => sum + position.actual.distributions, 0), nav: model.returns.currentPortfolioValue }
+}
 
 export { DEFAULT_PACING }
 export type { PacingAssumptions }
@@ -288,7 +295,7 @@ export function forecastSchedule(
   // Use the same capital reconciliation as the summary above: capital already called, less
   // deployed capital and incurred expenses. NAV contains investment marks, so NAV minus portfolio
   // value is not a reliable cash balance and made the timeline disagree with Capital planning.
-  let cash = Math.max(0, model.capital.ledgerAvailable && baseline.cashBalance != null
+  let cash = Math.max(0, baseline.cashBalance != null
     ? baseline.cashBalance
     : model.capital.calledCapital - deployedTotal - model.capital.incurredExpenses)
   // The past, for the IRR: dated when the caller has the dates, one lump at today otherwise.

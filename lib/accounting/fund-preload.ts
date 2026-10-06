@@ -1,3 +1,4 @@
+import type { ReviewedPeriod } from './capital-evidence'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { currentOwnership, loadLedgerRowsBatch, type InvestmentRow, type Ownership, type LedgerRows } from './load'
 import { loadPositionsBatch, type LpPosition } from './lp-positions'
@@ -10,7 +11,7 @@ import type { CapitalSource, VehicleCapitalPreload } from './capital-source'
  *
  * `/funds` (`fundEconomics`) and `/lps` (`generateLiveReport`) derive every vehicle's LP capital
  * on each request, and the per-vehicle loaders (`loadOwnership`, `loadEntityNames`,
- * `loadEntityClasses`, `loadCapitalSource`, `loadVintage`) each issue their own query for every
+ * `loadEntityClasses`, `loadVintage`) each issue their own query for every
  * vehicle — so a 20-vehicle fund pays ~6× that in round-trips before any ledger row is read.
  * This loads all of it in one batch of fund-scoped queries, grouped in memory by vehicle or
  * entity, so the orchestrators can hand each vehicle its slice. Nothing here changes a result;
@@ -25,7 +26,8 @@ export interface FundPreload {
   /** portfolio_group → current ownership, already reduced through `currentOwnership`. */
   ownershipByGroup: Map<string, Ownership[]>
   /** vehicle_id → capital source ('ledger' | 'events'). Absent ⇒ 'events' (the default). */
-  sourceByVehicleId: Map<string, CapitalSource>
+  closedThroughByVehicleId: Map<string, string>
+  reviewedPeriodsByVehicleId?: Map<string, ReviewedPeriod[]>
   /** vehicle name → stated vintage year (or null). */
   vintageByName: Map<string, number | null>
   /** vehicle_id → its posted-ledger raw rows (batched). Present when `asOf`-scoped loads ran. */
@@ -37,13 +39,13 @@ export interface FundPreload {
 }
 
 export async function loadFundPreload(admin: SupabaseClient, fundId: string, asOf?: string): Promise<FundPreload> {
-  const [vehRes, entRes, invRes, srcRes] = await Promise.all([
+  const [vehRes, entRes, invRes, periodRes] = await Promise.all([
     (admin as any).from('fund_vehicles').select('id, name, aliases, vintage_year').eq('fund_id', fundId),
     (admin as any).from('lp_entities').select('id, entity_name, partner_class').eq('fund_id', fundId),
     (admin as any).from('lp_investments')
       .select('entity_id, portfolio_group, commitment, paid_in_capital, distributions, snapshot_id, updated_at, lp_snapshots(as_of_date, created_at)')
       .eq('fund_id', fundId),
-    (admin as any).from('vehicle_accounting_settings').select('vehicle_id, capital_source').eq('fund_id', fundId),
+    (admin as any).from('fiscal_periods').select('vehicle_id, period_start, period_end').eq('fund_id', fundId).eq('status', 'closed'),
   ])
 
   // fund_vehicles → idMap (name + aliases) and vintage, from the one read.
@@ -76,9 +78,15 @@ export async function loadFundPreload(admin: SupabaseClient, fundId: string, asO
   const ownershipByGroup = new Map<string, Ownership[]>()
   for (const [g, rows] of Array.from(invByGroup.entries())) ownershipByGroup.set(g, currentOwnership(rows))
 
-  const sourceByVehicleId = new Map<string, CapitalSource>()
-  for (const s of ((srcRes.data as any[]) ?? [])) {
-    sourceByVehicleId.set(s.vehicle_id as string, s.capital_source === 'ledger' ? 'ledger' : 'events')
+  const reviewedPeriodsByVehicleId = new Map<string, ReviewedPeriod[]>()
+  const closedThroughByVehicleId = new Map<string, string>()
+  if (periodRes.error) throw periodRes.error
+  for (const row of periodRes.data ?? []) {
+    const periods = reviewedPeriodsByVehicleId.get(row.vehicle_id) ?? []
+    if (row.period_start && row.period_end) periods.push({ start: row.period_start, end: row.period_end })
+    reviewedPeriodsByVehicleId.set(row.vehicle_id, periods)
+    const previous = closedThroughByVehicleId.get(row.vehicle_id)
+    if (!previous || row.period_end > previous) closedThroughByVehicleId.set(row.vehicle_id, row.period_end)
   }
 
   // The heavy per-vehicle data, batched once by `vehicle_id IN (...)` now that the id set is
@@ -91,7 +99,7 @@ export async function loadFundPreload(admin: SupabaseClient, fundId: string, asO
     loadCommitmentEventsBatch(admin, fundId, vehicleIds),
   ])
 
-  return { idMap, entityNames, entityClasses, ownershipByGroup, sourceByVehicleId, vintageByName, ledgerByVehicleId, positionsByVehicleId, commitmentEventsByVehicleId }
+  return { idMap, entityNames, entityClasses, ownershipByGroup, closedThroughByVehicleId, reviewedPeriodsByVehicleId, vintageByName, ledgerByVehicleId, positionsByVehicleId, commitmentEventsByVehicleId }
 }
 
 /** A group's preloaded commitment events (empty if none / not in the id map). */
@@ -105,15 +113,9 @@ export function commitmentEventsForGroup(preload: FundPreload, group: string): C
 export function vehicleCapitalPreload(preload: FundPreload, group: string): VehicleCapitalPreload {
   const vehicleId = preload.idMap.get(group)
   return {
-    source: sourceForGroup(preload, group),
+    reviewedPeriods: preload.reviewedPeriodsByVehicleId ? (vehicleId ? preload.reviewedPeriodsByVehicleId.get(vehicleId) ?? [] : []) : undefined,
+    closedThrough: vehicleId ? preload.closedThroughByVehicleId.get(vehicleId) ?? null : null,
     ledgerRows: vehicleId ? preload.ledgerByVehicleId.get(vehicleId) : undefined,
     positions: vehicleId ? preload.positionsByVehicleId.get(vehicleId) : undefined,
   }
-}
-
-/** The capital source for one vehicle, resolved from a preload (no query). Absent ⇒ 'events'. */
-export function sourceForGroup(preload: FundPreload, group: string): CapitalSource {
-  const vehicleId = preload.idMap.get(group)
-  if (!vehicleId) return 'events'
-  return preload.sourceByVehicleId.get(vehicleId) ?? 'events'
 }

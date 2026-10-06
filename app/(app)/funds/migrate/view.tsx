@@ -1,5 +1,8 @@
 'use client'
 
+import { ImportReviewPanel } from '@/components/accounting/import-review'
+import type { ImportReview } from '@/lib/accounting/import-review'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -66,6 +69,7 @@ export function MigrateView({ group }: { group: string }) {
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
 
+  const [importReview, setImportReview] = useState<ImportReview | null>(null)
   const [dryRun, setDryRun] = useState<any>(null)
   const [runs, setRuns] = useState<any[]>([])
 
@@ -187,8 +191,9 @@ export function MigrateView({ group }: { group: string }) {
     setBusy(true); setStatus(null)
     try {
       const { ok, json } = await post('/api/accounting/quickbooks/import', {
-        text: journalText, dryRun: isDry,
+        text: journalText, dryRun: isDry, reviewToken: importReview?.token,
       })
+      setImportReview(json.importReview ?? null)
       if (!ok) { setStatus(json?.error ?? 'Import failed.'); return }
       setCapitalWarnings(json.capitalWarnings ?? [])
       if (isDry) { setDryRun(json); return }
@@ -405,7 +410,7 @@ export function MigrateView({ group }: { group: string }) {
             </p>
             {!mappingSaved && <p className="text-sm text-muted-foreground">Resolve every account and save the mapping to enable import.</p>}
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => runImport(true)} disabled={busy || !mappingSaved}>Dry run</Button>
+              <Button size="sm" variant="outline" onClick={() => runImport(true)} disabled={busy || !mappingSaved}>Review import</Button>
               <Button size="sm" onClick={() => runImport(false)} disabled={busy || !mappingSaved}>Import as drafts</Button>
             </div>
 
@@ -416,8 +421,10 @@ export function MigrateView({ group }: { group: string }) {
               </p>
             )}
 
+            <ImportReviewPanel review={importReview} />
+
             {capitalWarnings.length > 0 && (
-              <details className="rounded border border-amber-500 p-3 text-sm">
+              <details className="rounded border border-warning p-3 text-sm">
                 <summary>{capitalWarnings.length} capital lines need an LP match</summary>
                 <p className="my-2 text-muted-foreground">These amounts remain in unallocated capital. Review the named counterparty or bank evidence before assigning an LP.</p>
                 <ul className="max-h-64 overflow-y-auto space-y-1">
@@ -440,7 +447,7 @@ export function MigrateView({ group }: { group: string }) {
                 <TableBody>
                   {runs.map(r => (
                     <TableRow key={r.id}>
-                      <TableCell className="tabular-nums text-xs">{String(r.created_at).slice(0, 19).replace('T', ' ')}</TableCell>
+                      <TableCell className="tabular-nums text-xs">{String(r.created_at).slice(0, 19).replace('T', ' ')}{r.reconciliation_review && <details className="mt-2"><summary className="cursor-pointer">Import comparison</summary><ImportReviewPanel review={r.reconciliation_review} /></details>}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.transactions_parsed}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.entries_created}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.entries_matched}</TableCell>

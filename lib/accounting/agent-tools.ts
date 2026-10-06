@@ -169,12 +169,12 @@ const HANDLERS: Record<string, AgentToolHandler> = {
 
   export_ledger_text: async ({ admin, fundId, portfolioGroup }) => ({ text: await exportLedgerText(admin, fundId, portfolioGroup) }),
 
-  post_ledger_text: async ({ admin, fundId, portfolioGroup, userId }, input) => {
-    return postLedgerText(admin, fundId, portfolioGroup, userId, String(input.text ?? ''), input.status)
+  post_ledger_text: async ({ admin, fundId, portfolioGroup, userId, access }, input) => {
+    return postLedgerText(admin, fundId, portfolioGroup, userId, String(input.text ?? ''), input.status, input.reviewToken, hasAccess(access, 'lp_capital', 'read'))
   },
 
-  import_bank_transactions: async ({ admin, fundId, portfolioGroup, userId }, input) => {
-    const result = await importBankTransactions(admin, fundId, portfolioGroup, userId, String(input.csv ?? ''), String(input.source ?? 'csv'))
+  import_bank_transactions: async ({ admin, fundId, portfolioGroup, userId, access }, input) => {
+    const result = await importBankTransactions(admin, fundId, portfolioGroup, userId, String(input.csv ?? ''), String(input.source ?? 'csv'), input.reviewToken, hasAccess(access, 'lp_capital', 'read'))
     if ('error' in result) throw new Error(result.error)
     return result
   },

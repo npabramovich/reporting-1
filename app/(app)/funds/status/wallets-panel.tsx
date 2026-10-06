@@ -54,7 +54,7 @@ function shortAddress(a: string) {
   return a.length <= 14 ? a : `${a.slice(0, 8)}…${a.slice(-4)}`
 }
 
-export function WalletsPanel({ onChanged }: { onChanged?: () => void }) {
+export function WalletsPanel({ onChanged, showHeader = true }: { onChanged?: () => void; showHeader?: boolean }) {
   const lf = useLedgerFetch()
   const [wallets, setWallets] = useState<WalletRow[]>([])
   const [variances, setVariances] = useState<Variance[]>([])
@@ -140,14 +140,14 @@ export function WalletsPanel({ onChanged }: { onChanged?: () => void }) {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
-        <div>
+        {showHeader && (<div>
           <h3 className="text-base font-medium">Watched wallets</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             Public addresses a digital-asset holding sits in. Reading one gives a second, independent
             answer to how much the fund holds — the only asset class here where somebody outside the
             fund can check a position for themselves.
           </p>
-        </div>
+        </div>)}
         <Button size="sm" variant="outline" onClick={() => setAdding(a => !a)} disabled={busy}>
           <Plus className="h-3.5 w-3.5 mr-1" />Watch an address
         </Button>

@@ -1,3 +1,4 @@
+import { loadResolvedCommitments } from './terms'
 // Period close — the ONE place where P&L is allocated to partners' capital.
 //
 // Expense/income/valuation entries are booked simply (Dr expense / Cr cash). They
@@ -39,7 +40,7 @@ import { computeCapitalAccounts, bucketForSourceType, emptyAccount, type Capital
 import { closedPeriodRanges } from './periods'
 import { buildCarryEntry, buildAssociateMarkupEntry } from './entries'
 import { associateMembers, lookThroughAccount } from './look-through'
-import { loadCapitalSource, loadCapitalPostings } from './capital-source'
+import { loadCapitalPostings } from './capital-source'
 import { gpLinkFor, loadOwnershipBasis } from './gp-economics'
 import {
   loadCarryTerms, carryAccrual,
@@ -216,7 +217,7 @@ export async function previewClose(
       warnings.push('No commitment history found — falling back to each partner’s current commitment. Push the commitment-events migration to allocate historical periods correctly.')
     }
     basisAmounts = Array.from(
-      resolveCommitmentMap({ source: 'ledger', owners, events: commitmentEvents, asOf: periodEnd }).entries()
+      (await loadResolvedCommitments(admin, fundId, group, periodEnd)).entries()
     ).map(([lpEntityId, commitment]) => ({ lpEntityId, basisAmount: commitment }))
   }
 
@@ -1414,7 +1415,6 @@ async function accrueAssociateEconomics(
 ): Promise<{ entryIds: string[] } | { error: string }> {
   const link = await gpLinkFor(admin, fundId, group)
   if (!link) return { entryIds: [] }
-  if ((await loadCapitalSource(admin, fundId, group)) !== 'ledger') return { entryIds: [] }
   const codes = await accountIdByCode(admin, fundId, group)
   const investmentId = codes.get('1500')
   if (!investmentId) return { entryIds: [] }

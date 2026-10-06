@@ -1,3 +1,8 @@
+import { hasAccess, loadAccessContext } from '@/lib/access/effective'
+import { reviewImport } from '@/lib/accounting/import-review'
+import { ensureVehicleAccounts } from '@/lib/accounting/provision-accounts'
+import { chartForVehicleKind } from '@/lib/accounting/chart'
+import { vehicleKindByName } from '@/lib/accounting/vehicle-domain'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -69,15 +74,18 @@ export async function POST(req: NextRequest) {
 
   const accountIds = await accountIdByCode(admin, gate.fundId, group)
 
-  // The Name column becomes the entry's vendor. Vendors are created as needed — on a dry run too,
-  // which is deliberate: a vendor is a fund-level record, and seeing them appear is part of
-  // reviewing what the import would do.
+  const previewAccounts = []
+  {
+    const kind = await vehicleKindByName(admin, gate.fundId, group)
+    for (const a of chartForVehicleKind(kind)) if (!accountIds.has(a.code)) {
+      accountIds.set(a.code, `template:${a.code}`)
+      previewAccounts.push({ ...a, id: `template:${a.code}`, fundId: gate.fundId })
+    }
+  }
+
+  // Create vendors only during the confirmed import. A preview never changes records.
   const resolveVendor = vendorResolver(admin, gate.fundId)
   const vendorIdByName = new Map<string, string>()
-  for (const name of Array.from(new Set(importable.map(qbVendorName).filter((n): n is string => !!n)))) {
-    const id = await resolveVendor(name)
-    if (id) vendorIdByName.set(name.toLowerCase(), id)
-  }
 
   // Chart accounts provide both membership and the dedicated capital destination. Never
   // search the tenant-wide LP list: the same person can invest in several vehicles.
@@ -112,9 +120,16 @@ export async function POST(req: NextRequest) {
   const toCreate = entries.filter(e => !present.has(e.sourceRef!))
   const writeErrors: string[] = [...parseErrors, ...skippedForExclusion, ...skipped.map(s => s.reason)]
 
+  const access = await loadAccessContext(admin, gate.fundId, user.id, gate.role)
+  const importReview = await reviewImport(admin, gate.fundId, group, { entries: toCreate, previewAccounts, includeLp: hasAccess(access, 'lp_capital', 'read') })
+  if (!dryRun && importReview.differences.length && body.reviewToken !== importReview.token) {
+    return NextResponse.json({ error: 'Review the differences with investment and LP records before importing.', importReview }, { status: 409 })
+  }
+
   if (dryRun) {
     return NextResponse.json({
       dryRun: true,
+      importReview,
       transactionsParsed: transactions.length,
       wouldCreate: toCreate.length,
       alreadyPresent: entries.length - toCreate.length,
@@ -124,6 +139,18 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  await ensureVehicleAccounts(admin, gate.fundId, group)
+  const actualIds = await accountIdByCode(admin, gate.fundId, group)
+  for (const entry of toCreate) for (const posting of entry.postings) {
+    if (posting.accountId.startsWith('template:')) posting.accountId = actualIds.get(posting.accountId.slice(9))!
+  }
+  // Vendor creation is also a write and follows the comparison.
+  for (const name of Array.from(new Set(importable.map(qbVendorName).filter((n): n is string => !!n)))) {
+    const id = await resolveVendor(name)
+    if (id) vendorIdByName.set(name.toLowerCase(), id)
+  }
+  const withVendors = buildEntries(importable, mapping, actualIds, gate.fundId, vendorIdByName)
+  for (const entry of toCreate) entry.vendorId = withVendors.entries.find(e => e.sourceRef === entry.sourceRef)?.vendorId
   let created = 0
   for (const entry of toCreate) {
     const result = await persistEntry(admin, gate.fundId, group, user.id, entry, 'draft')
@@ -140,6 +167,7 @@ export async function POST(req: NextRequest) {
     fund_id: gate.fundId,
     vehicle_id: vehicleId,
     source_label: body?.sourceLabel ?? null,
+    reconciliation_review: { ...importReview, differences: importReview.differences.filter(d => d.domain !== 'lp'), lpDifferences: importReview.differences.filter(d => d.domain === 'lp').length },
     transactions_parsed: transactions.length,
     entries_created: created,
     entries_matched: entries.length - toCreate.length,
@@ -149,6 +177,7 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json({
+    importReview,
     transactionsParsed: transactions.length,
     created,
     alreadyPresent: entries.length - toCreate.length,

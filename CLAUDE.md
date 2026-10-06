@@ -75,6 +75,25 @@ Migration files that have already shipped to production must not be edited. The 
 
 This repo's owner runs `supabase db push` themselves. AI assistants only create local migration files in `supabase/migrations/`; they do not apply them.
 
+### A migration that must wait for a deploy does not belong in `supabase/migrations/` yet
+
+`supabase db push` applies every pending file in timestamp order. So a migration whose correctness
+depends on new application code already being live — dropping a column the current release still
+reads, tightening a constraint the current release can still violate — is a trap the moment it is
+written, and a plan that merely *says* "apply this one last" does not prevent it. Pushing
+everything pending is the normal thing to do and is not the owner's mistake.
+
+Stage these outside the scanned directory, as `supabase/pending-deploy/<name>.sql`, with a header
+naming the release that has to ship first, and move the file into `supabase/migrations/` (renaming
+it to a current timestamp) only once that release is deployed. Splitting an expand/contract change
+across two timestamps is not enough on its own — both halves are pending at the same time.
+
+This bit the unified-accounting work: `20261006174711_retire_accounting_mode_columns.sql` dropped
+`vehicle_accounting_settings.capital_source` and `history_mode` while the deployed release still
+read them, and because every one of those read sites ignores its `error` and uses `data`, the result
+was not a visible failure but a silent fallback to the default. Leave that file where it is — it is
+already applied, and deleting an applied migration causes a history mismatch on the next push.
+
 ## Access control
 
 ### Every new API route needs an access decision

@@ -7,7 +7,7 @@ import { assertWriteAccess, assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import {
   loadGpEconomics, gpLinkFor, setOwnershipWeight, setCarryWeight,
-  recordCarryPayment, deleteCarryPayment,
+  recordCarryPayment, deleteCarryPayment, reconcileCarryPayment,
 } from '@/lib/accounting/gp-economics'
 
 // GP / associate entity economics for the selected vehicle.
@@ -49,6 +49,12 @@ export async function PUT(req: NextRequest) {
 
   const link = await gpLinkFor(admin, gate.fundId, group)
   if (!link) return NextResponse.json({ error: `${group} is not a GP/associate entity.` }, { status: 400 })
+
+  if (body.paymentId) {
+    try { await reconcileCarryPayment(admin, gate.fundId, link.vehicleId, String(body.paymentId), body.journalEntryId, body.separate === true) }
+    catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }) }
+    return NextResponse.json({ gp: await loadGpEconomics(admin, gate.fundId, group) })
+  }
 
   const lpEntityId = String(body?.lpEntityId ?? '')
   if (!lpEntityId) return NextResponse.json({ error: 'lpEntityId is required' }, { status: 400 })
@@ -96,6 +102,7 @@ export async function POST(req: NextRequest) {
       paidDate: String(body?.paidDate ?? ''),
       amount: Number(body?.amount),
       memo: body?.memo,
+      journalEntryId: body?.journalEntryId,
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not record the payment' }, { status: 400 })

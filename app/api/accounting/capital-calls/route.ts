@@ -6,7 +6,6 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess, assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { issueCapitalCall, proRataCall, lpCapitalSummary, listCapitalCalls } from '@/lib/accounting/capital-calls'
-import { loadCapitalSource } from '@/lib/accounting/capital-source'
 
 // GET — the per-LP capital summary (commitment/called/funded/outstanding) plus
 // the issued-call history for the vehicle.
@@ -41,11 +40,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
-  if (await loadCapitalSource(admin, gate.fundId, group) !== 'ledger') {
-    return NextResponse.json({
-      error: 'Capital calls require accounting. This vehicle uses capital tracking; record its dated paid-in capital on the LP capital accounts instead.',
-    }, { status: 409 })
-  }
+
 
   if (body?.action === 'preview') {
     const total = Number(body?.total)
@@ -55,6 +50,7 @@ export async function POST(req: NextRequest) {
 
   if (body?.action === 'issue') {
     const result = await issueCapitalCall(admin, gate.fundId, group, user.id, {
+      requestKey: typeof body.requestKey === 'string' ? body.requestKey.slice(0, 100) : undefined,
       callDate: String(body?.callDate ?? ''),
       dueDate: body?.dueDate ? String(body.dueDate) : null,
       description: body?.description ?? null,

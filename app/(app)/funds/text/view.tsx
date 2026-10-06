@@ -1,5 +1,8 @@
 'use client'
 
+import { ImportReviewPanel } from '@/components/accounting/import-review'
+import type { ImportReview } from '@/lib/accounting/import-review'
+
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -32,6 +35,7 @@ export function TextLedgerView({ onPosted }: { onPosted?: () => void } = {}) {
   const [text, setText] = useState('')
   const [accounts, setAccounts] = useState<Account[]>([])
   const [busy, setBusy] = useState(false)
+  const [importReview, setImportReview] = useState<ImportReview | null>(null)
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ledger, setLedger] = useState<string | null>(null)
@@ -61,9 +65,11 @@ export function TextLedgerView({ onPosted }: { onPosted?: () => void } = {}) {
 
   async function post(status: 'draft' | 'posted') {
     setBusy(true); setError(null); setResult(null)
-    const res = await lf('/api/accounting/ledger-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, status }) })
+    const res = await lf('/api/accounting/ledger-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, status, reviewToken: importReview?.token }) })
     const d = await res.json().catch(() => ({}))
     if (!res.ok) { setError(d?.error ?? 'Could not post'); setBusy(false); return }
+    setImportReview(d.importReview ?? null)
+    if (d.reviewRequired) { setBusy(false); return }
     const problems: string[] = [...(d.errors ?? []), ...((d.unknownAccounts ?? []).map((u: string) => `Unknown account ${u}`))]
     setResult(`${status === 'posted' ? 'Posted' : 'Saved as drafts'}: ${d.posted} ${d.posted === 1 ? 'entry' : 'entries'}.${problems.length ? ` ${problems.length} problem${problems.length === 1 ? '' : 's'}: ${problems.join('; ')}` : ''}`)
     if (problems.length === 0) setText('')
@@ -141,6 +147,7 @@ export function TextLedgerView({ onPosted }: { onPosted?: () => void } = {}) {
             </>
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
+          <ImportReviewPanel review={importReview} />
           {result && <p className="text-sm text-success">{result}</p>}
         </div>
       </div>

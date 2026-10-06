@@ -1,3 +1,4 @@
+import { hasAccess, loadAccessContext } from '@/lib/access/effective'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
   if (text.trim().length < 10) return NextResponse.json({ error: 'Nothing to post' }, { status: 400 })
   const status = body?.status === 'draft' ? 'draft' : body?.status === 'posted' ? 'posted' : undefined
 
-  const result = await postLedgerText(admin, gate.fundId, group, user.id, text, status)
+  const access = await loadAccessContext(admin, gate.fundId, user.id, gate.role)
+  const result = await postLedgerText(admin, gate.fundId, group, user.id, text, status, body?.reviewToken, hasAccess(access, 'lp_capital', 'read'))
   return NextResponse.json(result)
 }

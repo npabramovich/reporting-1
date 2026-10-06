@@ -19,7 +19,7 @@ import {
   type ConstructionResult,
   type ConstructionStage,
 } from './construction'
-import { forecastSchedule, type ForecastSchedule, type ForecastBaseline } from './construction-forecast'
+import { applyLpWaterfall, constructionBaseline, forecastSchedule, type ForecastSchedule, type ForecastBaseline } from './construction-forecast'
 import { simulateFund, type SimulationResult } from './construction-simulation'
 import type { Account } from './types'
 import type { InvestmentTransaction } from '@/lib/types/database'
@@ -58,8 +58,17 @@ export interface ConstructionModelResponse {
   positions: ConstructionResult['returns']['positions']
   warnings: string[]
   asOf: string
-  /** The plan on the calendar, once pacing is stated (construction-forecast.ts). Null until then. */
+  /**
+   * The plan on the calendar, once pacing is stated (construction-forecast.ts). Null until then.
+   * The same view the construction page headlines: LP-only and net of carry when capital figures
+   * are supported and carry is configured, fund-level gross otherwise. `timelineNetOfCarry` says
+   * which, so a reader cannot quote one as the other.
+   */
   timeline: ForecastSchedule | null
+  /** Whether `timeline` and `simulation` are the LP's net-of-carry view. */
+  timelineNetOfCarry: boolean
+  /** The fund-level gross schedule, when `timeline` is the net one. Null when they are the same. */
+  grossTimeline: ForecastSchedule | null
   /** The Monte Carlo over that schedule, once loss or dispersion is stated. Null until then. */
   simulation: SimulationResult | null
 }
@@ -250,15 +259,18 @@ async function loadConstructionActuals(
   const economics = vehicles.find(item => item.vehicle === vehicle) ?? null
   const lpEconomics = economics ? (economics.lp ?? economics.fund) : null
   const recipientIds = new Set(carryTerms.recipients.map(recipient => recipient.lpEntityId))
-  const lpContributions = (ledger?.capitalPostings ?? [])
-    .filter(posting => !recipientIds.has(posting.lpEntityId ?? '') && bucketForSourceType(posting.sourceType) === 'contributions')
-    .map(posting => ({ date: posting.entryDate ?? new Date().toISOString().slice(0, 10), amount: Math.max(0, -posting.amount) }))
-    .filter(contribution => contribution.amount > 0)
-  const lpDistributions = (ledger?.capitalPostings ?? [])
-    .filter(posting => !recipientIds.has(posting.lpEntityId ?? '') && bucketForSourceType(posting.sourceType) === 'distributions')
-    .map(posting => ({ date: posting.entryDate ?? new Date().toISOString().slice(0, 10), amount: Math.max(0, posting.amount) }))
-    .filter(distribution => distribution.amount > 0)
-  const ledgerAvailable = !!ledger && ledger.accounts.length > 0
+  // An undated posting is DROPPED, not dated today. These flows are the dated history the IRR is
+  // computed from, and a historical contribution stamped with today's date is exactly the invented
+  // cash-flow date the evidence rules refuse — it would read as a return earned in no time at all.
+  // `journal_entries.entry_date` is NOT NULL, so this discards nothing in practice.
+  const datedFlows = (bucket: 'contributions' | 'distributions', sign: 1 | -1) =>
+    (ledger?.capitalPostings ?? [])
+      .filter(posting => !recipientIds.has(posting.lpEntityId ?? '') && bucketForSourceType(posting.sourceType) === bucket && !!posting.entryDate)
+      .map(posting => ({ date: posting.entryDate as string, amount: Math.max(0, sign * posting.amount) }))
+      .filter(flow => flow.amount > 0)
+  const lpContributions = datedFlows('contributions', -1)
+  const lpDistributions = datedFlows('distributions', 1)
+  const ledgerAvailable = !!ledger && ledger.postings.length > 0
   let managementFeesIncurred = 0
   let orgCostsIncurred = 0
   let partnershipExpensesIncurred = 0
@@ -268,9 +280,11 @@ async function loadConstructionActuals(
     managementFeesIncurred = expenseTotal(ledger.accounts, balances, 'management_fee')
     orgCostsIncurred = expenseTotal(ledger.accounts, balances, 'organizational_expense')
     partnershipExpensesIncurred = expenseTotal(ledger.accounts, balances, 'partnership_expense')
-    cashBalance = ledger.accounts
+    const cashAccounts = ledger.accounts
       .filter(account => account.type === 'asset' && account.subtype === 'cash')
-      .reduce((sum, account) => sum + normalBalance(account, balances.get(account.id) ?? 0), 0)
+    if (ledger.postings.some(posting => cashAccounts.some(account => account.id === posting.accountId))) {
+      cashBalance = cashAccounts.reduce((sum, account) => sum + normalBalance(account, balances.get(account.id) ?? 0), 0)
+    }
   }
 
   const allTransactions = (transactionResult.data ?? []) as InvestmentTransaction[]
@@ -320,11 +334,12 @@ async function loadConstructionActuals(
     vintageYear: economics?.vintageYear ?? null,
     vehicleId: economics?.id ?? null,
     actuals: {
+      capitalAvailable: !!economics && economics.fund.paidIn != null && economics.fund.distributions != null && economics.fund.nav != null,
       committedCapital: economics?.fund.committed ?? 0,
       calledCapital: economics?.fund.paidIn ?? 0,
       uncalledCapital: economics?.fund.uncalled ?? 0,
       distributedCapital: economics?.fund.distributions ?? 0,
-      waterfall: economics ? {
+      waterfall: economics && economics.fund.paidIn != null && economics.fund.distributions != null && economics.fund.nav != null ? {
         asOf: new Date().toISOString().slice(0, 10),
         kind: carryTerms.kind,
         carryRate: carryTerms.carryRate,
@@ -379,19 +394,24 @@ function constructionResponse(args: {
 }): ConstructionModelResponse {
   const now = new Date()
   const forecast = constructionModel(args.actuals, args.assumptions, now)
-  // The baseline the schedule starts from. The page swaps in the dated fund series when it has
-  // it; here (the agent, the route) the capital accounts stand in, with the past as one lump.
-  const baseline: ForecastBaseline = {
-    asOf: now.toISOString().slice(0, 10),
-    calledCapital: args.actuals.calledCapital ?? 0,
-    distributed: forecast.returns.positions.reduce((s, p) => s + p.actual.distributions, 0),
-    nav: args.actuals.nav,
-  }
-  const schedule = forecastSchedule(forecast, args.assumptions, args.assumptions.pacing, baseline)
+  const baseline = constructionBaseline(args.actuals, forecast, now.toISOString().slice(0, 10))
+  const gross = forecastSchedule(forecast, args.assumptions, args.assumptions.pacing, baseline)
+
+  // THE SAME VIEW THE PAGE HEADLINES. forecast-section.tsx applies the vehicle's waterfall
+  // whenever capital figures are supported and carry is actually configured, and shows the
+  // LP-only schedule; this used to return the gross one, so the Analyst reported a fund-level
+  // figure in a field called `netIrr` while the page showed the net-of-carry number for the same
+  // fund and date. Same conditions here, so one metric means one thing on every surface.
+  const waterfall = args.actuals.capitalAvailable === true
+    && args.actuals.waterfall && args.actuals.waterfall.kind !== 'none' && args.actuals.waterfall.carryRate > 0
+    ? args.actuals.waterfall
+    : undefined
+  const net = waterfall ? applyLpWaterfall(gross, waterfall) : null
+  const schedule = net ?? gross
   const timeline = schedule.stated ? schedule : null
   // The agent's copy runs fewer paths than the page's: the summary it needs is stable at 500.
   const simulation = timeline && (args.assumptions.simulation.lossRate > 0 || args.assumptions.simulation.dispersion > 0 || args.assumptions.simulation.holdSpreadYears > 0)
-    ? simulateFund(forecast, args.assumptions, args.assumptions.pacing, { ...args.assumptions.simulation, runs: Math.min(500, args.assumptions.simulation.runs) }, baseline)
+    ? simulateFund(forecast, args.assumptions, args.assumptions.pacing, { ...args.assumptions.simulation, runs: Math.min(500, args.assumptions.simulation.runs) }, baseline, waterfall)
     : null
   return {
     vehicle: args.vehicle,
@@ -405,6 +425,8 @@ function constructionResponse(args: {
     warnings: [...forecast.warnings, ...(timeline?.warnings ?? [])],
     asOf: now.toISOString(),
     timeline,
+    timelineNetOfCarry: !!net,
+    grossTimeline: net && gross.stated ? gross : null,
     simulation,
   }
 }

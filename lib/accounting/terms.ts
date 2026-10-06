@@ -1,3 +1,5 @@
+import { loadOwnership } from './load'
+import { loadPositions, type LpPosition } from './lp-positions'
 // Allocation configuration: what the close splits P&L on, how each partner's
 // commitment has changed over time, and which partners bear which categories.
 //
@@ -15,7 +17,6 @@ export type AllocationBasis = 'commitment' | 'capital_balance'
  *                  reconstructed history, so entering them would double-count capital.
  *   cutover      — books begin at a date with an explicit opening-balance entry.
  */
-export type HistoryMode = 'full_history' | 'cutover' | null
 
 export type AllocationCategory =
   | 'management_fee'
@@ -71,8 +72,10 @@ export function commitmentsFrom(
   asOf?: string | null,
 ): Map<string, number> {
   const fromEvents = commitmentsAsOf(events, asOf)
-  if (Array.from(fromEvents.values()).some(v => v > 0)) return fromEvents
-  return new Map(owners.map(o => [o.lpEntityId, o.commitment]))
+  const withHistory = new Set(events.map(e => e.lpEntityId))
+  const resolved = new Map(owners.filter(o => !withHistory.has(o.lpEntityId)).map(o => [o.lpEntityId, o.commitment]))
+  for (const [id, amount] of fromEvents) resolved.set(id, amount)
+  return resolved
 }
 
 /**
@@ -95,12 +98,35 @@ export function resolveCommitmentMap(input: {
   asOf?: string | null
 }): Map<string, number> {
   const base = commitmentsFrom(input.events ?? [], input.owners, input.asOf)
-  if (input.source && input.source !== 'ledger' && input.positions && input.positions.size > 0) {
+  if (input.positions && input.positions.size > 0) {
     const merged = new Map(base)
     for (const [id, c] of Array.from(input.positions.entries())) merged.set(id, c)
     return merged
   }
   return base
+}
+
+/** A reported commitment is an anchor; later commitment events are signed changes. */
+export function resolveDatedCommitments(events: CommitmentEvent[], owners: { lpEntityId: string; commitment: number }[], positions: LpPosition[], asOf?: string | null): Map<string, number> {
+  const result = commitmentsFrom(events, owners, asOf)
+  const latest = new Map<string, LpPosition>()
+  for (const p of positions) {
+    if (p.commitment == null || (asOf && p.asOfDate > asOf)) continue
+    const previous = latest.get(p.lpEntityId)
+    if (!previous || p.asOfDate > previous.asOfDate) latest.set(p.lpEntityId, p)
+  }
+  for (const [id, p] of latest) {
+    const changes = events.filter(e => e.lpEntityId === id && e.effectiveDate > p.asOfDate && (!asOf || e.effectiveDate <= asOf))
+    result.set(id, roundCents(p.commitment! + changes.reduce((sum, e) => sum + e.amount, 0)))
+  }
+  return result
+}
+
+export async function loadResolvedCommitments(admin: SupabaseClient, fundId: string, group: string, asOf?: string | null) {
+  const [events, owners, positions] = await Promise.all([
+    loadCommitmentEvents(admin, fundId, group), loadOwnership(admin, fundId, group), loadPositions(admin, fundId, group, asOf ?? undefined),
+  ])
+  return resolveDatedCommitments(events, owners, positions, asOf)
 }
 
 export interface WeightInput {
@@ -175,40 +201,6 @@ export async function loadAllocationBasis(
     .maybeSingle()
   const basis = (data as any)?.allocation_basis
   return basis === 'capital_balance' ? 'capital_balance' : 'commitment'
-}
-
-/** How the vehicle's books were started. Null until the user chooses. */
-export async function loadHistoryMode(
-  admin: SupabaseClient,
-  fundId: string,
-  group: string
-): Promise<HistoryMode> {
-  const vehicleId = await vehicleIdByName(admin, fundId, group)
-  const { data } = await admin
-    .from('vehicle_accounting_settings' as any)
-    .select('history_mode')
-    .eq('fund_id', fundId)
-    .eq('vehicle_id', vehicleId)
-    .maybeSingle()
-  const mode = (data as any)?.history_mode
-  return mode === 'full_history' || mode === 'cutover' ? mode : null
-}
-
-export async function saveHistoryMode(
-  admin: SupabaseClient,
-  fundId: string,
-  group: string,
-  mode: HistoryMode
-): Promise<{ ok: true } | { error: string }> {
-  const vehicleId = await vehicleIdByName(admin, fundId, group)
-  const { error } = await admin
-    .from('vehicle_accounting_settings' as any)
-    .upsert(
-      { fund_id: fundId, vehicle_id: vehicleId, history_mode: mode, updated_at: new Date().toISOString() },
-      { onConflict: 'fund_id,vehicle_id' }
-    )
-  if (error) return { error: error.message }
-  return { ok: true }
 }
 
 export async function saveAllocationBasis(

@@ -24,7 +24,7 @@ const CATEGORIES: { key: Category; label: string }[] = [
   { key: 'carried_interest', label: 'Carried interest' },
 ]
 
-export function AllocationTermsView() {
+export function AllocationTermsView({ showHeader = true }: { showHeader?: boolean } = {}) {
   const currency = useCurrency()
   const fmt = (v: number) => formatCurrencyPrice(v, currency)
   const lf = useLedgerFetch()
@@ -189,10 +189,12 @@ export function AllocationTermsView() {
 
       {/* Per-partner terms — actions (Add LP / Change Commitment / Basis) share one panel */}
       <div>
+        {showHeader && <>
         <p className="text-sm font-medium mb-1">Partners</p>
         <p className="text-xs text-muted-foreground mb-2">
           Add partners, change commitments, record transfers, and set expense allocations.
         </p>
+        </>}
 
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => { setShowBasis(false); if (showAdd) { setShowAdd(false) } else { setShowAdd(true); setShowChange(false) } }}>

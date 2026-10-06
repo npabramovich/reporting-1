@@ -70,7 +70,7 @@ export function MancoOverview() {
     const pad = (n: number) => String(n).padStart(2, '0')
     const end = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
     const win = `start=${now.getFullYear()}-01-01&end=${end}`
-    const entries = await Promise.all(list.filter(m => m.chartSeeded).map(async m => {
+    const entries = await Promise.all(list.map(async m => {
       const fr = await fetch(`/api/manco/overview?group=${encodeURIComponent(m.name)}&${win}`).catch(() => null)
       const d = fr && fr.ok ? await fr.json().catch(() => null) : null
       return [m.id, d ? {
@@ -119,7 +119,7 @@ export function MancoOverview() {
           <tbody>
             {mancos.map(m => {
               const f = figures[m.id]
-              const loading = m.chartSeeded && !(m.id in figures)
+              const loading = !(m.id in figures)
               return (
                 <tr key={m.id} className="border-t hover:bg-muted/30">
                   <td className="px-3 py-2 font-medium">
@@ -130,13 +130,7 @@ export function MancoOverview() {
                       </span>
                     )}
                   </td>
-                  {!m.chartSeeded ? (
-                    <td className="px-3 py-2 text-muted-foreground" colSpan={5}>
-                      No chart of accounts yet &mdash;{' '}
-                      <Link href="/funds/status" className="hover:underline text-foreground">set up its books</Link> to
-                      start keeping them.
-                    </td>
-                  ) : loading ? (
+                  {loading ? (
                     <td className="px-3 py-2 text-muted-foreground" colSpan={5}>
                       <Loader2 className="inline h-3.5 w-3.5 animate-spin" />
                     </td>

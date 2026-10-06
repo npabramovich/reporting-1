@@ -10,18 +10,18 @@ import { lpRatios } from '@/lib/lp-metrics'
 export interface OverviewVehicle {
   name: string
   commitment: number
-  called: number
-  distributed: number
-  nav: number
+  called: number | null
+  distributed: number | null
+  nav: number | null
   dpi: number | null
   tvpi: number | null
 }
 
 export interface OverviewTotals {
   commitment: number
-  called: number
-  distributed: number
-  nav: number
+  called: number | null
+  distributed: number | null
+  nav: number | null
   dpi: number | null
   tvpi: number | null
 }
@@ -50,8 +50,9 @@ const num = (x: number | string | null | undefined): number => {
   const n = typeof x === 'number' ? x : parseFloat(String(x ?? ''))
   return Number.isFinite(n) ? n : 0
 }
-const ratio = (numerator: number, denominator: number): number | null =>
-  denominator > 0 ? numerator / denominator : null
+const add = (a: number | null, b: number | null): number | null => a == null || b == null ? null : a + b
+const ratio = (numerator: number | null, denominator: number | null): number | null =>
+  numerator != null && denominator != null && denominator > 0 ? numerator / denominator : null
 
 /**
  * Build the overview from investment rows (each row = one entity's position in
@@ -103,16 +104,16 @@ export function buildOverview(
       vehicleMap.set(key, v)
     }
     const c = num(r.commitment), cl = called(r), d = num(r.distributions), n = navOf(r)
-    v.commitment += c; v.called += cl; v.distributed += d; v.nav += n
-    totals.commitment += c; totals.called += cl; totals.distributed += d; totals.nav += n
+    v.commitment += c; v.called = add(v.called, cl); v.distributed = add(v.distributed, d); v.nav = add(v.nav, n)
+    totals.commitment += c; totals.called = add(totals.called, cl); totals.distributed = add(totals.distributed, d); totals.nav = add(totals.nav, n)
   }
 
   for (const v of Array.from(vehicleMap.values())) {
     v.dpi = ratio(v.distributed, v.called)
-    v.tvpi = ratio(v.distributed + v.nav, v.called)
+    v.tvpi = ratio(add(v.distributed, v.nav), v.called)
   }
   totals.dpi = ratio(totals.distributed, totals.called)
-  totals.tvpi = ratio(totals.distributed + totals.nav, totals.called)
+  totals.tvpi = ratio(add(totals.distributed, totals.nav), totals.called)
 
   const vehicles = Array.from(vehicleMap.values()).sort((a, b) => b.commitment - a.commitment)
 
@@ -133,9 +134,9 @@ export function buildOverview(
 export interface LiveOverviewRow {
   portfolio_group: string | null
   commitment: number
-  paid_in_capital: number
-  distributions: number
-  nav: number
+  paid_in_capital: number | null
+  distributions: number | null
+  nav: number | null
 }
 
 /**
@@ -155,9 +156,9 @@ export function overviewFromLive(
     const key = (r.portfolio_group ?? '').trim() || 'Investment'
     let v = vehicleMap.get(key)
     if (!v) { v = { name: key, commitment: 0, called: 0, distributed: 0, nav: 0, dpi: null, tvpi: null }; vehicleMap.set(key, v) }
-    const c = num(r.commitment), cl = num(r.paid_in_capital), d = num(r.distributions), n = num(r.nav)
-    v.commitment += c; v.called += cl; v.distributed += d; v.nav += n
-    totals.commitment += c; totals.called += cl; totals.distributed += d; totals.nav += n
+    const c = num(r.commitment), cl = r.paid_in_capital, d = r.distributions, n = r.nav
+    v.commitment += c; v.called = add(v.called, cl); v.distributed = add(v.distributed, d); v.nav = add(v.nav, n)
+    totals.commitment += c; totals.called = add(totals.called, cl); totals.distributed = add(totals.distributed, d); totals.nav = add(totals.nav, n)
   }
   for (const v of Array.from(vehicleMap.values())) {
     const rr = lpRatios({ commitment: v.commitment, paidIn: v.called, distributions: v.distributed, nav: v.nav })

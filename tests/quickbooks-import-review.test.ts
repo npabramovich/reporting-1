@@ -23,6 +23,7 @@ beforeEach(() => {
       { id: 'cash', fund_id: 'tenant', vehicle_id: 'vehicle-2', code: '1000', name: 'Cash', type: 'asset', subtype: 'cash', is_active: true },
       { id: 'other-lp', fund_id: 'tenant', vehicle_id: 'vehicle-1', code: '3100-other', name: "Partners' capital — Fund I LP", type: 'equity', subtype: 'lp_capital', lp_entity_id: 'lp1', is_active: true },
     ],
+    fund_vehicles: [{ id: 'vehicle-2', fund_id: 'tenant', name: 'Fund II', kind: 'fund' }],
     qb_account_mappings: [], companies: [], fund_holding_terms: [],
   }
   ensureInvestmentAccounts.mockReset().mockImplementation(async (_a, _f, _g, holdings) => new Map(holdings.map((h: any) => [h.id, { costId: 'cost' }])))
@@ -57,7 +58,8 @@ describe('QuickBooks import review routes', () => {
     const res = await parse(req({ text: 'Date,Transaction Type,Num,Account,Debit,Credit\n01/01/2026,Journal Entry,1,Cash,100,\n,,,Partners capital,,100' }))
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.accounts.find((a: any) => a.qbAccount === 'Partners capital').code).toBeNull()
+    expect(body.accounts.find((a: any) => a.qbAccount === 'Partners capital').code).not.toBe('3100-other')
+    expect(writes).toEqual([])
     expect(body.accounts.find((a: any) => a.qbAccount === 'Cash').lineCount).toBe(1)
   })
 

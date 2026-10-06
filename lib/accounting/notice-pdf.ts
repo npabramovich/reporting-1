@@ -24,7 +24,8 @@ function esc(s: string): string {
 }
 
 /** Accounting convention: negatives in parentheses, a dash for exactly zero. */
-function money(v: number, currency: string): string {
+function money(v: number | null, currency: string): string {
+  if (v == null) return '—'
   if (Math.abs(v) < 0.005) return '—'
   const n = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const sym = getCurrencySymbol(currency)
@@ -59,7 +60,7 @@ export interface NoticeData {
    * balance. Supplied by the caller as label/value pairs so the register stays the only
    * source of the amount itself.
    */
-  context?: { label: string; value: number }[]
+  context?: { label: string; value: number | null }[]
 }
 
 const TITLE: Record<NoticeKind, string> = {
@@ -73,7 +74,7 @@ const TITLE: Record<NoticeKind, string> = {
  */
 export function buildNoticeHtml(d: NoticeData): string {
   const { currency, displayFont } = d
-  const m = (v: number) => money(v, currency)
+  const m = (v: number | null) => money(v, currency)
   const isCall = d.kind === 'capital_call'
 
   const contextRows = (d.context ?? []).map(c => `
@@ -167,7 +168,7 @@ export interface ReceiptData {
   /** The call this funds: its date, number and the partner's line on it. */
   call: { date: string; number: number | null; description: string | null; amount: number; outstanding: number }
   /** The partner's standing position after this funding. */
-  context?: { label: string; value: number }[]
+  context?: { label: string; value: number | null }[]
 }
 
 /**
@@ -179,7 +180,7 @@ export interface ReceiptData {
  */
 export function buildReceiptHtml(d: ReceiptData): string {
   const { currency, displayFont } = d
-  const m = (v: number) => money(v, currency)
+  const m = (v: number | null) => money(v, currency)
   const callTitle = `Capital Call${d.call.number ? ` No. ${d.call.number}` : ''} dated ${d.call.date}`
 
   const callRows = `

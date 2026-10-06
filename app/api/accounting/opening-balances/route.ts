@@ -1,3 +1,5 @@
+import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
+import { ensureVehicleAccounts } from '@/lib/accounting/provision-accounts'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -31,6 +33,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'entryDate and at least one balance are required' }, { status: 400 })
   }
 
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(entryDate) || !Number.isFinite(Date.parse(entryDate)) || new Date(entryDate).toISOString().slice(0, 10) !== entryDate) {
+    return NextResponse.json({ error: 'A valid opening date is required' }, { status: 400 })
+  }
+  if (new Set(balances.map(b => b.lpEntityId)).size !== balances.length || balances.some(b => !b.lpEntityId || !Number.isFinite(Number(b.amount)))) {
+    return NextResponse.json({ error: 'Provide one finite balance per partner' }, { status: 400 })
+  }
+  const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
+  const { data: existing, error: overlapError } = await admin.from('journal_postings' as any)
+    .select('id').eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId).eq('book', 'actual')
+    .in('lp_entity_id', balances.map(b => b.lpEntityId)).limit(1)
+  if (overlapError) return NextResponse.json({ error: 'Could not check existing capital entries' }, { status: 500 })
+  if (existing?.length) return NextResponse.json({ error: 'These partners already have accounting entries. Reconcile existing balances before importing an opening balance.' }, { status: 409 })
+
+  await ensureVehicleAccounts(admin, gate.fundId, group)
   const codes = await accountIdByCode(admin, gate.fundId, group)
   const offsetId = codes.get(offsetCode)
   if (!offsetId) return NextResponse.json({ error: `Offset account ${offsetCode} not found — seed the chart first` }, { status: 400 })
@@ -49,7 +65,7 @@ export async function POST(req: NextRequest) {
   }
   postings.push({ accountId: offsetId, amount: total, currency: 'USD', lpEntityId: null })
 
-  const entry: JournalEntry = { fundId: gate.fundId, entryDate, memo: 'Opening balances (cutover)', sourceType: 'opening_balance', postings }
+  const entry: JournalEntry = { fundId: gate.fundId, entryDate, memo: 'Opening balances', sourceType: 'opening_balance', sourceRef: 'partner-opening', postings }
   const result = await persistEntry(admin, gate.fundId, group, user.id, entry, 'posted')
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 })
 

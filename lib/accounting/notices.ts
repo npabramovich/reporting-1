@@ -19,7 +19,6 @@ import { loadEntityNames } from './load'
 import { vehicleIdByName } from './vehicle-id'
 import { displayFontOf } from '@/lib/theme'
 import { ACTUAL_BOOK } from './books'
-import { loadCapitalSource } from './capital-source'
 import { resolveLpRecipients } from '@/lib/lp-recipients'
 import { getOutboundConfig, sendOutboundEmail, type EmailAttachment } from '@/lib/email'
 import { buildLpEmailHtml, siteUrl } from '@/lib/lp-email'
@@ -59,7 +58,6 @@ export async function loadNoticeRegister(
   id: string,
 ): Promise<NoticeRegister | { error: string; status: number }> {
   const vehicleId = await vehicleIdByName(admin, fundId, group)
-  const tracking = (await loadCapitalSource(admin, fundId, group)) !== 'ledger'
 
   let row: any
   let entryIds: string[] = []
@@ -100,7 +98,7 @@ export async function loadNoticeRegister(
   // has no record of owing or being owed. A tracking vehicle keeps no entry; there the register
   // row is the record, and 'issued' / 'declared' is the check.
   let posted = false
-  if (tracking) {
+  if (entryIds.length === 0) {
     posted = row.status === 'issued' || row.status === 'declared'
     if (!posted) return { error: `That is still a ${row.status}; issue it before sending notices.`, status: 400 }
   } else {
@@ -130,7 +128,7 @@ export async function loadNoticeRegister(
       ? { returnOfCapital: Number(row.wf_return_of_capital), preferred: Number(row.wf_preferred ?? 0), lpTotal }
       : null,
     posted,
-    tracking,
+    tracking: entryIds.length === 0,
   }
 }
 
@@ -216,7 +214,7 @@ export async function publishNotices(
       const row = summaryByLp.get(line.lpEntityId)
       // Context is the partner's standing position, which legitimately moves. The AMOUNT is
       // the frozen register line and never comes from here.
-      const context: { label: string; value: number }[] = []
+      const context: { label: string; value: number | null }[] = []
       if (reg.kind === 'capital_call' && row) {
         context.push(
           { label: 'Commitment', value: row.commitment },
@@ -497,6 +495,7 @@ export interface ReceiptCandidate {
   /** What has arrived against the line, and when the latest of it arrived. */
   received: number
   receivedOn: string | null
+  settlementReview?: string
   outstanding: number
   /** The last receipt emailed for this line, if any. */
   lastReceiptAt: string | null
@@ -538,7 +537,7 @@ export async function receiptCandidates(
       return {
         lineId: l.id, lpEntityId: l.lpEntityId, name: l.name,
         received: l.settled, receivedOn: l.lastSettlementOn, outstanding: l.outstanding,
-        lastReceiptAt: lastAt, due, investorId: investorByEntity.get(l.lpEntityId) ?? null,
+        settlementReview: l.settlementReview, lastReceiptAt: lastAt, due: due && !l.settlementReview, investorId: investorByEntity.get(l.lpEntityId) ?? null,
       }
     }),
   }
@@ -561,6 +560,7 @@ export async function sendReceipts(
   if ('error' in found) return found
   const requested = opts.lineIds ?? []
   const targets = found.candidates.filter(c => requested.length === 0 ? c.due : requested.includes(c.lineId))
+  if (targets.some(c => c.settlementReview)) return { error: 'Reconcile manual payments with accounting records before issuing receipts for these lines.', status: 409 }
   if (targets.length === 0) return { error: 'Nothing to receipt: no selected line has money against it', status: 400 }
 
   const [fundRes, settingsRes, summary] = await Promise.all([

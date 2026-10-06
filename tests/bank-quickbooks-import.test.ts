@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server'
 const { from, persistEntry } = vi.hoisted(() => ({ from: vi.fn(), persistEntry: vi.fn() }))
 vi.mock('@/lib/accounting/persist', () => ({ accountIdByCode: async () => new Map([['1000', 'cash'], ['5100', 'expense']]), persistEntry }))
 vi.mock('@/lib/accounting/vehicle-id', () => ({ vehicleIdByName: async () => 'vehicle-2' }))
+vi.mock('@/lib/accounting/provision-accounts', () => ({ ensureVehicleAccounts: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@/lib/accounting/vendors', () => ({ vendorResolver: () => async () => null }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) } }) }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from }) }))

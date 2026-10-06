@@ -67,7 +67,10 @@ export async function ensureCapitalAccounts(
       subtype: 'lp_capital',
       lp_entity_id: id,
     }))
-    const { data: created } = await admin.from('chart_of_accounts' as any).insert(rows).select('id, lp_entity_id')
+    const { error } = await admin.from('chart_of_accounts' as any).upsert(rows, { onConflict: 'fund_id,portfolio_group,code', ignoreDuplicates: true })
+    if (error) throw error
+    const { data: created, error: readError } = await admin.from('chart_of_accounts' as any).select('id, lp_entity_id').eq('fund_id', fundId).eq('vehicle_id', vehicleId).in('lp_entity_id', missing)
+    if (readError) throw readError
     for (const a of ((created as any[]) ?? [])) map.set(a.lp_entity_id, a.id)
   }
   return map

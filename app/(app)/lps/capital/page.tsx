@@ -10,9 +10,11 @@ export const metadata: Metadata = { title: 'LP capital accounts' }
  * LP capital accounts, in the LPs section — the canonical home for them.
  *
  * Gated on `lp_tracking`, NOT on accounting: this works whether or not the fund keeps books.
- * When a vehicle is on the ledger, the accounts come from it; otherwise they come from the
- * pasted / manually-entered dated positions edited on this same page. Either way it is the
- * same capital-account statement — a tracking-only one just has fewer lines.
+ * (`lp_tracking` is a feature-visibility domain, not the retired entity-wide accounting mode.)
+ * The accounts are resolved per partner and date from whatever evidence supports them — posted
+ * postings, or the pasted / manually-entered dated positions edited on this same page, or both
+ * with the overlap excluded. Either way it is the same capital-account statement; a vehicle with
+ * only reported observations simply has fewer lines behind each figure.
  */
 export default async function LpCapitalPage() {
   const user = await getUser()

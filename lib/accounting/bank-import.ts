@@ -1,3 +1,5 @@
+import { reviewImport, type ImportReview } from './import-review'
+import { ensureVehicleAccounts } from './provision-accounts'
 // Shared bank-import logic used by the REST route and the agent tool, so humans
 // and agents ingest through the identical path: parse → dedup → stage → draft.
 
@@ -10,6 +12,7 @@ import { vendorResolver } from './vendors'
 import { clearQuickBooksMatch, loadQuickBooksCashEntries, quickBooksCandidates, quickBooksClaimHash, quickBooksAlreadyClaimed, readAll } from './bank-quickbooks-match'
 
 export interface ImportResult {
+  importReview?: ImportReview
   imported: number
   skipped: number
   matched: number
@@ -26,11 +29,18 @@ export async function importBankTransactions(
   group: string,
   userId: string | null,
   csv: string,
-  source = 'csv'
-): Promise<ImportResult | { error: string; errors?: string[] }> {
+  source = 'csv',
+  reviewToken?: string,
+  includeLp = false,
+): Promise<ImportResult | { error: string; errors?: string[]; importReview?: ImportReview }> {
   const { rows, errors } = parseTransactionsCsv((csv ?? '').toString())
   if (rows.length === 0) return { error: errors[0] ?? 'No transactions found', errors }
 
+  let importReview: ImportReview
+  try { importReview = await reviewImport(admin, fundId, group, { bankRows: rows, includeLp }) }
+  catch (e) { return { error: `Could not compare existing records: ${(e as Error).message ?? 'Read failed'}` } }
+  if (importReview.differences.length && reviewToken !== importReview.token) return { error: 'Review the differences with investment and LP records before importing.', importReview }
+  await ensureVehicleAccounts(admin, fundId, group)
   const codes = await accountIdByCode(admin, fundId, group)
   const cashId = codes.get('1000')
   if (!cashId) return { error: 'Seed the chart of accounts first' }
@@ -95,7 +105,7 @@ export async function importBankTransactions(
         txn_date: row.date, amount: row.amount, description: row.description,
         counterparty: row.counterparty ?? null, status: match ? 'reconciled' : 'unmatched',
         journal_entry_id: match?.id ?? null, imported_by: userId,
-        raw: { ...row, bankImportHash: hash, quickbooksReview: true, quickbooksCashAmount: match?.amount ?? null },
+        raw: { ...row, importDifferences: importReview.differences.filter(d => d.date === row.date).map(d => d.domain === 'lp' ? { ...d, name: 'Partner match needed', recorded: null, difference: null } : d), bankImportHash: hash, quickbooksReview: true, quickbooksCashAmount: match?.amount ?? null },
       })
       if (error) { errors.push(`${row.date} ${row.description}: ${error.message}`); continue }
       seen.add(hash)
@@ -133,7 +143,7 @@ export async function importBankTransactions(
       journal_entry_id: result.entryId,
       suggested_account_code: cat.accountCode,
       imported_by: userId,
-      raw: row,
+      raw: { ...row, importDifferences: importReview.differences.filter(d => d.date === row.date).map(d => d.domain === 'lp' ? { ...d, name: 'Partner match needed', recorded: null, difference: null } : d) },
     })
     if (insErr) {
       // The entry exists but its bank transaction doesn't — most often because a concurrent
@@ -152,5 +162,5 @@ export async function importBankTransactions(
     imported++
   }
 
-  return { imported, skipped, matched, needsReview, skippedRows, errors }
+  return { importReview, imported, skipped, matched, needsReview, skippedRows, errors }
 }

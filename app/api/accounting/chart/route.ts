@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
   if (missing.length === 0) return NextResponse.json({ seeded: 0, message: 'Chart already up to date' })
 
   const rows = missing.map(a => ({ fund_id: gate.fundId, portfolio_group: group, vehicle_id: vehicleId, code: a.code, name: a.name, type: a.type, subtype: a.subtype ?? null }))
-  const { data, error } = await admin.from('chart_of_accounts' as any).insert(rows).select('*')
+  const { data, error } = await admin.from('chart_of_accounts' as any).upsert(rows, { onConflict: 'fund_id,portfolio_group,code', ignoreDuplicates: true }).select('*')
   if (error) return dbError(error, 'accounting-chart-seed')
   return NextResponse.json({ seeded: (data as any[])?.length ?? 0, accounts: data ?? [] })
 }

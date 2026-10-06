@@ -46,6 +46,7 @@ const ALLOWLIST = new Map<string, string>([
   ['app/api/accounting/deal-carry/route.ts', 'deal-by-deal carry is computed over every position, funds included'],
   ['lib/accounting/investments.ts', 'per-holding account triplets and ledger balances cover both kinds'],
   ['lib/accounting/fund-timeseries.ts', 'cost and value over time cover every position, funds included'],
+  ['lib/accounting/import-review.ts', 'compares imported books to every investment position, including fund holdings'],
   ['lib/accounting/status.ts', 'the schedule-of-investments tie-out must cover every ledger position'],
   ['lib/accounting/statement-package.ts', 'the SOI needs both kinds to tie to the ledger; it splits them for display by holdingType'],
   ['lib/accounting/close.ts', 'the pre-close quoted-position check values every ledger position; a feed is what selects them, not holding_type'],

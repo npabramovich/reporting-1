@@ -6,7 +6,7 @@ import { Loader2, Check, AlertTriangle, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrencyFull } from '@/components/currency-context'
 import { useAccess } from '@/components/access-context'
-import { VEHICLE_KIND_LABELS, isVehicleKind, isManagementCompany } from '@/lib/vehicle-kinds'
+import { VEHICLE_KIND_LABELS, isVehicleKind } from '@/lib/vehicle-kinds'
 import { hasSectionForKind, sectionForSlug } from '@/lib/accounting/nav'
 import { withCapitalAction, type CapitalAction } from '@/lib/accounting/capital-action'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -200,8 +200,6 @@ export function FirmVehiclesTable({
   const [data, setData] = useState<Overview | null>(null)
   const [manco, setManco] = useState<MancoState[]>([])
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -220,24 +218,6 @@ export function FirmVehiclesTable({
     }).finally(() => setLoading(false))
   }, [canSeeBooks, canSeeManco])
   useEffect(() => { load() }, [load])
-
-  // Seed (or complete) a management company's chart of accounts — the one setup step a manco has
-  // that a fund does on its Admin page. Kept here because a manco whose chart is not seeded has
-  // no ledger pages worth opening yet, so the row offers this instead of a link.
-  async function setUp(m: MancoState) {
-    setBusy(m.id); setError(null)
-    const res = await fetch('/api/manco/setup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ group: m.name }),
-    })
-    setBusy(null)
-    if (!res.ok) {
-      setError((await res.json().catch(() => ({}))).error ?? 'Could not set up the chart of accounts')
-      return
-    }
-    load()
-  }
 
   if (loading) {
     return <div className="p-8 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
@@ -290,12 +270,6 @@ export function FirmVehiclesTable({
         {addButton}
       </div>
 
-      {error && (
-        <div className="rounded-card border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
       <div className="rounded-card border overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-muted-foreground">
@@ -314,26 +288,16 @@ export function FirmVehiclesTable({
               const m = r.id ? mancoById.get(r.id) : undefined
               // A management company whose chart is not the manco chart yet has nothing to open:
               // its row offers the setup step where the link would be.
-              const needsSetup = !!m && !m.chartSeeded
               const target = withCapitalAction(section ? `${base}/${section}` : base, action)
               const cell = (label: string | number, href: string, warn = false) => (
-                needsSetup
-                  ? <span className={warn ? 'text-warning' : undefined}>{label}</span>
-                  : <Link href={`${base}${href}`} className={warn ? 'text-warning hover:underline' : 'hover:underline'}>{label}</Link>
+                <Link href={`${base}${href}`} className={warn ? 'text-warning hover:underline' : 'hover:underline'}>{label}</Link>
               )
               return (
                 <tr key={r.id ?? r.name} className="border-t">
                   <td className="px-3 py-2 font-medium">
-                    {needsSetup ? r.name : <Link href={target} className="hover:underline">{r.name}</Link>}
+                    <Link href={target} className="hover:underline">{r.name}</Link>
                     {m && !m.active && (
                       <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-caption font-normal text-muted-foreground">Inactive</span>
-                    )}
-                    {needsSetup && (
-                      <p className="mt-0.5 text-caption font-normal text-muted-foreground">
-                        {m!.convertedFromOtherChart
-                          ? `${m!.accountCount} accounts, but ${m!.missingAccounts} management-company accounts are missing.`
-                          : 'No chart of accounts yet.'}
-                      </p>
                     )}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{kindLabel(r.kind)}</td>
@@ -343,16 +307,9 @@ export function FirmVehiclesTable({
                     </td>
                   ))}
                   <td className="px-3 py-2 text-right whitespace-nowrap">
-                    {needsSetup ? (
-                      <Button size="sm" onClick={() => setUp(m!)} disabled={busy === m!.id}>
-                        {busy === m!.id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-                        {m!.convertedFromOtherChart ? 'Add missing accounts' : 'Set up accounting'}
-                      </Button>
-                    ) : (
-                      <Button asChild variant="outline" size="sm">
-                        <Link href={target}>Open <ArrowRight className="ml-1 h-3.5 w-3.5" /></Link>
-                      </Button>
-                    )}
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={target}>Open <ArrowRight className="ml-1 h-3.5 w-3.5" /></Link>
+                    </Button>
                   </td>
                 </tr>
               )

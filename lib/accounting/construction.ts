@@ -198,6 +198,8 @@ export interface ConstructionActuals {
   committedCapital: number
   /** From capital accounts. Optional for backwards-compatible pure-model callers. */
   calledCapital?: number
+  /** Complete resolved capital figures, independent of whether journal entries exist. */
+  capitalAvailable?: boolean
   /** From capital accounts. Optional for backwards-compatible pure-model callers. */
   uncalledCapital?: number
   /** Capital returned to partners to date. */

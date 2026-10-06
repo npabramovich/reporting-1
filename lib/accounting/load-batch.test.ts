@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { loadLedgerRowsBatch, assembleLoadedLedger } from './load'
+import { fetchAllRows, loadLedgerRowsBatch, assembleLoadedLedger } from './load'
 import { loadPositionsBatch } from './lp-positions'
 
 // Chainable fake: every method returns the same thenable resolving to the table's canned rows.
@@ -99,4 +99,12 @@ describe('QuickBooks LP cash attribution', () => {
     expect(ledger.capitalPostings.map(p => p.sourceType)).toEqual(['contribution', 'distribution', 'quickbooks'])
     expect(ledger.sourcedPostings.every(p => p.sourceType === 'quickbooks')).toBe(true)
   })
+})
+
+
+it('refuses to report a truncated ledger when a later page fails', async () => {
+  const make = async (from: number) => from === 0
+    ? { data: [{ id: 'first' }], error: null }
+    : { data: null, error: new Error('Read failed') }
+  await expect(fetchAllRows(make, 1)).rejects.toThrow('Read failed')
 })
