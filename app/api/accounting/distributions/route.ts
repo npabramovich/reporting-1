@@ -6,7 +6,6 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWriteAccess, assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { previewDistribution, declareDistribution, listDistributions } from '@/lib/accounting/distributions'
-import { loadCapitalSource } from '@/lib/accounting/capital-source'
 
 // GET — declared distributions for the vehicle, newest first.
 export async function GET(req: NextRequest) {
@@ -38,11 +37,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
-  if (await loadCapitalSource(admin, gate.fundId, group) !== 'ledger') {
-    return NextResponse.json({
-      error: 'Distributions require accounting. This vehicle uses capital tracking; record dated distributions or proceeds on the LP capital accounts instead.',
-    }, { status: 409 })
-  }
+
 
   if (body?.action === 'preview') {
     const total = Number(body?.total)
@@ -61,6 +56,7 @@ export async function POST(req: NextRequest) {
     const c = body?.character
     const t = body?.tiers
     const result = await declareDistribution(admin, gate.fundId, group, user.id, {
+      requestKey: typeof body.requestKey === 'string' ? body.requestKey.slice(0, 100) : undefined,
       distributionDate: String(body?.distributionDate ?? ''),
       description: body?.description ?? null,
       lines: Array.isArray(body?.lines) ? body.lines : [],

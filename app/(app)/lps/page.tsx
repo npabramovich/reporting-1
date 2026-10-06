@@ -39,12 +39,12 @@ interface LiveRow {
   source: 'ledger' | 'events'
   lookThroughVia?: string
   commitment: number
-  called_capital: number
-  paid_in_capital: number
-  distributions: number
-  nav: number
-  total_value: number
-  outstanding_balance: number
+  called_capital: number | null
+  paid_in_capital: number | null
+  distributions: number | null
+  nav: number | null
+  total_value: number | null
+  outstanding_balance: number | null
   dpi: number | null
   rvpi: number | null
   tvpi: number | null
@@ -57,19 +57,21 @@ interface Payload {
 interface InvestorMeta { id: string; name: string; parent_id: string | null }
 
 interface Totals {
-  commitment: number; paid_in_capital: number; distributions: number; nav: number
-  total_value: number; outstanding_balance: number
+  commitment: number; paid_in_capital: number | null; distributions: number | null; nav: number | null
+  total_value: number | null; outstanding_balance: number | null
   pctFunded: number | null; dpi: number | null; rvpi: number | null; tvpi: number | null; irr: number | null
 }
 
 const moicX = (v: number | null | undefined) => (v == null ? '—' : `${v.toFixed(2)}x`)
 const pctX = (v: number | null | undefined) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`)
 
+const add = (a: number | null, b: number | null): number | null => a == null || b == null ? null : a + b
+
 function total(rows: LiveRow[]): Totals {
-  const t = rows.reduce((a, r) => ({
-    commitment: a.commitment + r.commitment, paid_in_capital: a.paid_in_capital + r.paid_in_capital,
-    distributions: a.distributions + r.distributions, nav: a.nav + r.nav,
-    total_value: a.total_value + r.total_value, outstanding_balance: a.outstanding_balance + r.outstanding_balance,
+  const t = rows.reduce<Omit<Totals, 'pctFunded' | 'dpi' | 'rvpi' | 'tvpi' | 'irr'>>((a, r) => ({
+    commitment: a.commitment + r.commitment, paid_in_capital: add(a.paid_in_capital, r.paid_in_capital),
+    distributions: add(a.distributions, r.distributions), nav: add(a.nav, r.nav),
+    total_value: add(a.total_value, r.total_value), outstanding_balance: add(a.outstanding_balance, r.outstanding_balance),
   }), { commitment: 0, paid_in_capital: 0, distributions: 0, nav: 0, total_value: 0, outstanding_balance: 0 })
   const rr = lpRatios({ commitment: t.commitment, paidIn: t.paid_in_capital, distributions: t.distributions, nav: t.nav })
   return {
@@ -91,7 +93,7 @@ export default function LpsPage() {
 
 function LpsInner() {
   const currency = useCurrency()
-  const fmt = (v: number) => formatCurrencyFull(v, currency)
+  const fmt = (v: number | null) => formatCurrencyFull(v, currency)
   const isAdmin = useIsAdmin()
   const fv = useFeatureVisibility()
   const lpPortalEnabled = useLpPortalEnabled()
@@ -184,7 +186,7 @@ function LpsInner() {
   async function deleteInvestor(inv: { id: string; name: string; rows: LiveRow[]; totals: Totals }) {
     setDelErr(null)
     const t = inv.totals
-    const hasCapital = [t.commitment, t.paid_in_capital, t.distributions, t.nav].some(v => Math.abs(v) > 0.5)
+    const hasCapital = [t.commitment, t.paid_in_capital, t.distributions, t.nav].some(v => v == null || Math.abs(v) > 0.5)
     const ok = await confirm({
       title: `Delete “${inv.name}”?`,
       description: hasCapital
@@ -408,7 +410,7 @@ function LpsInner() {
                                 <Money v={r.commitment} fmt={fmt} small />
                                 <Money v={r.paid_in_capital} fmt={fmt} small />
                                 <Money v={r.outstanding_balance} fmt={fmt} small />
-                                <td className="px-3 py-1.5 text-right tabular-nums text-xs">{pctX(r.commitment > 0 ? r.paid_in_capital / r.commitment : null)}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums text-xs">{pctX(r.commitment > 0 && r.paid_in_capital != null ? r.paid_in_capital / r.commitment : null)}</td>
                                 <Money v={r.distributions} fmt={fmt} small />
                                 <Money v={r.nav} fmt={fmt} small />
                                 <td className="px-3 py-1.5 text-right tabular-nums text-xs">{moicX(r.dpi)}</td>
@@ -480,7 +482,7 @@ function LpsInner() {
   )
 }
 
-function Money({ v, fmt, small }: { v: number; fmt: (n: number) => string; small?: boolean }) {
+function Money({ v, fmt, small }: { v: number | null; fmt: (n: number | null) => string; small?: boolean }) {
   return <td className={`px-3 py-1.5 text-right tabular-nums whitespace-nowrap ${small ? 'text-xs' : ''}`}>{fmt(v)}</td>
 }
 

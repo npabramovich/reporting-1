@@ -6,7 +6,10 @@ export const CONSTRUCTION_TOOL_MANIFEST: AgentToolMeta[] = [
     description:
       'Return portfolio-construction actuals, assumptions, forecasts, and capital availability ' +
       'for one investment vehicle. Use it to answer how much capital remains, how reserves and ' +
-      'new investments are planned, and what portfolio outcomes imply for fund returns.',
+      'new investments are planned, and what portfolio outcomes imply for fund returns. ' +
+      '`timeline` is the same view the construction page headlines: when `timelineNetOfCarry` ' +
+      'is true it is the LP\'s net-of-carry schedule and `grossTimeline` holds the fund-level ' +
+      'gross one. Say which measure a DPI, TVPI or IRR came from; do not quote one as the other.',
     scope: 'read',
     // Fund-scoped dispatch, but the contents are governed by the accounting grant and switch.
     domain: 'portfolio',

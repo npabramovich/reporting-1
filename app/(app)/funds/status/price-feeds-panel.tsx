@@ -70,7 +70,7 @@ function basisNote(q: Quote | null): string {
   return `Indicative price, ${q.as_of_date} — Level 2`
 }
 
-export function PriceFeedsPanel({ onChanged }: { onChanged?: () => void }) {
+export function PriceFeedsPanel({ onChanged, showHeader = true }: { onChanged?: () => void; showHeader?: boolean }) {
   const lf = useLedgerFetch()
   const [feeds, setFeeds] = useState<Feed[]>([])
   const [holdings, setHoldings] = useState<Holding[]>([])
@@ -189,13 +189,13 @@ export function PriceFeedsPanel({ onChanged }: { onChanged?: () => void }) {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
-        <div>
+        {showHeader && (<div>
           <h3 className="text-base font-medium">Price feeds</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             Holdings priced by a market rather than by a round. A feed is what makes a position
             Level 1 or 2 in the fair value hierarchy.
           </p>
-        </div>
+        </div>)}
         <Button size="sm" variant="outline" onClick={() => setAdding(a => !a)} disabled={busy}>
           <Plus className="h-3.5 w-3.5 mr-1" />Add a feed
         </Button>

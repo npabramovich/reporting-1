@@ -1,6 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { SettlementReviewAction } from '@/components/accounting/settlement-review'
+
+import { useCallback, useRef, useEffect, useMemo, useState } from 'react'
 import { useLpPortalEnabled, useIsAdmin } from '@/components/feature-visibility-context'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -15,15 +17,14 @@ import { PeriodPicker } from '@/components/accounting/period-picker'
 import { NoticeAction } from '@/components/accounting/notice-action'
 import { ReceiptAction } from '@/components/accounting/receipt-action'
 import { ReconciliationPanel } from './reconciliation-panel'
-import { type CapitalSource } from '@/lib/accounting/capital-source'
 import { GpPanel } from './gp-panel'
 import { useCanRead } from '@/components/access-context'
 import { CapitalRollforwardTable, type Row } from '@/components/accounting/capital-rollforward-table'
 import { EmptyState } from '@/components/ui/empty-state'
 
 type LineStatus = 'open' | 'partial' | 'settled'
-interface CallLine { id: string; lpEntityId: string; name: string; amount: number; settled: number; outstanding: number; status: LineStatus; settledOn: string | null; ack?: { at: string; wiredOn: string | null; reference: string | null } | null }
-interface RegisterStatus { status: LineStatus; settled: number; outstanding: number; overdue: boolean }
+interface CallLine { manualSettled?: number; settlementReview?: string; id: string; lpEntityId: string; name: string; amount: number; settled: number; outstanding: number; status: LineStatus; settledOn: string | null; ack?: { at: string; wiredOn: string | null; reference: string | null } | null }
+interface RegisterStatus { settlementReview?: string; status: LineStatus; settled: number; outstanding: number; overdue: boolean }
 interface CallRow extends RegisterStatus { id: string; callDate: string; dueDate: string | null; description: string | null; scope: string; total: number; lines: CallLine[] }
 interface Tiers { returnOfCapital: number; preferred: number; catchUp: number; carry: number; profitToLP: number; toLP: number; toGP: number }
 interface DistLine extends CallLine { role: 'lp' | 'carry' }
@@ -55,12 +56,10 @@ export function CapitalAccountsView() {
   const [rows, setRows] = useState<Row[]>([])
   const [calls, setCalls] = useState<CallRow[]>([])
   const [dists, setDists] = useState<DistRow[]>([])
-  const [nav, setNav] = useState(0)
   const [period, setPeriod] = useState<Period | null>(null)
   const [loading, setLoading] = useState(true)
   // Which producer this vehicle's capital comes from. Null until the first load — the
   // mode-specific parts of the page stay hidden rather than flashing the wrong ones.
-  const [source, setSource] = useState<CapitalSource | null>(null)
   // Capital stranded on the pooled account. Reported by the API because it's the one thing
   // that makes every number on this page a lie while looking like a fund with no capital.
   const [stranded, setStranded] = useState<{ stranded: boolean; message: string | null; taggedPostings: number; pooledPostings: number } | null>(null)
@@ -119,22 +118,18 @@ export function CapitalAccountsView() {
       if (asOf) qs.set('asOf', asOf)
     }
     lf(`/api/accounting/capital-accounts?${qs}`)
-      .then(r => (r.ok ? r.json() : { rows: [], nav: 0, calls: [] }))
+      .then(async r => { const data = await r.json(); if (!r.ok) throw new Error(data.error ?? 'Could not load capital accounts'); return data })
       .then(d => {
-        setRows(d.rows ?? []); setNav(d.nav ?? 0); setPeriod(d.period ?? null)
-        setCalls(d.calls ?? []); setSource(d.source ?? null); setStranded(d.stranded ?? null)
+        setRows(d.rows ?? []); setPeriod(d.period ?? null)
+        setCalls(d.calls ?? []); setStranded(d.stranded ?? null)
       })
-      .then(() => lf('/api/accounting/distributions').then(r => (r.ok ? r.json() : [])))
+      .then(() => lf('/api/accounting/distributions').then(async r => { const data = await r.json(); if (!r.ok) throw new Error(data.error ?? 'Could not load distributions'); return data }))
       .then(d => { setDists(Array.isArray(d) ? d : [])
       })
+      .catch(e => setErr(e instanceof Error ? e.message : 'Could not load capital records'))
       .finally(() => setLoading(false))
   }, [lf, preset, start, end, asOf])
   useEffect(() => { load() }, [load])
-
-  // A capital-tracking-only vehicle keeps no receivables, payables, cash ledger, or settlement
-  // workflow. It records dated capital facts only; formal calls and distributions require books.
-  const isEvents = source === 'events'
-  const isLedger = source === 'ledger'
 
   // Open the share dialog with every LP selected by default.
   function openShare() {
@@ -187,7 +182,9 @@ export function CapitalAccountsView() {
     if (isDist) setEdited(true)
   }
 
+  const operationNonce = useRef<string | null>(null)
   async function issue() {
+    operationNonce.current ??= crypto.randomUUID()
     setMsg(null)
     const lines = rows
       .map(r => ({ lpEntityId: r.lpEntityId, amount: Number(amounts[r.lpEntityId]) || 0 }))
@@ -205,19 +202,20 @@ export function CapitalAccountsView() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: isDist
         ? JSON.stringify({
-            action: 'declare', distributionDate: callDate, description: description || null, lines, carryLines,
+            action: 'declare', requestKey: operationNonce.current, distributionDate: callDate, description: description || null, lines, carryLines,
             splitMethod: fromPreview ? preview.method : 'manual',
             tiers: fromPreview && preview.method === 'waterfall' ? preview.tiers : null,
             character: fromPreview && preview.method === 'waterfall' ? preview.suggestedCharacter : undefined,
           })
-        : JSON.stringify({ action: 'issue', callDate, dueDate: dueDate || null, description: description || null, scope: mode, lines }),
+        : JSON.stringify({ action: 'issue', requestKey: operationNonce.current, callDate, dueDate: dueDate || null, description: description || null, scope: mode, lines }),
     })
     const data = await res.json()
     setIssuing(false)
     if (!res.ok) { setMsg({ ok: false, text: data.error ?? (isDist ? 'Could not declare distribution' : 'Could not issue call') }); return }
     setMsg({ ok: true, text: isDist
-      ? (isEvents ? 'Distribution declared. Mark each partner paid as the wires go out.' : 'Distribution declared. The wire that pays it will match automatically.')
-      : (isEvents ? 'Call issued. Mark each partner funded as the wires arrive.' : 'Call issued.') })
+      ? 'Distribution declared. Record or match the payment as it arrives.'
+      : 'Call issued.' })
+    operationNonce.current = null
     setAmounts({}); setCarryAmounts({}); setPreview(null); setEdited(false); setCallTotal(''); setDescription('')
     load()
   }
@@ -246,16 +244,17 @@ export function CapitalAccountsView() {
   // The one word a call or distribution card leads with. Derived at read time from the ledger
   // (lib/accounting/settlement.ts), so it is never stale and never needs a button to advance it.
   function StatusBadge({ r, verb }: { r: RegisterStatus; verb: 'funded' | 'paid' }) {
-    const label = r.status === 'settled' ? (verb === 'funded' ? 'Funded' : 'Paid')
+    const label = r.settlementReview ? 'Review payments' : r.status === 'settled' ? (verb === 'funded' ? 'Funded' : 'Paid')
       : r.status === 'partial' ? (verb === 'funded' ? 'Partly funded' : 'Partly paid')
       : r.overdue ? 'Overdue' : 'Open'
-    const tone = r.status === 'settled' ? 'bg-success text-success-foreground'
+    const tone = r.settlementReview ? 'bg-warning text-warning-foreground' : r.status === 'settled' ? 'bg-success text-success-foreground'
       : r.overdue ? 'bg-destructive text-destructive-foreground'
       : r.status === 'partial' ? 'bg-warning text-warning-foreground' : 'bg-muted text-muted-foreground'
     return <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[11px] font-medium ${tone}`}>{label}</span>
   }
   const lineNote = (l: CallLine, verb: 'funded' | 'paid') =>
-    l.status === 'settled' ? `${verb}${l.settledOn ? ` ${l.settledOn}` : ''}`
+    l.settlementReview ? l.settlementReview
+    : l.status === 'settled' ? `${verb}${l.settledOn ? ` ${l.settledOn}` : ''}`
     : l.status === 'partial' ? `${fmt(l.settled)} ${verb}, ${fmt(l.outstanding)} outstanding`
     : l.ack ? `LP says wired${l.ack.wiredOn ? ` ${l.ack.wiredOn}` : ''}${l.ack.reference ? `, ref ${l.ack.reference}` : ''}`
     : null
@@ -275,10 +274,7 @@ export function CapitalAccountsView() {
         </div>
       )}
 
-      {/* The action row. The statement-period select sits on the RIGHT of the same row (via
-          ml-auto) rather than in its own box — one control strip instead of two stacked
-          panels. Choosing the capital source (ledger vs capital tracking) lives on the Admin
-          page now; it is a fund-setup decision, not something to re-confront on every visit. */}
+      {/* Shared actions and statement-period controls. */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative max-w-xs w-full sm:w-56">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -292,7 +288,7 @@ export function CapitalAccountsView() {
             </button>
           )}
         </div>
-        {isLedger && (
+        {(
           <>
             <Button size="sm" variant="outline" className="hidden text-muted-foreground sm:inline-flex" onClick={() => { setKind('call'); setShowCall(v => !(v && !isDist)) }} disabled={rows.length === 0}>
               <Landmark className="h-4 w-4 mr-1" />Issue a capital call
@@ -385,7 +381,7 @@ export function CapitalAccountsView() {
       </Dialog>
 
       {/* Issue a call — folded in from the old Capital calls page. */}
-      {showCall && isLedger && rows.length > 0 && (
+      {showCall && rows.length > 0 && (
         <div className="border rounded-card p-4 space-y-3">
           <p className="text-sm font-medium">{isDist ? 'Declare a distribution' : 'Issue a capital call'}</p>
           <div className="flex flex-wrap items-end gap-3">
@@ -553,7 +549,7 @@ export function CapitalAccountsView() {
         />
       )}
 
-      {isLedger && calls.length > 0 && (
+      {calls.length > 0 && (
         <div>
           <p className="text-sm font-medium mb-2 mt-4">Issued calls</p>
           <div className="space-y-2">
@@ -576,6 +572,7 @@ export function CapitalAccountsView() {
                   ))}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {c.lines.map(line => <SettlementReviewAction key={line.id} kind="call" line={line} onChanged={load} />)}
                   <NoticeAction kind="capital_call" id={c.id} lines={c.lines} fmt={fmt} />
                   {c.settled > 0 && <div className="mt-2"><ReceiptAction callId={c.id} fmt={fmt} /></div>}
                 </div>
@@ -586,7 +583,7 @@ export function CapitalAccountsView() {
       )}
 
       {/* Declared distributions — the outbound register, read the same way. */}
-      {isLedger && dists.length > 0 && (
+      {dists.length > 0 && (
         <div>
           <p className="text-sm font-medium mb-2 mt-4">Declared distributions</p>
           <div className="space-y-2">
@@ -617,6 +614,7 @@ export function CapitalAccountsView() {
                     </span>
                   ))}
                 </div>
+                {d.lines.map(line => <SettlementReviewAction key={line.id} kind="distribution" line={line} onChanged={load} />)}
                 <NoticeAction kind="distribution" id={d.distributionId} lines={d.lines} fmt={fmt} />
               </div>
             ))}
@@ -624,16 +622,11 @@ export function CapitalAccountsView() {
         </div>
       )}
 
-      {/* The entry surface for a capital-tracking-only vehicle. It sits BELOW the
-          roll-forward because the roll-forward is what it produces — the same order the
-          Journal has to the statements it feeds. */}
-      {/* A capital-tracking vehicle is now EDITED as dated positions, in the LPs section —
-          not as capital events here (that store is no longer read). Point there rather than
-          showing a panel whose writes would go nowhere. */}
-      {isEvents && (
+      {/* Reported observations remain editable alongside accounting records. */}
+      {(
         <div className="pt-6">
           <div className="rounded-card border p-4 text-sm text-muted-foreground">
-            This vehicle is capital-tracked. Add or edit its LP positions on the{' '}
+            Enter reported balances or compare them with the books on the{' '}
             <Link href="/lps/capital" className="text-foreground underline underline-offset-4">LP capital accounts</Link>{' '}
             page.
           </div>
@@ -652,22 +645,14 @@ export function CapitalAccountsView() {
         </div>
       )}
 
-      {/* Reconciling against the incumbent administrator's statement compares one
-          partner's capital account, line by line — so it belongs with the capital
-          accounts, not on Admin.
-
-          It is a CUTOVER check, not a monthly step: it proves this ledger reproduces
-          the numbers the outgoing admin produced. Once you are closing periods here,
-          the ledger IS the record and there is nothing external left to reconcile
-          against. Hence collapsed, and last. Ledger-only: on a capital-tracking vehicle
-          the events ARE the administrator's statement, so there is nothing to tie out to. */}
-      {!isEvents && (
+      {/* Reconciliation is available throughout the life of the entity. */}
+      {(
       <details className="group border rounded-lg mt-6">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium">
           <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
           Tie out to an administrator&rsquo;s statement
           <span className="ml-1 text-xs font-normal text-muted-foreground">
-            a takeover check — prove these accounts reproduce theirs, per partner, per line
+            compare reported balances with the books, per partner and period
           </span>
         </summary>
         <div className="border-t p-3">

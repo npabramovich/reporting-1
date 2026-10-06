@@ -1,3 +1,4 @@
+import { loadResolvedCommitments } from '@/lib/accounting/terms'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -7,14 +8,12 @@ import { assertWriteAccess, assertReadAccess } from '@/lib/api-helpers'
 import { hasAccess, loadAccessContext } from '@/lib/access/effective'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { loadEntityNames, loadEntityClasses, loadOwnership } from '@/lib/accounting/load'
-import { loadCapitalSource } from '@/lib/accounting/capital-source'
 import { commitmentsFromPositions } from '@/lib/accounting/lp-positions'
 import {
   loadAllocationBasis, saveAllocationBasis,
-  loadHistoryMode, saveHistoryMode,
   loadPartnerTerms, savePartnerTerm,
   loadCommitmentEvents, resolveCommitmentMap,
-  type AllocationBasis, type AllocationCategory, type HistoryMode,
+  type AllocationBasis, type AllocationCategory,
 } from '@/lib/accounting/terms'
 
 // GET — the vehicle's allocation basis, every partner's terms, and their current
@@ -31,16 +30,12 @@ export async function GET(req: NextRequest) {
 
   const access = await loadAccessContext(admin, gate.fundId, user.id, gate.role)
 
-  const [basis, historyMode, terms, events, names, classes, owners, source, posCommit] = await Promise.all([
+  const [basis, terms, events, names, classes] = await Promise.all([
     loadAllocationBasis(admin, gate.fundId, group),
-    loadHistoryMode(admin, gate.fundId, group),
     loadPartnerTerms(admin, gate.fundId, group),
     loadCommitmentEvents(admin, gate.fundId, group),
     loadEntityNames(admin, gate.fundId, group),
     loadEntityClasses(admin, gate.fundId, group),
-    loadOwnership(admin, gate.fundId, group),
-    loadCapitalSource(admin, gate.fundId, group),
-    commitmentsFromPositions(admin, gate.fundId, group),
   ])
 
   // The carried-interest terms are each partner's CARRY RATE — gp_economics, not accounting, and
@@ -48,7 +43,7 @@ export async function GET(req: NextRequest) {
   // expenses, gains; commitments; names) is ordinary allocation config that comes with the books.
   const canReadCarry = hasAccess(access, 'gp_economics', 'read')
 
-  const commitments = resolveCommitmentMap({ source, owners, events, positions: posCommit })
+  const commitments = await loadResolvedCommitments(admin, gate.fundId, group)
   const partners = Array.from(names.entries())
     .map(([lpEntityId, name]) => ({
       lpEntityId,
@@ -59,7 +54,7 @@ export async function GET(req: NextRequest) {
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
-  return NextResponse.json({ basis, historyMode, partners, events })
+  return NextResponse.json({ basis, partners, events })
 }
 
 // POST
@@ -88,13 +83,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (body?.action === 'historyMode') {
-    const mode = body?.historyMode as HistoryMode
-    if (mode !== 'full_history' && mode !== 'cutover' && mode !== null) {
-      return NextResponse.json({ error: 'historyMode must be full_history or cutover' }, { status: 400 })
-    }
-    const result = await saveHistoryMode(admin, gate.fundId, group, mode)
-    if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ error: 'History modes are retired. Import dated opening balances or historical transactions directly.' }, { status: 410 })
   }
 
   if (body?.action === 'term') {

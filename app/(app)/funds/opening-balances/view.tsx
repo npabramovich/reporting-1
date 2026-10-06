@@ -21,8 +21,6 @@ export function OpeningBalancesView() {
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState<{ lpCount: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [historyMode, setHistoryMode] = useState<string | null>(null)
-  const [override, setOverride] = useState(false)
   const lf = useLedgerFetch()
 
   useEffect(() => {
@@ -33,7 +31,6 @@ export function OpeningBalancesView() {
     ])
       .then(([ents, settings]) => {
         setEntities(Array.isArray(ents) ? ents : [])
-        setHistoryMode(settings?.historyMode ?? null)
       })
       .finally(() => setLoading(false))
   }, [lf])
@@ -84,31 +81,6 @@ export function OpeningBalancesView() {
     )
   }
 
-  // On a full-history vehicle the ledger already starts at inception, so opening
-  // balances are DERIVED from it. Booking them here would credit every LP's capital a
-  // second time — double-counting the fund's entire contributed capital. Block it
-  // behind an explicit override rather than letting a stray visit corrupt the books.
-  if (historyMode === 'full_history' && !override) {
-    return (
-      <div className="rounded-card border border-warning/40 bg-warning/10 p-4 text-sm space-y-2">
-        <p className="flex items-center gap-2 font-medium text-warning">
-          <AlertTriangle className="h-4 w-4" />This vehicle doesn&rsquo;t need opening balances.
-        </p>
-        <p className="text-muted-foreground">
-          It&rsquo;s set to <strong>full history</strong> — the ledger is reconstructed from inception, so opening
-          balances come from the history itself. Booking them here would credit every partner&rsquo;s capital a
-          second time and double-count the fund&rsquo;s contributed capital.
-        </p>
-        <p className="text-muted-foreground">
-          Continue on the <Link href="/funds" className="underline underline-offset-2 hover:text-foreground">Accounting</Link> page, or{' '}
-          <Link href={fundSeg ? `/funds/${fundSeg}/bank` : '/funds'} className="underline underline-offset-2 hover:text-foreground">import the bank history</Link>.
-        </p>
-        <button onClick={() => setOverride(true)} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
-          I know what I&rsquo;m doing — enter them anyway
-        </button>
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-4 max-w-2xl">

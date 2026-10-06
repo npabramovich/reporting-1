@@ -133,10 +133,10 @@ describe('resolveCommitmentMap', () => {
     expect(m.get('b')).toBe(5750)
   })
 
-  it('ignores positions for a ledger vehicle', () => {
+  it('uses available position commitments regardless of the former mode', () => {
     const positions = new Map([['a', 999999]])
     const m = resolveCommitmentMap({ source: 'ledger', owners, events, positions })
-    expect(m.get('a')).toBe(1000) // ledger: positions never win
+    expect(m.get('a')).toBe(999999)
   })
 
   it('ignores an empty positions map even for a tracking vehicle', () => {

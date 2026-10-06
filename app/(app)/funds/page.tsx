@@ -31,7 +31,7 @@ export default async function AccountingPage() {
     // panel opens below it rather than level with it. AccountingChrome steps aside on this route.
     <div className="pt-4 md:pt-8 pb-8 w-full">
       <AccountingPageHeader title="Entities">
-        Performance per investment vehicle, derived from fund accounting or LP capital accounts,
+        Performance per investment vehicle, derived from reported balances and accounting records,
         and the firm&rsquo;s own operating entities below it.
       </AccountingPageHeader>
 

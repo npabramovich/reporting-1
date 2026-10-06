@@ -8,7 +8,7 @@ const p = (entryDate: string, sourceType: string, capitalDelta: number) => ({
   entryDate, sourceType, amount: -capitalDelta, // store as debit-positive
 })
 
-const at = (points: CapitalSeriesPoint[], label: string) => points.find(x => x.label === label)!
+const at = (points: ReturnType<typeof buildCapitalSeries>, label: string) => points.find(x => x.label === label)!
 
 describe('quarterEndsThrough', () => {
   it('walks quarter-ends from the start quarter through the end date, inclusive', () => {

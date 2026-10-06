@@ -56,7 +56,8 @@ function noNegZero(v: number): number {
   return v
 }
 
-function fmtCurrency(value: number, currency: string): string {
+function fmtCurrency(value: number | null, currency: string): string {
+  if (value == null) return '—'
   const v = noNegZero(value)
   const symbol = getCurrencySymbol(currency)
   if (Math.abs(v) >= 1_000_000) return `${symbol}${(v / 1_000_000).toFixed(1)}M`
@@ -64,7 +65,8 @@ function fmtCurrency(value: number, currency: string): string {
   return v.toLocaleString('en-US', { style: 'currency', currency, maximumFractionDigits: 0 })
 }
 
-function fmtCurrencyFull(value: number, currency: string): string {
+function fmtCurrencyFull(value: number | null, currency: string): string {
+  if (value == null) return '—'
   return noNegZero(value).toLocaleString('en-US', { style: 'currency', currency, maximumFractionDigits: 0 })
 }
 
@@ -117,11 +119,11 @@ export interface ComputedRow {
   /** GP/associate entity the position is held through, if any. */
   lookThroughVia: string | null
   commitment: number
-  paidInCapital: number
-  distributions: number
-  nav: number
-  totalValue: number
-  receivable: number
+  paidInCapital: number | null
+  distributions: number | null
+  nav: number | null
+  totalValue: number | null
+  receivable: number | null
   pctFunded: number | null
   dpi: number | null
   rvpi: number | null
@@ -131,10 +133,10 @@ export interface ComputedRow {
 
 export function computeRow(inv: InvestmentRow): ComputedRow {
   const commitment = Number(inv.commitment) || 0
-  const paidInCapital = Number(inv.paid_in_capital) || Number(inv.called_capital) || 0
-  const distributions = Number(inv.distributions) || 0
-  const nav = Number(inv.nav) || 0
-  const totalValue = Number(inv.total_value) || (distributions + nav)
+  const paidInCapital = inv.paid_in_capital ?? inv.called_capital ?? null
+  const distributions = inv.distributions ?? null
+  const nav = inv.nav ?? null
+  const totalValue = inv.total_value ?? (distributions == null || nav == null ? null : distributions + nav)
   const { pctFunded, dpi, rvpi, tvpi } = lpRatios({ commitment, paidIn: paidInCapital, distributions, nav })
   return {
     id: inv.id,
@@ -142,17 +144,17 @@ export function computeRow(inv: InvestmentRow): ComputedRow {
     portfolioGroup: inv.portfolio_group,
     lookThroughVia: inv.lookThroughVia ?? null,
     commitment, paidInCapital, distributions, nav, totalValue,
-    receivable: Number(inv.receivable) || 0,
+    receivable: inv.receivable ?? null,
     pctFunded, dpi, rvpi, tvpi,
     irr: inv.irr != null ? Number(inv.irr) : null,
   }
 }
 
 export function computeTotals(rows: ComputedRow[]) {
-  let c = 0, p = 0, d = 0, n = 0
-  for (const r of rows) { c += r.commitment; p += r.paidInCapital; d += r.distributions; n += r.nav }
+  const sum = (field: 'paidInCapital' | 'distributions' | 'nav') => rows.some(r => r[field] == null) ? null : rows.reduce((n, r) => n + r[field]!, 0)
+  const c = rows.reduce((n, r) => n + r.commitment, 0), p = sum('paidInCapital'), d = sum('distributions'), n = sum('nav')
   const { pctFunded, dpi, rvpi, tvpi } = lpRatios({ commitment: c, paidIn: p, distributions: d, nav: n })
-  return { commitment: c, paidInCapital: p, distributions: d, nav: n, totalValue: d + n, pctFunded, dpi, rvpi, tvpi }
+  return { commitment: c, paidInCapital: p, distributions: d, nav: n, totalValue: d == null || n == null ? null : d + n, pctFunded, dpi, rvpi, tvpi }
 }
 
 // ---------------------------------------------------------------------------
@@ -175,11 +177,11 @@ export function buildReportHtml(opts: {
   displayFont?: string | null
 }): string {
   const { investorName, rows, totals, excludedGroupNames, fundName, fundLogo, fundAddress, description, footerNote, asOfFormatted, currency, displayFont } = opts
-  const fmt = (v: number) => esc(fmtCurrency(v, currency))
-  const fmtF = (v: number) => esc(fmtCurrencyFull(v, currency))
+  const fmt = (v: number | null) => esc(fmtCurrency(v, currency))
+  const fmtF = (v: number | null) => esc(fmtCurrencyFull(v, currency))
 
-  const summaryText = totals.paidInCapital > 0
-    ? totals.distributions > 0
+  const summaryText = totals.paidInCapital != null && totals.paidInCapital > 0
+    ? totals.distributions != null && totals.distributions > 0
       ? `You have invested <strong>${fmtF(totals.paidInCapital)}</strong>. So far you have received <strong>${fmtF(totals.distributions)}</strong> back, and your current investments are valued at <strong>${fmtF(totals.nav)}</strong>.`
       : `You have invested <strong>${fmtF(totals.paidInCapital)}</strong>, and your current investments are valued at <strong>${fmtF(totals.nav)}</strong>.`
     : ''

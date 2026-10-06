@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { ConstructionActuals, ConstructionAssumptions, ConstructionPositionForecast, ConstructionResult, ConstructionStage, PacingAssumptions, SimulationAssumptions } from '@/lib/accounting/construction'
-import { applyLpWaterfall, forecastSchedule, type ForecastBaseline } from '@/lib/accounting/construction-forecast'
+import { constructionBaseline, applyLpWaterfall, forecastSchedule, type ForecastBaseline } from '@/lib/accounting/construction-forecast'
 import { simulateFund } from '@/lib/accounting/construction-simulation'
 import type { FundTimeseriesPoint } from '@/lib/accounting/fund-timeseries'
 import { JCurveChart, CashFlowChart, OutcomeHistogram, type ActualCashFlow, type ActualPoint } from './forecast-charts'
@@ -52,38 +52,22 @@ export function ForecastSection({ model, actuals, a, setA, vehicle, fmt, fmtFull
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
   const todayYear = useMemo(() => decimalYear(today), [today])
-  const accounting = actuals.ledgerAvailable
+  const accounting = actuals.capitalAvailable === true
   const carryConfigured = !!actuals.waterfall && actuals.waterfall.kind !== 'none' && actuals.waterfall.carryRate > 0
 
   // The baseline and the actual curve, from the dated series when there is one.
   const { baseline, actual, actualCashFlows } = useMemo(() => {
-    const pts = (points ?? []).filter(p => accounting ? p.calledCapital > 0 : p.investedCapital > 0)
+    // Never feed missing capital observations to the forecast as zero cash flows.
+    type CompletePoint = FundTimeseriesPoint & { calledCapital: number; distributed: number; nav: number }
+    const pts: CompletePoint[] = accounting
+      ? (points ?? []).filter((p): p is CompletePoint => p.calledCapital != null && p.distributed != null && p.nav != null && p.calledCapital > 0)
+      : (points ?? []).filter(p => p.investedCapital > 0).map(p => ({ ...p, calledCapital: 0, distributed: 0, nav: 0, expenses: 0 }))
     if (pts.length === 0) {
-      const baseline: ForecastBaseline = {
-        asOf: today,
-        calledCapital: accounting ? (actuals.calledCapital ?? 0) : model.capital.deployedTotal,
-        distributed: model.returns.positions.reduce((s, p) => s + p.actual.distributions, 0),
-        nav: accounting ? actuals.nav : model.returns.currentPortfolioValue,
-        ...(accounting && actuals.cashBalance != null ? { cashBalance: actuals.cashBalance } : {}),
-      }
+      const baseline = constructionBaseline(actuals, model, today)
       return { baseline, actual: [] as ActualPoint[], actualCashFlows: [] as ActualCashFlow[] }
     }
     const last = pts[pts.length - 1]
-    const historyFlows: { t: number; amount: number }[] = []
-    let prevCalled = 0
-    let prevDist = 0
-    for (const p of pts) {
-      const t = decimalYear(p.period) - todayYear
-      const called = (accounting ? p.calledCapital : p.investedCapital) - prevCalled
-      const dist = (accounting ? p.distributed : p.proceeds) - prevDist
-      if (Math.abs(called) > 0.005) historyFlows.push({ t, amount: -called })
-      if (Math.abs(dist) > 0.005) historyFlows.push({ t, amount: dist })
-      prevCalled = accounting ? p.calledCapital : p.investedCapital
-      prevDist = accounting ? p.distributed : p.proceeds
-    }
-    const baseline: ForecastBaseline = accounting
-      ? { asOf: today, calledCapital: last.calledCapital, distributed: last.distributed, nav: last.nav, cashBalance: actuals.cashBalance, historyFlows }
-      : { asOf: today, calledCapital: last.investedCapital, distributed: last.proceeds, nav: last.portfolioValue, historyFlows }
+    const baseline = constructionBaseline(actuals, model, today)
     const actual: ActualPoint[] = pts.map(p => ({
       x: decimalYear(p.period),
       label: p.label,
@@ -118,7 +102,7 @@ export function ForecastSection({ model, actuals, a, setA, vehicle, fmt, fmtFull
       const fundCalled = Math.max(0, cumulativeCalled - priorCalled)
       const fundDistributed = Math.max(0, cumulativeDistributed - priorDistributed)
       const invested = Math.max(0, p.investedCapital - priorInvested)
-      const expenses = Math.max(0, -(p.expenses - priorExpenses))
+      const expenses = Math.max(0, -((p.expenses ?? 0) - priorExpenses))
       const capitalDistributed = Math.max(0, p.distributed - priorCapitalDistributed)
       const lpCapitalDistributed = capitalDistributed * lpDistributionScale
       const lpCalled = fundCalled * calledScale
@@ -134,17 +118,16 @@ export function ForecastSection({ model, actuals, a, setA, vehicle, fmt, fmtFull
       priorCalled = cumulativeCalled
       priorDistributed = cumulativeDistributed
       priorInvested = p.investedCapital
-      priorExpenses = p.expenses
+      priorExpenses = p.expenses ?? 0
       priorCapitalDistributed = p.distributed
     }
     const actualCashFlows = Array.from(annual.values()).filter(row => row.called > 0.005 || row.distributed > 0.005 || row.lpDistributed > 0.005 || row.carriedInterest > 0.005)
-    return { baseline, actual, actualCashFlows }
+    return { baseline, actual, actualCashFlows: pts.some(p => p.expenses == null) ? [] : actualCashFlows }
   }, [points, actuals, model, today, todayYear, accounting])
 
   const grossSchedule = useMemo(() => forecastSchedule(model, a, a.pacing, baseline), [model, a, baseline])
   const waterfallSchedule = useMemo(() => carryConfigured && actuals.waterfall ? applyLpWaterfall(grossSchedule, actuals.waterfall) : null, [grossSchedule, actuals.waterfall, carryConfigured])
-  // Tracking vehicles still chart portfolio investments and proceeds. Their available fund
-  // economics can nevertheless calculate the terminal LP distribution and carry forecast.
+  // Net forecasts require supported capital figures; gross forecasts use investment records.
   const schedule = accounting && waterfallSchedule ? waterfallSchedule : grossSchedule
 
   // The simulation is the expensive part: run it on the deferred assumptions so typing in a field

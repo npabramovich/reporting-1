@@ -121,9 +121,8 @@ export function FundDetailView({ vehicle, vehicleId }: { vehicle: string; vehicl
   const hasGpSplit = !!econ && ((econ.gp?.paidIn ?? 0) !== 0 || (econ.gp?.nav ?? 0) !== 0 || (econ.carryAccrued ?? 0) !== 0)
   const effectiveLens: Lens = hasGpSplit ? lens : 'fund'
   const m = econ ? (effectiveLens === 'lp' ? econ.lp : econ.fund) : null
-  // Fund accounting carries called capital and a partners'-capital NAV; capital tracking has neither,
-  // so its charts stay on the gross (deal-level) view only. This is the switch for that everywhere.
-  const isAccounting = econ?.source === 'ledger'
+  // Capital charts depend on available figures, including reported balances.
+  const hasCapitalData = !!econ && ([econ.fund.paidIn, econ.fund.nav, econ.fund.distributions].some(v => v != null && v !== 0))
 
   // WHICH BASIS THE RATIOS ARE ON.
   //
@@ -192,12 +191,11 @@ export function FundDetailView({ vehicle, vehicleId }: { vehicle: string; vehicl
         {irrIsGross && ' IRR is shown gross — the capital accounts do not span enough time to derive a net rate.'}
       </p>
 
-      {/* Growth over time — two charts. Hidden entirely (rather than shown as an empty box) when the
-          vehicle has no dated ledger activity — e.g. it isn't kept on fund accounting. */}
+      {/* Dated investment and capital series, when available. */}
       {(ts?.points.length ?? 0) > 0 && (
         <div className="grid gap-4 lg:grid-cols-2">
-          <CashFlowsChart points={ts!.points} hasGross={!!ts?.hasGross} isAccounting={isAccounting} fmt={fmt} fmtFull={fmtFull} />
-          <AssetsChart points={ts!.points} isAccounting={isAccounting} fmt={fmt} fmtFull={fmtFull} />
+          <CashFlowsChart points={ts!.points} hasGross={!!ts?.hasGross} hasCapitalData={hasCapitalData} fmt={fmt} fmtFull={fmtFull} />
+          <AssetsChart points={ts!.points} hasCapitalData={hasCapitalData} fmt={fmt} fmtFull={fmtFull} />
         </div>
       )}
 
@@ -223,10 +221,10 @@ export function FundDetailView({ vehicle, vehicleId }: { vehicle: string; vehicl
 
       {/* Fourth row — the new-vs-follow-on split and IRR over time, side by side. The IRR chart
           shows whole-fund net IRR regardless of the header lens (charts stay whole-fund). */}
-      {(ts?.points.length ?? 0) > 0 && (ts!.hasGross || isAccounting) && (
+      {(ts?.points.length ?? 0) > 0 && (ts!.hasGross || hasCapitalData) && (
         <div className="grid gap-4 lg:grid-cols-2">
           {ts!.hasGross && <NewVsFollowOnPie point={ts!.points[ts!.points.length - 1]} fmt={fmt} fmtFull={fmtFull} />}
-          <IrrOverTimeChart points={ts!.points} isAccounting={isAccounting} />
+          <IrrOverTimeChart points={ts!.points} hasCapitalData={hasCapitalData} />
         </div>
       )}
 
@@ -252,7 +250,7 @@ export function FundDetailView({ vehicle, vehicleId }: { vehicle: string; vehicl
       >
         {econ && <>
           {econ.vintageYear ? <>Vintage {econ.vintageYear} · </> : null}
-          {econ.source === 'ledger' ? 'Fund accounting' : 'LP capital tracking'} · {econ.lpCount} {econ.lpCount === 1 ? 'partner' : 'partners'}
+          {econ.lpCount} {econ.lpCount === 1 ? 'partner' : 'partners'}
         </>}
       </AccountingPageHeader>
       <AccountingBody>{body}</AccountingBody>
@@ -263,13 +261,13 @@ export function FundDetailView({ vehicle, vehicleId }: { vehicle: string; vehicl
 // ── Fund cash flows per period: signed bars, proceeds up / capital deployed down ──
 
 function CashFlowsChart({
-  points, hasGross, isAccounting, fmt, fmtFull,
-}: { points: TsPoint[]; hasGross: boolean; isAccounting: boolean; fmt: (v: number) => string; fmtFull: (v: number) => string }) {
+  points, hasGross, hasCapitalData, fmt, fmtFull,
+}: { points: TsPoint[]; hasGross: boolean; hasCapitalData: boolean; fmt: (v: number) => string; fmtFull: (v: number) => string }) {
   // Net metrics (called capital, distributed) only mean something on a fund with accounting; a
   // capital-tracking vehicle has no called capital, so it shows the gross (deal-level) view only.
-  const canNet = isAccounting
+  const canNet = hasCapitalData
   const canGross = hasGross
-  const [mode, setMode] = useState<'net' | 'gross'>(isAccounting ? 'net' : 'gross')
+  const [mode, setMode] = useState<'net' | 'gross'>(hasCapitalData ? 'net' : 'gross')
   const view: 'net' | 'gross' =
     mode === 'net' && canNet ? 'net' : mode === 'gross' && canGross ? 'gross' : canGross ? 'gross' : 'net'
 
@@ -356,10 +354,10 @@ const GROSS_ASSET_SERIES = [
 ] as const
 
 function AssetsChart({
-  points, isAccounting, fmt, fmtFull,
-}: { points: TsPoint[]; isAccounting: boolean; fmt: (v: number) => string; fmtFull: (v: number) => string }) {
+  points, hasCapitalData, fmt, fmtFull,
+}: { points: TsPoint[]; hasCapitalData: boolean; fmt: (v: number) => string; fmtFull: (v: number) => string }) {
   const { data, series } = useMemo(() => {
-    if (isAccounting) {
+    if (hasCapitalData) {
       // Net paid-in = contributions net of capital returned; the rest is already signed so the
       // stack sums to NAV (partners' capital), which is the fund's assets under accounting.
       const d = points.map(p => ({ ...p, netPaidIn: Math.round((p.contributions + p.distributions) * 100) / 100 }))
@@ -377,7 +375,7 @@ function AssetsChart({
       return { label: p.label, newInvested: p.newInvested * f, followOnInvested: p.followOnInvested * f, unrealizedGains: 0 }
     })
     return { data: d as any[], series: GROSS_ASSET_SERIES as readonly { key: string; name: string; color: string }[] }
-  }, [points, isAccounting])
+  }, [points, hasCapitalData])
 
   return (
     <ChartCard title="Fund assets end of period">
@@ -447,12 +445,12 @@ function NewVsFollowOnPie({
 // ── IRR over time: gross always; net (whole-fund vs LP by the page lens) on accounting ──
 
 function IrrOverTimeChart({
-  points, isAccounting,
-}: { points: TsPoint[]; isAccounting: boolean }) {
+  points, hasCapitalData,
+}: { points: TsPoint[]; hasCapitalData: boolean }) {
   const [mode, setMode] = useState<'net' | 'gross'>('net')
-  const view: 'net' | 'gross' = isAccounting ? mode : 'gross'
+  const view: 'net' | 'gross' = hasCapitalData ? mode : 'gross'
 
-  const toggle = isAccounting ? (
+  const toggle = hasCapitalData ? (
     <div className="inline-flex rounded-md border p-0.5 text-xs">
       {(['net', 'gross'] as const).map(mo => (
         <button

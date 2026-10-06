@@ -71,7 +71,6 @@ export function FundOverview() {
   const [asOf, setAsOf] = useState('')
   const [lens, setLens] = useState<Lens>('lp')
   const [search, setSearch] = useState('')
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'ledger' | 'events'>('all')
   const [sort, setSort] = useState<SortState>({ key: 'committed', dir: 'desc' })
   const onSort = (key: string) => setSort(s => nextSort(s, key, key === 'vehicle' ? 'asc' : 'desc'))
 
@@ -113,7 +112,6 @@ export function FundOverview() {
   // describe exactly what's shown.
   const q = search.trim().toLowerCase()
   const filtered = live.filter(v =>
-    (sourceFilter === 'all' || v.source === sourceFilter) &&
     (!q || v.vehicle.toLowerCase().includes(q))
   )
   const sortVal = (v: Vehicle): number | string | null =>
@@ -149,16 +147,7 @@ export function FundOverview() {
               </button>
             )}
           </div>
-          <select
-            value={sourceFilter}
-            onChange={e => setSourceFilter(e.target.value as 'all' | 'ledger' | 'events')}
-            aria-label="Filter by accounting source"
-            className="h-8 px-2 rounded-md border border-input bg-background text-sm text-muted-foreground"
-          >
-            <option value="all">All vehicles</option>
-            <option value="ledger">Fund Accounting</option>
-            <option value="events">LP tracking</option>
-          </select>
+
 
           {/* Net to LP is the honest default: what an LP would actually receive, now exact rather
               than a carry estimate. Only shown when a GP class exists to carve out — otherwise the

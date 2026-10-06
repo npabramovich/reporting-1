@@ -1,3 +1,6 @@
+import { capitalOperationKey, validCapitalDate, validCapitalAmounts } from './capital-operation-key'
+import { loadSettlementReviews } from './settlement-reviews'
+import { ensureVehicleAccounts } from './provision-accounts'
 // Declaring a distribution — the outbound mirror of issuing a capital call.
 //
 // Declaring reduces each partner's capital and parks the obligation on 2300 Distributions
@@ -24,11 +27,11 @@ import { accountIdByCode, ensureCapitalAccounts, persistEntry } from './persist'
 import { DISTRIBUTION_PAYABLE_CODE } from './chart'
 import { buildDistributionDeclarationEntry } from './entries'
 import { loadPostedLedger, loadEntityNames } from './load'
-import { loadCapitalPostings, loadCapitalSource } from './capital-source'
+import { loadCapitalPostings } from './capital-source'
 import { computeCapitalAccounts, bucketForSourceType } from './capital-account'
 import { vehicleIdByName } from './vehicle-id'
 import { loadCarryTerms, type DatedContribution } from './carry'
-import { applySettlements, registerStatus, type LineStatus, type RegisterStatus, type Settlement } from './settlement'
+import { reconcileSettlements, registerStatus, type LineStatus, type RegisterStatus, type Settlement } from './settlement'
 import { loadSettlements } from './capital-calls'
 import {
   splitDistribution,
@@ -53,6 +56,7 @@ import {
 export interface DistributionLineInput { lpEntityId: string; amount: number }
 
 export interface DeclareDistributionInput {
+  requestKey?: string
   distributionDate: string
   description?: string | null
   scope?: 'fund_wide' | 'per_lp'
@@ -202,13 +206,12 @@ export async function declareDistribution(
   userId: string | null,
   input: DeclareDistributionInput,
 ): Promise<{ entryId: string; carryEntryId: string | null; distributionId: string } | { error: string }> {
-  if (await loadCapitalSource(admin, fundId, group) !== 'ledger') {
-    return { error: 'Distributions require accounting for this vehicle.' }
-  }
+
+  if (!validCapitalAmounts([...(input.lines ?? []), ...(input.carryLines ?? [])])) return { error: 'Distribution amounts must be finite nonnegative amounts in cents' }
   const perLp = cleanLines(input.lines)
   const perRecipient = cleanLines(input.carryLines)
   if (perLp.size === 0 && perRecipient.size === 0) return { error: 'A distribution needs at least one partner with a positive amount' }
-  if (!input.distributionDate) return { error: 'A distribution date is required' }
+  if (!validCapitalDate(input.distributionDate)) return { error: 'A valid distribution date is required' }
   for (const id of Array.from(perRecipient.keys())) {
     if (perLp.has(id)) return { error: 'A partner cannot appear as both an LP line and a carry line' }
   }
@@ -227,10 +230,22 @@ export async function declareDistribution(
   const splitMethod: SplitMethod = input.splitMethod === 'waterfall' || input.splitMethod === 'pro_rata' ? input.splitMethod : 'manual'
   const tiers = splitMethod === 'waterfall' && input.tiers ? input.tiers : null
 
-  let entryId: string | null = null
-  let carryEntryId: string | null = null
-  const source = await loadCapitalSource(admin, fundId, group)
-  if (source === 'ledger') {
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  // Refuse before anything is written, for the reason spelled out in issueCapitalCall: a null
+  // vehicle id defeats the request-key uniqueness and the retry lookup, and the publication would
+  // fail afterwards regardless, leaving drafts behind.
+  if (!vehicleId) return { error: `"${group}" is not in this fund's vehicle registry, so a distribution cannot be recorded against it` }
+  const requestKey = capitalOperationKey(input)
+  const { data: prior, error: priorError } = await admin.from('distributions' as any)
+    .select('id, status, journal_entry_id, carry_journal_entry_id, distribution_lines(id)').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('request_key', requestKey).maybeSingle()
+  if (priorError) return { error: priorError.message }
+  const previous = prior as any
+  if (previous?.status === 'declared') return { distributionId: previous.id, entryId: previous.journal_entry_id, carryEntryId: previous.carry_journal_entry_id }
+  let entryId: string | null = previous?.journal_entry_id ?? null
+  let carryEntryId: string | null = previous?.carry_journal_entry_id ?? null
+  let distributionId: string = previous?.id
+  if (!previous) {
+    await ensureVehicleAccounts(admin, fundId, group)
     const codes = await accountIdByCode(admin, fundId, group)
     const payableId = codes.get(DISTRIBUTION_PAYABLE_CODE)
     if (!payableId) {
@@ -244,7 +259,7 @@ export async function declareDistribution(
     // draft later, from the bank.
     if (perLp.size > 0) {
       const entry = buildDistributionDeclarationEntry({ ...base, memo: input.description || 'Distribution' }, perLp, capMap, payableId)
-      const result = await persistEntry(admin, fundId, group, userId, entry, 'posted')
+      const result = await persistEntry(admin, fundId, group, userId, entry, 'draft')
       if ('error' in result) return { error: result.error }
       entryId = result.entryId
     }
@@ -255,67 +270,58 @@ export async function declareDistribution(
         perRecipient, capMap, payableId,
       )
       entry.sourceType = 'carry_distribution'
-      const result = await persistEntry(admin, fundId, group, userId, entry, 'posted')
+      const result = await persistEntry(admin, fundId, group, userId, entry, 'draft')
       if ('error' in result) {
-        return { error: `${result.error}${entryId ? ` (the LP distribution entry ${entryId} was posted — void it before retrying)` : ''}` }
+        const { error: cleanupError } = await admin.rpc('discard_unregistered_capital_drafts' as any, { p_fund_id: fundId, p_vehicle_id: vehicleId, p_entry_ids: [entryId].filter(Boolean) })
+        return { error: `${result.error}${cleanupError ? `; draft cleanup failed: ${cleanupError.message}` : ''}` }
       }
       carryEntryId = result.entryId
     }
-  } else {
-    // A tracking vehicle: the register row is the declaration; payment is recorded on the line
-    // by hand (settleRegisterLine). The partners must exist in this fund.
-    const ids = [...Array.from(perLp.keys()), ...Array.from(perRecipient.keys())]
-    const { data: ents } = await admin.from('lp_entities' as any).select('id').eq('fund_id', fundId).in('id', ids)
-    const known = new Set(((ents as any[]) ?? []).map(e => e.id as string))
-    const foreign = ids.filter(id => !known.has(id))
-    if (foreign.length > 0) return { error: `Unknown LP for this fund: ${foreign.join(', ')}` }
-  }
 
-  // The register, written in the same shape as issueCapitalCall's.
-  const vehicleId = await vehicleIdByName(admin, fundId, group)
-  const { data: row, error: regErr } = await (admin as any)
-    .from('distributions')
-    .insert({
-      fund_id: fundId,
-      vehicle_id: vehicleId,
-      distribution_date: input.distributionDate,
-      description: input.description ?? null,
-      scope: input.scope === 'per_lp' ? 'per_lp' : 'fund_wide',
-      status: 'declared',
-      journal_entry_id: entryId ?? carryEntryId,
-      carry_journal_entry_id: carryEntryId,
-      split_method: splitMethod,
-      wf_return_of_capital: tiers?.returnOfCapital ?? null,
-      wf_preferred: tiers?.preferred ?? null,
-      wf_catch_up: tiers?.catchUp ?? null,
-      wf_carry: tiers?.carry ?? null,
-      kind,
-      char_return_of_capital: character.returnOfCapital,
-      char_realized_gain: character.realizedGain,
-      char_income: character.income,
-      created_by: userId,
-    })
-    .select('id')
-    .single()
-  if (regErr) return { error: regErr.message }
-  const distributionId = (row as any).id
+
+
+    // The register, written in the same shape as issueCapitalCall's.
+    const { data: row, error: regErr } = await (admin as any)
+      .from('distributions')
+      .insert({
+        fund_id: fundId,
+        vehicle_id: vehicleId,
+        request_key: requestKey,
+        distribution_date: input.distributionDate,
+        description: input.description ?? null,
+        scope: input.scope === 'per_lp' ? 'per_lp' : 'fund_wide',
+        status: 'draft',
+        journal_entry_id: entryId ?? carryEntryId,
+        carry_journal_entry_id: carryEntryId,
+        split_method: splitMethod,
+        wf_return_of_capital: tiers?.returnOfCapital ?? null,
+        wf_preferred: tiers?.preferred ?? null,
+        wf_catch_up: tiers?.catchUp ?? null,
+        wf_carry: tiers?.carry ?? null,
+        kind,
+        char_return_of_capital: character.returnOfCapital,
+        char_realized_gain: character.realizedGain,
+        char_income: character.income,
+        created_by: userId,
+      })
+      .select('id')
+      .single()
+    if (regErr) {
+      const { error: cleanupError } = await admin.rpc('discard_unregistered_capital_drafts' as any, { p_fund_id: fundId, p_vehicle_id: vehicleId, p_entry_ids: Array.from(new Set([entryId, carryEntryId].filter(Boolean))) })
+      return { error: `${regErr.message}${cleanupError ? `; draft cleanup failed: ${cleanupError.message}` : ''}` }
+    }
+    distributionId = (row as any).id
+  }
 
   const lineRows = [
     ...Array.from(perLp.entries()).map(([lpEntityId, amount]) => ({ lpEntityId, amount, role: 'lp' })),
     ...Array.from(perRecipient.entries()).map(([lpEntityId, amount]) => ({ lpEntityId, amount, role: 'carry' })),
   ]
-  const { error: lineErr } = await (admin as any).from('distribution_lines').insert(
-    lineRows.map(l => ({
-      distribution_id: distributionId,
-      fund_id: fundId,
-      vehicle_id: vehicleId,
-      lp_entity_id: l.lpEntityId,
-      amount: l.amount,
-      role: l.role,
-    }))
-  )
-  if (lineErr) return { error: lineErr.message }
-
+  const { error: finalizeError } = await admin.rpc('complete_capital_operation' as any, {
+    p_fund_id: fundId, p_vehicle_id: vehicleId, p_kind: 'distribution', p_register_id: distributionId,
+    p_entry_ids: Array.from(new Set([entryId, carryEntryId].filter(Boolean))), p_lines: lineRows,
+  })
+  if (finalizeError) return { error: `Distribution remains a draft: ${finalizeError.message}` }
   return { entryId: entryId ?? carryEntryId ?? '', carryEntryId, distributionId }
 }
 
@@ -333,6 +339,8 @@ export interface DeclaredDistributionLine {
   outstanding: number
   status: LineStatus
   settledOn: string | null
+  manualSettled?: number
+  settlementReview?: string
   noticeDocumentId: string | null
 }
 
@@ -376,7 +384,7 @@ export async function listDistributions(
   today: string = new Date().toISOString().slice(0, 10),
 ): Promise<DeclaredDistribution[]> {
   const vehicleId = await vehicleIdByName(admin, fundId, group)
-  const [{ data: rows }, names, settlements] = await Promise.all([
+  const [{ data: rows }, names, settlements, reviews] = await Promise.all([
     (admin as any)
       .from('distributions')
       .select('id, distribution_date, description, status, journal_entry_id, carry_journal_entry_id, split_method, wf_return_of_capital, wf_preferred, wf_catch_up, wf_carry, kind, char_return_of_capital, char_realized_gain, char_income, distribution_lines(id, lp_entity_id, amount, role, notice_document_id, settled_amount, settled_on)')
@@ -386,17 +394,18 @@ export async function listDistributions(
       .limit(200),
     loadEntityNames(admin, fundId, group),
     loadSettlements(admin, fundId, group, 'payable'),
+    loadSettlementReviews(admin, fundId, vehicleId, 'distribution'),
   ])
-  const all = ((rows as any[]) ?? [])
+  const all = ((rows as any[]) ?? []).filter(row => row.status !== 'draft')
 
   // One FIFO pass over every line — see listCapitalCalls.
   const registerLines = all.flatMap(d => ((d.distribution_lines as any[]) ?? []).map(l => ({
     id: l.id as string, lpEntityId: l.lp_entity_id as string, date: d.distribution_date as string, amount: Number(l.amount),
   })))
-  const manual: Settlement[] = all.flatMap(d => ((d.distribution_lines as any[]) ?? [])
+  const manual: (Settlement & { lineId: string })[] = all.flatMap(d => ((d.distribution_lines as any[]) ?? [])
     .filter(l => Number(l.settled_amount) > 0)
-    .map(l => ({ lpEntityId: l.lp_entity_id as string, date: (l.settled_on ?? d.distribution_date) as string, amount: Number(l.settled_amount) })))
-  const settledByLine = applySettlements(registerLines, settlements.length > 0 ? settlements : manual)
+    .map(l => ({ lineId: l.id as string, lpEntityId: l.lp_entity_id as string, date: (l.settled_on ?? d.distribution_date) as string, amount: Number(l.settled_amount) })))
+  const settledByLine = reconcileSettlements(registerLines, settlements, manual, reviews)
 
   return all.map(d => {
     const character = characterFromRow(d)
@@ -412,6 +421,8 @@ export async function listDistributions(
         outstanding: s?.outstanding ?? roundCents(Number(l.amount)),
         status: (s?.status ?? 'open') as LineStatus,
         settledOn: s?.settledOn ?? null,
+        settlementReview: s?.settlementReview,
+        manualSettled: Number(l.settled_amount ?? 0),
         noticeDocumentId: (l.notice_document_id ?? null) as string | null,
       }
     })

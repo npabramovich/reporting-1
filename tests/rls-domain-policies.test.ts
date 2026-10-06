@@ -153,7 +153,7 @@ describe('SEC-002 domain RLS migration', () => {
         `revoke all on public.${table} from anon, authenticated;`,
       )
       expect(allSql).toContain(
-        `grant select, insert, update, delete on public.${table} to service_role;`,
+        `grant ${rule.appendOnly ? 'select, insert' : 'select, insert, update, delete'} on public.${table} to service_role;`,
       )
     }
   })

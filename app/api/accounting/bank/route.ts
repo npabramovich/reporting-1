@@ -106,6 +106,7 @@ export async function GET(req: NextRequest) {
     return {
       ...r,
       raw: undefined,
+      import_differences: r.raw?.importDifferences ?? [],
       quickbooks_linked: !!r.raw?.quickbooksReview && !!r.journal_entry_id,
       duplicate_review: !!r.raw?.quickbooksReview && r.status === 'unmatched',
       duplicate_candidates: duplicateCandidates.get(r.id) ?? [],

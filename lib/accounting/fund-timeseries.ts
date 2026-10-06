@@ -22,6 +22,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { roundCents } from './ledger'
 import { loadCapitalPostings } from './capital-source'
+import { loadFundPreload, vehicleCapitalPreload } from './fund-preload'
 import { bucketForSourceType, computeCapitalAccounts } from './capital-account'
 import { loadEntityClasses } from './load'
 import { txnsForVehicle } from './soi'
@@ -37,23 +38,23 @@ export interface FundTimeseriesPoint {
 
   // ── Net, from LP capital accounts (cumulative) ────────────────────────────
   /** Called (paid-in) capital to date. */
-  calledCapital: number
+  calledCapital: number | null
   /** Capital returned to partners to date (positive). */
-  distributed: number
+  distributed: number | null
 
   // ── NAV composition (cumulative, signed so the segments sum to `nav`) ──────
-  contributions: number
+  contributions: number | null
   /** Negative — capital returned reduces NAV. */
-  distributions: number
-  operatingIncome: number
-  realizedGains: number
-  unrealizedGains: number
+  distributions: number | null
+  operatingIncome: number | null
+  realizedGains: number | null
+  unrealizedGains: number | null
   /** Negative — management fees + partnership expenses. */
-  expenses: number
+  expenses: number | null
   /** Transfers + FX translation + anything unclassified. Nets to ~0 whole-fund. */
-  other: number
+  other: number | null
   /** = sum of the composition segments = ending partners' capital. */
-  nav: number
+  nav: number | null
 
   // ── Gross, from the portfolio tracker (cumulative, as of the period) ───────
   /** Capital deployed into companies to date. */
@@ -172,7 +173,7 @@ interface SeriesPosting { entryDate?: string | null; sourceType?: string | null;
  * forward into cumulative points. DB-free and deterministic, so the bucketing and the NAV
  * tie-out can be pinned by a test. `quarters` are the quarter-end dates to report, in order.
  */
-export function buildCapitalSeries(postings: SeriesPosting[], quarters: string[]): CapitalSeriesPoint[] {
+export function buildCapitalSeries(postings: SeriesPosting[], quarters: string[]): { [K in keyof CapitalSeriesPoint]: NonNullable<CapitalSeriesPoint[K]> }[] {
   if (quarters.length === 0) return []
 
   const zero = () => ({
@@ -251,15 +252,16 @@ export async function fundTimeseries(
 ): Promise<FundTimeseries> {
   const endDate = asOf && /^\d{4}-\d{2}-\d{2}$/.test(asOf) ? asOf : new Date().toISOString().slice(0, 10)
 
-  const [{ postings, source }, { data: txnRows }, { data: companyRows }] = await Promise.all([
-    loadCapitalPostings(admin, fundId, group, endDate),
+  const preload = await loadFundPreload(admin, fundId, endDate)
+  const [{ postings }, { data: txnRows }, { data: companyRows }] = await Promise.all([
+    loadCapitalPostings(admin, fundId, group, endDate, preload.idMap, vehicleCapitalPreload(preload, group)),
     admin.from('investment_transactions' as any).select('*').eq('fund_id', fundId),
     admin.from('companies' as any).select('*').eq('fund_id', fundId),
   ])
 
   // Net IRR splits by partner class, so we need the LP/GP map — but only ledger vehicles carry a
   // meaningful net view (a tracking vehicle has no called capital), so skip the read otherwise.
-  const classes = source === 'ledger' ? await loadEntityClasses(admin, fundId, group) : new Map<string, string>()
+  const classes = await loadEntityClasses(admin, fundId, group)
 
   const txns = ((txnRows as InvestmentTransaction[]) ?? [])
   const companies = ((companyRows as any[]) ?? [])
@@ -280,8 +282,9 @@ export async function fundTimeseries(
   const allDates = [...postingDates, ...txnDates].filter(d => d <= endDate).sort()
   if (allDates.length === 0) return { points: [], hasGross: held.length > 0 }
 
-  const quarters = quarterEndsThrough(allDates[0], endDate)
-  const capital = buildCapitalSeries(postings, quarters)
+  const quarters = quarterEndsThrough(allDates[0], endDate).map(q => q > endDate ? endDate : q)
+  const resolvedPeriods = await Promise.all(quarters.map(q => loadCapitalPostings(admin, fundId, group, q, preload.idMap, vehicleCapitalPreload(preload, group))))
+  const capital = quarters.map((q, i) => buildCapitalSeries(resolvedPeriods[i].postings, [q])[0])
 
   // New vs follow-on: cost defined exactly as computeSummary's totalInvested (cash + any interest
   // capitalized on a conversion row) so new + follow-on ties to invested capital at every quarter.
@@ -297,6 +300,7 @@ export async function fundTimeseries(
   // Net-IRR flows from the LP's point of view: a contribution is money out (negative), a
   // distribution money back (positive). Mirrors fund-economics.flowsFor so the two agree.
   const netFlowsUpTo = (until: string, ids: Set<string> | null): CashFlow[] => {
+    const postings = resolvedPeriods[quarters.indexOf(until)].postings
     const out: CashFlow[] = []
     for (const p of postings) {
       if (p.entryDate && p.entryDate > until) continue
@@ -311,10 +315,11 @@ export async function fundTimeseries(
   }
 
   const entityIds = Array.from(new Set(postings.map(p => p.lpEntityId).filter(Boolean) as string[]))
-  const lpIds = source === 'ledger' ? new Set(entityIds.filter(id => (classes.get(id) ?? 'lp') !== 'gp')) : null
+  const lpIds = new Set(entityIds.filter(id => (classes.get(id) ?? 'lp') !== 'gp'))
 
   const netIrrFor = (until: string, terminalDate: Date, ids: Set<string> | null): number | null => {
-    if (source !== 'ledger') return null
+    const { postings, evidenceByLp } = resolvedPeriods[quarters.indexOf(until)]
+    if (Array.from(evidenceByLp.entries()).some(([id, e]) => (!ids || ids.has(id)) && (!e.canCalculateIrr || e.conflict || e.missing.length > 0))) return null
     const accounts = computeCapitalAccounts(postings, { end: until })
     let nav = 0
     for (const [id, a] of Array.from(accounts.entries())) if (!ids || ids.has(id)) nav += a.ending
@@ -347,6 +352,10 @@ export async function fundTimeseries(
 
     return {
       ...pt,
+      ...(Array.from(resolvedPeriods[i].evidenceByLp.values()).some(e => e.missing.length > 0) ? {
+        calledCapital: null, distributed: null, contributions: null, distributions: null,
+        operatingIncome: null, realizedGains: null, unrealizedGains: null, expenses: null, other: null, nav: null,
+      } : {}),
       investedCapital: r(investedCapital),
       newInvested: nfo[i].newInvested,
       followOnInvested: nfo[i].followOnInvested,

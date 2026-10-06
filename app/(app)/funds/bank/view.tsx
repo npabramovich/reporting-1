@@ -1,5 +1,8 @@
 'use client'
 
+import { ImportReviewPanel } from '@/components/accounting/import-review'
+import type { ImportReview } from '@/lib/accounting/import-review'
+
 import { useEffect, useState, useCallback } from 'react'
 import { Loader2, Check, AlertTriangle, Upload, Sparkles, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -11,7 +14,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { NoBooksState } from '@/components/accounting/no-books'
 
 interface DuplicateCandidate { id: string; date: string; amount: number; memo: string; status: string; claimed: boolean }
-interface Txn { duplicate_review?: boolean; quickbooks_linked?: boolean; duplicate_candidates?: DuplicateCandidate[]; id: string; txn_date: string; amount: number; description: string; counterparty: string | null; status: string; suggested_account_code: string | null; journal_entry_id: string | null; entry_account_code: string | null; entry_account_name: string | null; entry_is_split: boolean; settled_lp_entity_id: string | null; settled_lp_name: string | null }
+interface Txn { import_differences?: import('@/lib/accounting/import-review').ImportDifference[]; duplicate_review?: boolean; quickbooks_linked?: boolean; duplicate_candidates?: DuplicateCandidate[]; id: string; txn_date: string; amount: number; description: string; counterparty: string | null; status: string; suggested_account_code: string | null; journal_entry_id: string | null; entry_account_code: string | null; entry_account_name: string | null; entry_is_split: boolean; settled_lp_entity_id: string | null; settled_lp_name: string | null }
 interface Rec { bankEndingBalance: number; ledgerCashBalance: number; difference: number; matchedCount: number; unmatchedCount: number; unmatchedTotal: number; tiesOut: boolean }
 
 const actionBtn = 'text-xs border border-input rounded px-2 py-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors'
@@ -29,6 +32,7 @@ export function BankView() {
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [categorizing, setCategorizing] = useState(false)
+  const [importReview, setImportReview] = useState<ImportReview | null>(null)
   const [result, setResult] = useState<{ imported: number; skipped: number; matched?: number; needsReview?: number; errors: string[] } | null>(null)
   const [editing, setEditing] = useState<{ txnId: string; entryId: string; readOnly?: boolean } | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -106,11 +110,12 @@ export function BankView() {
 
   async function doImport() {
     setImporting(true); setResult(null)
-    const res = await lf('/api/accounting/bank/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv }) })
+    const res = await lf('/api/accounting/bank/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv, reviewToken: importReview?.token }) })
     const data = await res.json()
+    setImportReview(data.importReview ?? null)
     // Settle anything that pays a declared call or distribution before the AI sees it — an
     // obligation is a fact, and guessing an expense account for it would only be worse.
-    if (res.ok) { setResult(data); setCsv(''); await autoMatch(true) }
+    if (res.ok) { setResult(data); setCsv(''); if (!data.importReview?.differences?.length) await autoMatch(true); else load() }
     else setResult({ imported: 0, skipped: 0, errors: [data.error ?? 'Import failed'] })
     setImporting(false)
   }
@@ -200,9 +205,7 @@ export function BankView() {
 
   // Without a chart there is no 1000 Cash to post an import against; the import would fail on
   // submit, so say so up front and point at Admin.
-  if (!loading && accounts.length === 0) {
-    return <NoBooksState>No accounts are set up for this entity yet, so there is nothing to post bank transactions against.</NoBooksState>
-  }
+
 
   return (
     <div className="space-y-6">
@@ -217,9 +220,9 @@ export function BankView() {
       <div className="border rounded-card p-4 space-y-2">
         <p className="text-sm font-medium">Import transactions</p>
         <p className="text-xs text-muted-foreground">Paste a CSV/TSV export from your bank, Ramp, or QuickBooks. Columns matched automatically (date, description, amount, or debit/credit). Clear matches link to existing QuickBooks entries. Possible matches with the same cash amount within seven days are held for review; new transactions become drafts.</p>
-        <textarea value={csv} onChange={e => setCsv(e.target.value)} rows={5} placeholder="Date,Description,Amount&#10;2026-06-01,Capital call Fund II,5000000&#10;2026-06-15,Audit fee,-12000" className="w-full border border-input rounded p-2 text-sm font-mono bg-transparent" />
+        <textarea value={csv} onChange={e => { setCsv(e.target.value); setImportReview(null) }} rows={5} placeholder="Date,Description,Amount&#10;2026-06-01,Capital call Fund II,5000000&#10;2026-06-15,Audit fee,-12000" className="w-full border border-input rounded p-2 text-sm font-mono bg-transparent" />
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={doImport} disabled={importing || csv.trim().length < 5}>{importing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}Import</Button>
+          <Button size="sm" onClick={doImport} disabled={importing || csv.trim().length < 5}>{importing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}{importReview?.differences.length ? 'Import as drafts after review' : 'Import'}</Button>
           <label className="text-xs text-muted-foreground cursor-pointer border rounded px-2 py-1.5 hover:bg-accent">
             Upload CSV/XLS
             <input type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" onChange={onFile} className="hidden" />
@@ -230,6 +233,7 @@ export function BankView() {
             </span>
           )}
         </div>
+        <ImportReviewPanel review={importReview} />
         {result?.errors?.length ? <p className="text-sm text-destructive">{result.errors[0]}</p> : null}
       </div>
 
@@ -311,7 +315,7 @@ export function BankView() {
               {visibleTxns.map(t => (
                 <tr key={t.id} className="border-b last:border-b-0 hover:bg-muted/30">
                   <td className="px-3 py-2 tabular-nums text-xs">{t.txn_date}</td>
-                  <td className="px-3 py-2">{t.description}</td>
+                  <td className="px-3 py-2">{t.description}{!!t.import_differences?.length && <details className="text-sm text-warning mt-1"><summary className="cursor-pointer">Import comparison: {t.import_differences.length} items to review</summary>{t.import_differences.map((d, i) => <p key={i} className="mt-1 max-w-md">{d.name}: {d.message}</p>)}</details>}</td>
                   <td className={`px-3 py-2 text-right tabular-nums ${t.amount < 0 ? 'text-muted-foreground' : ''}`}>{fmt(t.amount)}</td>
                   <td className="px-3 py-2 text-xs">
                     {/* What the ENTRY posts to, not the stored hint — editing an entry in the

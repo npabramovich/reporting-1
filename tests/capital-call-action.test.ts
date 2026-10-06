@@ -42,9 +42,9 @@ describe('capital-call action preview', () => {
     expect(perLp.find(x => x.lp === 'Alpha LP')?.commitment).toBe(60)
   })
 
-  it('refuses a vehicle whose capital is not on the ledger', async () => {
+  it('previews a call without requiring accounting activation', async () => {
     capitalSource.value = 'events'
     await expect(previewIssueCapitalCall(deps, { vehicle: 'V1', callDate: '2026-07-01', total: 1_000_000 }))
-      .rejects.toThrow('Capital calls require accounting for this vehicle.')
+      .resolves.toHaveProperty('details.total', 1_000_000)
   })
 })

@@ -1,6 +1,4 @@
-// One health check for a vehicle's books: is it onboarded, where did the close get
-// to, and what needs attention. Feeds the Status page and decides whether the
-// Accounting home page still needs to show the onboarding card at all.
+// Entity book health, data completeness, and reconciliation work. No activation state.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadPostedLedger, loadOwnership } from './load'
@@ -8,8 +6,9 @@ import { loadStrandedCapital, type StrandedCapital } from './pooled-capital-chec
 import { balanceSheet, scheduleOfInvestments, postingsAsOf } from './statements'
 import { buildSoiPositions, type SoiCompany } from './soi'
 import { computeCapitalAccounts, totalNav } from './capital-account'
-import { loadHistoryMode, loadAllocationBasis, type HistoryMode, type AllocationBasis } from './terms'
-import { loadCapitalSource, type CapitalSource } from './capital-source'
+import { loadAllocationBasis, type AllocationBasis } from './terms'
+import { loadPositions } from './lp-positions'
+import { resolveCapitalEvidence } from './capital-evidence'
 import { nextCloseStart } from './close'
 import { vehicleIdByName } from './vehicle-id'
 import { vehicleKindByName } from './vehicle-domain'
@@ -33,14 +32,9 @@ export interface StatusIssue {
 
 export interface VehicleStatus {
   vehicle: string
-  /** 'ledger' = full Fund Accounting (double-entry books). 'events' = LP-only capital tracking,
-   *  where the ledger apparatus (trial balance, bank, close, onboarding) does not apply. */
-  source: CapitalSource
-  onboarded: boolean
   setup: {
     chartSeeded: boolean
     accountCount: number
-    historyMode: HistoryMode
     hasPostedEntries: boolean
     partnerCount: number
     partnersWithCommitment: number
@@ -93,12 +87,10 @@ export async function vehicleStatus(
   const kind = await vehicleKindByName(admin, fundId, group)
   const manco = isManagementCompany(kind)
   const ownerEquity = closesToOwnerEquity(kind)
-  const source = manco ? 'ledger' : await loadCapitalSource(admin, fundId, group)
 
   const [
     { accounts, postings, capitalPostings },
     owners,
-    historyMode,
     basis,
     { data: entryRows },
     { data: bankRows },
@@ -109,7 +101,6 @@ export async function vehicleStatus(
   ] = await Promise.all([
     loadPostedLedger(admin, fundId, group),
     manco ? Promise.resolve([]) : loadOwnership(admin, fundId, group),
-    manco ? Promise.resolve(null) : loadHistoryMode(admin, fundId, group),
     manco ? Promise.resolve('capital_balance' as const) : loadAllocationBasis(admin, fundId, group),
     admin.from('journal_entries' as any).select('id, status').eq('book', ACTUAL_BOOK).eq('fund_id', fundId).eq('vehicle_id', vehicleId).neq('status', 'void'),
     admin.from('bank_transactions' as any).select('id, status').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
@@ -157,19 +148,27 @@ export async function vehicleStatus(
     ? { pooledPostings: 0, pooledAmount: 0, taggedPostings: 0, perLpAccounts: 0, stranded: false, message: null }
     : await loadStrandedCapital(admin, fundId, group)
   const capitalAttributed = !stranded.stranded
-  const onboarded = manco ? chartSeeded : chartSeeded && !!historyMode && hasPostedEntries && investmentsBooked && capitalAttributed
 
   // ---------------------------------------------------------------------------
   // What needs attention, worst first.
   // ---------------------------------------------------------------------------
   const issues: StatusIssue[] = []
+  if (!manco) {
+    const observations = await loadPositions(admin, fundId, group)
+    const resolved = resolveCapitalEvidence(capitalPostings, observations, undefined, ((periodRows as any[]) ?? [])[0]?.period_end)
+    const evidence = Array.from(resolved.evidenceByLp.values())
+    const conflicts = evidence.filter(e => e.conflict).length
+    const incomplete = evidence.filter(e => e.missing.length > 0).length
+    const dates = evidence.filter(e => e.basis === 'reported').map(e => e.asOf!).sort()
+    if (conflicts) issues.push({ level: 'warning', title: `${conflicts} reported balance${conflicts === 1 ? '' : 's'} differ from the books`, detail: 'Reported balances remain visible until the overlapping accounting records reconcile. Review the differences before relying on a combined report.', href: '/funds/capital-accounts', action: 'Reconcile balances' })
+    if (incomplete) issues.push({ level: 'warning', title: `${incomplete} incomplete capital position${incomplete === 1 ? '' : 's'}`, detail: 'Missing amounts appear as a dash, including totals that depend on them. Enter the missing contributions, distributions, or NAV.', href: '/funds/capital-accounts', action: 'Review balances' })
+    if (dates.length) issues.push({ level: 'info', title: 'Reported capital balances', detail: `These balances are dated ${dates[0]}${dates.at(-1) !== dates[0] ? ` through ${dates.at(-1)}` : ''}. A later journal entry does not update their valuation date.`, href: '/funds/capital-accounts', action: 'View balances' })
+  }
 
   if (!chartSeeded) {
-    issues.push({ level: 'blocker', title: 'Accounting setup is incomplete', detail: 'Add the required accounts before recording transactions.', href: '/funds/status', action: 'Set up accounting' })
+    issues.push({ level: 'info', title: 'No accounting records yet', detail: 'Import books or record a transaction. The required accounts are created when needed.', href: '/funds/journal', action: 'Record a transaction' })
   }
-  if (!manco && chartSeeded && !historyMode) {
-    issues.push({ level: 'blocker', title: 'Onboarding path not chosen', detail: 'Pick full history (rebuild from inception) or cutover (start at a date with opening balances).', href: '/funds', action: 'Choose a path' })
-  }
+
   if (!bs.check || Math.abs(bs.check) > 0.004) {
     if (Math.abs(bs.check) > 0.004) {
       issues.push({ level: 'blocker', title: 'Balance sheet does not balance', detail: `Assets less liabilities and ${equityLabel(kind).toLowerCase()} leaves ${bs.check.toFixed(2)}. Something is booked wrong.`, href: '/funds/statements', action: 'Open the statements' })
@@ -289,12 +288,9 @@ export async function vehicleStatus(
 
   return {
     vehicle: group,
-    source,
-    onboarded,
     setup: {
       chartSeeded,
       accountCount: accounts.length,
-      historyMode,
       hasPostedEntries,
       partnerCount: owners.length,
       partnersWithCommitment,

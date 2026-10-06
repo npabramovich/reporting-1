@@ -14,7 +14,8 @@ import { lpRatios } from '@/lib/lp-metrics'
  *  prompt, and the totals line still accounts for all of it. */
 const MAX_LP_LINES = 100
 
-const money = (n: number) => n.toFixed(2)
+const money = (n: number | null) => n == null ? 'unknown' : n.toFixed(2)
+const add = (a: number | null, b: number | null): number | null => a == null || b == null ? null : a + b
 const ratio = (r: number | null) => (r == null ? 'n/a' : `${r.toFixed(2)}x`)
 const pct = (r: number | null) => (r == null ? 'n/a' : `${(r * 100).toFixed(1)}%`)
 
@@ -27,10 +28,10 @@ export async function buildLpContext(admin: SupabaseClient, fundId: string): Pro
   interface Agg {
     name: string
     commitment: number
-    called: number
-    distributions: number
-    nav: number
-    outstanding: number
+    called: number | null
+    distributions: number | null
+    nav: number | null
+    outstanding: number | null
     vehicles: string[]
     /** Only meaningful for a single-vehicle LP: IRRs don't sum across positions. */
     irr: number | null
@@ -48,10 +49,10 @@ export async function buildLpContext(admin: SupabaseClient, fundId: string): Pro
       byEntity.set(r.entity_id, a)
     }
     a.commitment += r.commitment
-    a.called += r.paid_in_capital
-    a.distributions += r.distributions
-    a.nav += r.nav
-    a.outstanding += r.outstanding_balance
+    a.called = add(a.called, r.paid_in_capital)
+    a.distributions = add(a.distributions, r.distributions)
+    a.nav = add(a.nav, r.nav)
+    a.outstanding = add(a.outstanding, r.outstanding_balance)
     a.vehicles.push(r.lookThroughVia ? `${r.portfolio_group} (via ${r.lookThroughVia})` : r.portfolio_group)
     a.irr = r.irr
     a.rowCount += 1
@@ -68,13 +69,13 @@ export async function buildLpContext(admin: SupabaseClient, fundId: string): Pro
     return `  ${a.name}: commit ${money(a.commitment)}, called ${money(a.called)}, outstanding ${money(a.outstanding)}, distributions ${money(a.distributions)}, NAV ${money(a.nav)}, DPI ${ratio(rr.dpi)}, TVPI ${ratio(rr.tvpi)}, IRR ${irr} — in ${a.vehicles.join('; ')}`
   })
 
-  const totals = all.reduce(
+  const totals = all.reduce<Omit<Agg, "name" | "vehicles" | "irr" | "rowCount">>(
     (t, a) => ({
       commitment: t.commitment + a.commitment,
-      called: t.called + a.called,
-      distributions: t.distributions + a.distributions,
-      nav: t.nav + a.nav,
-      outstanding: t.outstanding + a.outstanding,
+      called: add(t.called, a.called),
+      distributions: add(t.distributions, a.distributions),
+      nav: add(t.nav, a.nav),
+      outstanding: add(t.outstanding, a.outstanding),
     }),
     { commitment: 0, called: 0, distributions: 0, nav: 0, outstanding: 0 },
   )
@@ -89,12 +90,13 @@ export async function buildLpContext(admin: SupabaseClient, fundId: string): Pro
   return parts.join('\n\n')
 }
 
-export const LP_ANALYST_GUIDE = `The user is in the LP section. Every LP's capital position across the fund is below, derived LIVE from the ledger — not from a stored snapshot — so it reflects the books as they stand right now.
+export const LP_ANALYST_GUIDE = `The user is in the LP section. Every LP's capital position across the fund is below, resolved LIVE from reported balances and accounting records — not from a stored snapshot — so it reflects the books as they stand right now.
 
 Definitions, which are easy to get wrong:
 - "called" and "paid-in" are THE SAME NUMBER: capital is recognised when it is CALLED, and may still be unfunded. What differs from both is FUNDED (called − outstanding): the cash that actually arrived. "outstanding" is the receivable — called but not yet wired.
 - DPI = distributions / called. TVPI = (distributions + NAV) / called. Neither is annualised.
-- IRR is per-LP and call-dated (dated at recognition, not at the wire), so it runs slightly high where LPs fund late. It is shown only for an LP in a single vehicle — IRRs don't sum across positions, and a combined figure would be fabricated.
+- Calculated IRR is per-LP and call-dated (dated at recognition, not at the wire), so it runs slightly high where LPs fund late. It is shown only for an LP in a single vehicle — IRRs don't sum across positions, and a combined figure would be fabricated.
+- Unknown means an input is missing; never substitute zero. Reported IRRs retain their source definition.
 - An LP shown "via" an associate holds that position THROUGH a GP/associate vehicle (a look-through), not directly. It is not double-counting.
 
 Answer from these figures, citing LP names and amounts. Never invent an LP, a vehicle, or a number that isn't here, and don't recompute an IRR yourself.`

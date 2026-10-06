@@ -14,7 +14,7 @@ import { lastDataDates } from '@/lib/accounting/lp-positions'
 //
 //   GET ?asOf=YYYY-MM-DD (optional) → { fund, currency, asOf, investors[], vehicleDates[] }
 
-const ratio = (n: number, d: number): number | null => (d > 0 ? n / d : null)
+const ratio = (n: number | null, d: number): number | null => (n != null && d > 0 ? n / d : null)
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient()

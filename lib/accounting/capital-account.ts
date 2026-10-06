@@ -87,6 +87,8 @@ export function bucketForSourceType(sourceType: string | null | undefined): Roll
 }
 
 export interface CapitalPosting {
+  entryId?: string
+  currency?: string
   lpEntityId: string
   /** Signed, debit-positive posting amount to the LP's equity account. */
   amount: number

@@ -9,6 +9,7 @@ import { serializeLedger, parseLedgerText, resolvePostingAccounts, type TextEntr
 import { persistEntry } from './persist'
 import { vehicleIdByName } from './vehicle-id'
 import { isBalanced } from './ledger'
+import { reviewImport, type ImportReview } from './import-review'
 import { ACTUAL_BOOK } from './books'
 
 async function loadAccounts(admin: SupabaseClient, fundId: string, group: string): Promise<Account[]> {
@@ -43,6 +44,8 @@ export async function exportLedgerText(admin: SupabaseClient, fundId: string, gr
 }
 
 export interface PostTextResult {
+  importReview?: ImportReview
+  reviewRequired?: boolean
   posted: number
   errors: string[]
   unknownAccounts: string[]
@@ -58,7 +61,9 @@ export async function postLedgerText(
   group: string,
   userId: string | null,
   text: string,
-  defaultStatus?: 'draft' | 'posted'
+  defaultStatus?: 'draft' | 'posted',
+  reviewToken?: string,
+  includeLp = false,
 ): Promise<PostTextResult> {
   const { entries, errors } = parseLedgerText(text)
   const accounts = await loadAccounts(admin, fundId, group)
@@ -66,21 +71,22 @@ export async function postLedgerText(
   const unknownAccounts = new Set<string>()
   let posted = 0
 
+  const prepared: { entry: JournalEntry; status: 'draft' | 'posted' }[] = []
   for (const e of entries) {
-    // A per-partner capital account carries the partner onto the posting — see
-    // resolvePostingAccounts. Text used to write lpEntityId null, so an entry authored this way
-    // hit the partner's account without attributing to the partner.
     const { postings, unknown } = resolvePostingAccounts(accounts, e.postings)
-    if (unknown.length > 0) { unknown.forEach(u => unknownAccounts.add(u)); continue }
-
+    if (unknown.length) { unknown.forEach(u => unknownAccounts.add(u)); continue }
     const entry: JournalEntry = { fundId, entryDate: e.date, memo: e.narration, sourceType: e.sourceType ?? 'manual', postings }
     if (!isBalanced(entry)) { errors.push(`Entry ${e.date} does not balance after resolving accounts`); continue }
-
-    const status = defaultStatus ?? (e.flag === '!' ? 'draft' : 'posted')
+    prepared.push({ entry, status: defaultStatus ?? (e.flag === '!' ? 'draft' : 'posted') })
+  }
+  if (errors.length || unknownAccounts.size) return { posted: 0, errors, unknownAccounts: Array.from(unknownAccounts) }
+  const importReview = await reviewImport(admin, fundId, group, { entries: prepared.map(p => p.entry), includeLp })
+  if (importReview.differences.length && reviewToken !== importReview.token) return { posted: 0, errors: [], unknownAccounts: [], importReview, reviewRequired: true }
+  for (const { entry, status } of prepared) {
     const result = await persistEntry(admin, fundId, group, userId, entry, status)
-    if ('error' in result) errors.push(`Entry ${e.date}: ${result.error}`)
+    if ('error' in result) errors.push(`Entry ${entry.entryDate}: ${result.error}`)
     else posted++
   }
 
-  return { posted, errors, unknownAccounts: Array.from(unknownAccounts) }
+  return { importReview, posted, errors, unknownAccounts: Array.from(unknownAccounts) }
 }

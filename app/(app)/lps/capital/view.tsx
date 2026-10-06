@@ -76,7 +76,6 @@ export function LpCapitalView({ isAdmin }: { isAdmin: boolean }) {
   // Switching vehicles resets the period back to inception-to-date.
   useEffect(() => { setPreset('itd'); setStart(''); setEnd(''); setAsOf('') }, [group])
 
-  const isTracking = acct?.source !== 'ledger'
   // The snapshot an edit writes to: the latest stored position on-or-before the report date (or the
   // latest overall when no date is picked). dates is most-recent-first.
   const resolvedDate = useMemo(() => {
@@ -144,7 +143,7 @@ export function LpCapitalView({ isAdmin }: { isAdmin: boolean }) {
             {acct && (
               <span className="ml-1.5 inline-flex items-center gap-1 align-middle">
                 · {acct.source === 'ledger' ? <BookOpen className="h-3.5 w-3.5" /> : <ListTree className="h-3.5 w-3.5" />}
-                {acct.source === 'ledger' ? 'Derived from the ledger' : 'Pasted positions'}
+                Reported balances and recorded activity
               </span>
             )}
           </p>
@@ -210,21 +209,21 @@ export function LpCapitalView({ isAdmin }: { isAdmin: boolean }) {
             fmt={fmt}
             search={search}
             metrics
-            editable={isTracking && isAdmin && preset === 'itd' ? { onSave: savePosition, onDelete: deleteLp } : undefined}
+            editable={isAdmin && preset === 'itd' ? { onSave: savePosition, onDelete: deleteLp } : undefined}
           />
-          {isTracking && isAdmin && preset !== 'itd' && (
+          {isAdmin && preset !== 'itd' && (
             <p className="text-xs text-muted-foreground">
               Viewing period activity — switch to <strong>Inception to date</strong> (or click a date in History) to edit a snapshot.
             </p>
           )}
-          {isTracking && isAdmin && preset === 'itd' && resolvedDate && (
+          {isAdmin && preset === 'itd' && resolvedDate && (
             <p className="text-xs text-muted-foreground">
               Editing the snapshot as of <strong>{resolvedDate}</strong>
               {asOf && asOf !== resolvedDate ? ` (nearest paste on or before ${asOf})` : ''} — pick another date in History below to edit it at its root.
             </p>
           )}
 
-          {isTracking ? (
+          {(
             <>
               {/* The tracked history — one row per stored date; click to view/edit that snapshot. */}
               {dates.length > 0 && (
@@ -247,10 +246,6 @@ export function LpCapitalView({ isAdmin }: { isAdmin: boolean }) {
                 <p className="text-xs text-muted-foreground">Capital tracking is admin-edited.</p>
               )}
             </>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              This vehicle is on the ledger — its capital accounts are derived from posted entries. Manage entries in the Funds section.
-            </p>
           )}
         </>
       )}
@@ -275,16 +270,16 @@ function HistoryTable({
   fmt: (v: number) => string
 }) {
   const byDate = useMemo(() => {
-    const m = new Map<string, { lps: number; commitment: number; called: number; distributions: number; nav: number }>()
+    const m = new Map<string, { lps: number; commitment: number | null; called: number | null; distributions: number | null; nav: number | null }>()
     for (const d of dates) m.set(d, { lps: 0, commitment: 0, called: 0, distributions: 0, nav: 0 })
     for (const p of positions) {
       const agg = m.get(p.asOfDate)
       if (!agg) continue
       agg.lps += 1
-      agg.commitment += p.commitment ?? 0
-      agg.called += p.calledCapital ?? 0
-      agg.distributions += p.distributions ?? 0
-      agg.nav += p.nav ?? 0
+      agg.commitment = agg.commitment == null || p.commitment == null ? null : agg.commitment + p.commitment
+      agg.called = agg.called == null || p.calledCapital == null ? null : agg.called + p.calledCapital
+      agg.distributions = agg.distributions == null || p.distributions == null ? null : agg.distributions + p.distributions
+      agg.nav = agg.nav == null || p.nav == null ? null : agg.nav + p.nav
     }
     return m
   }, [positions, dates])
@@ -312,10 +307,10 @@ function HistoryTable({
                 <tr key={d} className={`border-t group cursor-pointer hover:bg-muted/20 ${d === activeDate ? 'bg-muted/30' : ''}`} onClick={() => onSelect(d)}>
                   <td className="px-3 py-1.5 font-medium">{d}{d === activeDate && <span className="ml-2 text-[10px] text-muted-foreground">shown above</span>}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{a.lps}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{fmt(a.commitment)}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{fmt(a.called)}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{fmt(a.distributions)}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{fmt(a.nav)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{(a.commitment == null ? '—' : fmt(a.commitment))}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{(a.called == null ? '—' : fmt(a.called))}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{(a.distributions == null ? '—' : fmt(a.distributions))}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{(a.nav == null ? '—' : fmt(a.nav))}</td>
                   {onDelete && (
                     <td className="px-3 py-1.5 text-right" onClick={e => e.stopPropagation()}>
                       <button

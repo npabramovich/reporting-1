@@ -15,9 +15,9 @@
 export interface LpFigures {
   commitment: number
   /** Paid-in = called capital (recognised, funded or not). */
-  paidIn: number
-  distributions: number
-  nav: number
+  paidIn: number | null
+  distributions: number | null
+  nav: number | null
 }
 
 export interface LpRatios {
@@ -32,7 +32,7 @@ export interface LpRatios {
 }
 
 /** n / d, or null when d is not positive (avoids 0- and negative-denominator nonsense). */
-export const lpRatio = (n: number, d: number): number | null => (d > 0 ? n / d : null)
+export const lpRatio = (n: number | null, d: number | null): number | null => (n != null && d != null && d > 0 ? n / d : null)
 
 /** The four LP ratios from a set of figures. Returns raw (unrounded) values; callers format. */
 export function lpRatios(f: LpFigures): LpRatios {
@@ -40,6 +40,6 @@ export function lpRatios(f: LpFigures): LpRatios {
     pctFunded: lpRatio(f.paidIn, f.commitment),
     dpi: lpRatio(f.distributions, f.paidIn),
     rvpi: lpRatio(f.nav, f.paidIn),
-    tvpi: lpRatio(f.distributions + f.nav, f.paidIn),
+    tvpi: lpRatio(f.distributions == null || f.nav == null ? null : f.distributions + f.nav, f.paidIn),
   }
 }

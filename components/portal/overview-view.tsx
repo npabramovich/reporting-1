@@ -11,7 +11,8 @@ export interface OverviewViewData extends Partial<OverviewMetrics> {
   hasData: boolean
 }
 
-function fmtMoney(v: number, currency: string): string {
+function fmtMoney(v: number | null, currency: string): string {
+  if (v == null) return '—'
   return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(v || 0)
 }
 function fmtMultiple(v: number | null | undefined): string {

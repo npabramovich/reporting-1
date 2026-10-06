@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -29,43 +30,17 @@ export async function POST(req: NextRequest) {
 
   const report = await generateLiveReport(admin, gate.fundId, asOf)
   const asOfDate = report.asOf ?? new Date().toISOString().slice(0, 10)
-  const name = String(body?.name ?? '').trim() || `Live report — ${asOfDate}`
+  const fingerprint = createHash('sha256').update(JSON.stringify(report.rows)).digest('hex').slice(0, 12)
+  const name = String(body?.name ?? '').trim() || `Live report — ${asOfDate} — ${fingerprint}`
 
   // Carry the fund-level live report header/footer onto the frozen snapshot.
   const { data: fs } = await (admin as any)
     .from('fund_settings').select('lp_report_description, lp_report_footer').eq('fund_id', gate.fundId).maybeSingle()
 
-  // Reuse a single snapshot per name rather than minting a new one on every click. Freezing is a
-  // side effect of opening the Share dialog, so a GP who clicks Share (or cancels and re-clicks)
-  // must not litter the archive with duplicate "Live report — <date>" snapshots. lp_snapshots is
-  // UNIQUE (fund_id, name), so we upsert by name: refresh the existing one (keeping its id, and
-  // therefore its existing LP shares) and replace its rows, or insert if it's the first time.
-  const snapPayload = {
-    fund_id: gate.fundId, name, as_of_date: asOfDate,
-    description: (fs as any)?.lp_report_description ?? null,
-    footer_note: (fs as any)?.lp_report_footer ?? null,
-  }
-  const { data: existing } = await (admin as any)
-    .from('lp_snapshots').select('id').eq('fund_id', gate.fundId).eq('name', name).maybeSingle()
-
-  let snap: { id: string; name: string } | null = null
-  if (existing?.id) {
-    await (admin as any).from('lp_snapshots').update(snapPayload).eq('id', existing.id).eq('fund_id', gate.fundId)
-    await (admin as any).from('lp_investments').delete().eq('fund_id', gate.fundId).eq('snapshot_id', existing.id)
-    snap = { id: existing.id, name }
-  } else {
-    const { data: inserted, error: snapErr } = await (admin as any)
-      .from('lp_snapshots').insert(snapPayload).select('id, name').single()
-    if (snapErr || !inserted) return snapErr ? dbError(snapErr, 'from-live') : NextResponse.json({ error: 'Could not create snapshot' }, { status: 500 })
-    snap = inserted
-  }
-  if (!snap) return NextResponse.json({ error: 'Could not create snapshot' }, { status: 500 })
-
-  // Write the live figures into the snapshot. Look-through member rows carry a synthetic
-  // portfolio_group tag; store them as-is so the snapshot matches what the live report showed.
+  // Identical default reports reuse an immutable content version; changed figures get a new
+  // version. The RPC freezes the header and rows atomically.
   const rows = report.rows.map(r => ({
     fund_id: gate.fundId,
-    snapshot_id: snap.id,
     entity_id: r.entity_id,
     portfolio_group: r.portfolio_group,
     commitment: r.commitment,
@@ -77,10 +52,13 @@ export async function POST(req: NextRequest) {
     outstanding_balance: r.outstanding_balance,
     dpi: r.dpi, rvpi: r.rvpi, tvpi: r.tvpi, irr: r.irr,
   }))
-  if (rows.length > 0) {
-    const { error: invErr } = await (admin as any).from('lp_investments').insert(rows)
-    if (invErr) { console.error('[from-live] rows insert', invErr.message); return NextResponse.json({ error: 'Could not write the report rows.', snapshotId: snap.id }, { status: 500 }) }
-  }
-
-  return NextResponse.json({ snapshotId: snap.id, name: snap.name })
+  const { data, error } = await admin.rpc('freeze_live_report' as any, {
+    p_fund_id: gate.fundId, p_name: name, p_as_of: asOfDate,
+    p_description: (fs as any)?.lp_report_description ?? null,
+    p_footer: (fs as any)?.lp_report_footer ?? null,
+    p_rows: rows,
+  })
+  if (error) return dbError(error, 'from-live')
+  if (body?.name && !(data as any)?.created) return NextResponse.json({ error: 'That report name already exists. Choose a new name to preserve the earlier report.' }, { status: 409 })
+  return NextResponse.json(data)
 }

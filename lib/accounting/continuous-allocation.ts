@@ -1,3 +1,4 @@
+import { loadResolvedCommitments } from './terms'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { allocateAmountCumulatively } from './allocation'
 import { computeCapitalAccounts } from './capital-account'
@@ -80,7 +81,7 @@ export async function allocatePostedEntry(
     const balances = computeCapitalAccounts(capitalPostings, { end: entry.entryDate })
     basisAmounts = Array.from(balances, ([lpEntityId, account]) => ({ lpEntityId, basisAmount: account.ending }))
   } else if (!ownerMode) {
-    basisAmounts = Array.from(resolveCommitmentMap({ source: 'ledger', owners, events, asOf: entry.entryDate }),
+    basisAmounts = Array.from((await loadResolvedCommitments(admin, fundId, group, entry.entryDate)),
       ([lpEntityId, basisAmount]) => ({ lpEntityId, basisAmount }))
   }
 

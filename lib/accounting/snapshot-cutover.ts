@@ -29,7 +29,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { roundCents } from './ledger'
 import { vehicleIdByName } from './vehicle-id'
-import { loadCapitalSource } from './capital-source'
 import { listVehicles } from './load'
 
 /**
@@ -315,16 +314,6 @@ export async function previewCutover(
     }
     if (vRows.length === 0) {
       planned.push({ ...base, action: 'skip', skipReason: 'No rows for this vehicle in the snapshot.' })
-      continue
-    }
-
-    const source = await loadCapitalSource(admin, fundId, vehicle)
-    if (source === 'ledger') {
-      planned.push({
-        ...base,
-        action: 'skip',
-        skipReason: 'Already on the ledger — it has books. Copying would duplicate its capital.',
-      })
       continue
     }
 

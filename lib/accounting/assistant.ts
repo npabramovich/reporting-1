@@ -100,7 +100,7 @@ async function gatherContext(
     const rows = await lpCapitalSummary(admin, fundId, group)
     if (rows.length) {
       capText = '\nPARTNER CAPITAL (per partner — commitment / called / funded / outstanding / NAV):\n' +
-        rows.map(r => `  ${r.name}${r.partnerClass === 'gp' ? ' [GP]' : ''}: commit ${r.commitment.toFixed(2)}, called ${r.called.toFixed(2)}, funded ${r.funded.toFixed(2)}, outstanding ${r.outstanding.toFixed(2)}, NAV ${r.ending.toFixed(2)}`).join('\n')
+        rows.map(r => `  ${r.name}${r.partnerClass === 'gp' ? ' [GP]' : ''}: commit ${r.commitment.toFixed(2)}, called ${(r.called == null ? 'unknown' : r.called.toFixed(2))}, funded ${(r.funded == null ? 'unknown' : r.funded.toFixed(2))}, outstanding ${(r.outstanding == null ? 'unknown' : r.outstanding.toFixed(2))}, NAV ${(r.ending == null ? 'unknown' : r.ending.toFixed(2))}`).join('\n')
     }
   } catch { /* LP data may be absent */ }
 

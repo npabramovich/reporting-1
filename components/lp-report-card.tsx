@@ -14,12 +14,12 @@ export interface ReportCardRow {
   entityName: string
   portfolioGroup: string
   commitment: number
-  paidInCapital: number
-  distributions: number
-  nav: number
-  totalValue: number
+  paidInCapital: number | null
+  distributions: number | null
+  nav: number | null
+  totalValue: number | null
   /** Called capital not yet funded (the receivable). Optional — only ledger vehicles have one. */
-  receivable?: number
+  receivable?: number | null
   pctFunded: number | null
   dpi: number | null
   rvpi: number | null
@@ -29,10 +29,10 @@ export interface ReportCardRow {
 
 export interface ReportCardTotals {
   commitment: number
-  paidInCapital: number
-  distributions: number
-  nav: number
-  totalValue: number
+  paidInCapital: number | null
+  distributions: number | null
+  nav: number | null
+  totalValue: number | null
   pctFunded: number | null
   dpi: number | null
   rvpi: number | null
@@ -63,8 +63,8 @@ const pctOf = (v: number | null) => (v == null ? '—' : `${(v * 100).toFixed(1)
 
 export function LpReportCard(props: ReportCardProps) {
   const currency = useCurrency()
-  const fmt = (v: number) => formatCurrency(v, currency)
-  const fmtFull = (v: number) => formatCurrencyFull(v, currency)
+  const fmt = (v: number | null) => formatCurrency(v, currency)
+  const fmtFull = (v: number | null) => formatCurrencyFull(v, currency)
   const { fundName, fundLogo, fundAddress, description, investorName, rows, totals } = props
 
   return (
@@ -89,10 +89,10 @@ export function LpReportCard(props: ReportCardProps) {
 
         <h1 className="font-display text-heading font-normal mb-3">{investorName}</h1>
 
-        {totals.paidInCapital > 0 && (
+        {totals.paidInCapital != null && totals.paidInCapital > 0 && (
           <p className="text-xs leading-relaxed mb-5">
             You have invested <strong>{fmtFull(totals.paidInCapital)}</strong>
-            {totals.distributions > 0 ? (
+            {totals.distributions != null && totals.distributions > 0 ? (
               <>. So far you have received <strong>{fmtFull(totals.distributions)}</strong> back, and your current
               investments are valued at <strong>{fmtFull(totals.nav)}</strong>.</>
             ) : (

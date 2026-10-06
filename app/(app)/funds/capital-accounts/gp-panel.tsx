@@ -24,10 +24,10 @@ interface Partner {
   carryWeight: number | null
   capital: { ending: number; carriedInterest: number }
   carryAccrued: number
-  carryPaid: number
-  carryUnpaid: number
+  carryPaid: number | null
+  carryUnpaid: number | null
 }
-interface CarryPayment { id: string; lpEntityId: string; date: string; amount: number; memo: string | null }
+interface CarryPayment { possibleEntryIds?: string[]; journalEntryId?: string | null; id: string; lpEntityId: string; date: string; amount: number; memo: string | null }
 interface Gp {
   link: { vehicle: string; servesVehicle: string }
   basis: 'commitments' | 'override' | 'none'
@@ -35,7 +35,7 @@ interface Gp {
   associate: { ending: number; carriedInterest: number }
   partners: Partner[]
   payments: CarryPayment[]
-  totals: { carryAccrued: number; carryPaid: number; carryUnpaid: number; ending: number }
+  totals: { carryAccrued: number; carryPaid: number | null; carryUnpaid: number | null; ending: number }
 }
 
 const pct = (v: number) => `${(v * 100).toFixed(2)}%`
@@ -43,7 +43,7 @@ const pct = (v: number) => `${(v * 100).toFixed(2)}%`
 export function GpPanel({ isAdmin }: { isAdmin: boolean }) {
   const lf = useLedgerFetch()
   const currency = useCurrency()
-  const fmt = (v: number) => formatCurrencyPrice(v, currency)
+  const fmt = (v: number | null) => formatCurrencyPrice(v, currency)
 
   const [gp, setGp] = useState<Gp | null>(null)
   const [loading, setLoading] = useState(true)
@@ -89,6 +89,15 @@ export function GpPanel({ isAdmin }: { isAdmin: boolean }) {
     if (!res.ok) { setError(d.error ?? 'Could not record the payment'); return }
     setGp(d.gp)
     setPayPartner(''); setPayDate(''); setPayAmount('')
+  }
+
+  async function matchPayment(id: string, choice: string) {
+    if (!choice) return
+    setSaving(id); setError(null)
+    const response = await lf('/api/accounting/gp-economics', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paymentId: id, journalEntryId: choice === 'separate' ? undefined : choice, separate: choice === 'separate' }) })
+    const data = await response.json()
+    if (response.ok) setGp(data.gp); else setError(data.error)
+    setSaving(null)
   }
 
   async function deletePayment(id: string) {
@@ -177,7 +186,7 @@ export function GpPanel({ isAdmin }: { isAdmin: boolean }) {
         </table>
       </div>
 
-      {gp.partners.some(p => p.carryUnpaid < -0.005) && (
+      {gp.partners.some(p => p.carryUnpaid != null && p.carryUnpaid < -0.005) && (
         <p className="text-sm text-warning">
           A negative <strong>carry unpaid</strong> means more carry has been paid than is currently accrued (NAV fell
           after a payment) — an over-distribution to claw back, not an amount owed.
@@ -186,13 +195,7 @@ export function GpPanel({ isAdmin }: { isAdmin: boolean }) {
 
       {/* Carry paid, sourced by mode. Ledger: rolled up per partner from the associate's own
           books, read-only. LP tracking: an explicit register of (partner, date, amount). */}
-      {gp.source === 'ledger' ? (
-        <p className="text-xs text-muted-foreground">
-          Carry paid is rolled up per partner from {gp.link.vehicle}&rsquo;s ledger — the carried-interest
-          distributions only, which the ledger keeps separate from return-of-capital distributions. Book a carry
-          payment as a carried-interest distribution in the ledger to change it; it can&rsquo;t be typed here.
-        </p>
-      ) : (
+      {(
         <div className="space-y-2">
           <h3 className="text-base font-medium">Carry payments</h3>
           <p className="text-xs text-muted-foreground">Carry paid to each partner — the total per partner feeds the table above.</p>
@@ -212,7 +215,7 @@ export function GpPanel({ isAdmin }: { isAdmin: boolean }) {
                 )}
                 {gp.payments.map(pay => (
                   <tr key={pay.id} className="border-t">
-                    <td className="px-3 py-1.5">{nameById.get(pay.lpEntityId) ?? pay.lpEntityId}</td>
+                    <td className="px-3 py-1.5">{nameById.get(pay.lpEntityId) ?? pay.lpEntityId}{!!pay.possibleEntryIds?.length && <div className="text-sm text-warning mt-1">Possible duplicate in the books. Paid totals are unknown until matched.{isAdmin && <select aria-label="Match carry payment" className="block border rounded p-1 mt-1 bg-background" value="" onChange={e => matchPayment(pay.id, e.target.value)}><option value="">Match payment…</option>{pay.possibleEntryIds.map(id => <option key={id} value={id}>Same payment as entry {id.slice(0, 8)}</option>)}<option value="separate">Separate payment</option></select>}</div>}</td>
                     <td className="px-3 py-1.5 text-muted-foreground">{pay.date}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">{fmt(pay.amount)}</td>
                     {isAdmin && (

@@ -28,6 +28,7 @@ import { ACTUAL_BOOK } from './books'
 const TOLERANCE = 0.005
 
 export interface LpPosition {
+  id?: string
   lpEntityId: string
   asOfDate: string
   commitment: number | null
@@ -105,16 +106,18 @@ export async function loadPositions(
   if (!vehicleId) return []
   let q = admin
     .from('lp_positions' as any)
-    .select('lp_entity_id, as_of_date, commitment, called_capital, distributions, nav, irr')
+    .select('id, lp_entity_id, as_of_date, commitment, called_capital, distributions, nav, irr')
     .eq('fund_id', fundId)
     .eq('vehicle_id', vehicleId)
   if (asOf) q = q.lte('as_of_date', asOf)
-  const { data } = await q
+  const { data, error } = await q
+  if (error) throw error
   return ((data as any[]) ?? []).map(toLpPosition)
 }
 
 function toLpPosition(r: any): LpPosition {
   return {
+    id: r.id as string | undefined,
     lpEntityId: r.lp_entity_id as string,
     asOfDate: r.as_of_date as string,
     commitment: r.commitment == null ? null : Number(r.commitment),
@@ -141,11 +144,12 @@ export async function loadPositionsBatch(
   for (const id of vehicleIds) out.set(id, [])
   let q = admin
     .from('lp_positions' as any)
-    .select('lp_entity_id, as_of_date, commitment, called_capital, distributions, nav, irr, vehicle_id')
+    .select('id, lp_entity_id, as_of_date, commitment, called_capital, distributions, nav, irr, vehicle_id')
     .eq('fund_id', fundId)
     .in('vehicle_id', vehicleIds)
   if (asOf) q = q.lte('as_of_date', asOf)
-  const { data } = await q
+  const { data, error } = await q
+  if (error) throw error
   for (const r of ((data as any[]) ?? [])) out.get(r.vehicle_id)?.push(toLpPosition(r))
   return out
 }
@@ -239,30 +243,12 @@ export async function lastDataDate(
   fundId: string,
   group: string
 ): Promise<string | null> {
-  const vehicleId = await vehicleIdByName(admin, fundId, group)
-  if (!vehicleId) return null
+  // Use the dates of the resolved figures, not the latest unrelated accounting activity.
+  const { loadCapitalPostings } = await import('./capital-source')
+  const resolved = await loadCapitalPostings(admin, fundId, group)
+  const dates = Array.from(resolved.evidenceByLp.values()).map(e => e.asOf).filter((d): d is string => !!d).sort()
+  return dates[0] ?? null
 
-  const { data: settings } = await admin
-    .from('vehicle_accounting_settings' as any)
-    .select('capital_source').eq('fund_id', fundId).eq('vehicle_id', vehicleId).maybeSingle()
-  const isLedger = (settings as any)?.capital_source === 'ledger'
-
-  if (isLedger) {
-    const { data } = await admin
-      .from('journal_entries' as any)
-      .select('entry_date')
-      .eq('book', ACTUAL_BOOK)
-      .eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'posted')
-      .order('entry_date', { ascending: false }).limit(1).maybeSingle()
-    return (data as any)?.entry_date ?? null
-  }
-
-  const { data } = await admin
-    .from('lp_positions' as any)
-    .select('as_of_date')
-    .eq('fund_id', fundId).eq('vehicle_id', vehicleId)
-    .order('as_of_date', { ascending: false }).limit(1).maybeSingle()
-  return (data as any)?.as_of_date ?? null
 }
 
 /** Last-updated date per vehicle NAME, for a report spanning several vehicles. */
@@ -274,4 +260,16 @@ export async function lastDataDates(
   const out = new Map<string, string | null>()
   await Promise.all(groups.map(async g => { out.set(g, await lastDataDate(admin, fundId, g)) }))
   return out
+}
+
+/** Separate freshness dimensions; a new expense does not revalue an LP statement. */
+export async function dataDates(admin: SupabaseClient, fundId: string, group: string) {
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  const [positions, entries, periods] = await Promise.all([
+    admin.from('lp_positions' as any).select('as_of_date').eq('fund_id', fundId).eq('vehicle_id', vehicleId).order('as_of_date', { ascending: false }).limit(1).maybeSingle(),
+    admin.from('journal_entries' as any).select('entry_date').eq('book', ACTUAL_BOOK).eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'posted').order('entry_date', { ascending: false }).limit(1).maybeSingle(),
+    admin.from('fiscal_periods' as any).select('period_end').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'closed').order('period_end', { ascending: false }).limit(1).maybeSingle(),
+  ])
+  for (const result of [positions, entries, periods]) if (result.error) throw result.error
+  return { reportedAsOf: (positions.data as any)?.as_of_date ?? null, bookActivityThrough: (entries.data as any)?.entry_date ?? null, closedThrough: (periods.data as any)?.period_end ?? null }
 }

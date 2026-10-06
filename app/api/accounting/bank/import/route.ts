@@ -1,3 +1,4 @@
+import { hasAccess, loadAccessContext } from '@/lib/access/effective'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -21,7 +22,8 @@ export async function POST(req: NextRequest) {
   const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
-  const result = await importBankTransactions(admin, gate.fundId, group, user.id, (body?.csv ?? '').toString(), (body?.source ?? 'csv').toString())
+  const access = await loadAccessContext(admin, gate.fundId, user.id, gate.role)
+  const result = await importBankTransactions(admin, gate.fundId, group, user.id, (body?.csv ?? '').toString(), (body?.source ?? 'csv').toString(), body?.reviewToken, hasAccess(access, 'lp_capital', 'read'))
   if ('error' in result) return NextResponse.json(result, { status: 400 })
   return NextResponse.json(result)
 }

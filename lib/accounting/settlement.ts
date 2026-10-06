@@ -28,6 +28,7 @@ export interface RegisterLine {
 
 /** Money that moved against a partner's receivable or payable. Always positive. */
 export interface Settlement {
+  entryId?: string
   lpEntityId: string
   date: string
   amount: number
@@ -95,7 +96,67 @@ export function applySettlements(lines: RegisterLine[], settlements: Settlement[
   return out
 }
 
+export interface SettlementReview {
+  lineId: string
+  manualAmount: number
+  manualDate: string
+  separateRemainder: boolean
+  links: { entryId: string; amount: number; entryAmount: number; date: string }[]
+}
+
+/** Manual amounts remain assigned to their exact line. Only confirmed links exclude overlap. */
+export function reconcileSettlements(
+  lines: RegisterLine[], ledger: Settlement[], manual: (Settlement & { lineId: string })[],
+  reviews: SettlementReview[] = [],
+): Map<string, SettledLine & { settlementReview?: string }> {
+  const result: Map<string, SettledLine & { settlementReview?: string }> = applySettlements(lines, ledger)
+  const manualPartners = new Set(manual.map(payment => payment.lpEntityId))
+  for (const lp of manualPartners) {
+    const recorded = manual.filter(payment => payment.lpEntityId === lp)
+    const bookPayments = ledger.filter(payment => payment.lpEntityId === lp)
+    const remaining = bookPayments.map(payment => ({ ...payment }))
+    let unresolved = false
+    for (const payment of recorded) {
+      const review = reviews.find(review => review.lineId === payment.lineId)
+      if (!review || Math.abs(review.manualAmount - payment.amount) >= CENT || review.manualDate !== payment.date) {
+        if (bookPayments.length || review) unresolved = true
+        continue
+      }
+      let linked = 0
+      for (const link of review.links) {
+        const entry = remaining.find(entry => entry.entryId === link.entryId)
+        const original = bookPayments.find(entry => entry.entryId === link.entryId)
+        if (!entry || !original || Math.abs(original.amount - link.entryAmount) >= CENT || original.date !== link.date || link.amount <= 0 || link.amount > entry.amount + CENT) {
+          unresolved = true
+          continue
+        }
+        entry.amount = roundCents(entry.amount - link.amount)
+        linked = roundCents(linked + link.amount)
+      }
+      if (linked > payment.amount + CENT || (Math.abs(linked - payment.amount) >= CENT && !review.separateRemainder)) unresolved = true
+    }
+    const lpLines = lines.filter(line => line.lpEntityId === lp)
+    const preserved = new Map(lpLines.map(line => [line.id, applySettlements([line], recorded.filter(payment => payment.lineId === line.id)).get(line.id)!]))
+    const additional = applySettlements(lpLines.map(line => ({ ...line, amount: preserved.get(line.id)!.outstanding })), unresolved ? [] : remaining)
+    for (const line of lpLines) {
+      const manualLine = preserved.get(line.id)!
+      const extra = additional.get(line.id)!
+      const settled = roundCents(manualLine.settled + extra.settled)
+      const outstanding = roundCents(Math.max(0, line.amount - settled))
+      const lastSettlementOn = [manualLine.lastSettlementOn, extra.lastSettlementOn].filter((date): date is string => !!date).sort().at(-1) ?? null
+      result.set(line.id, {
+        ...manualLine, settled, outstanding,
+        status: outstanding <= CENT ? 'settled' : settled > CENT ? 'partial' : 'open',
+        settledOn: outstanding <= CENT ? lastSettlementOn : null, lastSettlementOn,
+        ...(unresolved ? { settlementReview: `Payment reconciliation needed: this partner has ${recorded.reduce((sum, payment) => sum + payment.amount, 0).toFixed(2)} recorded manually and ${bookPayments.reduce((sum, payment) => sum + payment.amount, 0).toFixed(2)} in accounting records. Manual line allocations are retained until the payment representations are matched.` } : {}),
+      })
+    }
+  }
+  return result
+}
+
 export interface RegisterStatus {
+  settlementReview?: string
   status: LineStatus
   settled: number
   outstanding: number
@@ -105,14 +166,14 @@ export interface RegisterStatus {
 
 /** Roll a call's or distribution's lines up to one status. Pure. */
 export function registerStatus(
-  lines: Pick<SettledLine, 'settled' | 'outstanding'>[],
+  lines: (Pick<SettledLine, 'settled' | 'outstanding'> & { settlementReview?: string })[],
   dueDate: string | null | undefined,
   today: string,
 ): RegisterStatus {
   const settled = roundCents(lines.reduce((s, l) => s + l.settled, 0))
   const outstanding = roundCents(lines.reduce((s, l) => s + l.outstanding, 0))
   const status: LineStatus = outstanding <= CENT ? 'settled' : settled > CENT ? 'partial' : 'open'
-  return { status, settled, outstanding, overdue: outstanding > CENT && !!dueDate && dueDate < today }
+  return { ...(lines.some(line => line.settlementReview) ? { settlementReview: 'Payment reconciliation needed' } : {}), status, settled, outstanding, overdue: outstanding > CENT && !!dueDate && dueDate < today }
 }
 
 /**
@@ -123,16 +184,20 @@ export function registerStatus(
  * entries post the opposite sign, so a sign filter is the whole distinction.
  */
 export function settlementsFromPostings(
-  postings: { accountId: string; amount: number; lpEntityId?: string | null; entryDate?: string | null }[],
+  postings: { accountId: string; amount: number; lpEntityId?: string | null; entryDate?: string | null; entryId?: string }[],
   accountId: string,
   direction: 'receivable' | 'payable',
 ): Settlement[] {
   const out: Settlement[] = []
+  const grouped = new Map<string, Settlement>()
   for (const p of postings) {
     if (p.accountId !== accountId || !p.lpEntityId) continue
     const amount = direction === 'receivable' ? -p.amount : p.amount
-    if (amount <= CENT) continue
-    out.push({ lpEntityId: p.lpEntityId, date: p.entryDate ?? '', amount: roundCents(amount) })
+    const payment = { ...(p.entryId ? { entryId: p.entryId } : {}), lpEntityId: p.lpEntityId, date: p.entryDate ?? '', amount: roundCents(amount) }
+    if (p.entryId) {
+      const key = `${p.lpEntityId}:${p.entryId}`
+      grouped.set(key, { ...payment, amount: roundCents((grouped.get(key)?.amount ?? 0) + amount) })
+    } else if (amount > CENT) out.push(payment)
   }
-  return out
+  return [...out, ...[...grouped.values()].filter(payment => payment.amount > CENT)]
 }

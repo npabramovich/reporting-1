@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { loadFundPreload, sourceForGroup } from './fund-preload'
+import { loadFundPreload, vehicleCapitalPreload } from './fund-preload'
 
 // Fake admin client: a chainable query builder where every method returns the same thenable,
 // which resolves to the table's canned rows. Filters are no-ops (the loaders group/reduce in
@@ -78,25 +78,12 @@ describe('loadFundPreload', () => {
     expect(p.ownershipByGroup.has('nonexistent')).toBe(false)
   })
 
-  it('maps capital source per vehicle and defaults unknown/absent to events', async () => {
-    const admin = fakeAdmin({
-      fund_vehicles: [
-        { id: 'v1', name: 'Main Fund', aliases: null, vintage_year: null },
-        { id: 'v2', name: 'SPV One', aliases: null, vintage_year: null },
-        { id: 'v3', name: 'Tracked', aliases: null, vintage_year: null },
-      ],
-      lp_entities: [],
-      lp_investments: [],
-      vehicle_accounting_settings: [
-        { vehicle_id: 'v1', capital_source: 'ledger' },
-        { vehicle_id: 'v2', capital_source: 'events' },
-        // v3 has no settings row → defaults to events.
-      ],
-    })
-    const p = await loadFundPreload(admin, FUND)
-    expect(sourceForGroup(p, 'Main Fund')).toBe('ledger')
-    expect(sourceForGroup(p, 'SPV One')).toBe('events')
-    expect(sourceForGroup(p, 'Tracked')).toBe('events') // no settings row
-    expect(sourceForGroup(p, 'Unknown Vehicle')).toBe('events') // not in id map
+  it('batches reviewed dates without a mode lookup', async () => {
+    const p = await loadFundPreload(fakeAdmin({
+      fund_vehicles: [{ id: 'v1', name: 'Main Fund', aliases: [] }],
+      fiscal_periods: [{ vehicle_id: 'v1', period_end: '2025-03-31' }, { vehicle_id: 'v1', period_end: '2025-06-30' }],
+    }), FUND)
+    expect(vehicleCapitalPreload(p, 'Main Fund').closedThrough).toBe('2025-06-30')
+    expect(vehicleCapitalPreload(p, 'Unknown').closedThrough).toBeNull()
   })
 })

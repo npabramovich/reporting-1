@@ -1,3 +1,5 @@
+import { chartForVehicleKind } from '@/lib/accounting/chart'
+import { vehicleKindByName } from '@/lib/accounting/vehicle-domain'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -46,6 +48,10 @@ export async function POST(req: NextRequest) {
   }
 
   const chart = ((chartRows as any[]) ?? []) as ChartAccount[]
+  const kind = await vehicleKindByName(admin, gate.fundId, group)
+  for (const a of chartForVehicleKind(kind)) {
+    if (!chart.some(existing => existing.code === a.code)) chart.push({ ...a, id: `template:${a.code}`, is_active: true } as ChartAccount)
+  }
   const saved = new Map(((savedRows as any[]) ?? []).map(r => [r.qb_account, r]))
 
   // A previously CONFIRMED mapping always wins over a fresh proposal — see the migration's

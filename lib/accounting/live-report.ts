@@ -23,6 +23,9 @@ import { xirr, type CashFlow } from '@/lib/xirr'
 import { lpRatios } from '@/lib/lp-metrics'
 import { loadCapitalPostings, type CapitalSource } from './capital-source'
 import { loadCommitmentEvents, commitmentsFrom, loadPartnerTerms } from './terms'
+import { reportingIrr } from './reporting-irr'
+import type { CapitalEvidence } from './capital-evidence'
+import { loadReportingCapital } from './reporting-capital'
 import { listVehicles, loadOwnership } from './load'
 import { lookThroughAccount, associateMembers } from './look-through'
 import { latestPositionIrr } from './lp-positions'
@@ -33,15 +36,15 @@ import { loadVehicleGpLinks } from './gp-links'
 /** The metric half of an `lp_investments` row — same names, same units. */
 export interface LiveMetrics {
   commitment: number
-  called_capital: number
-  paid_in_capital: number
-  distributions: number
-  nav: number
-  total_value: number
-  outstanding_balance: number
+  called_capital: number | null
+  paid_in_capital: number | null
+  distributions: number | null
+  nav: number | null
+  total_value: number | null
+  outstanding_balance: number | null
   /** Called capital NOT yet funded (the receivable): called − wired. Zero on an events-tracked
    *  vehicle, where there is no call-vs-fund distinction. */
-  receivable: number
+  receivable: number | null
   dpi: number | null
   rvpi: number | null
   tvpi: number | null
@@ -63,6 +66,7 @@ export interface LiveMetrics {
 }
 
 export interface LiveInvestmentRow extends LiveMetrics {
+  evidence?: CapitalEvidence
   entity_id: string
   /** The vehicle name, matching `lp_investments.portfolio_group`. */
   portfolio_group: string
@@ -185,25 +189,17 @@ export async function liveRowsForVehicle(
   asOf?: string,
   preload?: FundPreload
 ): Promise<{ source: CapitalSource; rows: LiveInvestmentRow[] }> {
-  // With a preload, capital source and ownership come from the one fund-wide read instead of a
-  // per-vehicle query each; commitment_events is still per-vehicle (not part of the preload).
   const idMap = preload?.idMap
-  const [{ source, postings, receivableByLp }, commitmentEvents, owners] = await Promise.all([
-    loadCapitalPostings(admin, fundId, group, asOf, idMap, preload ? vehicleCapitalPreload(preload, group) : undefined),
-    loadCommitmentEvents(admin, fundId, group, idMap, preload ? commitmentEventsForGroup(preload, group) : undefined),
-    preload ? Promise.resolve(preload.ownershipByGroup.get(group) ?? []) : loadOwnership(admin, fundId, group),
-  ])
-
-  // Commitment is not a ledger concept — it lives in commitment_events (effective-dated,
-  // so it can be read as of the report date). Fall back to the lp_investments scalar when a
-  // vehicle has no events yet, mirroring what the close does (close.ts:134-141).
-  const commitmentByLp = commitmentsFrom(commitmentEvents, owners, asOf)
+  const { source, postings, receivableByLp, commitmentByLp, evidenceByLp } = await loadReportingCapital(
+    admin, fundId, group, asOf, preload,
+  )
 
   const accountByLp = computeCapitalAccounts(postings)
 
   // Union: an LP with a commitment but no activity still belongs on the report (they show
   // as fully unfunded), and an LP with activity but no recorded commitment must not vanish.
   const ids = new Set<string>([
+    ...Array.from(evidenceByLp.keys()),
     ...Array.from(accountByLp.keys()),
     ...Array.from(commitmentByLp.keys()),
   ])
@@ -219,38 +215,23 @@ export async function liveRowsForVehicle(
 
   const irrDate = asOf ?? new Date().toISOString().slice(0, 10)
 
-  // A tracking vehicle's positions can carry a REPORTED IRR (pasted from a statement). Prefer it:
-  // a single cutover date has no time spread for a derived IRR to be meaningful, and the statement
-  // figure is what the LP was actually shown. Falls back to the derived IRR when none was stored.
-  const storedIrr = source === 'events'
-    ? await latestPositionIrr(admin, fundId, group, asOf, idMap, preload ? (preload.positionsByVehicleId.get(idMap?.get(group) ?? '') ?? []) : undefined)
-    : new Map<string, number>()
-
   const rows = Array.from(ids).map(entityId => {
     const account = accountByLp.get(entityId) ?? emptyAccount()
     const lpPostings = postingsByLp.get(entityId) ?? []
-    // The NAV terminal for IRR must be dated when the NAV was actually STATED. For a ledger
-    // vehicle that's the report date (NAV persists to asOf). For a tracking vehicle the NAV is
-    // stated as of the position date, so the terminal is that LP's last posting date — using the
-    // report date instead would spread a large TVPI over a few months and annualize to nonsense.
-    // (A single cutover date then has no time spread and derives no IRR — the stored/pasted IRR
-    // above is what fills it.)
-    const lastPostingDate = lpPostings.reduce((m, p) => (p.entryDate && p.entryDate > m ? p.entryDate : m), '')
-    const terminalDate = source === 'events' && lastPostingDate ? lastPostingDate : irrDate
-    const irr = storedIrr.has(entityId)
-      ? storedIrr.get(entityId)!
-      : lpIrr(lpPostings, account.ending, terminalDate)
-    return {
-      entity_id: entityId,
-      portfolio_group: group,
-      source,
-      ...deriveMetrics(
-        account,
-        commitmentByLp.get(entityId) ?? 0,
-        receivableByLp.get(entityId) ?? 0,
-        irr,
-      ),
+    const evidence = evidenceByLp.get(entityId)
+    const irr = reportingIrr(lpPostings, account.ending, evidence)
+    const metrics = deriveMetrics(account, commitmentByLp.get(entityId) ?? 0, receivableByLp.get(entityId) ?? 0, irr)
+    if (evidence) {
+      metrics.called_capital = metrics.paid_in_capital = evidence.values.contributions
+      metrics.distributions = evidence.values.distributions
+      metrics.nav = evidence.values.nav
+      metrics.total_value = metrics.nav == null || metrics.distributions == null ? null : roundCents(metrics.nav + metrics.distributions)
+      metrics.outstanding_balance = metrics.paid_in_capital == null ? null : roundCents(metrics.commitment - metrics.paid_in_capital)
+      const ratios = lpRatios({ commitment: metrics.commitment, paidIn: metrics.paid_in_capital, distributions: metrics.distributions, nav: metrics.nav })
+      metrics.dpi = ratios.dpi; metrics.rvpi = ratios.rvpi; metrics.tvpi = ratios.tvpi
+      if (evidence.basis === 'reported' && !receivableByLp.has(entityId)) metrics.receivable = null
     }
+    return { entity_id: entityId, evidence, portfolio_group: group, source, ...metrics }
   })
   return { source, rows }
 }
@@ -341,6 +322,8 @@ async function applyLookThrough(
     const associateRow = rows.find(r => r.entity_id === link.entityId && r.portfolio_group === link.servesGroup)
     if (!associateRow) return null // the associate holds nothing in that vehicle — nothing to look through
 
+    if (associateRow.evidence?.missing.length) return { link, associateRow, memberRows: null }
+
     // The associate's members and their two allocations, from the associate vehicle's own books.
     const [commitmentEvents, terms, owners] = await Promise.all([
       loadCommitmentEvents(admin, fundId, link.associateGroup, idMap, preload ? commitmentEventsForGroup(preload, link.associateGroup) : undefined),
@@ -348,7 +331,7 @@ async function applyLookThrough(
       preload ? Promise.resolve(preload.ownershipByGroup.get(link.associateGroup) ?? []) : loadOwnership(admin, fundId, link.associateGroup),
     ])
 
-    const basis = commitmentsFrom(commitmentEvents, owners, asOf)
+    const basis = (await loadReportingCapital(admin, fundId, link.associateGroup, asOf, preload)).commitmentByLp
     const carryWeights = new Map(
       terms
         .filter(t => t.category === 'carried_interest' && t.participates && t.weightOverride != null)

@@ -24,11 +24,6 @@ async function main() {
   const { id: vehicleId, fund_id: fundId } = veh
   console.log(`Vehicle ${veh.name}  vehicle_id=${vehicleId}  fund_id=${fundId}\n`)
 
-  const { data: settings } = await admin.from('vehicle_accounting_settings')
-    .select('capital_source, history_mode').eq('vehicle_id', vehicleId).maybeSingle()
-  console.log(`capital_source = ${settings?.capital_source ?? '(no row → defaults to "events")'}`)
-  console.log(`history_mode   = ${settings?.history_mode ?? '(none)'}\n`)
-
   // --- 1. The chart -----------------------------------------------------------
   const { data: accounts } = await admin.from('chart_of_accounts')
     .select('id, code, name, type, subtype, lp_entity_id')

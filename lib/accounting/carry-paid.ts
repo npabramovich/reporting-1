@@ -13,37 +13,36 @@ export interface CarryPayment {
   date: string
   amount: number
   memo: string | null
+  possibleEntryIds: string[]
+  journalEntryId: string | null
 }
 
 export async function resolveCarryPaid(
   admin: SupabaseClient,
-  opts: { source: CapitalSource; ownPostings: CapitalPosting[]; fundId: string; vehicleId: string },
-): Promise<{ paidByLp: Map<string, number>; payments: CarryPayment[] }> {
+  opts: { source: CapitalSource; asOf?: string; ownPostings: CapitalPosting[]; fundId: string; vehicleId: string },
+): Promise<{ paidByLp: Map<string, number>; payments: CarryPayment[]; unresolvedLpIds: Set<string> }> {
   const paidByLp = new Map<string, number>()
   const payments: CarryPayment[] = []
+  const unresolvedLpIds = new Set<string>()
 
-  if (opts.source === 'ledger') {
-    // Carry paid = carried-interest DISTRIBUTIONS on the associate's own books, tagged
-    // source_type 'carry_distribution' — distinct from return-of-capital distributions AND from
-    // the accrual marks ('carried_interest'). A payment debits the member's capital (positive
-    // posting amount); its magnitude is the carry paid. No separate register to maintain.
-    for (const p of opts.ownPostings) {
-      if (!p.lpEntityId || p.sourceType !== 'carry_distribution') continue
-      paidByLp.set(p.lpEntityId, roundCents((paidByLp.get(p.lpEntityId) ?? 0) + p.amount))
-    }
-  } else {
-    // Tracking: an explicit (partner, date, amount) register, edited on the GP panel — the
-    // tracking equivalent of the ledger's distribution postings.
-    const { data: rows } = await (admin as any)
-      .from('carry_payments')
-      .select('id, lp_entity_id, paid_date, amount, memo')
-      .eq('fund_id', opts.fundId).eq('vehicle_id', opts.vehicleId)
-      .order('paid_date', { ascending: false })
-    for (const r of ((rows as any[]) ?? [])) {
-      paidByLp.set(r.lp_entity_id, (paidByLp.get(r.lp_entity_id) ?? 0) + Number(r.amount))
-      payments.push({ id: r.id as string, lpEntityId: r.lp_entity_id as string, date: r.paid_date as string, amount: Number(r.amount), memo: (r.memo ?? null) as string | null })
-    }
+  for (const p of opts.ownPostings) {
+    if (opts.asOf && p.entryDate && p.entryDate > opts.asOf) continue
+    if (!p.lpEntityId || p.sourceType !== 'carry_distribution') continue
+    paidByLp.set(p.lpEntityId, roundCents((paidByLp.get(p.lpEntityId) ?? 0) + p.amount))
   }
-
-  return { paidByLp, payments }
+  const { data: rows, error } = await admin.from('carry_payments' as any)
+    .select('id, lp_entity_id, paid_date, amount, memo, journal_entry_id, separate_from_ledger')
+    .eq('fund_id', opts.fundId).eq('vehicle_id', opts.vehicleId).order('paid_date', { ascending: false })
+  if (error) throw error
+  for (const r of (rows as any[]) ?? []) {
+    if (opts.asOf && r.paid_date > opts.asOf) continue
+    const represented = r.journal_entry_id && opts.ownPostings.some(p => p.entryId === r.journal_entry_id && p.lpEntityId === r.lp_entity_id && p.sourceType === 'carry_distribution')
+    const candidates = new Map<string, number>()
+    for (const p of opts.ownPostings) if (p.entryId && p.lpEntityId === r.lp_entity_id && p.sourceType === 'carry_distribution' && p.entryDate === r.paid_date) candidates.set(p.entryId, (candidates.get(p.entryId) ?? 0) + p.amount)
+    const possibleEntryIds = !r.journal_entry_id && !r.separate_from_ledger ? Array.from(candidates).filter(([, amount]) => Math.abs(amount - Number(r.amount)) < 0.005).map(([id]) => id) : []
+    if (possibleEntryIds.length) unresolvedLpIds.add(r.lp_entity_id)
+    if (!represented) paidByLp.set(r.lp_entity_id, roundCents((paidByLp.get(r.lp_entity_id) ?? 0) + Number(r.amount)))
+    payments.push({ id: r.id, lpEntityId: r.lp_entity_id, date: r.paid_date, amount: Number(r.amount), memo: r.memo ?? null, journalEntryId: r.journal_entry_id ?? null, possibleEntryIds })
+  }
+  return { paidByLp, payments, unresolvedLpIds }
 }
