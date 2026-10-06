@@ -13,6 +13,7 @@ import { closedPeriodRanges, dateInAnyClosedPeriod } from '@/lib/accounting/peri
 import { dbError } from '@/lib/api-error'
 import { ACTUAL_BOOK } from '@/lib/accounting/books'
 import { postExistingEntryWithAllocation, setGeneratedAllocationStatus } from '@/lib/accounting/continuous-allocation'
+import { loadQuickBooksCashEntries, quickBooksCandidates, quickBooksAlreadyClaimed, readAll } from '@/lib/accounting/bank-quickbooks-match'
 
 // GET — list a vehicle's staged bank transactions.
 export async function GET(req: NextRequest) {
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await admin
     .from('bank_transactions' as any)
-    .select('id, txn_date, amount, description, counterparty, status, suggested_account_code, journal_entry_id')
+    .select('id, txn_date, amount, description, counterparty, status, suggested_account_code, journal_entry_id, raw')
     .eq('fund_id', gate.fundId)
     .eq('vehicle_id', vehicleId)
     .order('txn_date', { ascending: false })
@@ -47,6 +48,19 @@ export async function GET(req: NextRequest) {
   // obligation, not a person), and whether the entry SPLITS across several accounts — which is
   // why re-pointing it is refused.
   const rows = (data as any[]) ?? []
+  const pending = rows.filter(r => r.status === 'unmatched' && r.raw?.quickbooksReview)
+  const duplicateCandidates = new Map<string, unknown[]>()
+  if (pending.length && vehicleId) {
+    try {
+      const codes = await accountIdByCode(admin, gate.fundId, group)
+      const cashId = codes.get('1000')
+      const entries = cashId ? await loadQuickBooksCashEntries(admin, gate.fundId, vehicleId, cashId, pending.map(t => t.txn_date)) : []
+      const linked = await readAll<any>((from, to) => admin.from('bank_transactions' as any).select('journal_entry_id, raw')
+        .eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId).not('journal_entry_id', 'is', null).order('id').range(from, to))
+      for (const t of pending) duplicateCandidates.set(t.id, quickBooksCandidates({ date: t.txn_date, amount: Number(t.amount), description: t.description ?? '' }, entries)
+        .map(e => ({ ...e, claimed: quickBooksAlreadyClaimed(e, linked) })))
+    } catch (e) { return NextResponse.json({ error: `Could not check QuickBooks matches: ${(e as Error).message}` }, { status: 500 }) }
+  }
   const entryIds = Array.from(new Set(rows.map(r => r.journal_entry_id).filter(Boolean)))
 
   const partnerByEntry = new Map<string, string>()
@@ -91,6 +105,10 @@ export async function GET(req: NextRequest) {
     const split = acct === 'split'
     return {
       ...r,
+      raw: undefined,
+      quickbooks_linked: !!r.raw?.quickbooksReview && !!r.journal_entry_id,
+      duplicate_review: !!r.raw?.quickbooksReview && r.status === 'unmatched',
+      duplicate_candidates: duplicateCandidates.get(r.id) ?? [],
       // What to SHOW. Falls back to the stored hint only when there is no entry to read.
       entry_account_code: split ? null : acct?.code ?? null,
       entry_account_name: split ? null : acct?.name ?? null,
@@ -188,13 +206,16 @@ export async function POST(req: NextRequest) {
 
   const { data: txn } = await admin
     .from('bank_transactions' as any)
-    .select('id, journal_entry_id, status')
+    .select('id, journal_entry_id, status, raw')
     .eq('id', id)
     .eq('fund_id', gate.fundId)
     .eq('vehicle_id', vehicleId)
     .maybeSingle()
   if (!txn) return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
   const entryId = (txn as any).journal_entry_id
+  if (entryId && (txn as any).raw?.quickbooksReview) {
+    return NextResponse.json({ error: 'This bank row is linked to an existing QuickBooks entry. Manage that entry from the Journal.' }, { status: 400 })
+  }
 
   // Override the suggested account before posting: re-point the draft entry's
   // single non-cash posting to the chosen chart account.
@@ -274,6 +295,11 @@ export async function POST(req: NextRequest) {
   // Restore: bring an ignored transaction back to draft (un-void its entry) so it
   // can be edited/posted again. Refused if the entry is in a closed period.
   if (action === 'restore') {
+    if ((txn as any).raw?.quickbooksReview && !entryId) {
+      const { error } = await admin.from('bank_transactions' as any).update({ status: 'unmatched' }).eq('id', id).eq('fund_id', gate.fundId)
+      if (error) return dbError(error, 'bank-restore-review')
+      return NextResponse.json({ ok: true, status: 'unmatched' })
+    }
     if ((txn as any).status !== 'ignored') return NextResponse.json({ error: 'Only an ignored transaction can be restored' }, { status: 400 })
     if (entryId) {
       const { data: entry } = await admin.from('journal_entries' as any).select('entry_date').eq('book', ACTUAL_BOOK).eq('id', entryId).eq('fund_id', gate.fundId).maybeSingle()

@@ -41,7 +41,7 @@ const SUBPAGES: Record<string, { title: string; description: string; view: React
   'fof-report': { title: 'Fund-of-funds report', description: 'Schedule of investments, commitments and liquidity, and underlying fund performance', view: <FofReportView /> },
   'journal': { title: 'Journal', description: 'Every entry, to view, unpost or edit — or author entries as plain text and post them in one go.', view: <JournalPageView /> },
   'ledger': { title: 'General ledger', description: 'One account at a time: the balance carried in, every posting, and the running balance.', view: <Suspense fallback={null}><LedgerView /></Suspense> },
-  'migrate': { title: 'Migrate from QuickBooks', description: 'Import the general ledger, map the accounts, and tie every period out to QuickBooks', view: <MigrateView /> },
+  'migrate': { title: 'Migrate from QuickBooks', description: 'Import the general ledger, map the accounts, and tie every period out to QuickBooks', view: null },
   'opening-balances': { title: 'Opening balances', description: 'Take over at a cutover date: enter each LP’s capital balance from their latest statement. Books one opening entry — no history to reconstruct.', view: <><div className="mb-8"><SnapshotCutover /></div><OpeningBalancesView /></> },
   'periods': { title: 'Period close', description: 'Allocate income and expenses to each partner and close the period', view: <PeriodsView /> },
   'schedule-of-investments': { title: 'Schedule of investments', description: 'Each investment at cost and fair value', view: <ScheduleOfInvestmentsView /> },
@@ -116,7 +116,7 @@ function EntitySubpage({ v, slug }: { v: Vehicle; slug: string }) {
   return (
     <div className="pt-4 md:pt-8 pb-8 w-full">
       <FundSubpageChrome title={page.title} description={page.description} vehicle={v.vehicle} vehicleId={v.vehicleId}>
-        {page.view}
+        {slug === 'migrate' ? <MigrateView key={v.vehicleId ?? v.vehicle} group={v.vehicle} /> : page.view}
       </FundSubpageChrome>
     </div>
   )

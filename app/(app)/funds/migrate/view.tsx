@@ -7,7 +7,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCurrency, formatCurrency } from '@/components/currency-context'
-import { useVehicle } from '@/components/accounting-vehicle'
+import { Input } from '@/components/ui/input'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { suggestAccount, type AccountSuggestion } from '@/lib/accounting/quickbooks/suggest-account'
 
 interface Proposal {
   qbAccount: string
@@ -15,6 +17,7 @@ interface Proposal {
   confidence: 'exact' | 'likely' | 'none'
   reason: string
   suggestsHolding: string | null
+  lineCount: number
   excluded?: boolean
 }
 
@@ -44,15 +47,17 @@ interface TieOutResult {
  * makes the migration safe — mapping before import, import before tie-out, tie-out before the
  * cut-over date is set — so the UI exists partly to make it hard to do out of sequence.
  */
-export function MigrateView() {
+export function MigrateView({ group }: { group: string }) {
   const currency = useCurrency()
-  const { group } = useVehicle()
   const fmt = (v: number) => formatCurrency(v, currency)
 
   const [journalText, setJournalText] = useState('')
   const [parsed, setParsed] = useState<ParseResult | null>(null)
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [chart, setChart] = useState<{ code: string; name: string }[]>([])
+  const [newAccount, setNewAccount] = useState<(AccountSuggestion & { qbAccount: string }) | null>(null)
+  const [holdingTypes, setHoldingTypes] = useState<Record<string, string>>({})
+  const [mappingSaved, setMappingSaved] = useState(false)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
 
@@ -68,7 +73,9 @@ export function MigrateView() {
     // /api/accounting/chart returns a bare array, not { accounts: [...] }.
     const json = await res.json().catch(() => [])
     const rows = Array.isArray(json) ? json : (json?.accounts ?? [])
-    setChart(rows.map((a: any) => ({ code: a.code, name: a.name })))
+    if (!res.ok) throw new Error(json?.error ?? 'Could not load accounts.')
+    const active = rows.filter((a: any) => a.is_active !== false)
+    setChart(active.map((a: any) => ({ code: a.code, name: a.name })))
   }, [group])
 
   const loadRuns = useCallback(async () => {
@@ -77,7 +84,11 @@ export function MigrateView() {
     setRuns(json?.runs ?? [])
   }, [group])
 
-  useEffect(() => { void loadChart(); void loadRuns() }, [loadChart, loadRuns])
+  useEffect(() => {
+    // Both loaders update state only after their network requests resolve.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void Promise.all([loadChart(), loadRuns()]).catch(e => setStatus(e.message))
+  }, [loadChart, loadRuns])
 
   async function post(url: string, body: unknown) {
     const res = await fetch(url, {
@@ -93,23 +104,25 @@ export function MigrateView() {
       const { ok, json } = await post('/api/accounting/quickbooks/parse', { text: journalText })
       if (!ok) { setStatus(json?.error ?? 'Could not parse.'); return }
       setParsed(json)
-      setMapping(Object.fromEntries(json.accounts.map((a: Proposal) => [a.qbAccount, a.code ?? ''])))
-    } finally { setBusy(false) }
+      setMappingSaved(false); setDryRun(null); setTieOut(null); setNewAccount(null)
+      setMapping(Object.fromEntries(json.accounts.map((a: Proposal) => [a.qbAccount, a.excluded ? '__exclude__' : (a.code ?? '')])))
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'Request failed.') } finally { setBusy(false) }
   }
 
   async function saveMapping() {
     setBusy(true); setStatus(null)
     try {
       const rows = Object.entries(mapping).map(([qbAccount, accountCode]) => ({
-        qbAccount, accountCode: accountCode || null, excluded: !accountCode,
+        qbAccount, accountCode: accountCode === '__exclude__' ? null : accountCode, excluded: accountCode === '__exclude__',
       }))
       const res = await fetch('/api/accounting/quickbooks/mapping', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ group, rows }),
       })
       const json = await res.json()
+      setMappingSaved(res.ok)
       setStatus(res.ok ? `Saved ${json.saved} mapping(s).` : (json?.error ?? 'Could not save.'))
-    } finally { setBusy(false) }
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'Request failed.') } finally { setBusy(false) }
   }
 
   async function discoverHoldings() {
@@ -117,14 +130,44 @@ export function MigrateView() {
     setBusy(true); setStatus(null)
     try {
       const { ok, json } = await post('/api/accounting/quickbooks/mapping/discover', {
-        holdings: parsed.discoveredHoldings,
+        holdings: pendingHoldings, holdingTypes,
       })
       if (!ok) { setStatus(json?.error ?? 'Could not create holdings.'); return }
       const bits = [`${json.created.length} created`]
       if (json.existing.length) bits.push(`${json.existing.length} already existed`)
       if (json.errors.length) bits.push(`${json.errors.length} failed`)
-      setStatus(bits.join(', ') + '.')
-    } finally { setBusy(false) }
+      await loadChart()
+      const codes = new Map<string, string>((json.mappings ?? []).map((m: { name: string; code: string }) => [m.name, m.code]))
+      setMapping(m => {
+        const next = { ...m }
+        for (const a of parsed.accounts) {
+          const code = a.suggestsHolding && codes.get(a.suggestsHolding)
+          if (code && (!next[a.qbAccount] || next[a.qbAccount] === '1100')) next[a.qbAccount] = code
+        }
+        return next
+      })
+      setMappingSaved(false); setDryRun(null); setTieOut(null)
+      setStatus(bits.join(', ') + '.' + (json.errors.length ? ' ' + json.errors.join(' ') : ' Dedicated accounts are ready. Review and save the mapping.'))
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'Request failed.') } finally { setBusy(false) }
+  }
+
+  async function createAccount() {
+    if (!newAccount) return
+    setBusy(true); setStatus(null)
+    try {
+      const { ok, json } = await post('/api/accounting/chart', { ...newAccount, action: 'add' })
+      if (!ok) { setStatus(json?.error ?? 'Could not create account.'); return }
+      setChart(c => [...c, { code: json.code, name: json.name }].sort((a, b) => a.code.localeCompare(b.code)))
+      setMapping(m => ({ ...m, [newAccount.qbAccount]: json.code }))
+      setMappingSaved(false); setDryRun(null); setTieOut(null); setNewAccount(null)
+      setStatus(`Created ${json.code} — ${json.name} on ${group} and selected it. Save the mapping when ready.`)
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'Could not create account.') }
+    finally { setBusy(false) }
+  }
+
+  function changeMapping(account: string, code: string) {
+    setMapping(m => ({ ...m, [account]: code }))
+    setMappingSaved(false); setDryRun(null); setTieOut(null)
   }
 
   async function runImport(isDry: boolean) {
@@ -138,7 +181,7 @@ export function MigrateView() {
       setDryRun(null)
       setStatus(`Created ${json.created} draft entr${json.created === 1 ? 'y' : 'ies'}; ${json.alreadyPresent} already present; ${json.skipped} skipped.`)
       await loadRuns()
-    } finally { setBusy(false) }
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'Request failed.') } finally { setBusy(false) }
   }
 
   async function runTieOut() {
@@ -147,16 +190,21 @@ export function MigrateView() {
       const { ok, json } = await post('/api/accounting/quickbooks/tie-out', { text: tbText, asOf: tbAsOf })
       if (!ok) { setStatus(json?.error ?? 'Could not tie out.'); return }
       setTieOut(json)
-    } finally { setBusy(false) }
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'Request failed.') } finally { setBusy(false) }
   }
 
   const coverage = parsed
-    ? `${Object.values(mapping).filter(Boolean).length} of ${parsed.accounts.length} accounts mapped`
+    ? `${Object.values(mapping).filter(c => c && c !== '__exclude__').length} of ${parsed.accounts.length} accounts mapped`
     : null
+
+  const pendingHoldings = parsed?.discoveredHoldings.filter(name => parsed.accounts.some(a =>
+    a.suggestsHolding === name && (!mapping[a.qbAccount] || mapping[a.qbAccount] === '1100'))) ?? []
+  const unresolved = parsed?.accounts.filter(a => !mapping[a.qbAccount]).length ?? 0
 
   return (
     <div className="space-y-6">
-      {status && <p className="text-sm text-warning">{status}</p>}
+      <p className="text-sm text-muted-foreground">Importing into <strong>{group}</strong>. Accounts and mappings belong to this entity.</p>
+      {status && <p role="status" className="text-sm text-warning">{status}</p>}
 
       {/* ---- Step 1 -------------------------------------------------------- */}
       <Card className="rounded-card">
@@ -167,7 +215,7 @@ export function MigrateView() {
             only QuickBooks report that is already double-entry; the General Ledger loses the
             transaction grouping and the Trial Balance has no detail.
           </p>
-          <Textarea rows={6} value={journalText} onChange={e => setJournalText(e.target.value)}
+          <Textarea rows={6} disabled={busy} value={journalText} onChange={e => { setJournalText(e.target.value); setParsed(null); setMappingSaved(false); setDryRun(null); setTieOut(null) }}
                     placeholder="Date,Transaction Type,Num,Name,Memo/Description,Account,Debit,Credit"
                     className="font-mono text-xs" />
           <Button size="sm" onClick={runParse} disabled={busy || !journalText.trim()}>
@@ -204,21 +252,65 @@ export function MigrateView() {
           <CardContent className="p-4 space-y-3">
             <h2 className="text-base font-medium">2 · Map the accounts</h2>
             <p className="text-sm text-muted-foreground">
-              Busiest accounts first. Leave an account unmapped to exclude it — every
-              transaction touching it is then dropped whole, since importing half of a
-              double-entry transaction would not balance. {coverage}.
+              Busiest accounts first. Choose an existing account or create one here. Exclusion is an explicit choice and drops every transaction touching that account. {coverage}; {unresolved} need a decision.
             </p>
 
-            {parsed.discoveredHoldings.length > 0 && (
-              <div className="rounded-lg border border-brand-200 p-3 space-y-2">
-                <p className="text-sm">
-                  Found {parsed.discoveredHoldings.length} underlying fund(s) in the QuickBooks
-                  chart: {parsed.discoveredHoldings.join(', ')}.
-                </p>
-                <Button size="sm" variant="outline" onClick={discoverHoldings} disabled={busy}>
-                  Create {parsed.discoveredHoldings.length} fund holding(s)
-                </Button>
-              </div>
+            {pendingHoldings.length > 0 && (
+              <details className="rounded-lg border p-3" open>
+                <summary className="cursor-pointer text-sm font-medium">Review {pendingHoldings.length} investment holdings</summary>
+                <div className="flex flex-col gap-3 pt-3">
+                  <p className="text-sm text-muted-foreground">
+                    For each name, this creates a portfolio record if missing and dedicated investment accounts on {group}.
+                    Existing records are reused without changing their type. New fund records start with a $0 commitment for you to complete later.
+                    This does not import transactions, set balances, or record capital calls. Review the account mapping afterward.
+                  </p>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => setHoldingTypes(Object.fromEntries(pendingHoldings.map(name => [name, 'fund'])))}>Set all to fund</Button>
+                  {pendingHoldings.map(name => (
+                    <div key={name} className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm">{name}</span>
+                      <select aria-label={`Holding type for ${name}`} value={holdingTypes[name] ?? ''} disabled={busy}
+                        onChange={e => setHoldingTypes(t => ({ ...t, [name]: e.target.value }))}
+                        className="border rounded-lg px-2 py-1 text-sm bg-background">
+                        <option value="">Choose type if new</option>
+                        <option value="fund">Fund</option>
+                        <option value="company">Company / direct investment</option>
+                      </select>
+                    </div>
+                  ))}
+                  <Button size="sm" variant="outline" onClick={discoverHoldings}
+                    disabled={busy || pendingHoldings.some(name => !holdingTypes[name])}>
+                    Create or link holdings and investment accounts
+                  </Button>
+                </div>
+              </details>
+            )}
+
+            {newAccount && (
+              <fieldset disabled={busy} className="flex flex-col gap-3 rounded-lg border p-3">
+                <legend className="px-1 text-sm font-medium">New account for {newAccount.qbAccount}</legend>
+                <p className="text-sm text-muted-foreground">Suggested from the QuickBooks name. Review the number and type before creating it on {group}.</p>
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="new-account-code">Account number</FieldLabel>
+                    <Input autoFocus id="new-account-code" value={newAccount.code} maxLength={20} onChange={e => setNewAccount({ ...newAccount, code: e.target.value })} />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="new-account-name">Account name</FieldLabel>
+                    <Input id="new-account-name" value={newAccount.name} onChange={e => setNewAccount({ ...newAccount, name: e.target.value })} />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="new-account-type">Account type</FieldLabel>
+                    <select id="new-account-type" value={newAccount.type} className="border rounded-lg px-2 py-1 text-sm bg-background"
+                    onChange={e => setNewAccount({ ...newAccount, type: e.target.value as AccountSuggestion['type'], subtype: null })}>
+                    {['asset', 'liability', 'equity', 'income', 'expense'].map(type => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                  </Field>
+                </FieldGroup>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={createAccount} disabled={busy || !newAccount.name.trim() || !newAccount.code.trim()}>Create and select account</Button>
+                  <Button size="sm" variant="outline" onClick={() => setNewAccount(null)}>Cancel</Button>
+                </div>
+              </fieldset>
             )}
 
             <Table>
@@ -234,28 +326,36 @@ export function MigrateView() {
                 {parsed.accounts.map(a => (
                   <TableRow key={a.qbAccount}>
                     <TableCell className="font-medium">{a.qbAccount}</TableCell>
-                    <TableCell className="text-right tabular-nums">—</TableCell>
+                    <TableCell className="text-right tabular-nums">{a.lineCount}</TableCell>
                     <TableCell>
                       <select
                         value={mapping[a.qbAccount] ?? ''}
-                        onChange={e => setMapping(m => ({ ...m, [a.qbAccount]: e.target.value }))}
+                        aria-label={`Account for ${a.qbAccount}`}
+                        disabled={busy}
+                        onChange={e => changeMapping(a.qbAccount, e.target.value)}
                         className="border rounded-lg px-2 py-1 text-sm"
                       >
-                        <option value="">Exclude from import</option>
+                        <option value="">Choose or create an account</option>
+                        <option value="__exclude__">Exclude from import (skip affected transactions)</option>
                         {chart.map(c => (
                           <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
                         ))}
                       </select>
+                      {!a.suggestsHolding && <Button size="sm" variant="outline" disabled={busy} className="mt-2"
+                        onClick={() => setNewAccount({ ...suggestAccount(a.qbAccount, chart), qbAccount: a.qbAccount })}>
+                        Create account…
+                      </Button>}
                     </TableCell>
                     <TableCell className={`text-sm ${a.confidence === 'none' ? 'text-warning' : 'text-muted-foreground'}`}>
-                      {a.reason}
+                      {mapping[a.qbAccount] && mapping[a.qbAccount] !== '__exclude__' && mapping[a.qbAccount] !== a.code
+                        ? 'Selected for this import.' : a.reason}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
 
-            <Button size="sm" onClick={saveMapping} disabled={busy}>Save mapping</Button>
+            <Button size="sm" onClick={saveMapping} disabled={busy || unresolved > 0}>Save mapping</Button>
           </CardContent>
         </Card>
       )}
@@ -269,9 +369,10 @@ export function MigrateView() {
               Every entry imports as a DRAFT and is posted from the journal page. Re-running is
               safe — entries already imported are matched by their content hash, not duplicated.
             </p>
+            {!mappingSaved && <p className="text-sm text-muted-foreground">Resolve every account and save the mapping to enable import.</p>}
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => runImport(true)} disabled={busy}>Dry run</Button>
-              <Button size="sm" onClick={() => runImport(false)} disabled={busy}>Import as drafts</Button>
+              <Button size="sm" variant="outline" onClick={() => runImport(true)} disabled={busy || !mappingSaved}>Dry run</Button>
+              <Button size="sm" onClick={() => runImport(false)} disabled={busy || !mappingSaved}>Import as drafts</Button>
             </div>
 
             {dryRun && (

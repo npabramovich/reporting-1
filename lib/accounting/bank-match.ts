@@ -24,7 +24,7 @@ async function getTxn(admin: SupabaseClient, fundId: string, group: string, txnI
   const vehicleId = await vehicleIdByName(admin, fundId, group)
   const { data } = await admin
     .from('bank_transactions' as any)
-    .select('id, journal_entry_id, amount, txn_date, description, status')
+    .select('id, journal_entry_id, amount, txn_date, description, status, raw')
     .eq('id', txnId)
     .eq('fund_id', fundId)
     .eq('vehicle_id', vehicleId)
@@ -50,6 +50,7 @@ export async function bookCapitalCallFromInflow(
 ): Promise<{ entryId: string } | { error: string }> {
   const txn = await getTxn(admin, fundId, group, txnId)
   if (!txn) return { error: 'Transaction not found' }
+  if (txn.raw?.quickbooksReview) return { error: 'Review the QuickBooks match on the bank page before booking another entry.' }
   const total = Number(txn.amount)
   if (total <= 0) return { error: 'Only an inflow (deposit) can be booked as a capital call' }
 
@@ -223,6 +224,7 @@ export async function bookDistributionFromOutflow(
 ): Promise<{ entryId: string } | { error: string }> {
   const txn = await getTxn(admin, fundId, group, txnId)
   if (!txn) return { error: 'Transaction not found' }
+  if (txn.raw?.quickbooksReview) return { error: 'Review the QuickBooks match on the bank page before booking another entry.' }
   const amount = Number(txn.amount)
   if (amount >= 0) return { error: 'Only an outflow (withdrawal) can be booked as a distribution' }
   const total = Math.abs(amount)
@@ -294,6 +296,7 @@ export async function linkInflowToEntry(
 ): Promise<{ ok: true } | { error: string }> {
   const txn = await getTxn(admin, fundId, group, txnId)
   if (!txn) return { error: 'Transaction not found' }
+  if (txn.raw?.quickbooksReview) return { error: 'Review the QuickBooks match on the bank page before booking another entry.' }
 
   const vehicleId = await vehicleIdByName(admin, fundId, group)
   const { data: target } = await admin

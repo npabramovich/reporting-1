@@ -16,7 +16,7 @@ export default async function MigratePage(props: { params: Promise<{ id: string 
         vehicle={vehicle}
         vehicleId={vehicleId}
       >
-        <MigrateView />
+        <MigrateView key={vehicleId ?? vehicle} group={vehicle} />
       </FundSubpageChrome>
     </div>
   )

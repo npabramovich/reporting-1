@@ -33,14 +33,17 @@ export async function POST(req: NextRequest) {
 
   const { transactions, accounts, errors } = parseQbJournal(body.text)
 
-  const [{ data: chartRows }, { data: savedRows }] = await Promise.all([
+  const [{ data: chartRows, error: chartError }, { data: savedRows, error: savedError }] = await Promise.all([
     admin.from('chart_of_accounts' as any)
-      .select('id, code, name, type, subtype')
+      .select('id, code, name, type, subtype, company_id, lp_entity_id, is_active')
       .eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId),
     (admin as any).from('qb_account_mappings')
       .select('qb_account, account_code, excluded')
       .eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId),
   ])
+  if (chartError || savedError) {
+    return NextResponse.json({ error: chartError?.message ?? savedError?.message }, { status: 500 })
+  }
 
   const chart = ((chartRows as any[]) ?? []) as ChartAccount[]
   const saved = new Map(((savedRows as any[]) ?? []).map(r => [r.qb_account, r]))
@@ -50,6 +53,7 @@ export async function POST(req: NextRequest) {
   const proposals = proposeMapping(accounts, chart).map(p => {
     const prior = saved.get(p.qbAccount)
     if (!prior) return p
+    if (!prior.excluded && !chart.some(a => a.code === prior.account_code && a.is_active !== false)) return p
     return {
       ...p,
       code: prior.account_code ?? null,
@@ -65,7 +69,7 @@ export async function POST(req: NextRequest) {
     group,
     transactionCount: transactions.length,
     dateRange: dates.length ? { first: dates[0], last: dates[dates.length - 1] } : null,
-    accounts: proposals,
+    accounts: proposals.map(p => ({ ...p, lineCount: accounts.find(a => a.account === p.qbAccount)?.lineCount ?? 0 })),
     mappedCount: proposals.filter((p: any) => p.code && !p.excluded).length,
     excludedCount: proposals.filter((p: any) => p.excluded).length,
     discoveredHoldings: Array.from(new Set(proposals.map(p => p.suggestsHolding).filter(Boolean))),

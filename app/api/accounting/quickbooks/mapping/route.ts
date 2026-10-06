@@ -58,6 +58,13 @@ export async function PUT(req: NextRequest) {
 
   if (rows.length === 0) return NextResponse.json({ saved: 0 })
 
+  const { data: chart, error: chartError } = await admin.from('chart_of_accounts' as any)
+    .select('code, is_active').eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId)
+  if (chartError) return NextResponse.json({ error: chartError.message }, { status: 500 })
+  const codes = new Set(((chart as any[]) ?? []).filter(a => a.is_active !== false).map(a => a.code))
+  const invalid = rows.find((r: any) => !r.excluded && (!r.account_code || !codes.has(r.account_code)))
+  if (invalid) return NextResponse.json({ error: `Choose an active account on ${group} for "${invalid.qb_account}".` }, { status: 400 })
+
   const { error } = await (admin as any).from('qb_account_mappings')
     .upsert(rows, { onConflict: 'fund_id,vehicle_id,qb_account' })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

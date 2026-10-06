@@ -7,10 +7,13 @@ import { vehicleIdByName } from './vehicle-id'
 import { parseTransactionsCsv, dedupHash, legacyDedupHash, suggestCategory, bankEntryPostings } from './bank'
 import type { JournalEntry } from './types'
 import { vendorResolver } from './vendors'
+import { clearQuickBooksMatch, loadQuickBooksCashEntries, quickBooksCandidates, quickBooksClaimHash, quickBooksAlreadyClaimed, readAll } from './bank-quickbooks-match'
 
 export interface ImportResult {
   imported: number
   skipped: number
+  matched: number
+  needsReview: number
   /** Which rows were skipped as duplicates, and why — so "12 skipped" is auditable rather
    *  than indistinguishable from "12 transactions silently lost". */
   skippedRows: string[]
@@ -35,8 +38,26 @@ export async function importBankTransactions(
   const resolveVendor = vendorResolver(admin, fundId)
 
   const vehicleId = await vehicleIdByName(admin, fundId, group)
-  const { data: existing } = await admin.from('bank_transactions' as any).select('dedup_hash').eq('fund_id', fundId).eq('vehicle_id', vehicleId)
-  const seen = new Set(((existing as any[]) ?? []).map(r => r.dedup_hash))
+  if (!vehicleId) return { error: 'Unknown vehicle' }
+  let existing: any[]
+  let qbEntries: Awaited<ReturnType<typeof loadQuickBooksCashEntries>>
+  try {
+    existing = await readAll<any>((from, to) => admin.from('bank_transactions' as any)
+      .select('dedup_hash, journal_entry_id, raw').eq('fund_id', fundId).eq('vehicle_id', vehicleId).order('id').range(from, to))
+    qbEntries = await loadQuickBooksCashEntries(admin, fundId, vehicleId, cashId, rows.map(r => r.date))
+  } catch (e) { return { error: `Could not check for existing transactions: ${(e as Error).message}` } }
+  const seen = new Set(existing.flatMap(r => [r.dedup_hash, r.raw?.bankImportHash].filter(Boolean)))
+  const claimed = new Set<string>()
+  // A single cash movement cannot explain two rows in the same bank file.
+  const demand = new Map<string, number>()
+  for (const row of rows) {
+    for (const e of quickBooksCandidates(row, qbEntries)) {
+      const key = quickBooksClaimHash(e.id, e.amount)
+      demand.set(key, (demand.get(key) ?? 0) + 1)
+    }
+  }
+  let matched = 0
+  let needsReview = 0
 
   let imported = 0
   let skipped = 0
@@ -63,7 +84,25 @@ export async function importBankTransactions(
       skippedRows.push(`${row.date} ${row.description || ''} ${row.amount.toFixed(2)} — already imported`)
       continue
     }
-    seen.add(hash)
+    const candidates = quickBooksCandidates(row, qbEntries)
+    const confident = clearQuickBooksMatch(row, candidates)
+    const claimKey = confident ? quickBooksClaimHash(confident.id, confident.amount) : ''
+    const match = confident && !claimed.has(claimKey) && !quickBooksAlreadyClaimed(confident, existing) && demand.get(claimKey) === 1 ? confident : null
+    if (candidates.length) {
+      const { error } = await admin.from('bank_transactions' as any).insert({
+        fund_id: fundId, portfolio_group: group, vehicle_id: vehicleId, source,
+        dedup_hash: match ? quickBooksClaimHash(match.id, match.amount) : hash,
+        txn_date: row.date, amount: row.amount, description: row.description,
+        counterparty: row.counterparty ?? null, status: match ? 'reconciled' : 'unmatched',
+        journal_entry_id: match?.id ?? null, imported_by: userId,
+        raw: { ...row, bankImportHash: hash, quickbooksReview: true, quickbooksCashAmount: match?.amount ?? null },
+      })
+      if (error) { errors.push(`${row.date} ${row.description}: ${error.message}`); continue }
+      seen.add(hash)
+      imported++
+      if (match) { matched++; claimed.add(claimKey) } else needsReview++
+      continue
+    }
 
     const cat = suggestCategory(row)
     const otherId = codes.get(cat.accountCode) ?? cashId
@@ -109,8 +148,9 @@ export async function importBankTransactions(
       errors.push(`${row.date}: ${insErr.message}`)
       continue
     }
+    seen.add(hash)
     imported++
   }
 
-  return { imported, skipped, skippedRows, errors }
+  return { imported, skipped, matched, needsReview, skippedRows, errors }
 }

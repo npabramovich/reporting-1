@@ -10,7 +10,8 @@ import { EntryModal } from '../entry-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { NoBooksState } from '@/components/accounting/no-books'
 
-interface Txn { id: string; txn_date: string; amount: number; description: string; counterparty: string | null; status: string; suggested_account_code: string | null; journal_entry_id: string | null; entry_account_code: string | null; entry_account_name: string | null; entry_is_split: boolean; settled_lp_entity_id: string | null; settled_lp_name: string | null }
+interface DuplicateCandidate { id: string; date: string; amount: number; memo: string; status: string; claimed: boolean }
+interface Txn { duplicate_review?: boolean; quickbooks_linked?: boolean; duplicate_candidates?: DuplicateCandidate[]; id: string; txn_date: string; amount: number; description: string; counterparty: string | null; status: string; suggested_account_code: string | null; journal_entry_id: string | null; entry_account_code: string | null; entry_account_name: string | null; entry_is_split: boolean; settled_lp_entity_id: string | null; settled_lp_name: string | null }
 interface Rec { bankEndingBalance: number; ledgerCashBalance: number; difference: number; matchedCount: number; unmatchedCount: number; unmatchedTotal: number; tiesOut: boolean }
 
 const actionBtn = 'text-xs border border-input rounded px-2 py-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors'
@@ -28,18 +29,24 @@ export function BankView() {
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [categorizing, setCategorizing] = useState(false)
-  const [result, setResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
+  const [result, setResult] = useState<{ imported: number; skipped: number; matched?: number; needsReview?: number; errors: string[] } | null>(null)
   const [editing, setEditing] = useState<{ txnId: string; entryId: string; readOnly?: boolean } | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
+  const [duplicateSelection, setDuplicateSelection] = useState<Record<string, string>>({})
+  const [resolvingDuplicate, setResolvingDuplicate] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('')
   const [sortBy, setSortBy] = useState('date-desc')
   const lf = useLedgerFetch()
 
   const load = useCallback(() => {
     setLoading(true)
-    Promise.all([
-      lf('/api/accounting/bank').then(r => (r.ok ? r.json() : [])),
+    return Promise.all([
+      lf('/api/accounting/bank').then(async r => {
+        const data = await r.json()
+        if (!r.ok) throw new Error(data.error ?? 'Could not load bank transactions.')
+        return data
+      }),
       lf('/api/accounting/bank/reconcile').then(r => (r.ok ? r.json() : null)),
       lf('/api/accounting/chart').then(r => (r.ok ? r.json() : [])),
     ]).then(([t, r, ch]) => {
@@ -49,7 +56,7 @@ export function BankView() {
       const chart = (Array.isArray(ch) ? ch : []).map((a: any) => ({ code: a.code, name: a.name, is_active: a.is_active, lp_entity_id: a.lp_entity_id }))
       setAccounts(chart)
       setAcctNames(Object.fromEntries(chart.map(a => [a.code, a.name])))
-    }).finally(() => setLoading(false))
+    }).catch(e => setMatchError(e.message)).finally(() => setLoading(false))
   }, [lf])
 
   useEffect(() => { load() }, [load])
@@ -106,6 +113,20 @@ export function BankView() {
     if (res.ok) { setResult(data); setCsv(''); await autoMatch(true) }
     else setResult({ imported: 0, skipped: 0, errors: [data.error ?? 'Import failed'] })
     setImporting(false)
+  }
+
+  async function resolveDuplicate(id: string, action: 'link' | 'separate') {
+    setResolvingDuplicate(id); setMatchError(null)
+    try {
+      const res = await lf('/api/accounting/bank/duplicates', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action, entryId: duplicateSelection[id] }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setMatchError(data.error ?? 'Could not resolve the match.'); return }
+      await load()
+    } catch (e) { setMatchError(e instanceof Error ? e.message : 'Could not resolve the match.') }
+    finally { setResolvingDuplicate(null) }
   }
 
   async function act(id: string, action: 'post' | 'ignore' | 'unpost' | 'restore') {
@@ -195,7 +216,7 @@ export function BankView() {
       {/* Import */}
       <div className="border rounded-card p-4 space-y-2">
         <p className="text-sm font-medium">Import transactions</p>
-        <p className="text-xs text-muted-foreground">Paste a CSV/TSV export from your bank, Ramp, or QuickBooks. Columns matched automatically (date, description, amount, or debit/credit). Each row is deduped and drafted as a balanced entry for review.</p>
+        <p className="text-xs text-muted-foreground">Paste a CSV/TSV export from your bank, Ramp, or QuickBooks. Columns matched automatically (date, description, amount, or debit/credit). Clear matches link to existing QuickBooks entries. Possible matches with the same cash amount within seven days are held for review; new transactions become drafts.</p>
         <textarea value={csv} onChange={e => setCsv(e.target.value)} rows={5} placeholder="Date,Description,Amount&#10;2026-06-01,Capital call Fund II,5000000&#10;2026-06-15,Audit fee,-12000" className="w-full border border-input rounded p-2 text-sm font-mono bg-transparent" />
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={doImport} disabled={importing || csv.trim().length < 5}>{importing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}Import</Button>
@@ -205,7 +226,7 @@ export function BankView() {
           </label>
           {result && (
             <span className="text-sm text-muted-foreground">
-              {result.imported} imported{result.skipped ? `, ${result.skipped} duplicate(s) skipped` : ''}{result.errors.length ? `, ${result.errors.length} error(s)` : ''}.
+              {result.imported} imported{result.matched ? `, ${result.matched} matched to QuickBooks (no new entries)` : ''}{result.needsReview ? `, ${result.needsReview} held for duplicate review` : ''}{result.skipped ? `, ${result.skipped} duplicate(s) skipped` : ''}{result.errors.length ? `, ${result.errors.length} error(s)` : ''}.
             </span>
           )}
         </div>
@@ -258,6 +279,7 @@ export function BankView() {
             </div>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-9 px-3 rounded-md border border-input bg-background text-sm">
               <option value="">All statuses</option>
+              <option value="unmatched">Needs duplicate review</option>
               <option value="drafted">Not posted</option>
               <option value="reconciled">Posted</option>
               <option value="ignored">Ignored</option>
@@ -295,7 +317,9 @@ export function BankView() {
                     {/* What the ENTRY posts to, not the stored hint — editing an entry in the
                         journal modal never updates `suggested_account_code`, so showing that
                         column left a re-pointed entry displaying its old account. */}
-                    {t.status === 'ignored' ? (
+                    {t.duplicate_review ? (
+                      <span className="text-warning">Possible QuickBooks duplicate — no new entry</span>
+                    ) : t.status === 'ignored' ? (
                       <span className="text-muted-foreground">Ignored</span>
                     ) : t.entry_is_split ? (
                       <span className="text-muted-foreground" title="This entry splits across several accounts, so it can't be re-pointed from here — open it with Edit.">
@@ -344,6 +368,23 @@ export function BankView() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
+                    {t.duplicate_review && (
+                      <div className="flex flex-col gap-2 items-end">
+                        <select aria-label={`QuickBooks match for ${t.description}`} value={duplicateSelection[t.id] ?? ''}
+                          disabled={resolvingDuplicate === t.id} className="max-w-[320px] border rounded px-2 py-1 text-xs bg-background"
+                          onChange={e => setDuplicateSelection(s => ({ ...s, [t.id]: e.target.value }))}>
+                          <option value="">Choose an existing entry</option>
+                          {(t.duplicate_candidates ?? []).map(c => <option key={c.id} value={c.id} disabled={c.claimed || c.status !== 'posted'}>
+                            {c.date} · {c.memo || 'QuickBooks entry'}{c.claimed ? ' (already linked)' : c.status === 'draft' ? ' (post in Journal first)' : ''}
+                          </option>)}
+                        </select>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" disabled={!!resolvingDuplicate || !duplicateSelection[t.id]} onClick={() => resolveDuplicate(t.id, 'link')}>Match existing</Button>
+                          <Button size="sm" variant="outline" disabled={!!resolvingDuplicate} onClick={() => resolveDuplicate(t.id, 'separate')}>Separate transaction</Button>
+                        </div>
+                        <span className="text-xs text-muted-foreground">Separate transaction creates a new draft.</span>
+                      </div>
+                    )}
                     {t.status === 'drafted' && (
                       <span className="flex items-center gap-1.5 justify-end">
                         {t.journal_entry_id && <button onClick={() => setEditing({ txnId: t.id, entryId: t.journal_entry_id! })} className={actionBtn}>Edit</button>}
@@ -352,7 +393,8 @@ export function BankView() {
                       </span>
                     )}
                     {t.status === 'reconciled' && (
-                      <span className="flex justify-end">
+                      <span className="flex items-center gap-2 justify-end">
+                        {t.quickbooks_linked && <span className="text-xs text-muted-foreground">Matched to QuickBooks</span>}
                         {t.journal_entry_id
                           ? <button onClick={() => setEditing({ txnId: t.id, entryId: t.journal_entry_id!, readOnly: true })} title="See the journal entry that was booked — unpost from there to edit it" className={actionBtn}>View / edit</button>
                           : <button onClick={() => act(t.id, 'unpost')} title="Revert to draft" className={actionBtn}>Unpost</button>}
