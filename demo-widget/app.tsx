@@ -25,6 +25,7 @@ export const FEATURES: FeatureVisibilityMap = {
   interactions: 'everyone', notes: 'everyone', lp_letters: 'everyone', asks: 'everyone', lps: 'everyone',
   lp_tracking: 'everyone', lp_portal: 'everyone', lp_activity: 'everyone', compliance: 'everyone',
   deals: 'everyone', diligence: 'everyone', accounting: 'everyone', imports: 'everyone', investments: 'everyone',
+  gp_economics: 'everyone',
 }
 export const ACCESS: ClientAccess = { role: 'viewer', features: FEATURES, grants: {}, defaults: {} }
 

@@ -1,6 +1,6 @@
 {
  "schemaVersion": 2,
- "generatedAt": "2026-10-05",
+ "generatedAt": "2026-10-06",
  "source": "the demo fund",
  "fund": {
   "name": "Portfolio Demo",
@@ -1275,6 +1275,14 @@
    "name": "Hemrock Founders Capital LP"
   },
   {
+   "id": "b320a371-a861-47fe-97d5-615eed8c4470",
+   "name": "Hemrock Fund I GP LLC"
+  },
+  {
+   "id": "db46561e-6cc5-4b31-88f8-9e5b1a7d4a50",
+   "name": "Hemrock Fund II GP LLC"
+  },
+  {
    "id": "0c458157-e6b4-4b60-8742-5403da230ba7",
    "name": "Northstar Family Office"
   },
@@ -1294,23 +1302,19 @@
  "lpPositions": [
   {
    "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
-   "lpEntityId": "284cb747-2354-4cf1-8018-548eb5eac0f3"
-  },
-  {
-   "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
-   "lpEntityId": "7888b510-c3cf-40ab-b40a-586623662b83"
+   "lpEntityId": "1343c4f2-f57a-47bf-a829-90129b18d913"
   },
   {
    "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
    "lpEntityId": "278ec0e3-2940-46f6-b651-5775726f9560"
   },
   {
-   "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
-   "lpEntityId": "a2636fbe-5a1e-4bf1-a600-c1d5e28631d5"
+   "vehicleId": "d73f3df5-5a2f-4c34-b431-e6c8d71fd4e9",
+   "lpEntityId": "278ec0e3-2940-46f6-b651-5775726f9560"
   },
   {
    "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
-   "lpEntityId": "fcfff8e9-f323-497e-bcf1-15d2979a3a82"
+   "lpEntityId": "284cb747-2354-4cf1-8018-548eb5eac0f3"
   },
   {
    "vehicleId": "d73f3df5-5a2f-4c34-b431-e6c8d71fd4e9",
@@ -1318,19 +1322,31 @@
   },
   {
    "vehicleId": "d73f3df5-5a2f-4c34-b431-e6c8d71fd4e9",
-   "lpEntityId": "ed542a37-1fc6-4c19-bce8-992413009631"
+   "lpEntityId": "4f57aefa-a42b-4293-9162-6b849f592dc8"
   },
   {
    "vehicleId": "d73f3df5-5a2f-4c34-b431-e6c8d71fd4e9",
    "lpEntityId": "6a657357-5f5d-416f-81f3-35815df4ae69"
   },
   {
-   "vehicleId": "d73f3df5-5a2f-4c34-b431-e6c8d71fd4e9",
-   "lpEntityId": "278ec0e3-2940-46f6-b651-5775726f9560"
+   "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
+   "lpEntityId": "7888b510-c3cf-40ab-b40a-586623662b83"
   },
   {
    "vehicleId": "d73f3df5-5a2f-4c34-b431-e6c8d71fd4e9",
-   "lpEntityId": "4f57aefa-a42b-4293-9162-6b849f592dc8"
+   "lpEntityId": "959744a6-6698-4839-941f-6595bf2d7bab"
+  },
+  {
+   "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
+   "lpEntityId": "a2636fbe-5a1e-4bf1-a600-c1d5e28631d5"
+  },
+  {
+   "vehicleId": "d73f3df5-5a2f-4c34-b431-e6c8d71fd4e9",
+   "lpEntityId": "ed542a37-1fc6-4c19-bce8-992413009631"
+  },
+  {
+   "vehicleId": "061ee98b-cea1-465e-a73c-d597df4afaba",
+   "lpEntityId": "fcfff8e9-f323-497e-bcf1-15d2979a3a82"
   }
  ],
  "deals": [
@@ -1651,6 +1667,15 @@
    "note": "Co-led with Fintech Africa"
   },
   {
+   "company_id": "2231479f-1bf3-4646-9173-abc5d31fd515",
+   "vehicle": "Fund II",
+   "type": "unrealized_gain_change",
+   "date": "2025-12-31",
+   "unrealized_change": 2100000,
+   "mark_share_price": 5.65,
+   "note": "Mark based on GMV growth trajectory"
+  },
+  {
    "company_id": "d08a27bc-39e4-4fb1-a624-7a286d83e929",
    "vehicle": "Fund I",
    "type": "unrealized_gain_change",
@@ -1696,13 +1721,87 @@
    "note": "Modest mark-up based on grant milestones"
   },
   {
+   "company_id": "a67954cb-474b-404b-858b-49c240c22027",
+   "vehicle": "Fund I",
+   "type": "investment",
+   "date": "2026-02-02",
+   "round": "Series B",
+   "cost": 1000000,
+   "share_price": 3.6,
+   "note": "demo-seed-2026: 38245057-3cc6-4601-986e-304418e38533:1100-a67954cb"
+  },
+  {
+   "company_id": "d1263d61-e648-4906-b991-f831fb74a186",
+   "vehicle": "Fund II",
+   "type": "investment",
+   "date": "2026-02-24",
+   "round": "Series C",
+   "cost": 900000,
+   "share_price": 18.82,
+   "note": "demo-seed-2026: c1a37451-21de-4787-b216-08fa1b1b8807:1100-d1263d61"
+  },
+  {
+   "company_id": "35dea40d-dd6f-4916-b566-deb40872d579",
+   "vehicle": "Fund II",
+   "type": "investment",
+   "date": "2026-03-12",
+   "round": "Bridge note",
+   "cost": 400000,
+   "note": "demo-seed-2026: e0c0eece-c7de-44cb-a7c6-536ddeea38f4:1100-35dea40d"
+  },
+  {
+   "company_id": "d1263d61-e648-4906-b991-f831fb74a186",
+   "vehicle": "Fund II",
+   "type": "unrealized_gain_change",
+   "date": "2026-06-30",
+   "unrealized_change": 1800000,
+   "mark_share_price": 20.82485293247322,
+   "note": "demo-seed-2026: 854ea956-a6a2-4139-a6f2-9d876eb1e8eb:1200-d1263d61"
+  },
+  {
+   "company_id": "d08a27bc-39e4-4fb1-a624-7a286d83e929",
+   "vehicle": "Fund I",
+   "type": "unrealized_gain_change",
+   "date": "2026-06-30",
+   "unrealized_change": -200000,
+   "mark_share_price": 3.75,
+   "note": "demo-seed-2026: bc5bd9de-0986-4984-ba05-eeca2cf5c3fe:1200-d08a27bc"
+  },
+  {
    "company_id": "2231479f-1bf3-4646-9173-abc5d31fd515",
    "vehicle": "Fund II",
    "type": "unrealized_gain_change",
-   "date": "2025-12-31",
-   "unrealized_change": 2100000,
-   "mark_share_price": 5.65,
-   "note": "Mark based on GMV growth trajectory"
+   "date": "2026-06-30",
+   "unrealized_change": 350000,
+   "mark_share_price": 6.061764705882353,
+   "note": "demo-seed-2026: 854ea956-a6a2-4139-a6f2-9d876eb1e8eb:1200-2231479f"
+  },
+  {
+   "company_id": "8b396e22-1612-4737-8d09-5dbf593bb08f",
+   "vehicle": "Fund II",
+   "type": "unrealized_gain_change",
+   "date": "2026-06-30",
+   "unrealized_change": -100000,
+   "mark_share_price": 0.6,
+   "note": "demo-seed-2026: 854ea956-a6a2-4139-a6f2-9d876eb1e8eb:1200-8b396e22"
+  },
+  {
+   "company_id": "b4870bad-ddd4-42d1-a300-7111899cf154",
+   "vehicle": "Fund I",
+   "type": "unrealized_gain_change",
+   "date": "2026-06-30",
+   "unrealized_change": 425000,
+   "mark_share_price": 12.91705632811833,
+   "note": "demo-seed-2026: bc5bd9de-0986-4984-ba05-eeca2cf5c3fe:1200-b4870bad"
+  },
+  {
+   "company_id": "a67954cb-474b-404b-858b-49c240c22027",
+   "vehicle": "Fund I",
+   "type": "unrealized_gain_change",
+   "date": "2026-06-30",
+   "unrealized_change": 750000,
+   "mark_share_price": 4.090909090909091,
+   "note": "demo-seed-2026: bc5bd9de-0986-4984-ba05-eeca2cf5c3fe:1200-a67954cb"
   }
  ]
 }

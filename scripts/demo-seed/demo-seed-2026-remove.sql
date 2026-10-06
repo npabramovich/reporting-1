@@ -3,4 +3,5 @@ begin;
 delete from bank_transactions where fund_id = 'e2dfd2bf-ced3-4647-8277-096e616a6eab' and raw->>'demo_seed' = '2026';
 delete from journal_postings where journal_entry_id in (select id from journal_entries where fund_id = 'e2dfd2bf-ced3-4647-8277-096e616a6eab' and source_ref = 'demo-seed-2026');
 delete from journal_entries where fund_id = 'e2dfd2bf-ced3-4647-8277-096e616a6eab' and source_ref = 'demo-seed-2026';
+delete from investment_transactions where fund_id = 'e2dfd2bf-ced3-4647-8277-096e616a6eab' and notes like 'demo-seed-2026:%';
 commit;
