@@ -1,12 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useCurrency, formatCurrency } from '@/components/currency-context'
+import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { suggestAccount, type AccountSuggestion } from '@/lib/accounting/quickbooks/suggest-account'
@@ -40,6 +40,8 @@ interface TieOutResult {
   theirTotal: number
   includesDrafts: boolean
   unmappedAccounts: string[]
+  quickBooksOnly?: { ties: boolean; differenceCount: number }
+  openingEntries?: { id: string; date: string; memo: string | null; status: string; cash: number }[]
 }
 
 /**
@@ -49,8 +51,9 @@ interface TieOutResult {
  */
 export function MigrateView({ group }: { group: string }) {
   const currency = useCurrency()
-  const fmt = (v: number) => formatCurrency(v, currency)
+  const fmt = (v: number) => formatCurrencyPrice(v, currency)
 
+  const [capitalWarnings, setCapitalWarnings] = useState<string[]>([])
   const [journalText, setJournalText] = useState('')
   const [parsed, setParsed] = useState<ParseResult | null>(null)
   const [mapping, setMapping] = useState<Record<string, string>>({})
@@ -58,6 +61,8 @@ export function MigrateView({ group }: { group: string }) {
   const [newAccount, setNewAccount] = useState<(AccountSuggestion & { qbAccount: string }) | null>(null)
   const [holdingTypes, setHoldingTypes] = useState<Record<string, string>>({})
   const [mappingSaved, setMappingSaved] = useState(false)
+  const [mappingExpanded, setMappingExpanded] = useState(false)
+  const mappingToggle = useRef<HTMLButtonElement>(null)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
 
@@ -90,6 +95,10 @@ export function MigrateView({ group }: { group: string }) {
     void Promise.all([loadChart(), loadRuns()]).catch(e => setStatus(e.message))
   }, [loadChart, loadRuns])
 
+  useEffect(() => {
+    if (mappingSaved && !mappingExpanded) mappingToggle.current?.focus()
+  }, [mappingSaved, mappingExpanded])
+
   async function post(url: string, body: unknown) {
     const res = await fetch(url, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -121,7 +130,11 @@ export function MigrateView({ group }: { group: string }) {
       })
       const json = await res.json()
       setMappingSaved(res.ok)
-      setStatus(res.ok ? `Saved ${json.saved} mapping(s).` : (json?.error ?? 'Could not save.'))
+      if (res.ok) {
+        setMappingExpanded(false)
+        setNewAccount(null)
+        setStatus(null)
+      } else setStatus(json?.error ?? 'Could not save.')
     } catch (e) { setStatus(e instanceof Error ? e.message : 'Request failed.') } finally { setBusy(false) }
   }
 
@@ -177,6 +190,7 @@ export function MigrateView({ group }: { group: string }) {
         text: journalText, dryRun: isDry,
       })
       if (!ok) { setStatus(json?.error ?? 'Import failed.'); return }
+      setCapitalWarnings(json.capitalWarnings ?? [])
       if (isDry) { setDryRun(json); return }
       setDryRun(null)
       setStatus(`Created ${json.created} draft entr${json.created === 1 ? 'y' : 'ies'}; ${json.alreadyPresent} already present; ${json.skipped} skipped.`)
@@ -250,7 +264,25 @@ export function MigrateView({ group }: { group: string }) {
       {parsed && (
         <Card className="rounded-card">
           <CardContent className="p-4 space-y-3">
-            <h2 className="text-base font-medium">2 · Map the accounts</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-base font-medium">2 · Map the accounts</h2>
+              {mappingSaved && (
+                <Button ref={mappingToggle} size="sm" variant="outline"
+                  aria-expanded={mappingExpanded} aria-controls="quickbooks-account-mapping"
+                  onClick={() => setMappingExpanded(open => !open)}>
+                  {mappingExpanded ? 'Hide mapping' : 'Review / edit mapping'}
+                </Button>
+              )}
+            </div>
+            {mappingSaved && (
+              <p role="status" className="flex items-center gap-2 text-sm text-success">
+                <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+                Mapping saved · {Object.values(mapping).filter(c => c && c !== '__exclude__').length} mapped
+                {' · '}{Object.values(mapping).filter(c => c === '__exclude__').length} excluded. Ready to import.
+              </p>
+            )}
+            <div id="quickbooks-account-mapping" hidden={mappingSaved && !mappingExpanded}>
+            <div className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
               Busiest accounts first. Choose an existing account or create one here. Exclusion is an explicit choice and drops every transaction touching that account. {coverage}; {unresolved} need a decision.
             </p>
@@ -356,6 +388,8 @@ export function MigrateView({ group }: { group: string }) {
             </Table>
 
             <Button size="sm" onClick={saveMapping} disabled={busy || unresolved > 0}>Save mapping</Button>
+            </div>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -380,6 +414,16 @@ export function MigrateView({ group }: { group: string }) {
                 Would create {dryRun.wouldCreate}; {dryRun.alreadyPresent} already present;
                 {' '}{dryRun.skipped} skipped.
               </p>
+            )}
+
+            {capitalWarnings.length > 0 && (
+              <details className="rounded border border-amber-500 p-3 text-sm">
+                <summary>{capitalWarnings.length} capital lines need an LP match</summary>
+                <p className="my-2 text-muted-foreground">These amounts remain in unallocated capital. Review the named counterparty or bank evidence before assigning an LP.</p>
+                <ul className="max-h-64 overflow-y-auto space-y-1">
+                  {capitalWarnings.map((warning, index) => <li key={index}>{warning}</li>)}
+                </ul>
+              </details>
             )}
 
             {runs.length > 0 && (
@@ -431,6 +475,21 @@ export function MigrateView({ group }: { group: string }) {
 
           {tieOut && (
             <div className="space-y-2 pt-2">
+              {!tieOut.ties && !!tieOut.openingEntries?.length && (
+                <div className="flex flex-col gap-2 text-sm">
+                  <p className="text-warning">
+                    This comparison also includes {tieOut.openingEntries.length} opening-balance entry/entries.
+                    Full QuickBooks history may overlap with these starting balances.
+                    {tieOut.quickBooksOnly?.ties && ' The imported QuickBooks entries alone match every mapped trial-balance account; the full ledger still differs.'}
+                  </p>
+                  {tieOut.openingEntries.map(entry => (
+                    <p key={entry.id}>
+                      {entry.date} · {entry.memo || 'Opening balance'} · {entry.status} · Cash {fmt(entry.cash)}.
+                    </p>
+                  ))}
+                  <p className="text-muted-foreground">Review overlapping opening entries in the Journal before changing them. No entries have been removed from this comparison.</p>
+                </div>
+              )}
               {tieOut.ties ? (
                 <p className="text-sm text-success">
                   <CheckCircle2 className="inline h-4 w-4 mr-1" />
@@ -467,6 +526,7 @@ export function MigrateView({ group }: { group: string }) {
                 </>
               )}
               <p className="text-xs text-muted-foreground">
+                Both columns use debit minus credit, so credit balances appear negative.{' '}
                 Includes draft entries, since imported entries stay drafts until they are
                 reviewed and posted.
                 {tieOut.unmappedAccounts.length > 0 && (

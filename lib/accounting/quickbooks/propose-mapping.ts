@@ -44,12 +44,15 @@ const head = (path: string) => path.split(':')[0]!.trim()
 // rules can chain for the same wording and each chart takes the one it can use. That is how
 // "Management Fee" reaches the EXPENSE on a fund's chart and the INCOME on a management company's,
 // from the same QuickBooks account name, with no chart-kind switch anywhere in this file.
+export const PARTNER_CAPITAL = /\b(partners?[’']?s?|members?[’']?s?)\s+(investments?|contributions?|capital|equity)\b/i
+
 const KEYWORDS: { match: RegExp; subtype: string; why: string }[] = [
   // "operating" alone used to be a cash keyword, which made "Operating Expenses" — the largest
   // account on many management companies' and GP entities' books — map confidently to the bank
   // account. It now has to look like an account, not an expense line.
   { match: /\b(bank|checking|cash|money market)\b|\boperating\s+(account|bank|cash)\b/i, subtype: 'cash', why: 'looks like a bank or cash account' },
-  { match: /\binvestment|portfolio|holdings?\b/i, subtype: 'investment', why: 'looks like an investment account' },
+  { match: PARTNER_CAPITAL, subtype: 'lp_capital', why: 'names capital invested by partners' },
+  { match: PARTNER_CAPITAL, subtype: 'members_capital', why: 'names capital invested by members' },
   { match: /\bmanagement fee\b/i, subtype: 'management_fee', why: 'names the management fee' },
   // The manco side of the same words: a fund PAYS the management fee, the management company EARNS
   // it, and QuickBooks calls both "Management Fee". Reached only when the chart has no management
@@ -76,13 +79,15 @@ const KEYWORDS: { match: RegExp; subtype: string; why: string }[] = [
   { match: /\blegal\b/i, subtype: 'legal', why: 'looks like legal fees' },
   { match: /\borgani[sz]ation(al)?\s+(cost|expense)s?\b/i, subtype: 'organizational_expense', why: 'looks like an organizational expense' },
   { match: /\binterest\s+(income|earned)\b/i, subtype: 'interest_income', why: 'looks like interest income' },
-  { match: /\brealized\s+(gain|loss)\b/i, subtype: 'realized_gain', why: 'looks like realized gain/loss' },
+  { match: /\brealized\s+(gains?|loss(?:es)?)\b/i, subtype: 'realized_gain', why: 'looks like realized gain/loss' },
   { match: /\bunrealized\b/i, subtype: 'unrealized', why: 'looks like an unrealized valuation account' },
   { match: /\b(accrued|accounts payable|a\/p)\b/i, subtype: 'accrued', why: 'looks like an accrual or payable' },
   { match: /\b(partners?'? capital|members?'? capital|equity)\b/i, subtype: 'lp_capital', why: "looks like partners' capital" },
   // A manco's equity is members' capital, and its chart has no lp_capital to catch the line above.
   { match: /\b(members?'? capital|equity|capital account)\b/i, subtype: 'members_capital', why: "looks like members' capital" },
   { match: /\b(draw|distribution)s?\b/i, subtype: 'member_distributions', why: 'looks like a distribution to the members' },
+  // Investment assets are a fallback only when the wording is not capital or income.
+  { match: /^(?!.*\b(?:partners?|members?|capital|equity|income|gains?|loss(?:es)?|unrealized|realized)\b).*\b(?:investments?|portfolio|holdings?)\b/i, subtype: 'investment', why: 'looks like an investment asset account' },
   // Last resort for an expense on a chart that has a catch-all operating line (GP entities do).
   { match: /\bexpenses?\b/i, subtype: 'operating_expense', why: 'looks like an operating expense' },
 ]

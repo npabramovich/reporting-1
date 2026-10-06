@@ -69,6 +69,7 @@ export function compareTrialBalance(
   ours: TrialBalance,
   theirs: QbTrialBalanceRow[],
   mapping: Map<string, string>,
+  capitalRollups: Map<string, string> = new Map(),
 ): { lines: TieOutLine[]; ties: boolean; ourTotal: number; theirTotal: number } {
   // Several QuickBooks accounts can map to one of ours — sum them before comparing.
   //
@@ -83,8 +84,16 @@ export function compareTrialBalance(
   }
 
   const oursByCode = new Map<string, { name: string; balance: number }>()
-  for (const r of (ours.rows as unknown as { code: string; name: string; balance: number }[])) {
-    oursByCode.set(r.code, { name: r.name, balance: r.balance })
+  for (const r of ours.rows) {
+    // `balance` is normal-side positive (credits are positive for equity/income).
+    // QuickBooks above is debit minus credit. Compare the actual debit/credit columns
+    // so a matching credit balance does not appear as a difference of twice its value.
+    // QuickBooks may keep all partners in one account while we retain per-LP detail.
+    // Never roll up a destination which the source trial balance maps explicitly.
+    const code = theirsByCode.has(r.code) ? r.code : capitalRollups.get(r.code) ?? r.code
+    const previous = oursByCode.get(code)
+    oursByCode.set(code, { name: code === r.code ? r.name : previous?.name ?? "Partners' capital",
+      balance: round2((previous?.balance ?? 0) + r.debit - r.credit) })
   }
 
   const codes = new Set([...Array.from(oursByCode.keys()), ...Array.from(theirsByCode.keys())])

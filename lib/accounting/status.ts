@@ -13,10 +13,12 @@ import { loadCapitalSource, type CapitalSource } from './capital-source'
 import { nextCloseStart } from './close'
 import { vehicleIdByName } from './vehicle-id'
 import { vehicleKindByName } from './vehicle-domain'
-import { closesToOwnerEquity } from '@/lib/vehicle-kinds'
+import { closesToOwnerEquity, isManagementCompany } from '@/lib/vehicle-kinds'
 import { equityLabel } from './vocab'
 import { roundCents } from './ledger'
 import { ACTUAL_BOOK } from './books'
+import { chartForVehicleKind } from './chart'
+import { intercompanyBalances } from './intercompany'
 
 export type IssueLevel = 'blocker' | 'warning' | 'info'
 
@@ -60,6 +62,7 @@ export interface VehicleStatus {
   ledger: {
     entryCount: number
     draftCount: number
+    postedCount: number
     trialBalanced: boolean
     nav: number
     netAssets: number
@@ -87,7 +90,10 @@ export async function vehicleStatus(
   group: string
 ): Promise<VehicleStatus> {
   const vehicleId = await vehicleIdByName(admin, fundId, group)
-  const source = await loadCapitalSource(admin, fundId, group)
+  const kind = await vehicleKindByName(admin, fundId, group)
+  const manco = isManagementCompany(kind)
+  const ownerEquity = closesToOwnerEquity(kind)
+  const source = manco ? 'ledger' : await loadCapitalSource(admin, fundId, group)
 
   const [
     { accounts, postings, capitalPostings },
@@ -99,18 +105,18 @@ export async function vehicleStatus(
     { data: periodRows },
     { data: txns },
     { data: companies },
-    kind,
+    balances,
   ] = await Promise.all([
     loadPostedLedger(admin, fundId, group),
-    loadOwnership(admin, fundId, group),
-    loadHistoryMode(admin, fundId, group),
-    loadAllocationBasis(admin, fundId, group),
+    manco ? Promise.resolve([]) : loadOwnership(admin, fundId, group),
+    manco ? Promise.resolve(null) : loadHistoryMode(admin, fundId, group),
+    manco ? Promise.resolve('capital_balance' as const) : loadAllocationBasis(admin, fundId, group),
     admin.from('journal_entries' as any).select('id, status').eq('book', ACTUAL_BOOK).eq('fund_id', fundId).eq('vehicle_id', vehicleId).neq('status', 'void'),
     admin.from('bank_transactions' as any).select('id, status').eq('fund_id', fundId).eq('vehicle_id', vehicleId),
     admin.from('fiscal_periods' as any).select('period_end, label').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'closed').order('period_end', { ascending: false }).limit(1),
-    admin.from('investment_transactions' as any).select('*').eq('fund_id', fundId),
-    admin.from('companies' as any).select('*').eq('fund_id', fundId),
-    vehicleKindByName(admin, fundId, group),
+    manco ? Promise.resolve({ data: [] }) : admin.from('investment_transactions' as any).select('*').eq('fund_id', fundId),
+    manco ? Promise.resolve({ data: [] }) : admin.from('companies' as any).select('*').eq('fund_id', fundId),
+    manco ? intercompanyBalances(admin, fundId, group) : Promise.resolve([]),
   ])
 
   const entries = ((entryRows as any[]) ?? [])
@@ -131,7 +137,10 @@ export async function vehicleStatus(
 
   const partnersWithCommitment = owners.filter(o => o.commitment > 0).length
 
-  const chartSeeded = accounts.length > 0
+  const accountCodes = new Set(accounts.map(a => a.code))
+  const chartSeeded = manco
+    ? chartForVehicleKind(kind).every(a => accountCodes.has(a.code))
+    : accounts.length > 0
   const hasPostedEntries = postedCount > 0
 
   // A vehicle whose tracker holds positions the ledger doesn't carry is NOT onboarded,
@@ -144,9 +153,11 @@ export async function vehicleStatus(
   // every per-LP figure reads 0 while the vehicle looks finished. Counting it as onboarded is
   // what let the setup tools — including the attribution repair — disappear from Status on a
   // vehicle that still needed them, leaving no route to the fix from anywhere in the product.
-  const stranded = await loadStrandedCapital(admin, fundId, group)
+  const stranded: StrandedCapital = manco
+    ? { pooledPostings: 0, pooledAmount: 0, taggedPostings: 0, perLpAccounts: 0, stranded: false, message: null }
+    : await loadStrandedCapital(admin, fundId, group)
   const capitalAttributed = !stranded.stranded
-  const onboarded = chartSeeded && !!historyMode && hasPostedEntries && investmentsBooked && capitalAttributed
+  const onboarded = manco ? chartSeeded : chartSeeded && !!historyMode && hasPostedEntries && investmentsBooked && capitalAttributed
 
   // ---------------------------------------------------------------------------
   // What needs attention, worst first.
@@ -154,14 +165,14 @@ export async function vehicleStatus(
   const issues: StatusIssue[] = []
 
   if (!chartSeeded) {
-    issues.push({ level: 'blocker', title: 'Chart of accounts not seeded', detail: 'Nothing can be booked until the chart exists.', href: '/funds', action: 'Seed the chart' })
+    issues.push({ level: 'blocker', title: 'Accounting setup is incomplete', detail: 'Add the required accounts before recording transactions.', href: '/funds/status', action: 'Set up accounting' })
   }
-  if (chartSeeded && !historyMode) {
+  if (!manco && chartSeeded && !historyMode) {
     issues.push({ level: 'blocker', title: 'Onboarding path not chosen', detail: 'Pick full history (rebuild from inception) or cutover (start at a date with opening balances).', href: '/funds', action: 'Choose a path' })
   }
   if (!bs.check || Math.abs(bs.check) > 0.004) {
     if (Math.abs(bs.check) > 0.004) {
-      issues.push({ level: 'blocker', title: 'Balance sheet does not balance', detail: `Assets less liabilities and partners' capital leaves ${bs.check.toFixed(2)}. Something is booked wrong.`, href: '/funds/statements', action: 'Open the statements' })
+      issues.push({ level: 'blocker', title: 'Balance sheet does not balance', detail: `Assets less liabilities and ${equityLabel(kind).toLowerCase()} leaves ${bs.check.toFixed(2)}. Something is booked wrong.`, href: '/funds/statements', action: 'Open the statements' })
     }
   }
 
@@ -169,7 +180,7 @@ export async function vehicleStatus(
     issues.push({
       level: 'blocker',
       title: `${bankNeedsAttention} bank transaction${bankNeedsAttention === 1 ? '' : 's'} not posted`,
-      detail: 'Their income and expense is not in the ledger, so a close would allocate nothing for them — and then lock the period.',
+      detail: 'These transactions are not fully recorded in the books. Review and post them before closing their period.',
       href: '/funds/bank',
       action: 'Categorize and post',
     })
@@ -222,8 +233,10 @@ export async function vehicleStatus(
   if (Math.abs(bs.partnersCapital.unallocatedEarnings) > 0.004) {
     issues.push({
       level: 'warning',
-      title: `${bs.partnersCapital.unallocatedEarnings.toFixed(2)} of net income not allocated`,
-      detail: "Fund-level statements are right, but each partner's capital account understates their NAV until the period is closed.",
+      title: `${bs.partnersCapital.unallocatedEarnings.toFixed(2)} of net income ${ownerEquity ? 'not yet closed to equity' : 'not allocated'}`,
+      detail: ownerEquity
+        ? `Close the period to transfer its net income into ${equityLabel(kind).toLowerCase()}.`
+        : "Fund-level statements are right, but each partner's capital account understates their NAV until the period is closed.",
       href: '/funds/periods',
       action: 'Close the period',
     })
@@ -245,8 +258,6 @@ export async function vehicleStatus(
   // An owner's-equity vehicle (a management company, an individual) has no partner accounts to
   // tie to and nobody to hold a commitment: every check in this block is about partners, and
   // for those kinds each would fire forever. See lib/vehicle-kinds.ts closesToOwnerEquity.
-  const ownerEquity = closesToOwnerEquity(kind)
-
   if (!ownerEquity && Math.abs(capitalGap) > 0.004) {
     issues.push({
       level: 'blocker',
@@ -266,6 +277,14 @@ export async function vehicleStatus(
   }
   if (!ownerEquity && owners.length === 0) {
     issues.push({ level: 'warning', title: 'No partners yet', detail: 'Add the LPs and GP entity that hold capital in this vehicle.', href: '/funds/capital-accounts', action: 'Add partners' })
+  }
+
+  if (manco && chartSeeded && !hasPostedEntries) {
+    issues.push({ level: 'info', title: 'No posted entries yet', detail: 'Import your existing books or record the first transaction to start tracking income, expenses, and cash.', href: '/funds/migrate', action: 'Import books' })
+  }
+  const outstanding = balances.filter(b => Math.abs(b.dueFrom) >= 0.005 || Math.abs(b.dueTo) >= 0.005)
+  if (outstanding.length > 0) {
+    issues.push({ level: 'info', title: `${outstanding.length} outstanding intercompany balance${outstanding.length === 1 ? '' : 's'}`, detail: 'Review management fees, expense reimbursements, and other amounts due between entities. Settle charges when payment is recorded.', href: '/funds/status#intercompany', action: 'Review balances' })
   }
 
   return {
@@ -294,6 +313,7 @@ export async function vehicleStatus(
     ledger: {
       entryCount: entries.length,
       draftCount,
+      postedCount,
       trialBalanced: Math.abs(bs.check) < 0.005,
       nav: roundCents(nav),
       netAssets: bs.partnersCapital.total,

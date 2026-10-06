@@ -50,10 +50,10 @@ export async function POST(req: NextRequest) {
   // truncated ledger produces a tie-out that fails for the wrong reason.
   const [acctRows, entryRows, postingRows, mappingRows] = await Promise.all([
     fetchAllRows((f, t) => admin.from('chart_of_accounts' as any)
-      .select('id, code, name, type, subtype, company_id')
+      .select('id, code, name, type, subtype, company_id, lp_entity_id')
       .eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId).range(f, t)),
     fetchAllRows((f, t) => admin.from('journal_entries' as any)
-      .select('id, status, entry_date')
+      .select('id, status, entry_date, source_type, memo')
       .eq('book', ACTUAL_BOOK)
       .eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId)
       .in('status', ['posted', 'draft'])
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   const inWindow = new Set(((entryRows as any[]) ?? []).map(e => e.id))
   const accounts: Account[] = ((acctRows as any[]) ?? []).map(a => ({
     id: a.id, fundId: gate.fundId, code: a.code, name: a.name,
-    type: a.type, subtype: a.subtype, companyId: a.company_id ?? null,
+    type: a.type, subtype: a.subtype, lpEntityId: a.lp_entity_id, companyId: a.company_id ?? null,
   }))
   const postings: Posting[] = ((postingRows as any[]) ?? [])
     .filter(p => inWindow.has(p.journal_entry_id))
@@ -81,13 +81,28 @@ export async function POST(req: NextRequest) {
     if (!r.excluded && r.account_code) mapping.set(r.qb_account, r.account_code)
   }
 
+  const pooledCapital = accounts.find(a => a.type === 'equity' && a.subtype === 'lp_capital' && !a.lpEntityId)
+  const capitalRollups = new Map(accounts.filter(a => a.type === 'equity' && a.subtype === 'lp_capital' && a.lpEntityId && pooledCapital)
+    .map(a => [a.code, pooledCapital!.code]))
   const ours = trialBalance(accounts, postings)
-  const result = compareTrialBalance(ours, theirs, mapping)
+  const result = compareTrialBalance(ours, theirs, mapping, capitalRollups)
+  const qbEntryIds = new Set((entryRows as any[]).filter(e => e.source_type === 'quickbooks').map(e => e.id))
+  const qbPostings = (postingRows as any[]).filter(p => qbEntryIds.has(p.journal_entry_id))
+    .map(p => ({ accountId: p.account_id, amount: Number(p.amount), currency: p.currency }))
+  const quickBooksOnly = compareTrialBalance(trialBalance(accounts, qbPostings), theirs, mapping, capitalRollups)
+  const cashIds = new Set(accounts.filter(a => a.code === '1000' || a.subtype === 'cash').map(a => a.id))
+  const openingEntries = (entryRows as any[]).filter(e => e.source_type === 'opening_balance').map(e => ({
+    id: e.id, date: e.entry_date, memo: e.memo, status: e.status,
+    cash: Math.round((postingRows as any[]).filter(p => p.journal_entry_id === e.id && cashIds.has(p.account_id))
+      .reduce((sum, p) => sum + Number(p.amount), 0) * 100) / 100,
+  }))
 
   return NextResponse.json({
     asOf: body.asOf,
     ...result,
     includesDrafts: true,
+    quickBooksOnly: { ties: quickBooksOnly.ties, differenceCount: quickBooksOnly.lines.length },
+    openingEntries,
     unmappedAccounts: theirs.filter(r => !mapping.has(r.account)).map(r => r.account),
   })
 }

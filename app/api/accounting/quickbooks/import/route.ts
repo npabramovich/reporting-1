@@ -44,9 +44,11 @@ export async function POST(req: NextRequest) {
 
   const { transactions, errors: parseErrors } = parseQbJournal(body.text)
 
-  const { data: mappingRows } = await (admin as any).from('qb_account_mappings')
+  const { data: mappingRows, error: mappingError } = await (admin as any).from('qb_account_mappings')
     .select('qb_account, account_code, excluded')
     .eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId)
+
+  if (mappingError) return NextResponse.json({ error: mappingError.message }, { status: 500 })
 
   const mapping = new Map<string, string>()
   const excluded = new Set<string>()
@@ -77,7 +79,20 @@ export async function POST(req: NextRequest) {
     if (id) vendorIdByName.set(name.toLowerCase(), id)
   }
 
-  const { entries, skipped } = buildEntries(importable, mapping, accountIds, gate.fundId, vendorIdByName)
+  // Chart accounts provide both membership and the dedicated capital destination. Never
+  // search the tenant-wide LP list: the same person can invest in several vehicles.
+  const { data: capitalRows, error: capitalError } = await admin.from('chart_of_accounts' as any)
+    .select('id, code, lp_entity_id, lp_entities(entity_name)')
+    .eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId)
+    .eq('type', 'equity').eq('subtype', 'lp_capital').eq('is_active', true)
+  if (capitalError) return NextResponse.json({ error: capitalError.message }, { status: 500 })
+  const rows = (capitalRows ?? []) as any[]
+  const { entries, skipped, capitalWarnings } = buildEntries(importable, mapping, accountIds, gate.fundId, vendorIdByName, {
+    accountIds: new Set(rows.filter(r => !r.lp_entity_id).map(r => r.id)),
+    targets: rows.filter(r => r.lp_entity_id && r.lp_entities?.entity_name).map(r => ({
+      entityId: r.lp_entity_id, name: r.lp_entities.entity_name, accountId: r.id,
+    })),
+  })
 
   // Which of these have we already imported? Batched: a decade of history is thousands of
   // refs, and one .in() of that size fails.
@@ -85,11 +100,12 @@ export async function POST(req: NextRequest) {
   const present = new Set<string>()
   for (let i = 0; i < refs.length; i += BULK_BATCH) {
     const chunk = refs.slice(i, i + BULK_BATCH)
-    const { data } = await admin.from('journal_entries' as any)
+    const { data, error } = await admin.from('journal_entries' as any)
       .select('source_ref')
       .eq('book', ACTUAL_BOOK)
       .eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId)
       .in('source_ref', chunk)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     for (const r of ((data as any[]) ?? [])) present.add(r.source_ref)
   }
 
@@ -104,6 +120,7 @@ export async function POST(req: NextRequest) {
       alreadyPresent: entries.length - toCreate.length,
       skipped: skipped.length + skippedForExclusion.length,
       errors: writeErrors,
+      capitalWarnings,
     })
   }
 
@@ -137,6 +154,7 @@ export async function POST(req: NextRequest) {
     alreadyPresent: entries.length - toCreate.length,
     skipped: skipped.length + skippedForExclusion.length,
     errors: writeErrors,
+    capitalWarnings,
   })
 }
 

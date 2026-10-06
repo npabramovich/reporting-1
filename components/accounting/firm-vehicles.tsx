@@ -346,7 +346,7 @@ export function FirmVehiclesTable({
                     {needsSetup ? (
                       <Button size="sm" onClick={() => setUp(m!)} disabled={busy === m!.id}>
                         {busy === m!.id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-                        {m!.convertedFromOtherChart ? 'Add missing accounts' : 'Set up books'}
+                        {m!.convertedFromOtherChart ? 'Add missing accounts' : 'Set up accounting'}
                       </Button>
                     ) : (
                       <Button asChild variant="outline" size="sm">
