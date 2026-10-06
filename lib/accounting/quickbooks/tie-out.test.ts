@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { parseQbTrialBalance, compareTrialBalance } from './tie-out'
-import type { TrialBalance } from '@/lib/accounting/statements'
+import { trialBalance, type TrialBalance } from '@/lib/accounting/statements'
+import type { Account } from '@/lib/accounting/types'
 
 const TB_TEXT = [
   'Account,Debit,Credit',
@@ -17,7 +18,8 @@ const MAPPING = new Map([
 ])
 
 const ours = (rows: { code: string; name: string; balance: number }[]) =>
-  ({ rows, totalDebits: 0, totalCredits: 0, balanced: true }) as unknown as TrialBalance
+  ({ rows: rows.map(row => ({ ...row, debit: Math.max(row.balance, 0), credit: Math.max(-row.balance, 0) })),
+    totalDebits: 0, totalCredits: 0, balanced: true }) as unknown as TrialBalance
 
 describe('parseQbTrialBalance', () => {
   it('parses accounts and drops the total row', () => {
@@ -118,6 +120,56 @@ describe('compareTrialBalance', () => {
       theirs,
       MAPPING,
     )
+    expect(result.ties).toBe(true)
+  })
+})
+
+
+describe('real ledger normal-side balances', () => {
+  it('ties credit-normal capital, retained earnings, and income to QuickBooks credits', () => {
+    const accounts: Account[] = [
+      { id: 'cash', fundId: 'f', code: '1000', name: 'Cash', type: 'asset' },
+      { id: 'capital', fundId: 'f', code: '3100', name: 'Partners capital', type: 'equity' },
+      { id: 'retained', fundId: 'f', code: '3900', name: 'Retained earnings', type: 'equity' },
+      { id: 'interest', fundId: 'f', code: '4100', name: 'Interest income', type: 'income' },
+      { id: 'other', fundId: 'f', code: '4900', name: 'Other income', type: 'income' },
+      { id: 'prepaid', fundId: 'f', code: '3900.1', name: 'Prepaid capital call', type: 'equity' },
+    ]
+    const amounts = [138000, -39000, 9000, -58000, -44000, -6000]
+    const ledger = trialBalance(accounts, accounts.map((a, i) => ({ accountId: a.id, amount: amounts[i], currency: 'USD' })))
+    expect(ledger.rows.find(a => a.code === '4100')?.balance).toBe(58000)
+    const qb = accounts.map((a, i) => ({ account: a.name, debit: Math.max(amounts[i], 0), credit: Math.max(-amounts[i], 0) }))
+    const result = compareTrialBalance(ledger, qb, new Map(accounts.map(a => [a.name, a.code])))
+    expect(result).toMatchObject({ ties: true, lines: [], ourTotal: 0, theirTotal: 0 })
+  })
+
+  it('still reports an extra opening cash/capital entry instead of hiding it', () => {
+    const accounts: Account[] = [
+      { id: 'cash', fundId: 'f', code: '1000', name: 'Cash', type: 'asset' },
+      { id: 'lp', fundId: 'f', code: '3100-lp', name: 'Partner', type: 'equity' },
+    ]
+    const ledger = trialBalance(accounts, [{ accountId: 'cash', amount: 1523889, currency: 'USD' }, { accountId: 'lp', amount: -1523889, currency: 'USD' }])
+    const result = compareTrialBalance(ledger, [], new Map())
+    expect(result.lines.map(l => l.difference)).toEqual([1523889, -1523889])
+  })
+})
+
+describe('per-LP capital detail', () => {
+  it('reconciles dedicated LP accounts to pooled QuickBooks capital without hiding other differences', () => {
+    const ledger = ours([
+      { code: '3100', name: 'Unallocated capital', balance: -20 },
+      { code: '3100-a', name: 'LP A', balance: -80 },
+    ])
+    const qb = [{ account: 'Partner investments', debit: 0, credit: 100 }]
+    const mapping = new Map([['Partner investments', '3100']])
+    const rollups = new Map([['3100-a', '3100']])
+    expect(compareTrialBalance(ledger, qb, mapping, rollups).ties).toBe(true)
+    expect(compareTrialBalance(ledger, [{ ...qb[0], credit: 90 }], mapping, rollups).lines[0].difference).toBe(-10)
+  })
+  it('keeps an explicitly mapped LP account separate', () => {
+    const ledger = ours([{ code: '3100-a', name: 'LP A', balance: -80 }])
+    const result = compareTrialBalance(ledger, [{ account: 'Capital:A', debit: 0, credit: 80 }],
+      new Map([['Capital:A', '3100-a']]), new Map([['3100-a', '3100']]))
     expect(result.ties).toBe(true)
   })
 })

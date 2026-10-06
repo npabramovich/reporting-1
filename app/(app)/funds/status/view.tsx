@@ -13,8 +13,8 @@ import { PriceFeedsPanel } from './price-feeds-panel'
 import { WalletsPanel } from './wallets-panel'
 import { CarryTerms } from '../allocation-terms/carry-terms'
 import { useCanRead } from '@/components/access-context'
-import { VEHICLE_KIND_LABELS } from '@/lib/vehicle-kinds'
-import { IntercompanyCard } from './intercompany-card'
+import { isManagementCompany, VEHICLE_KIND_LABELS } from '@/lib/vehicle-kinds'
+import { IntercompanyCard, MancoIntercompanyCard } from './intercompany-card'
 import { AllocationTermsView } from '../allocation-terms/view'
 import { CollapsibleSection } from '@/components/collapsible-section'
 import { ChartOfAccountsCard } from '@/components/accounting/chart-of-accounts-card'
@@ -35,7 +35,7 @@ interface Status {
     partnerCount: number
     partnersWithCommitment: number
   }
-  ledger: { entryCount: number; draftCount: number; trialBalanced: boolean; nav: number; netAssets: number }
+  ledger: { entryCount: number; postedCount: number; draftCount: number; trialBalanced: boolean; nav: number; netAssets: number }
   close: { basis: string; lastClosedEnd: string | null; lastClosedLabel: string | null; nextStart: string | null; unallocatedEarnings: number }
   bank: { total: number; needsAttention: number }
   issues: Issue[]
@@ -48,11 +48,17 @@ const LEVEL = {
 }
 
 export function StatusView() {
+  const { group } = useVehicle()
+  return <EntityStatusView key={group} />
+}
+
+function EntityStatusView() {
   const currency = useCurrency()
   const fmt = (v: number) => formatCurrencyPrice(v, currency)
   const lf = useLedgerFetch()
   const fundSeg = useFundSeg()
-  const { group } = useVehicle()
+  const { group, kind } = useVehicle()
+  const manco = isManagementCompany(kind)
   // The status issues carry bare /funds/<page> hrefs (built server-side, where the URL's
   // vehicle id isn't known); rewrite them fund-first for the current vehicle.
   const fundHref = (href: string) => {
@@ -64,15 +70,25 @@ export function StatusView() {
   const [s, setS] = useState<Status | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    setLoading(true)
-    lf('/api/accounting/status')
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => setS(d && !d.error ? d : null))
-      .finally(() => setLoading(false))
+  const [error, setError] = useState<string | null>(null)
+  const load = useCallback(async () => {
+    try {
+      const res = await lf('/api/accounting/status')
+      if (!res.ok) throw new Error('Could not load the current status. Please try again.')
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setS(data)
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load status')
+    } finally {
+      setLoading(false)
+    }
   }, [lf])
+  useEffect(() => { void load() }, [load])
 
   if (loading) return <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>
+  if (error) return <EmptyState>{error} <Button variant="outline" size="sm" onClick={load}>Retry</Button></EmptyState>
   if (!s) return <EmptyState>Could not load status for this vehicle.</EmptyState>
 
   // Vehicle identity — name, type, vintage, aliases — sits above the accounting state on both
@@ -83,7 +99,7 @@ export function StatusView() {
   // onboarding, the seed-the-chart prompts, the close, allocation terms, and the entry-drafting
   // assistant — is meaningless without double-entry books. Show only the source switch and a
   // pointer to where this vehicle's capital IS maintained.
-  if (s.source === 'events') {
+  if (!manco && s.source === 'events') {
     return (
       <div className="space-y-6">
         <VehicleDetailsCard />
@@ -104,24 +120,28 @@ export function StatusView() {
             balances, then activate. The flip to the ledger is the LAST step of AccountingSetup
             (guarded against an empty chart); there is no separate mode switch. The box explains
             itself, so there is no preamble above it. */}
-        <AccountingSetup alwaysShow />
+        <AccountingSetup alwaysShow onSetup={load} />
       </div>
     )
   }
 
   // The close gets its own summary card below, so it isn't duplicated up here.
-  const cards: { label: string; value: string; hint?: string }[] = [
-    { label: 'Net assets', value: fmt(s.ledger.netAssets), hint: `${s.ledger.entryCount} entries` },
-    { label: 'Partners', value: String(s.setup.partnerCount), hint: `${s.setup.partnersWithCommitment} with a commitment` },
+  const cards: { label: string; value: string; hint?: string; href: string }[] = [
+    { label: manco ? 'Members’ capital' : 'Net assets', value: fmt(s.ledger.netAssets), hint: `${s.ledger.postedCount} posted entries`, href: '/funds/statements' },
+    manco
+      ? { label: 'Books', value: `${s.setup.accountCount} accounts`, hint: `${s.ledger.draftCount} draft entries`, href: '/funds/journal' }
+      : { label: 'Partners', value: String(s.setup.partnerCount), hint: `${s.setup.partnersWithCommitment} with a commitment`, href: '/funds/capital-accounts' },
     {
       label: 'Bank',
-      value: s.bank.needsAttention > 0 ? `${s.bank.needsAttention} to post` : 'All posted',
+      value: s.bank.total === 0 ? 'No transactions' : s.bank.needsAttention > 0 ? `${s.bank.needsAttention} to review` : 'No pending transactions',
       hint: `${s.bank.total} transactions`,
+      href: '/funds/bank',
     },
     {
       label: 'Trial balance',
-      value: s.ledger.trialBalanced ? 'Balanced' : 'Out',
-      hint: s.ledger.draftCount > 0 ? `${s.ledger.draftCount} draft entries` : 'all entries posted',
+      value: !s.setup.hasPostedEntries ? 'No entries yet' : s.ledger.trialBalanced ? 'Balanced' : 'Out',
+      hint: s.ledger.draftCount > 0 ? `${s.ledger.draftCount} draft entries` : `${s.ledger.postedCount} posted entries`,
+      href: '/funds/statements',
     },
   ]
 
@@ -139,22 +159,23 @@ export function StatusView() {
 
       {/* Onboarding only shows while it's actually unfinished. */}
       {!s.onboarded ? (
-        <AccountingSetup alwaysShow />
+        <AccountingSetup alwaysShow onSetup={load} />
       ) : (
         <div className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm text-muted-foreground">
           <Check className="h-4 w-4 text-success" />
-          Onboarded — {s.setup.historyMode === 'full_history' ? 'rebuilt from full history' : 'started from a cutover balance'},
-          {' '}{s.setup.accountCount} accounts, {s.setup.partnerCount} partners.
+          {manco
+            ? `Accounting is set up — ${s.setup.accountCount} accounts, ${s.ledger.postedCount} posted entries.`
+            : <>Onboarded — {s.setup.historyMode === 'full_history' ? 'rebuilt from full history' : 'started from a cutover balance'}, {s.setup.accountCount} accounts, {s.setup.partnerCount} partners.</>}
         </div>
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {cards.map(c => (
-          <div key={c.label} className="border rounded-card p-3">
+          <Link key={c.label} href={fundHref(c.href)} className="border rounded-card p-3 hover:bg-muted/30">
             <p className="text-xs text-muted-foreground">{c.label}</p>
             <p className="text-lg tabular-nums font-semibold mt-0.5 truncate">{c.value}</p>
             {c.hint && <p className="text-[11px] text-muted-foreground mt-0.5">{c.hint}</p>}
-          </div>
+          </Link>
         ))}
       </div>
 
@@ -163,7 +184,7 @@ export function StatusView() {
         {s.issues.length === 0 ? (
           <div className="flex items-center gap-2 rounded-lg border border-success/40 bg-success/5 px-3 py-2 text-sm text-success">
             <Check className="h-4 w-4" />
-            Nothing outstanding. The books balance, everything is posted, and the close is up to date.
+            No outstanding issues detected in the books.
           </div>
         ) : (
           <div className="space-y-2">
@@ -204,7 +225,7 @@ export function StatusView() {
               <>
                 {' '}
                 <span className="text-warning">
-                  {fmt(s.close.unallocatedEarnings)} of net income is not yet allocated to partners.
+                  {fmt(s.close.unallocatedEarnings)} of net income {manco ? 'has not yet been closed to members’ capital.' : 'is not yet allocated to partners.'}
                 </span>
               </>
             )}
@@ -221,7 +242,7 @@ export function StatusView() {
         {/* Carry rate, preferred return, catch-up, and the GP entity that receives it — the
             gp_economics domain, not plain accounting. Someone who runs the close does not
             thereby get to see (or set) the partners' carry terms. */}
-        {canReadGpEconomics && (
+        {!manco && canReadGpEconomics && (
           <CollapsibleSection title="General Partners and carried interest" subtitle="Carried interest and general partner settings">
             <div className="space-y-4">
               <CarryTerms />
@@ -235,9 +256,9 @@ export function StatusView() {
         {/* The chart itself — add, rename, hide. The only surface for it: the Setup block that
             holds "Sync accounts" disappears once a vehicle counts as onboarded, which is exactly
             when you want to add an account to one. */}
-        <CollapsibleSection title="Payment instructions" subtitle="Bank details printed on this vehicle's capital call notices">
+        {!manco && <CollapsibleSection title="Payment instructions" subtitle="Bank details printed on this vehicle's capital call notices">
           <WireInstructionsCard />
-        </CollapsibleSection>
+        </CollapsibleSection>}
 
         <CollapsibleSection title="Chart of accounts" subtitle="Add, rename, or hide the accounts this vehicle posts to">
           <ChartOfAccountsCard />
@@ -246,6 +267,7 @@ export function StatusView() {
         {/* Marks infrastructure — which holdings take a price from a feed, and which wallets
             are watched for on-chain balances. Both are set up once and then run themselves,
             so they belong with the settings rather than on the schedule they feed. */}
+        {!manco && <>
         <CollapsibleSection title="Price feeds" subtitle="Attach a quote source to a holding and store its marks">
           <PriceFeedsPanel />
         </CollapsibleSection>
@@ -260,6 +282,7 @@ export function StatusView() {
         >
           <AllocationTermsView />
         </CollapsibleSection>
+        </>}
       </div>
 
       {/* Migrating a QuickBooks general ledger happens once, at the start of a vehicle's life,
@@ -280,7 +303,9 @@ export function StatusView() {
 
       {/* Charges between this vehicle and the firm's management company, seen from this side.
           Renders nothing for a caller without the management-company grant or a firm without one. */}
-      <IntercompanyCard />
+      <div id="intercompany">
+        {manco ? <MancoIntercompanyCard onChanged={load} /> : <IntercompanyCard />}
+      </div>
 
       {/* The year's preparer bundle. Lives here beside the other once-a-year work; the same
           control is in the statements page's Download menu. */}
@@ -293,7 +318,7 @@ export function StatusView() {
 
       {/* Deal-by-deal carry — a reference calculator for American vehicles. gp_economics, for the
           same reason as the carry terms above. Renders to nothing on other vehicles anyway. */}
-      {canReadGpEconomics && <DealCarryCard />}
+      {!manco && canReadGpEconomics && <DealCarryCard />}
 
     </div>
   )

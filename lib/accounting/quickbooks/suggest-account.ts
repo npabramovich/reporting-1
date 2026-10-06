@@ -1,3 +1,4 @@
+import { PARTNER_CAPITAL } from './propose-mapping'
 import type { AccountType } from '../types'
 
 export interface AccountSuggestion {
@@ -12,7 +13,11 @@ export function suggestAccount(name: string, chart: { code: string }[]): Account
   let type: AccountType = 'expense'
   let base = 5900
   let subtype: string | null = null
-  if (/accumulated.*(amorti[sz]|deprec)/i.test(name)) {
+  if (PARTNER_CAPITAL.test(name)) {
+    type = 'equity'; base = 3100; subtype = 'lp_capital'
+  } else if (/\brealized\s+gains?\b/i.test(name)) {
+    type = 'income'; base = 4000; subtype = 'realized_gain'
+  } else if (/accumulated.*(amorti[sz]|deprec)/i.test(name)) {
     type = 'asset'; base = 1700; subtype = 'accumulated_amortization'
   } else if (/amorti[sz]|depreciation/i.test(name)) {
     base = 5800; subtype = 'depreciation'

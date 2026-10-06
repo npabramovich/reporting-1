@@ -123,3 +123,41 @@ describe('vendors on import', () => {
     expect(buildEntries([txn], MAPPING, IDS, 'fund-1', ids).entries[0].vendorId).toBeNull()
   })
 })
+
+describe('per-LP capital from QuickBooks', () => {
+  const contribution: QbTransaction = {
+    date: '2024-01-15', type: 'Deposit', num: null, memo: null,
+    lines: [
+      { account: 'Bank', name: 'Paul Sethi', memo: null, debit: 87500, credit: 0 },
+      { account: 'Partner investments', name: null, memo: null, debit: 0, credit: 87500 },
+    ],
+  }
+  const mapping = new Map([['Bank', '1000'], ['Partner investments', '3100']])
+  const ids = new Map([['1000', 'cash'], ['3100', 'pooled']])
+  const capital = { accountIds: new Set(['pooled']), targets: [{ entityId: 'paul', name: 'Paul Sethi', accountId: 'paul-capital' }] }
+  it('links the equity split while preserving cash, source identity and balance', () => {
+    const result = buildEntries([contribution], mapping, ids, 'fund', undefined, capital)
+    expect(result.entries[0].postings).toEqual([
+      { accountId: 'cash', amount: 87500, currency: 'USD' },
+      { accountId: 'paul-capital', lpEntityId: 'paul', amount: -87500, currency: 'USD' },
+    ])
+    expect(result.entries[0].sourceRef).toBe(qbSourceRef(contribution))
+    expect(result.capitalWarnings).toEqual([])
+  })
+  it('retains unknown LPs in pooled capital and exposes the review item', () => {
+    const result = buildEntries([contribution], mapping, ids, 'fund', undefined, { ...capital, targets: [] })
+    expect(result.entries[0].postings[1].accountId).toBe('pooled')
+    expect(result.capitalWarnings).toHaveLength(1)
+    expect(result.entries[0].postings.reduce((s, p) => s + p.amount, 0)).toBe(0)
+  })
+  it('matches separate named capital splits independently', () => {
+    const split = { ...contribution, lines: [
+      { ...contribution.lines[0], debit: 100 },
+      { ...contribution.lines[1], name: 'Paul Sethi', credit: 60 },
+      { ...contribution.lines[1], name: 'Other LP', credit: 40 },
+    ] }
+    const result = buildEntries([split], mapping, ids, 'fund', undefined, capital)
+    expect(result.entries[0].postings.map(p => p.accountId)).toEqual(['cash', 'paul-capital', 'pooled'])
+    expect(result.capitalWarnings).toHaveLength(1)
+  })
+})

@@ -1,0 +1,96 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { vehicleStatus } from './status'
+import { loadPostedLedger, loadOwnership } from './load'
+import { vehicleKindByName } from './vehicle-domain'
+import { loadCapitalSource } from './capital-source'
+import { loadHistoryMode, loadAllocationBasis } from './terms'
+import { loadStrandedCapital } from './pooled-capital-check'
+import { intercompanyBalances } from './intercompany'
+import { chartForVehicleKind } from './chart'
+
+vi.mock('./load', () => ({ loadPostedLedger: vi.fn(), loadOwnership: vi.fn() }))
+vi.mock('./vehicle-id', () => ({ vehicleIdByName: vi.fn().mockResolvedValue('vehicle-1') }))
+vi.mock('./vehicle-domain', () => ({ vehicleKindByName: vi.fn() }))
+vi.mock('./capital-source', () => ({ loadCapitalSource: vi.fn() }))
+vi.mock('./terms', () => ({ loadHistoryMode: vi.fn(), loadAllocationBasis: vi.fn() }))
+vi.mock('./close', () => ({ nextCloseStart: vi.fn().mockResolvedValue('2026-01-01') }))
+vi.mock('./pooled-capital-check', () => ({ loadStrandedCapital: vi.fn() }))
+vi.mock('./intercompany', () => ({ intercompanyBalances: vi.fn() }))
+
+function adminWith(tables: Record<string, unknown[]> = {}) {
+  return { from: vi.fn((table: string) => {
+    const q: any = { then: (resolve: any) => resolve({ data: tables[table] ?? [], error: null }) }
+    for (const method of ['select', 'eq', 'neq', 'order', 'limit']) q[method] = () => q
+    return q
+  }) } as any
+}
+const accounts = () => chartForVehicleKind('manco').map(a => ({ ...a, id: a.code, fundId: 'firm' }))
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(vehicleKindByName).mockResolvedValue('manco')
+  vi.mocked(loadPostedLedger).mockResolvedValue({ accounts: accounts(), postings: [], capitalPostings: [] } as any)
+  vi.mocked(intercompanyBalances).mockResolvedValue([])
+  vi.mocked(loadOwnership).mockResolvedValue([])
+  vi.mocked(loadHistoryMode).mockResolvedValue(null)
+  vi.mocked(loadAllocationBasis).mockResolvedValue('capital_balance')
+  vi.mocked(loadCapitalSource).mockResolvedValue('events')
+  vi.mocked(loadStrandedCapital).mockResolvedValue({ pooledPostings: 0, pooledAmount: 0, taggedPostings: 0, perLpAccounts: 0, stranded: false, message: null })
+})
+
+describe('management company accounting status', () => {
+  it('finishes setup with a complete chart without requiring LPs, a history mode, or entries', async () => {
+    const admin = adminWith()
+    const s = await vehicleStatus(admin, 'firm', 'Management LLC')
+    expect(s.source).toBe('ledger')
+    expect(s.onboarded).toBe(true)
+    expect(s.issues.map(i => i.title)).toEqual(['No posted entries yet'])
+    expect(loadCapitalSource).not.toHaveBeenCalled()
+    expect(loadOwnership).not.toHaveBeenCalled()
+    expect(loadHistoryMode).not.toHaveBeenCalled()
+    expect(loadStrandedCapital).not.toHaveBeenCalled()
+    expect(admin.from).not.toHaveBeenCalledWith('investment_transactions')
+  })
+
+  it('keeps setup available when an existing chart lacks operating accounts', async () => {
+    vi.mocked(loadPostedLedger).mockResolvedValue({ accounts: accounts().slice(0, 2), postings: [], capitalPostings: [] } as any)
+    const s = await vehicleStatus(adminWith(), 'firm', 'Management LLC')
+    expect(s.onboarded).toBe(false)
+    expect(s.issues).toContainEqual(expect.objectContaining({ title: 'Accounting setup is incomplete', action: 'Set up accounting' }))
+  })
+
+  it('reports draft entries, bank work, close progress, and net income going to members’ capital', async () => {
+    const income = accounts().find(a => a.type === 'income')!
+    const cash = accounts().find(a => a.subtype === 'cash')!
+    vi.mocked(loadPostedLedger).mockResolvedValue({ accounts: accounts(), capitalPostings: [], postings: [
+      { accountId: cash.id, amount: 100, currency: 'USD', entryDate: '2026-01-01' },
+      { accountId: income.id, amount: -100, currency: 'USD', entryDate: '2026-01-01' },
+    ] } as any)
+    const s = await vehicleStatus(adminWith({
+      journal_entries: [{ status: 'posted' }, { status: 'draft' }],
+      bank_transactions: [{ status: 'unmatched' }, { status: 'drafted' }, { status: 'reconciled' }],
+      fiscal_periods: [{ period_end: '2025-12-31', label: '2025' }],
+    }), 'firm', 'Management LLC')
+    expect(s.ledger).toMatchObject({ postedCount: 1, draftCount: 1, trialBalanced: true })
+    expect(s.bank).toEqual({ total: 3, needsAttention: 2 })
+    expect(s.close).toMatchObject({ lastClosedEnd: '2025-12-31', nextStart: '2026-01-01', unallocatedEarnings: 100 })
+    expect(s.issues).toContainEqual(expect.objectContaining({ title: '100.00 of net income not yet closed to equity', detail: expect.stringContaining("members' capital") }))
+    expect(s.issues.some(i => /partner|LP|NAV/.test(i.title + i.detail))).toBe(false)
+  })
+
+  it('flags receivables and payables even when they net to zero', async () => {
+    vi.mocked(intercompanyBalances).mockResolvedValue([{ counterpartyVehicleId: 'fund', counterpartyName: 'Fund I', dueFrom: 500, dueTo: 500, net: 0 }])
+    const s = await vehicleStatus(adminWith(), 'firm', 'Management LLC')
+    expect(s.issues).toContainEqual(expect.objectContaining({ title: '1 outstanding intercompany balance', href: '/funds/status#intercompany' }))
+  })
+
+  it('keeps the existing LP setup requirements for funds', async () => {
+    vi.mocked(vehicleKindByName).mockResolvedValue('fund')
+    const s = await vehicleStatus(adminWith(), 'firm', 'Fund I')
+    expect(s.source).toBe('events')
+    expect(s.onboarded).toBe(false)
+    expect(s.issues.map(i => i.title)).toContain('Onboarding path not chosen')
+    expect(s.issues.map(i => i.title)).toContain('No partners yet')
+    expect(intercompanyBalances).not.toHaveBeenCalled()
+  })
+})

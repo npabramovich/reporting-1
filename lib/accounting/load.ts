@@ -112,6 +112,27 @@ export function assembleLoadedLedger(fundId: string, rows: LedgerRows): LoadedLe
   // receivable), which must not be mistaken for a capital movement.
   const lpCapitalAccountIds = new Set(accounts.filter(a => a.lpEntityId).map(a => a.id))
 
+  // Import provenance stays "quickbooks" on the journal. For the LP roll-forward,
+  // classify only simple cash/capital exchanges; non-cash and mixed adjustments
+  // remain unclassified rather than presenting an accrual as incoming cash.
+  const qbCashActivity = new Map<string, string>()
+  const accountById = new Map(accounts.map(a => [a.id, a]))
+  const qbSplits = new Map<string, any[]>()
+  for (const p of postingRows ?? []) {
+    if (sourceByEntry.get(p.journal_entry_id) !== 'quickbooks') continue
+    const splits = qbSplits.get(p.journal_entry_id) ?? []
+    splits.push(p)
+    qbSplits.set(p.journal_entry_id, splits)
+  }
+  for (const [id, splits] of qbSplits) {
+    const cash = splits.filter(p => accountById.get(p.account_id)?.subtype === 'cash')
+    const capital = splits.filter(p => accountById.get(p.account_id)?.subtype === 'lp_capital')
+    if (!cash.length || !capital.length || cash.length + capital.length !== splits.length) continue
+    const incoming = cash.every(p => Number(p.amount) > 0) && capital.every(p => Number(p.amount) < 0)
+    const outgoing = cash.every(p => Number(p.amount) < 0) && capital.every(p => Number(p.amount) > 0)
+    if (incoming || outgoing) qbCashActivity.set(id, incoming ? 'contribution' : 'distribution')
+  }
+
   const postings: Posting[] = []
   const capitalPostings: CapitalPosting[] = []
   const sourcedPostings: SourcedPosting[] = []
@@ -123,7 +144,7 @@ export function assembleLoadedLedger(fundId: string, rows: LedgerRows): LoadedLe
     postings.push({ accountId: p.account_id, amount, currency: p.currency ?? 'USD', lpEntityId: p.lp_entity_id ?? null, entryDate })
     sourcedPostings.push({ entryId: p.journal_entry_id, accountId: p.account_id, amount, currency: p.currency ?? 'USD', lpEntityId: p.lp_entity_id ?? null, sourceType, entryDate, memo: memoByEntry.get(p.journal_entry_id) ?? null })
     if (p.lp_entity_id && lpCapitalAccountIds.has(p.account_id)) {
-      capitalPostings.push({ lpEntityId: p.lp_entity_id, amount, sourceType, entryDate })
+      capitalPostings.push({ lpEntityId: p.lp_entity_id, amount, sourceType: qbCashActivity.get(p.journal_entry_id) ?? sourceType, entryDate })
     }
   }
 

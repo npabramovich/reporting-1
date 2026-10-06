@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { proposeMapping } from './propose-mapping'
+import { proposeMapping, type ChartAccount } from './propose-mapping'
 
 const CHART = [
   { id: 'a1', code: '1000', name: 'Cash', type: 'asset', subtype: 'cash' },
@@ -89,7 +89,7 @@ const asChart = (seed: typeof MANAGEMENT_COMPANY_CHART) =>
 const MANCO = asChart(MANAGEMENT_COMPANY_CHART)
 const FUND = asChart(DEFAULT_CHART)
 
-const codeFor = (account: string, chart: typeof MANCO) => proposeMapping([qb(account)], chart)[0].code
+const codeFor = (account: string, chart: ChartAccount[]) => proposeMapping([qb(account)], chart)[0].code
 
 describe('proposeMapping — management company charts', () => {
   it('maps the compensation accounts a fund chart has no home for', () => {
@@ -158,5 +158,16 @@ describe('migration account identity', () => {
 
   it('does not suggest inactive accounts', () => {
     expect(proposeMapping([qb('Cash')], CHART.map(a => ({ ...a, is_active: false })))[0].code).toBeNull()
+  })
+})
+
+describe('capital and gains must not become investment assets', () => {
+  it.each(['Partner investments', "Partner's investments", 'Partners’ capital'])('maps %s to LP equity', name => {
+    expect(codeFor(name, FUND)).toBe('3100')
+    expect(codeFor(name, CHART)).toBeNull()
+  })
+  it('maps realized investment gains to income and refuses an asset fallback', () => {
+    expect(codeFor('Realized Gains on Investment', FUND)).toBe('4000')
+    expect(codeFor('Realized Gains on Investment', CHART)).toBeNull()
   })
 })

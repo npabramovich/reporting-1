@@ -5,11 +5,19 @@ import Link from 'next/link'
 import { Loader2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useLedgerFetch, useFundSeg, useVehicle } from '@/components/accounting-vehicle'
-import { closesToOwnerEquity } from '@/lib/vehicle-kinds'
+import { closesToOwnerEquity, isManagementCompany } from '@/lib/vehicle-kinds'
+import { MancoAccountingSetup } from './manco-setup'
 import { BootstrapInvestmentsCard } from './status/bootstrap-investments'
 
 /** Vehicle-scoped onboarding: seed chart, choose full-history or cutover, reconcile. */
-export function AccountingSetup({ alwaysShow = false }: { alwaysShow?: boolean } = {}) {
+export function AccountingSetup({ alwaysShow = false, onSetup }: { alwaysShow?: boolean; onSetup?: () => void } = {}) {
+  const { kind, group } = useVehicle()
+  return isManagementCompany(kind)
+    ? <MancoAccountingSetup key={group} alwaysShow={alwaysShow} onSetup={onSetup} />
+    : <InvestmentAccountingSetup key={group} alwaysShow={alwaysShow} />
+}
+
+function InvestmentAccountingSetup({ alwaysShow }: { alwaysShow: boolean }) {
   const [accountCount, setAccountCount] = useState<number | null>(null)
   const [onboarded, setOnboarded] = useState(false)
   const [seeding, setSeeding] = useState(false)
@@ -18,7 +26,7 @@ export function AccountingSetup({ alwaysShow = false }: { alwaysShow?: boolean }
   // every refresh and nothing downstream (like opening balances) could act on it.
   const [path, setPath] = useState<'full_history' | 'cutover' | null>(null)
   // The vehicle's current producer. When it is still 'events', finishing setup means ACTIVATING
-  // fund accounting (flip to 'ledger') — the outcome of setup, not a separate mode switch.
+  // accounting (flip to 'ledger') — the outcome of setup, not a separate mode switch.
   const [source, setSource] = useState<'ledger' | 'events' | null>(null)
   const [activating, setActivating] = useState(false)
   const [activateErr, setActivateErr] = useState<string | null>(null)
@@ -146,7 +154,7 @@ export function AccountingSetup({ alwaysShow = false }: { alwaysShow?: boolean }
       body: JSON.stringify({ capitalSource: 'ledger' }),
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) { setActivateErr(data.error ?? 'Could not activate fund accounting'); setActivating(false); return }
+    if (!res.ok) { setActivateErr(data.error ?? 'Could not activate accounting'); setActivating(false); return }
     window.location.reload()
   }
 
@@ -156,7 +164,7 @@ export function AccountingSetup({ alwaysShow = false }: { alwaysShow?: boolean }
     setTurningOn(true); setTurnOnErr(null)
     const res = await lf('/api/accounting/turn-on', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) { setTurnOnErr(data.error ?? 'Could not turn on fund accounting'); setTurningOn(false); return }
+    if (!res.ok) { setTurnOnErr(data.error ?? 'Could not turn on accounting'); setTurningOn(false); return }
     window.location.reload()
   }
 
@@ -169,18 +177,18 @@ export function AccountingSetup({ alwaysShow = false }: { alwaysShow?: boolean }
 
   return (
     <div className="border rounded-card p-4 mb-6 bg-muted/20 space-y-3">
-      <p className="text-sm font-medium">Onboarding this vehicle</p>
+      <p className="text-sm font-medium">Set up accounting</p>
 
       {/* PRIMARY path for a tracking vehicle: one click does the whole turn-on. */}
       {source === 'events' && (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            Turn on fund accounting for this vehicle. This seeds the chart of accounts, carries your
+            Set up accounting for this vehicle. This seeds the chart of accounts, carries your
             latest pasted positions in as opening balances, and starts deriving capital from the
             ledger. You can rebuild full history from inception later.
           </p>
           <Button size="sm" onClick={turnOn} disabled={turningOn}>
-            {turningOn && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Turn on fund accounting
+            {turningOn && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Set up accounting
           </Button>
           {turnOnErr && <p className="text-sm text-destructive">{turnOnErr}</p>}
           {!showManual && (
@@ -326,11 +334,11 @@ export function AccountingSetup({ alwaysShow = false }: { alwaysShow?: boolean }
       {source === 'events' && accountCount > 0 && (
         <div className="border-t pt-3 space-y-2">
           <p className="text-sm text-muted-foreground">
-            When the books are ready, activate fund accounting. This vehicle&rsquo;s capital will then be
+            When the books are ready, activate accounting. This vehicle&rsquo;s capital will then be
             derived from the ledger, and the pasted-positions input is retired.
           </p>
           <Button size="sm" onClick={activate} disabled={activating}>
-            {activating && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Activate fund accounting
+            {activating && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Activate accounting
           </Button>
           {activateErr && <p className="text-sm text-destructive">{activateErr}</p>}
         </div>
