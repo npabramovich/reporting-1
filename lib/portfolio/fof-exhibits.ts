@@ -3,6 +3,10 @@ import type { FundPosition } from './fof-metrics'
 /**
  * The three quarterly exhibits, shaped for presentation. Pure.
  *
+ * The schedule-of-investments shape is NOT here: underlying funds appear in the ordinary schedule
+ * of investments (lib/accounting/soi.ts), scoped to the vehicle whose activity bought them. A
+ * second, firm-wide SOI was the bug.
+ *
  * NOTHING HERE RECOMPUTES A METRIC. Every figure arrives from computeFundPositions; this module
  * only selects, orders, and totals. A DPI derived in two places is a DPI that will eventually
  * disagree with itself, and the one on the LP's statement will be the wrong one.
@@ -15,44 +19,6 @@ import type { FundPosition } from './fof-metrics'
 const CENT = 0.005
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
 const ratio = (num: number, den: number) => (Math.abs(den) < CENT ? null : num / den)
-
-// ---------------------------------------------------------------------------
-// Schedule of investments, fund-shaped
-// ---------------------------------------------------------------------------
-
-export interface FofSoiRow {
-  companyId: string
-  name: string
-  vintageYear: number | null
-  strategy: string | null
-  commitment: number
-  unfunded: number
-  /** Capital in less capital returned — a fund position's remaining basis. */
-  cost: number
-  distributions: number
-  fairValue: number
-  /** null when the portfolio has no NAV to be a percentage of. */
-  pctOfNav: number | null
-  navAsOf: string | null
-  stalenessDays: number | null
-}
-
-export function fofSoiPositions(positions: FundPosition[], totalNav: number): FofSoiRow[] {
-  return positions.map(p => ({
-    companyId: p.companyId,
-    name: p.name,
-    vintageYear: p.vintageYear,
-    strategy: p.strategy,
-    commitment: p.commitment,
-    unfunded: p.unfunded,
-    cost: p.contributed - p.distributed,
-    distributions: p.distributed,
-    fairValue: p.carryingValue,
-    pctOfNav: ratio(p.carryingValue, totalNav),
-    navAsOf: p.navAsOf,
-    stalenessDays: p.stalenessDays,
-  }))
-}
 
 // ---------------------------------------------------------------------------
 // Commitment & liquidity

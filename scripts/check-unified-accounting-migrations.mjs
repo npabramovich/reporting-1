@@ -15,6 +15,7 @@ import assert from 'node:assert/strict'
 import {
   IDS, GROUP, applySchema, seedEntity, prepareCallEntry, prepareDistributionEntry,
   draftCall, draftDistribution, migrationSql, RETIREMENT_MIGRATION, rejects,
+  prepareOpeningEntry, reportedPosition,
 } from './unified-accounting-sql-fixture.mjs'
 
 async function openDb() {
@@ -411,9 +412,82 @@ const exists = async id => (await count('select count(*)::int n from journal_ent
 }
 
 // ---------------------------------------------------------------------------
+// 7b. Opening balances: the entry records WHICH statement it represents.
+// ---------------------------------------------------------------------------
+const publishOpening = (entryId, fund = i.fund, vehicle = i.vehicle) =>
+  db.query('select publish_opening_balances($1,$2,$3,$4) r', [fund, vehicle, entryId, i.user])
+{
+  // A cutover at 2026-09-30 for two partners, with a statement on file for one of them.
+  const navA = 500, navB = 300
+  const positionA = await reportedPosition(db, i.lpA, '2026-09-30', { nav: navA, calledCapital: 600, distributions: 100 })
+  const openingId = await prepareOpeningEntry(db, { [i.lpA]: navA, [i.lpB]: navB }, { entryDate: '2026-09-30' })
+
+  await rejects('publishing an opening draft from another tenant',
+    () => publishOpening(openingId, i.otherFund, i.otherVehicle), /No opening draft to publish/)
+  assert.equal((await one('select status from journal_entries where id = $1', [openingId])).status, 'draft')
+
+  const result = (await publishOpening(openingId)).rows[0].r
+  assert.deepEqual(result, { entryId: openingId, partners: 2, linked: 1, openedOn: '2026-09-30' },
+    'both partners were opened; only the one with a statement on file is linked')
+  assert.equal((await one('select status from journal_entries where id = $1', [openingId])).status, 'posted')
+
+  const link = await one('select * from capital_opening_links where position_id = $1', [positionA])
+  assert.equal(link.lp_entity_id, i.lpA)
+  assert.equal(link.journal_entry_id, openingId)
+  assert.equal(Number(link.observed_nav), navA, 'the statement figure is frozen on the link')
+  assert.equal(Number(link.booked_amount), navA, 'so is what the entry actually booked')
+  assert.equal(link.observed_on.toISOString?.().slice(0, 10) ?? link.observed_on, '2026-09-30')
+
+  // The partner with no statement at that date is left UNLINKED rather than linked to a nearby
+  // observation — a cutover date that is not a statement date is not a representation of it.
+  await reportedPosition(db, i.lpB, '2026-08-31', { nav: navB })
+  assert.equal(await count('select count(*)::int n from capital_opening_links where lp_entity_id = $1', [i.lpB]), 0)
+
+  // Republishing is refused: the draft is gone, so there is nothing to publish twice.
+  await rejects('publishing the same opening twice', () => publishOpening(openingId), /No opening draft to publish/)
+  assert.equal(await count('select count(*)::int n from capital_opening_links where journal_entry_id = $1', [openingId]), 1)
+
+  // One partner cannot be opened twice, even at a different date — the link's primary key.
+  const positionA2 = await reportedPosition(db, i.lpA, '2026-10-31', { nav: 550 })
+  const secondOpening = await prepareOpeningEntry(db, { [i.lpA]: 550 }, { entryDate: '2026-10-31' })
+  await rejects('opening one partner a second time', () => publishOpening(secondOpening), /duplicate key|capital_opening_links_pkey/)
+  assert.equal((await one('select status from journal_entries where id = $1', [secondOpening])).status, 'draft',
+    'the refused second opening left its entry a draft')
+  assert.equal(await count('select count(*)::int n from capital_opening_links where position_id = $1', [positionA2]), 0,
+    'and wrote no link')
+
+  // The failed preparation is cleanable; a published one is not.
+  const discardOpening = (entryId, fund = i.fund, vehicle = i.vehicle) =>
+    db.query('select discard_unpublished_opening_draft($1,$2,$3)', [fund, vehicle, entryId])
+  await discardOpening(secondOpening, i.otherFund, i.otherVehicle)
+  assert.equal(await count('select count(*)::int n from journal_entries where id = $1', [secondOpening]), 1,
+    'another tenant could not discard this draft')
+  await discardOpening(secondOpening)
+  assert.equal(await count('select count(*)::int n from journal_entries where id = $1', [secondOpening]), 0)
+  await discardOpening(openingId)
+  assert.equal(await count('select count(*)::int n from journal_entries where id = $1', [openingId]), 1,
+    'a published opening that a link claims is never discarded')
+
+  // A second cutover DATE for a different partner is allowed; a second entry on ONE date is not.
+  const lateOpening = await prepareOpeningEntry(db, { [i.lpB]: navB }, { entryDate: '2026-08-31' })
+  await publishOpening(lateOpening)
+  assert.equal(await count('select count(*)::int n from capital_opening_links where lp_entity_id = $1', [i.lpB]), 1,
+    'a partner admitted after the first cutover can still be opened, at their own statement date')
+  await rejects('a second opening entry on a date that already has one',
+    () => prepareOpeningEntry(db, { [i.gp]: 10 }, { entryDate: '2026-08-31' }),
+    /journal_entries_partner_opening_once_per_date|duplicate key/)
+
+  // An opening entry that posts no partner capital is not an opening.
+  const { rows: [{ id: emptyOpening }] } = await db.query(
+    `insert into journal_entries(fund_id, portfolio_group, vehicle_id, entry_date, source_type, source_ref, status)
+     values ($1,$2,$3,'2026-11-30','opening_balance','partner-opening','draft') returning id`, [i.fund, GROUP, i.vehicle])
+  await rejects('an opening entry with no partner capital', () => publishOpening(emptyOpening), /posts no partner capital/)
+}
+
+// ---------------------------------------------------------------------------
 // 8. Client roles reach none of this.
 // ---------------------------------------------------------------------------
-for (const table of ['capital_settlement_reviews', 'capital_settlement_review_history']) {
+for (const table of ['capital_settlement_reviews', 'capital_settlement_review_history', 'capital_opening_links']) {
   for (const role of ['anon', 'authenticated']) {
     for (const privilege of ['select', 'insert', 'update', 'delete']) {
       assert.equal((await one('select has_table_privilege($1,$2,$3) allowed', [role, table, privilege])).allowed, false,
@@ -426,6 +500,8 @@ for (const fn of [
   'complete_capital_operation(uuid,uuid,text,uuid,uuid[],jsonb)',
   'discard_unregistered_capital_drafts(uuid,uuid,uuid[])',
   'finalize_capital_operation(uuid,uuid,text,uuid,uuid[])',
+  'publish_opening_balances(uuid,uuid,uuid,uuid)',
+  'discard_unpublished_opening_draft(uuid,uuid,uuid)',
   'freeze_live_report(uuid,text,date,text,text,jsonb)',
 ]) {
   for (const role of ['anon', 'authenticated']) {
@@ -464,6 +540,8 @@ console.log(`unified-accounting SQL checks passed on ${db.kind}:
   discard_unregistered_capital_drafts: orphan removal, claimed/posted/foreign protection
   finalize_capital_operation recipient requirement
   request-key uniqueness per entity
+  opening balances: the statement each opening entry represents, unlinked partners left unlinked,
+    one opening per partner, several cutover dates, protected cleanup, tenant refusal
   settlement review: matching, partial allocation, double-allocation refusal, draft refusal,
     append-only history, tenant refusal, editing an existing review, refusals that change
     nothing, and stale allocations releasing their claim instead of stranding a payment

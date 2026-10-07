@@ -42,6 +42,11 @@ export function FundHoldingDetail({
   const [name, setName] = useState('')
   const [events, setEvents] = useState<RegisterEvent[]>([])
   const [navs, setNavs] = useState<NavStatement[]>([])
+  /** The entity that holds this fund, from its register. Null until the first notice names one. */
+  const [vehicleId, setVehicleId] = useState<string | null>(null)
+  const [vehicleName, setVehicleName] = useState<string | null>(null)
+  const [vehicleChoices, setVehicleChoices] = useState<{ id: string; name: string }[]>([])
+  const [chosenVehicle, setChosenVehicle] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -56,6 +61,16 @@ export function FundHoldingDetail({
       setName(json?.holding?.name ?? '')
       setEvents(json?.events ?? [])
       setNavs(json?.navStatements ?? [])
+      const held: string | null = json?.vehicleId ?? null
+      setVehicleId(held)
+      setVehicleName(held ? (json?.vehicles ?? []).find((v: any) => v.id === held)?.name ?? null : null)
+      // Only needed while the holding has no entity yet — one fetch, not on every render.
+      if (!held) {
+        const vr = await fetch('/api/accounting/vehicle-index').catch(() => null)
+        const rows = vr && vr.ok ? await vr.json().catch(() => []) : []
+        setVehicleChoices((Array.isArray(rows) ? rows : [])
+          .filter((v: any) => v?.id && v?.name).map((v: any) => ({ id: v.id, name: v.name })))
+      }
     } finally {
       setLoading(false)
     }
@@ -67,6 +82,7 @@ export function FundHoldingDetail({
 
   async function addEvent() {
     if (!eventForm.eventDate || !eventForm.amount) { setNotice('A date and an amount are required.'); return }
+    if (!vehicleId && !chosenVehicle) { setNotice('Choose which entity holds this fund.'); return }
     setBusy(true); setNotice(null)
     try {
       const res = await fetch(`/api/portfolio/fund-holdings/${companyId}/events`, {
@@ -76,6 +92,9 @@ export function FundHoldingDetail({
           kind: eventForm.kind,
           eventDate: eventForm.eventDate,
           amount: Number(eventForm.amount),
+          // Named on the first notice; inferred from the register after that. A notice with no
+          // entity cannot be confirmed and cannot be scoped to a schedule of investments.
+          ...(vehicleId ? {} : { vehicleId: chosenVehicle }),
         }),
       })
       const json = await res.json()
@@ -132,6 +151,30 @@ export function FundHoldingDetail({
         ) : (
           <div className="space-y-6">
             {notice && <p className="text-sm text-warning">{notice}</p>}
+
+            {/* WHICH ENTITY HOLDS THIS FUND. Asked once, on the first notice, then shown as a
+                fact. The vehicle is recorded on the register rows and nowhere else, so without it
+                a notice cannot be confirmed to the ledger and the holding cannot be scoped to one
+                entity's schedule of investments. */}
+            {vehicleId ? (
+              <p className="text-sm text-muted-foreground">Held by <span className="font-medium text-foreground">{vehicleName ?? 'this entity'}</span>.</p>
+            ) : (
+              <div className="space-y-1 rounded-lg border border-warning/40 bg-warning/10 p-3">
+                <Label htmlFor="holding-vehicle">Which entity holds this fund?</Label>
+                <select
+                  id="holding-vehicle"
+                  value={chosenVehicle}
+                  onChange={e => setChosenVehicle(e.target.value)}
+                  className="border rounded-lg px-2 py-1 text-sm h-9 w-full max-w-xs bg-background"
+                >
+                  <option value="">Choose an entity…</option>
+                  {vehicleChoices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+                <p className="text-caption text-muted-foreground">
+                  Recorded with the first notice below. Until it is set, a notice cannot be confirmed to the ledger.
+                </p>
+              </div>
+            )}
 
             <section className="space-y-2">
               <h3 className="text-base font-medium">Notices received</h3>

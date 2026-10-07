@@ -54,6 +54,71 @@ describe('capital evidence resolution', () => {
   })
 })
 
+describe('statement observations an opening entry represents', () => {
+  // A cutover: the books start at the March statement, booked as one opening entry.
+  const anchored = { ...position, id: 'pos-march' }
+  const opening = [{ lpEntityId: 'lp', entryDate: '2025-03-31', sourceType: 'opening_balance', amount: -120, entryId: 'open-1' }]
+  const link = { lpEntityId: 'lp', positionId: 'pos-march', entryId: 'open-1', observedOn: '2025-03-31', observedNav: 120, bookedAmount: 120 }
+
+  it('stops a represented observation from competing with the books that represent it', () => {
+    // WITHOUT the link this partner is stuck on the reported basis: the opening entry books the
+    // 120 NAV but says nothing about contributions or distributions, so `ties` can never hold.
+    const inferred = resolveCapitalEvidence(opening, [anchored], '2025-04-30')
+    expect(inferred.evidenceByLp.get('lp')?.basis).toBe('reported')
+    // WITH it, the statement is not a second representation of the same fact, so the books win
+    // and the 120 is counted exactly once.
+    const linked = resolveCapitalEvidence(opening, [anchored], '2025-04-30', null, undefined, [link])
+    const evidence = linked.evidenceByLp.get('lp')!
+    expect(evidence.basis).toBe('ledger')
+    expect(evidence.values.nav).toBe(120)
+    expect(computeCapitalAccounts(linked.postings).get('lp')?.ending).toBe(120)
+    expect(evidence.representedObservations).toEqual([
+      { positionId: 'pos-march', date: '2025-03-31', entryId: 'open-1', restated: false },
+    ])
+    // The observation is still disclosed; it is just no longer an anchor.
+    expect(evidence.observationDates).toEqual(['2025-03-31'])
+  })
+
+  it('still anchors on a later statement the books do not represent', () => {
+    const june = { ...position, id: 'pos-june', asOfDate: '2025-06-30', nav: 140 }
+    const evidence = resolveCapitalEvidence(opening, [anchored, june], '2025-07-31', null, undefined, [link])
+      .evidenceByLp.get('lp')!
+    expect(evidence).toMatchObject({ basis: 'reported', asOf: '2025-06-30' })
+    expect(evidence.values.nav).toBe(140)
+  })
+
+  it('surfaces a statement restated after the books were started from it', () => {
+    const restated = { ...anchored, nav: 125 }
+    const evidence = resolveCapitalEvidence(opening, [restated], '2025-04-30', null, undefined, [link]).evidenceByLp.get('lp')!
+    expect(evidence.conflict).toBe(true)
+    expect(evidence.representedObservations?.[0].restated).toBe(true)
+  })
+
+  it('does not calculate an IRR from an opening balance', () => {
+    // An opening balance is a starting position, not a dated cash flow.
+    expect(resolveCapitalEvidence(opening, [anchored], '2025-04-30', null, undefined, [link])
+      .evidenceByLp.get('lp')?.canCalculateIrr).toBe(false)
+  })
+
+  it('returns the statement to anchor duty if the entry representing it is gone', () => {
+    // A voided or deleted opening entry leaves its link row behind (it is only dropped when the
+    // entry row is). The statement must go back to anchoring rather than staying suppressed by a
+    // representation that no longer exists — only a link whose entry is actually in this
+    // partner's posted ledger counts.
+    const evidence = resolveCapitalEvidence([], [anchored], '2025-04-30', null, undefined, [link]).evidenceByLp.get('lp')!
+    expect(evidence.representedObservations).toBeUndefined()
+    expect(evidence).toMatchObject({ basis: 'reported', asOf: '2025-03-31' })
+    expect(evidence.values.nav).toBe(120)
+  })
+
+  it('does not let one partner\'s cutover suppress another\'s statement', () => {
+    const other = { ...position, id: 'pos-other', lpEntityId: 'other' }
+    const result = resolveCapitalEvidence(opening, [anchored, other], '2025-04-30', null, undefined, [link])
+    expect(result.evidenceByLp.get('lp')?.basis).toBe('ledger')
+    expect(result.evidenceByLp.get('other')).toMatchObject({ basis: 'reported', asOf: '2025-03-31' })
+  })
+})
+
 describe('dated commitments', () => {
   const owners = [{ lpEntityId: 'lp', commitment: 999 }, { lpEntityId: 'other', commitment: 50 }]
   it('keeps a zero event balance and does not erase an unrelated partner', () => {

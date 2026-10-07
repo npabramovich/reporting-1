@@ -94,14 +94,9 @@ export const ACCOUNTING_SECTIONS: AccountingSection[] = [
     icon: Lock,
     desc: "Close a period: allocate its income and expenses to each partner's capital account, snapshot the ledger, and lock the books. Reopen to reverse.",
   },
-  {
-    href: '/funds/fof-report',
-    label: 'Fund-of-funds report',
-    icon: Layers,
-    desc: 'Schedule of investments, commitments and liquidity, and per-fund performance for the underlying funds.',
-    requiresFof: true,
-    hideFor: ['individual', 'associate', 'manco'],
-  },
+  // NOTE: /funds/fof-report is deliberately GONE. It re-derived, firm-wide and unscoped, what the
+  // schedule of investments already shows per vehicle — see the fund section there, which now
+  // carries commitment and unfunded for each underlying fund.
   // NOTE: /funds/migrate is deliberately NOT listed. Importing a QuickBooks general
   // ledger is a one-time event at the start of a vehicle's life, not a place you work —
   // so it's linked from Admin, alongside the rest of the onboarding.

@@ -15,7 +15,7 @@ import {
   type ScheduleOfInvestments, type ChangesInPartnersCapital, type StatementOfCashFlows,
 } from './statements'
 import { loadPostedLedger, loadEntityNames, type SourcedPosting } from './load'
-import { buildSoiPositions, type SoiCompany } from './soi'
+import { buildSoiPositions, withFundHoldingFigures, type SoiCompany } from './soi'
 import { withFairValueLevels, type PriceFeed, type PriceObservation } from '@/lib/portfolio/quotes'
 import { loadFofRaw, computeFofFromRaw, type FofRawData } from '@/lib/portfolio/fof-load'
 import { commitmentSchedule, performanceTable, type CommitmentSchedule, type PerformanceTable } from '@/lib/portfolio/fof-exhibits'
@@ -130,7 +130,7 @@ export async function loadLedgerData(
     // ledger control total only ties if both are present. The SOI splits them for DISPLAY by
     // holding_type — see SoiPosition.holdingType — rather than by excluding either here.
     admin.from('companies' as any).select('*').eq('fund_id', fundId),
-    loadFofRaw(admin, fundId),
+    loadFofRaw(admin, fundId, group),
     (admin as any).from('price_feeds').select('*').eq('fund_id', fundId),
     (admin as any).from('price_observations').select('*').eq('fund_id', fundId),
     vehicleKindByName(admin, fundId, group),
@@ -196,7 +196,12 @@ export function computePayload(data: LedgerData, period: StatementPeriod): State
     period.end ?? new Date().toISOString().slice(0, 10),
   )
   const isRealized = (p: { cost: number; fairValue: number }) => p.cost === 0 && p.fairValue === 0
-  const positions = allPositions.filter(p => !isRealized(p))
+  // Commitment, called and unfunded for the underlying funds, onto their own schedule rows. The
+  // register is already loaded for this vehicle, so this costs no extra query.
+  const fofPositions = data.fofRaw
+    ? computeFofFromRaw(data.fofRaw, period.end ?? new Date().toISOString().slice(0, 10)).positions
+    : []
+  const positions = withFundHoldingFigures(allPositions.filter(p => !isRealized(p)), fofPositions)
   // pctOfNetAssets is 0 by construction: a realized position has no fair value to be a
   // percentage of. Stated rather than left undefined, because SoiRow requires it.
   const realizedRows = allPositions.filter(isRealized).map(p => ({ ...p, pctOfNetAssets: 0 }))
@@ -211,7 +216,7 @@ export function computePayload(data: LedgerData, period: StatementPeriod): State
     balanceSheet: balanceSheet(data.accounts, cumulative, { equityLabel: equityLabel(data.kind) }),
     incomeStatement: incomeStatement(data.accounts, inPeriod),
     scheduleOfInvestments: {
-      ...scheduleOfInvestments(data.accounts, cumulative, nav, positions),
+      ...scheduleOfInvestments(data.accounts, cumulative, nav, positions, data.companies as SoiCompany[]),
       realizedRows,
     },
     changesInPartnersCapital: changesInPartnersCapital(capitalAccounts, data.names, gpEnding),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fofSoiPositions, commitmentSchedule, performanceTable } from './fof-exhibits'
+import { commitmentSchedule, performanceTable } from './fof-exhibits'
 import type { FundPosition } from './fof-metrics'
 
 const pos = (over: Partial<FundPosition>): FundPosition => ({
@@ -19,35 +19,6 @@ const TWO = [
         unfunded: 0, pctCalled: 1, reportedNav: 1_000_000, carryingValue: 1_000_000,
         dpi: 1.5, rvpi: 0.5, tvpi: 2, netIrr: 0.25 }),
 ]
-
-describe('fofSoiPositions', () => {
-  it('shapes a position as an SOI row with percent of NAV', () => {
-    const rows = fofSoiPositions(TWO, 5_000_000)
-    expect(rows[0]).toMatchObject({
-      name: 'Acme Ventures III', vintageYear: 2021, strategy: 'Early stage',
-      commitment: 5_000_000, unfunded: 2_200_000, fairValue: 4_000_000,
-      navAsOf: '2025-09-30', stalenessDays: 92,
-    })
-    expect(rows[0].pctOfNav).toBeCloseTo(0.8, 10)
-    expect(rows[1].pctOfNav).toBeCloseTo(0.2, 10)
-  })
-
-  it('has percentages that sum to one across the portfolio', () => {
-    const rows = fofSoiPositions(TWO, TWO.reduce((a, p) => a + p.carryingValue, 0))
-    expect(rows.reduce((a, r) => a + (r.pctOfNav ?? 0), 0)).toBeCloseTo(1, 10)
-  })
-
-  it('reports cost as contributed less distributed return of capital', () => {
-    // Cost for a fund position is capital in, less capital returned — not gross contributions.
-    const rows = fofSoiPositions([pos({})], 5_000_000)
-    expect(rows[0].cost).toBe(1_800_000)
-  })
-
-  it('returns null percent of NAV when total NAV is zero rather than dividing by zero', () => {
-    const rows = fofSoiPositions([pos({})], 0)
-    expect(rows[0].pctOfNav).toBeNull()
-  })
-})
 
 describe('commitmentSchedule', () => {
   it('totals commitment, called, recallable and unfunded across holdings', () => {

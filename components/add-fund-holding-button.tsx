@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,10 +21,28 @@ export function AddFundHoldingButton({ onCreated }: { onCreated?: () => void }) 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
-    name: '', managerName: '', vintageYear: '', strategy: '', commitment: '',
+    name: '', managerName: '', vintageYear: '', strategy: '', commitment: '', vehicleId: '',
   })
+  // The entity making the commitment. A fund can be recorded before that is decided, but the
+  // commitment — and the unfunded balance the schedule of investments derives from it — belongs
+  // to one entity, so this is asked here rather than inferred later from whoever pays the first call.
+  const [vehicles, setVehicles] = useState<{ id: string; name: string }[]>([])
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    fetch('/api/accounting/vehicle-index')
+      .then(r => (r.ok ? r.json() : []))
+      .then(rows => {
+        if (cancelled) return
+        setVehicles((Array.isArray(rows) ? rows : [])
+          .filter((v: { id?: string; name?: string }) => v?.id && v?.name)
+          .map((v: { id: string; name: string }) => ({ id: v.id, name: v.name })))
+      })
+      .catch(() => { if (!cancelled) setVehicles([]) })
+    return () => { cancelled = true }
+  }, [open])
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
 
   async function save() {
@@ -41,12 +59,13 @@ export function AddFundHoldingButton({ onCreated }: { onCreated?: () => void }) 
           vintageYear: form.vintageYear ? Number(form.vintageYear) : null,
           strategy: form.strategy.trim() || null,
           commitment: form.commitment ? Number(form.commitment) : 0,
+          ...(form.vehicleId ? { vehicleId: form.vehicleId } : {}),
         }),
       })
       const json = await res.json()
       if (!res.ok) { setError(json?.error ?? 'Could not create the fund holding.'); return }
       setOpen(false)
-      setForm({ name: '', managerName: '', vintageYear: '', strategy: '', commitment: '' })
+      setForm({ name: '', managerName: '', vintageYear: '', strategy: '', commitment: '', vehicleId: '' })
       onCreated?.()
     } finally {
       setSaving(false)
@@ -85,6 +104,18 @@ export function AddFundHoldingButton({ onCreated }: { onCreated?: () => void }) 
               <Label htmlFor="fh-commitment">Commitment</Label>
               <Input id="fh-commitment" type="number" value={form.commitment} onChange={set('commitment')} placeholder="5000000" className="tabular-nums" />
             </div>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="fh-vehicle">Held by</Label>
+            <select
+              id="fh-vehicle"
+              value={form.vehicleId}
+              onChange={set('vehicleId')}
+              className="border rounded-lg px-2 py-1 text-sm h-9 w-full bg-background"
+            >
+              <option value="">Not decided yet</option>
+              {vehicles.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
           </div>
           <div className="space-y-1">
             <Label htmlFor="fh-strategy">Strategy</Label>

@@ -226,6 +226,25 @@ export interface SoiRow {
   ledgerCost?: number
   ledgerFairValue?: number
   tiesOut?: boolean
+  /**
+   * UNDERLYING-FUND FIGURES, on fund rows only (`holdingType === 'fund'`).
+   *
+   * A commitment to a fund is an obligation the schedule has to state: a position carried at 4m
+   * with 6m still callable is a different liquidity picture from one carried at 4m and fully
+   * drawn, and cost alone cannot tell them apart. These come from the fund-of-funds register
+   * (lib/portfolio/fof-metrics.ts) — the same computation the quarterly marks and the pre-close
+   * check use — so the schedule and the close cannot disagree about what is unfunded.
+   */
+  commitment?: number
+  /** Drawn by the manager to date. */
+  called?: number
+  /** Still callable. Net of recallable distributions, which is why it is not commitment − called. */
+  unfunded?: number
+  /** Fraction of the commitment drawn (0..1); null when there is no commitment to divide by. */
+  pctCalled?: number | null
+  /** The manager statement this position is carried on, and how stale it was at the report date. */
+  navAsOf?: string | null
+  stalenessDays?: number | null
 }
 /** A subtotal band — ASC 946 wants fair value grouped by industry and asset type. */
 export interface SoiGroup {
@@ -299,7 +318,13 @@ export function scheduleOfInvestments(
   postings: Posting[],
   netAssets: number,
   // pctOfNetAssets is derived here, so callers don't supply it.
-  positions: Omit<SoiRow, 'pctOfNetAssets'>[] = []
+  positions: Omit<SoiRow, 'pctOfNetAssets'>[] = [],
+  /**
+   * Names for companies the LEDGER carries but the portfolio tracker does not — so a holding
+   * imported from a general ledger appears by name instead of vanishing into the control total.
+   * Without it those positions cannot be named and are left out, which is the old behaviour.
+   */
+  companies: { id: string; name: string; holding_type?: 'company' | 'fund' | 'crypto' | null }[] = [],
 ): ScheduleOfInvestments {
   const tb = trialBalance(accounts, postings)
   // ASSET accounts only. `unrealized` is also the subtype of the INCOME account
@@ -335,8 +360,7 @@ export function scheduleOfInvestments(
   const hasPerCompany = byCompany.size > 0
 
   const fromTracker = positions.length > 0
-  const rows: SoiRow[] = fromTracker
-    ? positions.map(p => {
+  const trackerRows: SoiRow[] = !fromTracker ? [] : positions.map(p => {
       const l = p.companyId ? byCompany.get(p.companyId) : undefined
       const lc = l ? l.cost : undefined
       const lfv = l ? r(l.cost + l.unrealized + l.fx) : undefined
@@ -350,7 +374,44 @@ export function scheduleOfInvestments(
           ? Math.abs(p.cost - lc) < 0.005 && Math.abs(p.fairValue - lfv) < 0.005
           : undefined,
       }
+  })
+
+  // LEDGER-ONLY POSITIONS. A general-ledger import creates a company's own 1100-<id>/1200-<id>
+  // accounts and posts cost and marks to them, but writes no investment transaction — so until
+  // someone records and confirms a notice, the tracker has nothing and the position used to
+  // disappear from the schedule into the control total, showing up only as a tie-out variance.
+  //
+  // DUPLICATE CHECK: keyed on company id, and a company the tracker already reports is skipped
+  // entirely. The tracker is authoritative where it has an opinion; this fills the gaps, so no
+  // position is counted twice and the totals still tie to the ledger.
+  const trackerCompanies = new Set(positions.map(p => p.companyId).filter((id): id is string => !!id))
+  const companyById = new Map(companies.map(c => [c.id, c]))
+  const ledgerRows: SoiRow[] = Array.from(byCompany.entries())
+    .filter(([companyId]) => !trackerCompanies.has(companyId) && companyById.has(companyId))
+    .map(([companyId, l]) => {
+      const company = companyById.get(companyId)!
+      const fairValue = r(l.cost + l.unrealized + l.fx)
+      return {
+        name: company.name,
+        companyId,
+        ...(company.holding_type ? { holdingType: company.holding_type } : {}),
+        cost: l.cost,
+        fairValue,
+        pctOfNetAssets: netAssets ? r(fairValue / netAssets) : 0,
+        // It IS the ledger, so it ties by construction. Stated rather than left undefined, so the
+        // page does not flag a row that cannot disagree with itself.
+        ledgerCost: l.cost,
+        ledgerFairValue: fairValue,
+        tiesOut: true,
+      }
     })
+    // A fully written-off or never-funded account is not a position worth a line.
+    .filter(row => Math.abs(row.cost) >= 0.005 || Math.abs(row.fairValue) >= 0.005)
+
+  const rows: SoiRow[] = trackerRows.length > 0 || ledgerRows.length > 0
+    ? [...trackerRows, ...ledgerRows]
+    // Neither source names anything: fall back to the single aggregate line, as before, so a book
+    // with only aggregate investment accounts is unchanged.
     : ledgerFairValue === 0 && ledgerCost === 0 ? [] : [{
       name: 'Portfolio investments',
       cost: ledgerCost,

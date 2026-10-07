@@ -460,7 +460,7 @@ async function loadFofCloseInputs(
   asOf: string,
 ): Promise<{ positions: FundPosition[]; ledgerCarrying: Map<string, number> } | null> {
   const [fof, ledger] = await Promise.all([
-    loadFofData(admin, fundId, asOf),
+    loadFofData(admin, fundId, asOf, group),
     // loadPostedLedger already paginates (a vehicle can hold more than the PostgREST 1000-row
     // default, which would silently truncate) and already scopes to POSTED entries <= asOf.
     loadPostedLedger(admin, fundId, group, asOf),

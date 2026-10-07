@@ -1,21 +1,19 @@
 # Unified accounting: implementation handoff
 
-Updated 2026-10-06 after the SQL-validation session. **Not yet deployed.** All work is local and uncommitted. Preserve the working tree; do not reset it.
+Updated 2026-10-06. The unified application is **committed (`a4008ced`) and deployed**, and migrations 1–4 below are applied. One migration and its matching code change are pending; the remaining gaps are authenticated browser workflows and a comparison on authorized data.
 
 ## Objective and non-negotiable behavior
 
 Retire the entity-wide accounting-on/off and LP-tracking-versus-accounting distinction. Accounting actions are always available; create accounts only when a write needs them. Use the label “Accounting.” Management companies show operating book health, not LP allocation requirements. Investments and entered LP balances must remain usable and unchanged when journals, bank activity, or QuickBooks records are imported. Imports must show differences and possible overlaps before confirmation. Never silently add two representations of the same economic activity. Preserve unknown versus zero, reported observation dates, and immutable published reports.
 
-**Migration state, as of the owner's confirmation:** all three of `20261006164431`, `20261006174407` and `20261006174711` are **applied**, in timestamp order. Two entities are fully onboarded to accounting — *bluefish spv* and *bluefish spv associates* — and a few others are mid-setup. The unified code is **not committed and not deployed**. No agent has applied a migration, imported anything, deployed, or committed.
-
-Consequences, and what to do about them, are in **Current state of the database** below.
+**Deployment state.** `20261006164431`, `20261006174407`, `20261006174711` and `20261006190000` are applied, and the unified application is deployed. Two entities are fully onboarded to accounting — *bluefish spv* and *bluefish spv associates* — and a few others are mid-setup. No agent has applied a migration, imported anything, deployed, or committed; the owner does all four.
 
 ## Validation status
 
 | Check | Result |
 | --- | --- |
-| `npx tsc --noEmit` | Clean. (Fixed one error in `tests/capital-operation-retries.test.ts`: a carry-only declaration omitted the required `lines`.) |
-| `npx vitest run` | **242 files, 2,435 tests passed.** |
+| `npx tsc --noEmit` | Clean. |
+| `npx vitest run` | **242 files, 2,441 tests passed.** |
 | `npm run sql:check:accounting` | **Passes.** Both SQL scripts against a real PostgreSQL 17 server. |
 | `npm run lint` | 1 error, 195 warnings — all pre-existing. The error (`tests/auth-brand.test.tsx` `react/no-children-prop`) is committed and untouched by this work. |
 | `git diff --check` | Clean. |
@@ -76,17 +74,17 @@ Frozen reports (created once, nulls preserved, cross-tenant rows refused, no emp
 4. **Confirm which migration the user applied, and in which environment.**
 5. **Rollout, in this order.** Apply the additive migrations, verify representative scoped comparisons, deploy the unified code, then drop the old columns. Not from local unit tests alone.
 
-## Current state of the database, and the fix
+## Resolved: the dropped-column window
 
-All three migrations are applied. Two consequences, one that needs a migration and one that needs a deploy.
+Kept as the record of what happened, since the convention it produced now lives in `CLAUDE.md`.
 
-**1. The settlement stranding bug is live.** `review_capital_settlement` as applied counts a stale review's allocation against a wire, and a line whose recorded payment was edited away can never be re-reviewed to release it. Fix: apply **`20261006190000_settlement_review_stale_allocations.sql`**. It is a `create or replace` of that one function, safe on its own, and does not depend on the application deploy. `20261006174407` was reverted to exactly its applied text; the fix lives only in the new file.
+**1. The settlement stranding bug was live and is now fixed (`20261006190000` applied).** `review_capital_settlement` as applied counts a stale review's allocation against a wire, and a line whose recorded payment was edited away can never be re-reviewed to release it. Fix: apply **`20261006190000_settlement_review_stale_allocations.sql`**. It is a `create or replace` of that one function, safe on its own, and does not depend on the application deploy. `20261006174407` was reverted to exactly its applied text; the fix lives only in the new file.
 
-**2. `capital_source` and `history_mode` are dropped while the committed release still reads them.** `20261006174711` is a post-deployment step that was sitting in `supabase/migrations/`, so `db push` correctly applied it along with the rest — the fault is in where the file was, not in how it was run (see the new convention in `CLAUDE.md`). The committed code reads both columns in `capital-source.ts`, `fund-preload.ts`, `lp-positions.ts` and `terms.ts`, and **every one of those reads destructures only `{ data }` and ignores `error`**, so they do not fail — they return the default. On a build of the committed code, both onboarded entities would read as statement-only and `turn-on`/`saveHistoryMode` writes would fail outright, blocking the entities mid-setup.
+**2. `capital_source` and `history_mode` were dropped while the then-committed release still read them.** `20261006174711` is a post-deployment step that was sitting in `supabase/migrations/`, so `db push` correctly applied it along with the rest — the fault is in where the file was, not in how it was run (see the new convention in `CLAUDE.md`). The committed code reads both columns in `capital-source.ts`, `fund-preload.ts`, `lp-positions.ts` and `terms.ts`, and **every one of those reads destructures only `{ data }` and ignores `error`**, so they do not fail — they return the default. On a build of the committed code, both onboarded entities would read as statement-only and `turn-on`/`saveHistoryMode` writes would fail outright, blocking the entities mid-setup.
 
-**The fix is the deploy, not a database repair.** The unified code reads neither column, so once it ships the question disappears. Nothing needs restoring: the dropped values are unrecoverable by DDL, but they are also not needed.
+**The fix was the deploy, not a database repair** — the unified code reads neither column — and it has shipped. Nothing needed restoring: the dropped values are unrecoverable by DDL, and also not needed.
 
-Only if a running deployment points at this database before that happens:
+The two scripts written during that window remain, in case the situation recurs:
 
 - `scripts/check-dropped-mode-columns.sql` — read-only, prints a verdict and the affected vehicle count.
 - `scripts/restore-mode-columns-shim.sql` — puts the columns back and sets `capital_source = 'ledger'` for the two onboarded vehicles (including inserting a settings row where none exists, since a missing row also reads as `'events'`). Ad-hoc, deliberately not a migration: `20261006174711` is already recorded as applied and re-adding what it dropped should not enter the ledger.
@@ -101,10 +99,13 @@ Leave `20261006174711` in place. Deleting an applied migration causes a history 
 2. `20261006174407_retire_accounting_modes_and_reconcile_payments.sql` — despite its filename, additive only. Settlement-review tables/RPC/audit trail, call/distribution request keys and unique indexes, transactional completion, safe draft cleanup.
 3. `20261006174711_retire_accounting_mode_columns.sql` — dropped `capital_source` and `history_mode`. This was the post-deployment step; see **Current state of the database** above.
 
+**Applied since:**
+
+4. `20261006190000_settlement_review_stale_allocations.sql` — the stale-allocation fix. The unified application is committed (`a4008ced`) and deployed, which closed the dropped-column exposure.
+
 **Pending:**
 
-4. `20261006190000_settlement_review_stale_allocations.sql` — apply now. Independent of the deploy.
-5. Commit and deploy the unified application. This is what resolves the dropped-column exposure.
+5. `20261006200000_statement_opening_entry_links.sql` — the statement ↔ opening-entry link. Additive: one new table, two functions, and it replaces the per-vehicle `journal_entries_partner_opening_once` index with a per-date one. **Apply this together with a deploy of the code that goes with it**, because the opening-balances route now prepares a draft and calls `publish_opening_balances`: the currently deployed release posts the entry directly, so on the new schema its openings would be posted but unlinked (safe — the resolver falls back to the old inference — but the links would be missing). It does not belong in `supabase/pending-deploy/` because the schema half must land first, not last.
 
 ## Environment notes
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { resolveHoldingVehicle } from '@/lib/portfolio/fof-register'
 // portfolio domain, investments feature (lib/access/route-domains.ts).
 import { assertReadAccess, assertWriteAccess } from '@/lib/api-helpers'
 
@@ -51,11 +52,17 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   // Deliberately does NOT clear investment_transaction_id. If the original already posted, a
   // restatement needs a correcting mark — until then the link is the honest record of what
   // was posted, not something to quietly orphan.
+  // The entity this statement belongs to. Inferred from the holding's register, because a null
+  // here would hide the NAV from the schedule of investments and leave the position carried at
+  // cost — a quieter failure than the unconfirmable notice the same bug caused on the event side.
+  const resolved = await resolveHoldingVehicle(admin, gate.fundId, params.id, body?.vehicleId)
+  if ('error' in resolved) return NextResponse.json({ error: resolved.error }, { status: 400 })
+
   const { error } = await (admin as any)
     .from('fund_nav_statements')
     .upsert({
       fund_id: gate.fundId,
-      vehicle_id: body?.vehicleId ?? null,
+      vehicle_id: resolved.vehicleId,
       company_id: params.id,
       as_of_date: body.asOfDate,
       received_date: body?.receivedDate ?? null,
@@ -66,7 +73,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       reported_unfunded: body?.reportedUnfunded ?? null,
       source: 'manual',
       created_by: user.id,
-    }, { onConflict: 'company_id,as_of_date' })
+    }, { onConflict: 'company_id,vehicle_id,as_of_date' })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })

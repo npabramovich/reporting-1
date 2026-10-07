@@ -199,6 +199,7 @@ export const TABLE_RULES: Record<string, TableRule> = {
 
   // ---- GP economics (carry is NOT structurally part of the ledger — see DOMAIN_META) --------
   capital_settlement_review_history: { scope: 'service', appendOnly: true, note: 'Immutable history of scoped payment reconciliation decisions.' },
+  capital_opening_links: { scope: 'service', note: 'Which statement observation each opening entry represents; read only by the server-side evidence resolver.' },
   capital_settlement_reviews: { scope: 'service', note: 'Explicit payment links; validated atomically and accessed through tenant-scoped lp_capital routes.' },
   carry_payments: { scope: 'fund', domain: 'gp_economics' },
   vehicle_partner_ownership: { scope: 'fund', domain: 'gp_economics' },

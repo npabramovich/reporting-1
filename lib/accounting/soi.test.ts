@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSoiPositions, txnsForVehicle, type SoiCompany } from './soi'
+import { buildSoiPositions, txnsForVehicle, withFundHoldingFigures, type SoiCompany } from './soi'
 
 const co = (over: Partial<SoiCompany> = {}): SoiCompany => ({
   id: 'c1', name: 'Acme Labs, Inc.', status: 'active',
@@ -239,5 +239,39 @@ describe('includeRealized', () => {
     const nothing = [inv({ transaction_date: '2024-01-01', investment_cost: 0 })]
     const rows = buildSoiPositions(nothing, [co()], 'Acme SPV LP', undefined, { includeRealized: true })
     expect(rows).toHaveLength(0)
+  })
+})
+
+describe('withFundHoldingFigures', () => {
+  const position = {
+    companyId: 'f1', commitment: 10_000_000, contributed: 6_000_000, unfunded: 4_500_000,
+    pctCalled: 0.6, navAsOf: '2026-06-30', stalenessDays: 92,
+  }
+  it('puts commitment, called and unfunded on the fund row', () => {
+    const [row] = withFundHoldingFigures(
+      [{ companyId: 'f1', holdingType: 'fund' as const, name: 'Acme Growth II' }], [position])
+    expect(row).toMatchObject({
+      commitment: 10_000_000, called: 6_000_000, unfunded: 4_500_000,
+      pctCalled: 0.6, navAsOf: '2026-06-30', stalenessDays: 92,
+    })
+    // Unfunded is the register's own figure, not commitment − called: a recallable distribution
+    // puts capital back on the hook, so subtracting here would understate it.
+    expect(row.unfunded).not.toBe(position.commitment - position.contributed)
+  })
+  it('leaves direct and crypto holdings untouched', () => {
+    const rows = [
+      { companyId: 'c1', holdingType: 'company' as const, name: 'Direct Co' },
+      { companyId: 'f1', holdingType: 'crypto' as const, name: 'Token' },
+      { holdingType: 'fund' as const, name: 'Ledger-sourced fund row with no company id' },
+    ]
+    expect(withFundHoldingFigures(rows, [position])).toEqual(rows)
+  })
+  it('leaves a fund the register does not know about untouched', () => {
+    const rows = [{ companyId: 'other', holdingType: 'fund' as const, name: 'Unregistered' }]
+    expect(withFundHoldingFigures(rows, [position])).toEqual(rows)
+  })
+  it('is a no-op when there is no register at all', () => {
+    const rows = [{ companyId: 'f1', holdingType: 'fund' as const, name: 'Acme Growth II' }]
+    expect(withFundHoldingFigures(rows, [])).toBe(rows)
   })
 })

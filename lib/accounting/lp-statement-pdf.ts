@@ -332,7 +332,7 @@ export async function generateLpStatementPdf(
 
   // Fund-of-funds exhibits, only when the fund actually holds funds. loadFofRaw returns null
   // otherwise, so the statement for an ordinary fund is unchanged.
-  const fofRaw = await loadFofRaw(admin, fundId)
+  const fofRaw = await loadFofRaw(admin, fundId, group)
   const fof = fofRaw
     ? (() => {
         // period.end is nullable on an inception-to-date window; fall back to today, which

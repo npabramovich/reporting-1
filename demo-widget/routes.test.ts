@@ -31,7 +31,6 @@ const NOT_IN_DEMO: Record<string, string> = {
   'manco/[[...rest]]': 'redirect into /funds',
   'funds/[id]/text': 'redirect to the journal',
   'funds/[id]/fof-quarter': 'fund-of-funds only; the demo fund holds companies',
-  'funds/[id]/fof-report': 'fund-of-funds only; the demo fund holds companies',
   'funds/[id]/migrate': 'reached from Admin, not the nav; an import flow',
   'funds/[id]/opening-balances': 'reached from Admin, not the nav; a setup flow',
   'funds/[id]/tax': 'tax_reporting ships off',

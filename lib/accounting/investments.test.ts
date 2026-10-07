@@ -139,3 +139,86 @@ describe('bootstrapping investments must not double-count equity', () => {
     expect(bs.partnersCapital.total).toBe(1_300) // inflated by the investment
   })
 })
+
+describe('ledger-only positions in the schedule of investments', () => {
+  // The shape a QuickBooks import leaves: each holding has its own 1100-<id>/1200-<id> accounts
+  // carrying cost and marks, and no investment transaction — so the portfolio tracker knows
+  // nothing about it.
+  const ledgerAccounts: Account[] = [
+    { id: 'cost-arca', fundId: 'f', code: '1100-arca', name: 'Arca — cost', type: 'asset', subtype: 'investment', companyId: 'arca' },
+    { id: 'mark-arca', fundId: 'f', code: '1200-arca', name: 'Arca — mark', type: 'asset', subtype: 'unrealized', companyId: 'arca' },
+    { id: 'cost-volt', fundId: 'f', code: '1100-volt', name: 'Volt — cost', type: 'asset', subtype: 'investment', companyId: 'volt' },
+  ]
+  const ledgerPostings: Posting[] = [
+    { accountId: 'cost-arca', amount: 400, currency: 'USD' },
+    { accountId: 'mark-arca', amount: 100, currency: 'USD' },
+    { accountId: 'cost-volt', amount: 250, currency: 'USD' },
+  ]
+  const companies = [
+    { id: 'arca', name: 'Arca Endeavor Fund LP', holding_type: 'fund' as const },
+    { id: 'volt', name: 'Volt Capital Fund II LP', holding_type: 'fund' as const },
+  ]
+
+  it('names holdings the ledger carries and the tracker does not', () => {
+    const soi = scheduleOfInvestments(ledgerAccounts, ledgerPostings, 1_000, [], companies)
+    expect(soi.rows.map(r => [r.name, r.cost, r.fairValue])).toEqual([
+      ['Arca Endeavor Fund LP', 400, 500],
+      ['Volt Capital Fund II LP', 250, 250],
+    ])
+    expect(soi.rows.every(r => r.holdingType === 'fund')).toBe(true)
+    // It IS the ledger, so it cannot disagree with it — and the schedule now ties.
+    expect(soi.rows.every(r => r.tiesOut === true)).toBe(true)
+    expect(soi.costVariance).toBe(0)
+    expect(soi.fairValueVariance).toBe(0)
+  })
+
+  it('does NOT duplicate a holding the tracker already reports', () => {
+    const soi = scheduleOfInvestments(ledgerAccounts, ledgerPostings, 1_000, [
+      { name: 'Arca Endeavor Fund LP', companyId: 'arca', cost: 400, fairValue: 500, holdingType: 'fund' },
+    ], companies)
+    expect(soi.rows.filter(r => r.companyId === 'arca')).toHaveLength(1)
+    // Volt is still filled in from the ledger; Arca is left to the tracker.
+    expect(soi.rows.map(r => r.name)).toEqual(['Arca Endeavor Fund LP', 'Volt Capital Fund II LP'])
+    expect(soi.totalCost).toBe(650)
+    expect(soi.costVariance).toBe(0)
+  })
+
+  it('skips a company it cannot name rather than inventing a row', () => {
+    const soi = scheduleOfInvestments(ledgerAccounts, ledgerPostings, 1_000, [], [companies[0]])
+    expect(soi.rows.map(r => r.name)).toEqual(['Arca Endeavor Fund LP'])
+    // The unnamed one still counts in the control total, so the variance reports the gap.
+    expect(soi.costVariance).toBe(-250)
+  })
+
+  it('keeps a written-down holding, at cost with no fair value', () => {
+    // A full write-down is a position with a story, not an absent one. Dropping the row would
+    // hide the write-off and leave the schedule failing its own tie-out.
+    const written: Posting[] = [
+      { accountId: 'cost-arca', amount: 400, currency: 'USD' },
+      { accountId: 'mark-arca', amount: -400, currency: 'USD' },
+      { accountId: 'cost-volt', amount: 250, currency: 'USD' },
+    ]
+    const soi = scheduleOfInvestments(ledgerAccounts, written, 1_000, [], companies)
+    expect(soi.rows.map(r => [r.name, r.cost, r.fairValue])).toEqual([
+      ['Arca Endeavor Fund LP', 400, 0],
+      ['Volt Capital Fund II LP', 250, 250],
+    ])
+    expect(soi.costVariance).toBe(0)
+    expect(soi.fairValueVariance).toBe(0)
+  })
+
+  it('omits an account pair that carries nothing at all', () => {
+    const none: Posting[] = [{ accountId: 'cost-volt', amount: 250, currency: 'USD' }]
+    const soi = scheduleOfInvestments(ledgerAccounts, none, 1_000, [], companies)
+    expect(soi.rows.map(r => r.name)).toEqual(['Volt Capital Fund II LP'])
+  })
+
+  it('still falls back to one aggregate line when nothing is held per company', () => {
+    const aggregate: Account[] = [
+      { id: 'inv', fundId: 'f', code: '1100', name: 'Investments', type: 'asset', subtype: 'investment' },
+    ]
+    const soi = scheduleOfInvestments(aggregate, [{ accountId: 'inv', amount: 900, currency: 'USD' }], 1_000, [], companies)
+    expect(soi.rows.map(r => r.name)).toEqual(['Portfolio investments'])
+    expect(soi.source).toBe('ledger')
+  })
+})
