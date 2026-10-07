@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { backfillDerivedEntries } from './investment-backfill'
 import { draftEntryForTransaction } from './from-portfolio'
+import { postExistingEntryWithAllocation } from './continuous-allocation'
 
 vi.mock('./vehicle-id', () => ({ vehicleIdByName: vi.fn(async () => 'veh-1') }))
+vi.mock('./persist', () => ({ accountIdByCode: vi.fn(async () => new Map([['1000', 'cash']])) }))
+vi.mock('./continuous-allocation', () => ({
+  postExistingEntryWithAllocation: vi.fn(async (_a, _f, _g, _u, id) =>
+    id === 'old-refused' ? { error: 'No partner participates.' } : { allocationEntryIds: [] }),
+}))
 vi.mock('./from-portfolio', async (orig) => ({
   ...(await orig<typeof import('./from-portfolio')>()),
   draftEntryForTransaction: vi.fn(async (_a, _f, _u, txn) =>
@@ -40,7 +46,7 @@ function fakeAdmin(tables: Record<string, Row[]>) {
 }
 
 const txn = (id: string, company_id: string, transaction_type: string, transaction_date: string) =>
-  ({ id, fund_id: 'f1', portfolio_group: 'Fund I', company_id, transaction_type, transaction_date })
+  ({ id, fund_id: 'f1', portfolio_group: 'Fund I', company_id, transaction_type, transaction_date, investment_cost: 1000, unrealized_value_change: 250 })
 
 function world(extra: Partial<Record<string, Row[]>> = {}) {
   return fakeAdmin({
@@ -103,5 +109,53 @@ describe('backfillDerivedEntries', () => {
     const r = await backfillDerivedEntries(world(), 'f1', 'Fund I', 'u1', { dryRun: true })
     expect(draftEntryForTransaction).not.toHaveBeenCalled()
     expect(r).toMatchObject({ toDerive: 4, alreadyDerived: 0, carriedElsewhere: [] })
+  })
+})
+
+describe('backfillDerivedEntries — drafts left by the old always-draft derivation', () => {
+  beforeEach(() => { vi.mocked(postExistingEntryWithAllocation).mockClear() })
+
+  const oldDrafts = {
+    journal_entries: [
+      { id: 'old-mark', fund_id: 'f1', vehicle_id: 'veh-1', book: 'actual', status: 'draft', source_ref: 'txn:t3', entry_date: '2026-06-30',
+        journal_postings: [{ account_id: 'unreal', amount: 250 }, { account_id: 'unreal-income', amount: -250 }] },
+      { id: 'old-buy', fund_id: 'f1', vehicle_id: 'veh-1', book: 'actual', status: 'draft', source_ref: 'txn:t1', entry_date: '2025-03-01',
+        journal_postings: [{ account_id: 'cost', amount: 1000 }, { account_id: 'cash', amount: -1000 }] },
+    ],
+  }
+
+  it('posts an old mark draft — it moves no cash — and leaves an old purchase draft for its bank match', async () => {
+    const r = await backfillDerivedEntries(world(oldDrafts), 'f1', 'Fund I', 'u1')
+    expect(vi.mocked(postExistingEntryWithAllocation).mock.calls.map(c => c[4])).toEqual(['old-mark'])
+    expect(r.posted).toBe(1 + 0) // t3 was already derived; its old draft is what posts
+    expect(r.alreadyDerived).toBe(2)
+  })
+
+  it('counts them in the preview without posting', async () => {
+    const r = await backfillDerivedEntries(world(oldDrafts), 'f1', 'Fund I', 'u1', { dryRun: true })
+    expect(postExistingEntryWithAllocation).not.toHaveBeenCalled()
+    expect(r.toPost).toBe(1)
+  })
+
+  it('reports an old draft that still cannot post', async () => {
+    const r = await backfillDerivedEntries(world({ journal_entries: [{ ...oldDrafts.journal_entries[0], id: 'old-refused' }] }), 'f1', 'Fund I', 'u1')
+    expect(r.refused).toContain('Acme, 2026-06-30: No partner participates.')
+  })
+})
+
+describe('backfillDerivedEntries — rows that never imply an entry', () => {
+  it('does not count rounds, splits, or zero-value marks and purchases as waiting for the ledger', async () => {
+    const r = await backfillDerivedEntries(fakeAdmin({
+      investment_transactions: [
+        txn('r', 'acme', 'round_info', '2026-01-01'),
+        txn('s', 'acme', 'split', '2026-01-02'),
+        { ...txn('m0', 'acme', 'unrealized_gain_change', '2026-01-03'), unrealized_value_change: 0 },
+        { ...txn('i0', 'acme', 'investment', '2026-01-04'), investment_cost: 0 },
+        { ...txn('m1', 'acme', 'unrealized_gain_change', '2026-01-05'), unrealized_value_change: 10 },
+      ],
+      companies: [{ id: 'acme', fund_id: 'f1', name: 'Acme' }],
+      journal_entries: [], chart_of_accounts: [], journal_postings: [],
+    }), 'f1', 'Fund I', 'u1', { dryRun: true })
+    expect(r.toDerive).toBe(1)
   })
 })

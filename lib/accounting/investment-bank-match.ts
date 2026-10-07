@@ -116,7 +116,7 @@ async function resolve(admin: SupabaseClient, fundId: string, group: string, txn
  */
 export async function matchInvestmentToBank(
   admin: SupabaseClient, fundId: string, group: string, userId: string | null, txnId: string, bankTxnId: string,
-): Promise<{ ok: true; entryId: string } | { error: string }> {
+): Promise<{ ok: true; entryId: string; warning?: string } | { error: string }> {
   const r = await resolve(admin, fundId, group, txnId)
   if ('error' in r) return { error: r.error as string }
   const { vehicleId, entry } = r
@@ -158,9 +158,14 @@ export async function matchInvestmentToBank(
   }
 
   // The bank import's own draft for this wire is now redundant: the derived entry is its booking.
+  // If it cannot be deleted, the match still stands — but the orphan could be posted later and
+  // book the wire twice, so say which entry to delete by hand.
   if (prior.journal_entry_id) {
-    await admin.from('journal_entries' as any).delete()
+    const { error } = await admin.from('journal_entries' as any).delete()
       .eq('id', prior.journal_entry_id).eq('fund_id', fundId).eq('status', 'draft')
+    if (error) {
+      return { ok: true, entryId: entry.id, warning: `Matched and posted, but the bank's own draft for this wire (${prior.journal_entry_id}) could not be deleted: ${error.message}. Delete it from the journal — posting it would book the payment twice.` }
+    }
   }
   return { ok: true, entryId: entry.id }
 }
@@ -175,8 +180,23 @@ export async function postWithoutBankMatch(
 ): Promise<{ ok: true; entryId: string } | { error: string }> {
   const r = await resolve(admin, fundId, group, txnId)
   if ('error' in r) return { error: r.error as string }
-  const { entry } = r
+  const { vehicleId, entry } = r
   if (entry.status !== 'draft') return { error: 'That entry is already posted.' }
+
+  // The waiver is for a payment with NO bank row — a vehicle without a feed. When a row of exactly
+  // this amount is open, it is the match: posting past it leaves that row's auto-draft to be
+  // posted later, and the payment booked twice.
+  const codes = await accountIdByCode(admin, fundId, group)
+  const cashId = codes.get(CASH)
+  if (cashId) {
+    const cash = await cashLeg(admin, fundId, cashId, entry.id)
+    const { data: open } = await admin.from('bank_transactions' as any)
+      .select('id, amount, txn_date, status, raw')
+      .eq('fund_id', fundId).eq('vehicle_id', vehicleId).in('status', OPEN_BANK_STATUSES)
+    if (rankBankCandidates(cash, entry.entry_date, (open as any[]) ?? []).length > 0) {
+      return { error: 'A bank transaction of the same amount is waiting to be matched — match it instead.' }
+    }
+  }
 
   const posted = await postExistingEntryWithAllocation(admin, fundId, group, userId, entry.id)
   if ('error' in posted) return { error: posted.error }

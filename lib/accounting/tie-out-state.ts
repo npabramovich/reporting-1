@@ -6,7 +6,14 @@
 // cannot explain: an entry edited by hand after it was derived, or history never derived at all.
 export type TieOutState = 'booked' | 'awaiting-match' | 'disagrees'
 
-export function tieOutState({ tied, awaitingMatch }: { tied: boolean; awaitingMatch: number }): TieOutState {
+export function tieOutState({ tied, awaitingCash, costVariance }: {
+  tied: boolean
+  /** Total cash (absolute) of the derived entries still waiting for their bank match. */
+  awaitingCash: number
+  costVariance: number
+}): TieOutState {
   if (tied) return 'booked'
-  return awaitingMatch > 0 ? 'awaiting-match' : 'disagrees'
+  // Waiting entries explain the gap only if they are big enough to. One $10k purchase waiting does
+  // not explain $5m of history that never reached the ledger — that is still a disagreement.
+  return awaitingCash > 0 && awaitingCash + 0.005 >= Math.abs(costVariance) ? 'awaiting-match' : 'disagrees'
 }

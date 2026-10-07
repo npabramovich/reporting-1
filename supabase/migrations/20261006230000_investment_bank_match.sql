@@ -42,3 +42,29 @@ create unique index if not exists bank_transactions_one_row_per_entry
 alter table public.journal_entries
   add column if not exists bank_match_waived_at timestamptz,
   add column if not exists bank_match_waived_by uuid;
+
+-- 3. ONE LIVE ENTRY PER TRACKER TRANSACTION. Derivation is keyed on source_ref = 'txn:<id>', and
+--    marks now post on record — so two concurrent derivations of one transaction (two backfill
+--    tabs, a backfill racing an edit) would post the appreciation twice. Voided history is
+--    exempt: an edited transaction keeps its voided entries and derives a new one.
+do $$
+declare
+  dupes text;
+begin
+  select string_agg(source_ref || ' (' || n || ' entries)', ', ')
+    into dupes
+    from (
+      select source_ref, count(*) as n
+        from public.journal_entries
+       where source_ref like 'txn:%' and status <> 'void'
+       group by source_ref
+      having count(*) > 1
+    ) d;
+  if dupes is not null then
+    raise exception 'Tracker transactions have more than one live journal entry: %. Void the extras in the journal, then re-run.', dupes;
+  end if;
+end $$;
+
+create unique index if not exists journal_entries_one_live_entry_per_txn
+  on public.journal_entries (source_ref)
+  where source_ref like 'txn:%' and status <> 'void';

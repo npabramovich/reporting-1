@@ -42,6 +42,7 @@ export function InvestmentMatchQueue({ onChanged }: { onChanged?: () => void }) 
     const data = await res.json().catch(() => ({}))
     setBusy(null); setConfirming(null)
     if (!res.ok) { setError(data.error ?? 'Could not post the entry.'); return }
+    if (data.warning) setError(data.warning)
     load(); onChanged?.()
   }
 
@@ -75,14 +76,16 @@ export function InvestmentMatchQueue({ onChanged }: { onChanged?: () => void }) 
               {r.candidates.length === 0 && (
                 <span className="text-xs text-muted-foreground">No bank transaction of this amount yet.</span>
               )}
-              <button
+              {/* Only when no bank row of this amount is open: the waiver is for a payment with no
+                  bank transaction, and the server refuses it otherwise. */}
+              {r.candidates.length === 0 && <button
                 type="button"
                 disabled={busy !== null}
                 onClick={() => confirming === r.txnId ? act(r.txnId, { withoutBankMatch: true }) : setConfirming(r.txnId)}
                 className="ml-auto text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
               >
                 {confirming === r.txnId ? 'Confirm: this payment has no bank transaction' : 'Post without a bank match'}
-              </button>
+              </button>}
             </div>
           </li>
         ))}

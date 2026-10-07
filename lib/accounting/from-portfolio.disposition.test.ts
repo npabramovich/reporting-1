@@ -70,6 +70,15 @@ describe('draftEntryForTransaction — disposition', () => {
     expect(r).toMatchObject({ drafted: true, posted: false })
   })
 
+  it('keeps a mark as a draft when its partner allocation fails, rather than losing it', async () => {
+    vi.mocked(persistEntry)
+      .mockResolvedValueOnce({ error: 'Entry was not posted because its partner allocation failed: No partner participates.', allocationFailed: true } as any)
+      .mockResolvedValueOnce({ entryId: 'e2' })
+    const r = await draftEntryForTransaction(admin, 'f1', 'u1', { ...base, transaction_type: 'unrealized_gain_change', unrealized_value_change: 250 }, 'Acme')
+    expect(vi.mocked(persistEntry).mock.calls.map(c => c[5])).toEqual(['posted', 'draft'])
+    expect(r).toMatchObject({ drafted: true, posted: false, entryId: 'e2', reason: expect.stringMatching(/No partner participates/) })
+  })
+
   it('surfaces a closed-period refusal of a mark instead of swallowing it', async () => {
     vi.mocked(persistEntry).mockResolvedValueOnce({ error: 'Period closed through 2026-06-30.' })
     const r = await draftEntryForTransaction(admin, 'f1', 'u1', { ...base, transaction_type: 'unrealized_gain_change', unrealized_value_change: 250 }, 'Acme')
