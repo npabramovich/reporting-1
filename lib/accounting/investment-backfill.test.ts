@@ -92,7 +92,7 @@ describe('backfillDerivedEntries', () => {
     // Deriving its transactions too would book the position twice.
     const r = await backfillDerivedEntries(world({
       chart_of_accounts: [{ id: 'acc-acme', fund_id: 'f1', vehicle_id: 'veh-1', company_id: 'acme' }],
-      journal_postings: [{ account_id: 'acc-acme', fund_id: 'f1', journal_entry_id: 'snap' }],
+      journal_postings: [{ account_id: 'acc-acme', fund_id: 'f1', book: 'actual', journal_entry_id: 'snap' }],
       journal_entries: [{ id: 'snap', fund_id: 'f1', vehicle_id: 'veh-1', book: 'actual', status: 'posted', source_ref: null }],
     }), 'f1', 'Fund I', 'u1')
     expect(vi.mocked(draftEntryForTransaction).mock.calls.map(c => c[3].id)).toEqual(['t4'])

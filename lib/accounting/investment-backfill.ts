@@ -67,7 +67,7 @@ export async function backfillDerivedEntries(
   const carried = new Set<string>()
   for (const ids of chunks([...companyOfAccount.keys()])) {
     const postings = await readAll<any>((from, to) => admin.from('journal_postings' as any)
-      .select('account_id, journal_entry_id').eq('fund_id', fundId).in('account_id', ids).order('id').range(from, to))
+      .select('account_id, journal_entry_id').eq('book', ACTUAL_BOOK).eq('fund_id', fundId).in('account_id', ids).order('id').range(from, to))
     const entryIds = [...new Set(postings.map(p => p.journal_entry_id))]
     const foreign = new Set<string>()
     for (const eids of chunks(entryIds)) {
