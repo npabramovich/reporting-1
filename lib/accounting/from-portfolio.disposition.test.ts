@@ -56,7 +56,7 @@ const admin = {} as any
 const base = { id: 't1', company_id: 'co-1', portfolio_group: 'Fund I', transaction_date: '2026-06-30' }
 
 describe('draftEntryForTransaction — disposition', () => {
-  beforeEach(() => vi.mocked(persistEntry).mockClear())
+  beforeEach(() => { vi.mocked(persistEntry).mockClear() })
 
   it('posts a mark and says so', async () => {
     const r = await draftEntryForTransaction(admin, 'f1', 'u1', { ...base, transaction_type: 'unrealized_gain_change', unrealized_value_change: 250 }, 'Acme')
