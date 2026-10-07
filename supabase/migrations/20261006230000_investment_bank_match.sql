@@ -41,7 +41,7 @@ create unique index if not exists bank_transactions_one_row_per_entry
 --    were made without one.
 alter table public.journal_entries
   add column if not exists bank_match_waived_at timestamptz,
-  add column if not exists bank_match_waived_by uuid;
+  add column if not exists bank_match_waived_by uuid references auth.users(id) on delete set null;
 
 -- 3. ONE LIVE ENTRY PER TRACKER TRANSACTION. Derivation is keyed on source_ref = 'txn:<id>', and
 --    marks now post on record — so two concurrent derivations of one transaction (two backfill

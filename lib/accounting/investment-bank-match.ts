@@ -256,3 +256,40 @@ export async function awaitingBankMatch(admin: SupabaseClient, fundId: string, g
     }]
   })
 }
+
+/** What the journal says when it refuses to post one of these. */
+export const AWAITING_BANK_MATCH_REASON =
+  'This entry waits for its bank match — match it on the bank page, or post it there without a bank match.'
+
+/**
+ * Of these entries, the ones the journal must NOT post directly: derived from a tracker row, moving
+ * cash, and matched to no bank row. Posting one from the journal would skip the match, and the bank
+ * import's own draft for the same wire could then be posted too — the payment booked twice. A
+ * derived entry that a bank row already points at (matched, then unposted) is free to post again.
+ */
+export async function entriesAwaitingBankMatch(
+  admin: SupabaseClient, fundId: string, group: string, entryIds: string[],
+): Promise<Set<string>> {
+  const held = new Set<string>()
+  if (entryIds.length === 0) return held
+  const cashId = (await accountIdByCode(admin, fundId, group)).get(CASH)
+  if (!cashId) return held
+
+  const { data: entries } = await admin.from('journal_entries' as any)
+    .select('id, source_ref').eq('book', ACTUAL_BOOK).eq('fund_id', fundId).in('id', entryIds)
+  const derived = ((entries as any[]) ?? []).filter(e => String(e.source_ref ?? '').startsWith(TXN_REF_PREFIX)).map(e => e.id as string)
+  if (derived.length === 0) return held
+
+  const [{ data: postings }, { data: linked }] = await Promise.all([
+    admin.from('journal_postings' as any).select('journal_entry_id, account_id, amount')
+      .eq('book', ACTUAL_BOOK).eq('fund_id', fundId).in('journal_entry_id', derived),
+    admin.from('bank_transactions' as any).select('journal_entry_id').eq('fund_id', fundId).in('journal_entry_id', derived),
+  ])
+  const matched = new Set(((linked as any[]) ?? []).map(b => b.journal_entry_id))
+  for (const id of derived) {
+    if (matched.has(id)) continue
+    const lines = ((postings as any[]) ?? []).filter(p => p.journal_entry_id === id)
+    if (lines.some(p => p.account_id === cashId && roundCents(Number(p.amount)) !== 0)) held.add(id)
+  }
+  return held
+}

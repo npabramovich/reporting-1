@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { checkInvestmentMatch, rankBankCandidates, matchInvestmentToBank, postWithoutBankMatch } from './investment-bank-match'
+import { checkInvestmentMatch, rankBankCandidates, matchInvestmentToBank, postWithoutBankMatch, entriesAwaitingBankMatch } from './investment-bank-match'
 import { postExistingEntryWithAllocation } from './continuous-allocation'
 
 vi.mock('./vehicle-id', () => ({ vehicleIdByName: vi.fn(async () => 'veh-1') }))
@@ -64,7 +64,7 @@ describe('rankBankCandidates', () => {
 
 // ---- The orchestration: a failed post leaves the bank row as it was. ------------------------
 type Row = Record<string, any>
-function fakeAdmin(tables: Record<string, Row[]>, failOn?: string) {
+function fakeAdmin(tables: Record<string, Row[]>, failOn?: string, failMessage?: string, afterBankRead?: () => void) {
   const writes: { table: string; op: string; values?: any; filters: Record<string, any> }[] = []
   const from = (table: string) => {
     const f: Record<string, any> = {}
@@ -85,9 +85,14 @@ function fakeAdmin(tables: Record<string, Row[]>, failOn?: string) {
       neq: (k: string, v: any) => { f[`neq:${k}`] = v; return chain },
       in: (k: string, v: any[]) => { f[`in:${k}`] = v; return chain },
       is: (k: string, v: any) => { f[k] = v; return chain },
-      maybeSingle: async () => ({ data: exec()[0] ?? null, error: null }),
+      maybeSingle: async () => {
+        const hit = exec()[0]
+        const row = hit ? { ...hit } : null // a snapshot, as a real read returns
+        if (table === 'bank_transactions' && afterBankRead) { const f = afterBankRead; afterBankRead = undefined; f() }
+        return { data: row, error: null }
+      },
       then: (res: any) => failOn === `${table}:${op}`
-        ? res({ data: null, error: { message: `${op} failed` } })
+        ? res({ data: null, error: { message: failMessage ?? `${op} failed` } })
         : res({ data: exec(), error: null }),
     }
     return chain
@@ -136,6 +141,33 @@ describe('matchInvestmentToBank', () => {
     const failing = fakeAdmin(w.tables, 'journal_entries:delete')
     const r = await matchInvestmentToBank(failing.admin, 'f1', 'Fund I', 'u1', 't1', 'b1')
     expect(r).toMatchObject({ ok: true, entryId: 'e1', warning: expect.stringMatching(/auto1|draft/) })
+  })
+
+  it('refuses, and posts nothing, when the bank row changed between reading and claiming it', async () => {
+    const w = world()
+    // Another request matches the row to something else in the gap.
+    const racing = fakeAdmin(w.tables, undefined, undefined, () => {
+      Object.assign(w.tables.bank_transactions[0], { status: 'reconciled', journal_entry_id: 'other' })
+    })
+    const r = await matchInvestmentToBank(racing.admin, 'f1', 'Fund I', 'u1', 't1', 'b1')
+    expect(r).toEqual({ error: 'That bank transaction changed while you were matching it — reload and try again.' })
+    expect(postExistingEntryWithAllocation).not.toHaveBeenCalled()
+  })
+
+  it('refuses when the entry is already claimed by another bank row (the unique index)', async () => {
+    const w = world()
+    const dup = fakeAdmin(w.tables, 'bank_transactions:update', 'duplicate key value violates unique constraint "bank_transactions_one_row_per_entry"')
+    const r = await matchInvestmentToBank(dup.admin, 'f1', 'Fund I', 'u1', 't1', 'b1')
+    expect(r).toEqual({ error: 'That entry is already matched to another bank transaction.' })
+    expect(postExistingEntryWithAllocation).not.toHaveBeenCalled()
+  })
+
+  it('refuses a bank row from another vehicle of the same fund', async () => {
+    const w = world()
+    w.tables.bank_transactions[0].vehicle_id = 'veh-2'
+    const r = await matchInvestmentToBank(w.admin, 'f1', 'Fund I', 'u1', 't1', 'b1')
+    expect(r).toEqual({ error: 'Bank transaction not found' })
+    expect(w.writes).toEqual([])
   })
 
   it('refuses another fund\'s transaction', async () => {
@@ -189,5 +221,34 @@ describe('postWithoutBankMatch', () => {
     w.tables.bank_transactions = []
     expect(await postWithoutBankMatch(w.admin, 'f1', 'Fund I', 'u1', 't1')).toEqual({ error: 'Period closed.' })
     expect(w.tables.journal_entries.find(e => e.id === 'e1')?.bank_match_waived_by).toBeUndefined()
+  })
+})
+
+describe('entriesAwaitingBankMatch — the journal may not post past the bank match', () => {
+  function journal() {
+    const w = world()
+    w.tables.journal_entries.push(
+      { id: 'mark', fund_id: 'f1', vehicle_id: 'veh-1', book: 'actual', status: 'draft', entry_date: '2026-03-01', source_ref: 'txn:t2' },
+      { id: 'manual', fund_id: 'f1', vehicle_id: 'veh-1', book: 'actual', status: 'draft', entry_date: '2026-03-01', source_ref: null },
+    )
+    w.tables.journal_postings.push(
+      { journal_entry_id: 'mark', fund_id: 'f1', book: 'actual', account_id: 'unreal', amount: 5 },
+      { journal_entry_id: 'mark', fund_id: 'f1', book: 'actual', account_id: 'unreal-income', amount: -5 },
+      { journal_entry_id: 'manual', fund_id: 'f1', book: 'actual', account_id: 'cash', amount: -10 },
+    )
+    return w
+  }
+
+  it('holds back a derived entry that moves cash and has no bank row', async () => {
+    const w = journal()
+    const held = await entriesAwaitingBankMatch(w.admin, 'f1', 'Fund I', ['e1', 'mark', 'manual'])
+    expect([...held]).toEqual(['e1'])
+  })
+
+  it('lets it through once a bank row points at it — it was matched, then unposted', async () => {
+    const w = journal()
+    w.tables.bank_transactions[0].journal_entry_id = 'e1'
+    const held = await entriesAwaitingBankMatch(w.admin, 'f1', 'Fund I', ['e1'])
+    expect(held.size).toBe(0)
   })
 })

@@ -67,7 +67,6 @@ export async function POST(req: NextRequest) {
   const companyId = typeof body?.companyId === 'string' ? body.companyId : null
   const marks = companyId ? all.marks.filter(m => m.companyId === companyId) : all.marks
 
-  let booked = 0
   const errors: string[] = []
   const ledger: Parameters<typeof tallyLedgerResults>[0] = []
   for (const m of marks) {
@@ -89,9 +88,8 @@ export async function POST(req: NextRequest) {
     // refused and reported here (this used to read a `skipped` field that never existed, so
     // every refusal was swallowed and counted as booked).
     ledger.push({ name: m.name, result: await draftEntryForTransaction(admin, gate.fundId, user.id, txn, m.name) })
-    booked += 1
   }
 
-  const { posted, drafted, errors: ledgerErrors } = tallyLedgerResults(ledger)
+  const { booked, posted, drafted, errors: ledgerErrors } = tallyLedgerResults(ledger)
   return NextResponse.json({ asOf, booked, posted, drafted, total: marks.length, errors: [...errors, ...ledgerErrors] })
 }

@@ -96,13 +96,14 @@ export function postsOnRecord(postings: Pick<Posting, 'accountId' | 'amount'>[],
  */
 export function tallyLedgerResults(
   rows: { name: string; result: Pick<LedgerDraftResult, 'drafted' | 'posted' | 'reason' | 'notOnboarded'> }[]
-): { posted: number; drafted: number; errors: string[] } {
+): { booked: number; posted: number; drafted: number; errors: string[] } {
   const out = { posted: 0, drafted: 0, errors: [] as string[] }
   for (const { name, result } of rows) {
     if (result.drafted) result.posted ? out.posted++ : out.drafted++
     else if (result.reason && !result.notOnboarded) out.errors.push(`${name}: ${result.reason}`)
   }
-  return out
+  // Booked = an entry exists. A row the ledger refused is not booked, however it was recorded.
+  return { booked: out.posted + out.drafted, ...out }
 }
 
 /** The `source_ref` that ties a journal entry back to the tracker row that drafted it. */

@@ -159,3 +159,27 @@ describe('backfillDerivedEntries — rows that never imply an entry', () => {
     expect(r.toDerive).toBe(1)
   })
 })
+
+describe('backfillDerivedEntries — what counts as already on the ledger', () => {
+  beforeEach(() => { vi.mocked(draftEntryForTransaction).mockClear() })
+
+  it('ignores an unposted draft from another source — a draft is not on the books', async () => {
+    const r = await backfillDerivedEntries(world({
+      chart_of_accounts: [{ id: 'acc-acme', fund_id: 'f1', vehicle_id: 'veh-1', company_id: 'acme', code: '1100-acme' }],
+      journal_postings: [{ account_id: 'acc-acme', fund_id: 'f1', book: 'actual', journal_entry_id: 'bank-draft' }],
+      journal_entries: [{ id: 'bank-draft', fund_id: 'f1', vehicle_id: 'veh-1', book: 'actual', status: 'draft', source_ref: null }],
+    }), 'f1', 'Fund I', 'u1', { dryRun: true })
+    expect(r.carriedElsewhere).toEqual([])
+  })
+
+  it('refuses the whole vehicle when the pooled investment account carries postings — they cannot be attributed to a company', async () => {
+    const r = await backfillDerivedEntries(world({
+      chart_of_accounts: [{ id: 'pooled', fund_id: 'f1', vehicle_id: 'veh-1', company_id: null, code: '1100', subtype: 'investment' }],
+      journal_postings: [{ account_id: 'pooled', fund_id: 'f1', book: 'actual', journal_entry_id: 'qb' }],
+      journal_entries: [{ id: 'qb', fund_id: 'f1', vehicle_id: 'veh-1', book: 'actual', status: 'posted', source_ref: null }],
+    }), 'f1', 'Fund I', 'u1')
+    expect(draftEntryForTransaction).not.toHaveBeenCalled()
+    expect(r.toDerive).toBe(0)
+    expect(r.blocked).toMatch(/1100/)
+  })
+})
