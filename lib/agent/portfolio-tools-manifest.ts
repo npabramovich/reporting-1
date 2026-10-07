@@ -156,7 +156,7 @@ export const PORTFOLIO_TOOL_MANIFEST: AgentToolMeta[] = [
     name: 'record_investment',
     description:
       'Record a portfolio transaction (investment | unrealized_gain_change | proceeds | round_info). ' +
-      'Also DRAFTS the journal entry it implies in that vehicle\'s ledger for review — it does not post it. ' +
+      'Also books the journal entry it implies in that vehicle\'s ledger: a mark (no cash) posts; a purchase, exit or cash income drafts and posts when matched to its bank transaction. ' +
       'For an FX revaluation set valuation_change_source="fx" and supply fx_rate/prior_fx_rate/original_position_value.',
     scope: 'write',
     domain: 'portfolio',

@@ -76,3 +76,22 @@ describe('draftEntryForTransaction — disposition', () => {
     expect(r).toMatchObject({ drafted: false, reason: 'Period closed through 2026-06-30.' })
   })
 })
+
+// ---- Reporting: a batch of derivations, said back to the caller. --------------------------
+import { tallyLedgerResults } from './from-portfolio'
+
+describe('tallyLedgerResults', () => {
+  it('counts posted and drafted apart, and keeps every refusal with its name', () => {
+    const t = tallyLedgerResults([
+      { name: 'Acme', result: { drafted: true, posted: true } },
+      { name: 'Beta', result: { drafted: true, posted: false } },
+      { name: 'Gamma', result: { drafted: false, reason: 'Period closed through 2026-06-30.' } },
+    ])
+    expect(t).toEqual({ posted: 1, drafted: 1, errors: ['Gamma: Period closed through 2026-06-30.'] })
+  })
+
+  it('does not call a vehicle that keeps no books an error', () => {
+    const t = tallyLedgerResults([{ name: 'Acme', result: { drafted: false, reason: 'no chart', notOnboarded: true } }])
+    expect(t).toEqual({ posted: 0, drafted: 0, errors: [] })
+  })
+})

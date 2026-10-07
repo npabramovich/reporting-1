@@ -170,6 +170,8 @@ export function formFromTransaction(txn: InvestmentTransaction): Record<string, 
 /** What the API says about the books after a save. See draftEntryForTransaction. */
 export interface LedgerResult {
   drafted: boolean
+  /** Posted on record (no cash leg), rather than drafted to wait for its bank match. */
+  posted?: boolean
   kind?: string
   amount?: number
   vehicle?: string
@@ -187,6 +189,7 @@ const LEDGER_KIND_LABEL: Record<string, string> = {
   valuation: 'a mark to fair value',
   fx_revaluation: 'a foreign currency revaluation',
   proceeds: 'an exit',
+  income: 'portfolio income',
 }
 
 /**
@@ -208,21 +211,41 @@ export function LedgerSaveNote({ ledger, onDismiss }: { ledger: LedgerResult | n
   const canReadAccounting = useCanRead('accounting')
   if (!canReadAccounting || !ledger) return null
 
-  // A draft entry nobody knows about is worse than none — it sits in the journal silently
-  // changing nothing while the books drift. So say it, and link to it.
+  // No cash leg, so it is already on the books. Said, quietly — this is the normal case.
+  if (ledger.drafted && ledger.posted) {
+    return (
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+        <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span>
+          Posted {LEDGER_KIND_LABEL[ledger.kind ?? ''] ?? 'a journal entry'} to{' '}
+          <strong>{ledger.vehicle}</strong>&rsquo;s ledger.
+        </span>
+        <Link href="/funds/journal" className="ml-auto text-xs underline underline-offset-2 hover:text-foreground">
+          View the entry
+        </Link>
+        <button onClick={onDismiss} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    )
+  }
+
+  // Cash moved, so the entry waits for the bank row that is the same payment — posting it now
+  // would book the wire twice once the bank feed brings it in. Say so, and point at the match.
   if (ledger.drafted) {
     return (
       <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-sm">
         <FileText className="h-4 w-4 shrink-0 text-info" />
         <span>
           Drafted {LEDGER_KIND_LABEL[ledger.kind ?? ''] ?? 'a journal entry'} in{' '}
-          <strong>{ledger.vehicle}</strong>&rsquo;s ledger. It is <strong>not posted</strong> until you review it.
+          <strong>{ledger.vehicle}</strong>&rsquo;s ledger. It posts when its cash is{' '}
+          <strong>matched to a bank transaction</strong>.
         </span>
         <Link
-          href="/funds/journal"
+          href="/funds/bank"
           className="ml-auto text-xs underline underline-offset-2 hover:text-foreground"
         >
-          Review the entry
+          Match it
         </Link>
         <button onClick={onDismiss} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss">
           <X className="h-3.5 w-3.5" />
