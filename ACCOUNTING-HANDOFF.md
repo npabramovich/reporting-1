@@ -91,6 +91,47 @@ The two scripts written during that window remain, in case the situation recurs:
 
 Leave `20261006174711` in place. Deleting an applied migration causes a history mismatch on the next push.
 
+## Fund-of-funds and the schedule of investments
+
+A separate strand from the unified-accounting work, done in the same session. The owner's firm has
+21 fund holdings carried **only in the ledger** — each with its own `1100-<id>`/`1200-<id>` accounts
+and real postings from a QuickBooks import, and with `fund_capital_events` and
+`fund_nav_statements` both entirely empty because the register is still being filled in.
+
+- **The fund-of-funds report is deleted** (`/funds/fof-report`, `/api/accounting/fof-exhibits`,
+  `fofSoiPositions`, the nav entry, both access-registry entries, the demo-widget entry). It
+  re-derived, firm-wide and unscoped, what the schedule of investments shows per vehicle: every
+  entity's page listed every other entity's holdings. `commitmentSchedule`/`performanceTable`
+  remain — the LP statement PDF uses them, and its content was deliberately left alone.
+- **`loadFofRaw`/`loadFofData` take the vehicle name** and scope the register by it, which fixed
+  all five remaining readers at once, including `lp-statement-pdf.ts`.
+- **A holding's entity resolves from three sources**, and the ledger is usually the first to
+  exist: `fund_holding_terms.vehicle_id`, then the register's `vehicle_id`, then
+  `chart_of_accounts` (indexed on `fund_id, vehicle_id, company_id`). Scoping on the register
+  alone made a half-entered fund-of-funds invisible on the page used to finish entering it.
+- **The schedule of investments generates rows from per-company ledger balances** for holdings the
+  portfolio tracker does not cover, keyed on company id so a tracked holding is never duplicated.
+  This is what makes those 21 appear by name, and it takes `costVariance`/`fairValueVariance` to
+  zero — the "does not tie to the ledger" warning was the symptom of their absence.
+- **Underlying funds get their own schedule columns**: Commitment, Called (with % drawn), Unfunded,
+  Cost, Fair value, MOIC, NAV as of, % of net assets. `unfunded` is the register's own figure, not
+  commitment − called, because a recallable distribution puts capital back on the hook.
+- **The fund-side intercompany box is gone.** A charge is already a pair of postings, one per
+  entity, so the fund side showed nothing its journal and statements do not. It rendered one panel
+  per management company in the firm unconditionally, which is why every fund displayed both.
+- **Both fund-holding write paths now carry the entity.** `resolveHoldingVehicle` validates an
+  explicitly named one and otherwise infers it; the events and NAV routes no longer default it to
+  null, which had made notices unconfirmable (`confirmFundCapitalEvent` refuses an event with no
+  vehicle) and left the register unscopeable.
+
+Diagnostics, all read-only and single-statement so the Supabase SQL editor returns them whole:
+`scripts/check-fof-vehicle-scope.sql` and `scripts/check-fund-tagged-holdings.sql`.
+
+Open: the 21 include apparent duplicates (`Arca` / `Arca Endeavor Fund LP`, `Multicoin Fund III` /
+`Multicoin Ventures Fund III`, `TCG Crypto` / `TCG Crypto B, LP`) worth tidying. All carry ledger
+postings, so none is safe to delete outright. `loadFofActive` derives the whole fund-of-funds
+feature set from `count(companies where holding_type = 'fund') > 0`.
+
 ## Migrations and order
 
 **Applied** (all three — do not edit these files in place):

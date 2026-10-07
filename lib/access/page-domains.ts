@@ -96,7 +96,6 @@ export const PAGE_DOMAINS: Record<string, PageDomain> = {
   'funds/[id]/capital-accounts': { domain: 'accounting', gate: 'requireVehicleAccess' },
   'funds/[id]/construction': { domain: 'accounting', gate: 'requireVehicleAccess' },
   'funds/[id]/capital-accounts/[lpEntityId]': { domain: 'accounting', gate: 'requireVehicleAccess' },
-  'funds/[id]/fof-quarter': { domain: 'accounting', gate: 'requireVehicleAccess' },
   'funds/[id]/journal': { domain: 'accounting', gate: 'requireVehicleAccess' },
   'funds/[id]/ledger': { domain: 'accounting', gate: 'requireVehicleAccess' },
   // Gated in the page itself on the domain AND the tax_reporting feature: every route behind it
