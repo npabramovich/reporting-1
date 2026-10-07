@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { closedPeriodRanges, dateInAnyClosedPeriod } from './periods'
 import { ACTUAL_BOOK } from './books'
 import { postExistingEntryWithAllocation } from './continuous-allocation'
+import { entriesAwaitingBankMatch, AWAITING_BANK_MATCH_REASON } from '@/lib/accounting/investment-bank-match'
 
 // Shared machinery behind the journal's two bulk actions — post many drafts, void many
 // drafts. Both page the same way, scope the same way and guard the same way; only the
@@ -93,6 +94,8 @@ export async function runBulkDraftAction(
   const batch = rows.slice(0, BULK_BATCH)
 
   const closed = await closedPeriodRanges(admin, fundId, group)
+  // A derived investment entry that moves cash posts through its bank match, never from here.
+  const awaiting = action === 'post' ? await entriesAwaitingBankMatch(admin, fundId, group, batch.map(e => e.id)) : new Set<string>()
 
   const target: string[] = []
   const skipped: { id: string; reason: string }[] = []
@@ -103,6 +106,10 @@ export async function runBulkDraftAction(
     }
     // Balance only gates posting. A lopsided draft is precisely the kind you want to be
     // able to throw away, so refusing to void it would trap the mess it represents.
+    if (awaiting.has(e.id)) {
+      skipped.push({ id: e.id, reason: AWAITING_BANK_MATCH_REASON })
+      continue
+    }
     if (action === 'post') {
       const sum = ((e.journal_postings as any[]) ?? []).reduce((s, p) => s + Number(p.amount), 0)
       if (Math.abs(sum) > 0.005) {

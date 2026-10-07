@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 import type { AwaitingMatch } from '@/lib/accounting/investment-bank-match'
+import { useCanWrite } from '@/components/access-context'
 
 // Investment entries waiting for their bank match (lib/accounting/investment-bank-match.ts).
 //
@@ -20,6 +21,9 @@ export function InvestmentMatchQueue({ onChanged }: { onChanged?: () => void }) 
   const currency = useCurrency()
   const fmt = (v: number) => formatCurrencyPrice(v, currency)
   const lf = useLedgerFetch()
+  // A member who can read accounting but not write it sees what is waiting, without buttons the
+  // server would refuse.
+  const canWrite = useCanWrite('accounting')
   const [rows, setRows] = useState<AwaitingMatch[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -65,7 +69,7 @@ export function InvestmentMatchQueue({ onChanged }: { onChanged?: () => void }) 
               <span className="flex-1 min-w-0 truncate">{r.memo ?? 'Investment entry'}</span>
               <span className="tabular-nums">{fmt(r.cash)}</span>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            {canWrite && <div className="flex flex-wrap items-center gap-2">
               {r.candidates.map(c => (
                 <Button key={c.id} size="sm" variant="outline" disabled={busy !== null}
                   onClick={() => act(r.txnId, { bankTransactionId: c.id })}>
@@ -86,7 +90,7 @@ export function InvestmentMatchQueue({ onChanged }: { onChanged?: () => void }) 
               >
                 {confirming === r.txnId ? 'Confirm: this payment has no bank transaction' : 'Post without a bank match'}
               </button>}
-            </div>
+            </div>}
           </li>
         ))}
       </ul>

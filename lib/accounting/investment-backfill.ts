@@ -43,9 +43,15 @@ export interface BackfillResult {
   posted: number
   /** Entries drafted to wait for their bank match (purchases, exits, cash income). */
   awaitingBankMatch: number
+  /** Set when the whole vehicle is refused, and why — nothing was derived. */
+  blocked?: string
   /** Every transaction the ledger refused — a closed period, a missing account — by name. */
   refused: string[]
 }
+
+// Pooled (company-less) investment accounts: 1100 at cost, 1200 unrealized, 1250 FX translation.
+// By subtype, not code — a management company's chart uses 1100 for receivables.
+const POOLED_SUBTYPES = new Set(['investment', 'unrealized', 'fx_translation'])
 
 const n = (v: unknown) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
 
@@ -79,27 +85,46 @@ export async function backfillDerivedEntries(
       .eq('book', ACTUAL_BOOK).eq('fund_id', fundId).eq('vehicle_id', vehicleId)
       .neq('status', 'void').like('source_ref', `${TXN_REF_PREFIX}%`).order('id').range(from, to)),
     readAll<any>((from, to) => admin.from('companies' as any).select('id, name').eq('fund_id', fundId).order('id').range(from, to)),
-    readAll<any>((from, to) => admin.from('chart_of_accounts' as any).select('id, company_id')
-      .eq('fund_id', fundId).eq('vehicle_id', vehicleId).not('company_id', 'is', null).order('id').range(from, to)),
+    readAll<any>((from, to) => admin.from('chart_of_accounts' as any).select('id, code, company_id, subtype')
+      .eq('fund_id', fundId).eq('vehicle_id', vehicleId).order('id').range(from, to)),
   ])
   const names = new Map<string, string>(companies.map(c => [c.id, c.name]))
   const done = new Set(derived.map(e => e.source_ref))
 
-  // Which companies does the ledger already carry through an entry derivation did not make?
-  const companyOfAccount = new Map<string, string>(accounts.map(a => [a.id, a.company_id]))
-  const carried = new Set<string>()
-  for (const ids of chunks([...companyOfAccount.keys()])) {
-    const postings = await readAll<any>((from, to) => admin.from('journal_postings' as any)
-      .select('account_id, journal_entry_id').eq('book', ACTUAL_BOOK).eq('fund_id', fundId).in('account_id', ids).order('id').range(from, to))
-    const entryIds = [...new Set(postings.map(p => p.journal_entry_id))]
-    const foreign = new Set<string>()
-    for (const eids of chunks(entryIds)) {
-      const entries = await readAll<any>((from, to) => admin.from('journal_entries' as any).select('id, source_ref')
-        .eq('book', ACTUAL_BOOK).eq('fund_id', fundId).neq('status', 'void').in('id', eids).order('id').range(from, to))
-      for (const e of entries) if (!String(e.source_ref ?? '').startsWith(TXN_REF_PREFIX)) foreign.add(e.id)
+  // Which companies does the ledger already carry through a POSTED entry derivation did not make?
+  // Posted only: an unposted bank auto-draft or a manual draft is not on the books, and counting it
+  // would leave a company off the ledger with no way back.
+  const companyOfAccount = new Map<string, string>(
+    accounts.filter(a => a.company_id).map(a => [a.id, a.company_id]))
+  const foreignPosted = async (accountIds: string[]) => {
+    const hits = new Set<string>()
+    for (const ids of chunks(accountIds)) {
+      const postings = await readAll<any>((from, to) => admin.from('journal_postings' as any)
+        .select('account_id, journal_entry_id').eq('book', ACTUAL_BOOK).eq('fund_id', fundId).in('account_id', ids).order('id').range(from, to))
+      const foreign = new Set<string>()
+      for (const eids of chunks([...new Set(postings.map(p => p.journal_entry_id))])) {
+        const entries = await readAll<any>((from, to) => admin.from('journal_entries' as any).select('id, source_ref')
+          .eq('book', ACTUAL_BOOK).eq('fund_id', fundId).eq('status', 'posted').in('id', eids).order('id').range(from, to))
+        for (const e of entries) if (!String(e.source_ref ?? '').startsWith(TXN_REF_PREFIX)) foreign.add(e.id)
+      }
+      for (const p of postings) if (foreign.has(p.journal_entry_id)) hits.add(p.account_id)
     }
-    for (const p of postings) if (foreign.has(p.journal_entry_id)) carried.add(companyOfAccount.get(p.account_id)!)
+    return hits
   }
+
+  // The POOLED investment accounts (1100/1200/1250 with no company) cannot be attributed to any
+  // company. If an import or a hand entry put value there, every company might already be carried,
+  // and deriving any of them could book it twice — so the whole vehicle waits for a person.
+  const pooled = accounts.filter(a => !a.company_id && POOLED_SUBTYPES.has(a.subtype))
+  const pooledHits = await foreignPosted(pooled.map(a => a.id))
+  if (pooledHits.size > 0) {
+    const codes = pooled.filter(a => pooledHits.has(a.id)).map(a => a.code).sort().join(', ')
+    out.blocked = `The pooled investment account${pooledHits.size === 1 ? '' : 's'} ${codes} carr${pooledHits.size === 1 ? 'ies' : 'y'} posted entries that are not tied to any company, so backfilling could book a position twice. Move those postings to each company's own accounts first.`
+    return out
+  }
+
+  const carried = new Set<string>()
+  for (const accountId of await foreignPosted([...companyOfAccount.keys()])) carried.add(companyOfAccount.get(accountId)!)
   out.carriedElsewhere = [...carried].map(id => names.get(id) ?? id).sort()
 
   const pending = txns.filter(t => {

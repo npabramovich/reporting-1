@@ -96,11 +96,11 @@ describe('tallyLedgerResults', () => {
       { name: 'Beta', result: { drafted: true, posted: false } },
       { name: 'Gamma', result: { drafted: false, reason: 'Period closed through 2026-06-30.' } },
     ])
-    expect(t).toEqual({ posted: 1, drafted: 1, errors: ['Gamma: Period closed through 2026-06-30.'] })
+    expect(t).toEqual({ booked: 2, posted: 1, drafted: 1, errors: ['Gamma: Period closed through 2026-06-30.'] })
   })
 
   it('does not call a vehicle that keeps no books an error', () => {
     const t = tallyLedgerResults([{ name: 'Acme', result: { drafted: false, reason: 'no chart', notOnboarded: true } }])
-    expect(t).toEqual({ posted: 0, drafted: 0, errors: [] })
+    expect(t).toEqual({ booked: 0, posted: 0, drafted: 0, errors: [] })
   })
 })
