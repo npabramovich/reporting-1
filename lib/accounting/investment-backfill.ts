@@ -1,0 +1,96 @@
+// Backfill: derive the entries historical tracker transactions never derived.
+//
+// Transactions recorded before derivation existed drafted nothing, so their vehicle's books are
+// empty however much the tracker holds. This runs every one of them through the same
+// draftEntryForTransaction a live save uses — so the backfill obeys the same rule: an entry with
+// no cash leg (a mark) posts, one that moves cash (a purchase) drafts and waits for its bank match.
+//
+// IDEMPOTENT, keyed on source_ref = txnRef(txn.id). A transaction with a live (non-void) derived
+// entry is left alone, so running it twice derives nothing twice; one whose entries were all
+// voided is derived again, which is what a void is for.
+//
+// IT WILL NOT BOOK A POSITION TWICE. A company the ledger already carries through a non-derived
+// entry — a cutover snapshot, a history replay, a QuickBooks import — is skipped and named. Its
+// value is already on the books; deriving its transactions too would double it.
+//
+// IN DATE ORDER, because an exit's entry reads the carried values earlier entries put there.
+
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { draftEntryForTransaction, txnRef } from './from-portfolio'
+import { vehicleIdByName } from './vehicle-id'
+import { readAll } from './bank-quickbooks-match'
+import { ACTUAL_BOOK } from './books'
+
+const TXN_REF_PREFIX = txnRef('')
+const CHUNK = 200
+
+export interface BackfillResult {
+  /** Transactions with nothing derived yet — what a run would derive. */
+  toDerive: number
+  /** Already derived earlier (idempotency), left alone. */
+  alreadyDerived: number
+  /** Companies the ledger carries through a non-derived entry, skipped so nothing books twice. */
+  carriedElsewhere: string[]
+  /** Entries posted on record (marks). */
+  posted: number
+  /** Entries drafted to wait for their bank match (purchases, exits, cash income). */
+  awaitingBankMatch: number
+  /** Every transaction the ledger refused — a closed period, a missing account — by name. */
+  refused: string[]
+}
+
+const chunks = <T,>(xs: T[]) => Array.from({ length: Math.ceil(xs.length / CHUNK) }, (_, i) => xs.slice(i * CHUNK, (i + 1) * CHUNK))
+
+export async function backfillDerivedEntries(
+  admin: SupabaseClient, fundId: string, group: string, userId: string | null,
+  opts: { dryRun?: boolean } = {},
+): Promise<BackfillResult> {
+  const out: BackfillResult = { toDerive: 0, alreadyDerived: 0, carriedElsewhere: [], posted: 0, awaitingBankMatch: 0, refused: [] }
+  const vehicleId = await vehicleIdByName(admin, fundId, group)
+  if (!vehicleId) return out
+
+  const [txns, derived, companies, accounts] = await Promise.all([
+    readAll<any>((from, to) => admin.from('investment_transactions' as any).select('*')
+      .eq('fund_id', fundId).eq('portfolio_group', group).order('transaction_date').order('id').range(from, to)),
+    readAll<any>((from, to) => admin.from('journal_entries' as any).select('source_ref')
+      .eq('book', ACTUAL_BOOK).eq('fund_id', fundId).eq('vehicle_id', vehicleId)
+      .neq('status', 'void').like('source_ref', `${TXN_REF_PREFIX}%`).order('id').range(from, to)),
+    readAll<any>((from, to) => admin.from('companies' as any).select('id, name').eq('fund_id', fundId).order('id').range(from, to)),
+    readAll<any>((from, to) => admin.from('chart_of_accounts' as any).select('id, company_id')
+      .eq('fund_id', fundId).eq('vehicle_id', vehicleId).not('company_id', 'is', null).order('id').range(from, to)),
+  ])
+  const names = new Map<string, string>(companies.map(c => [c.id, c.name]))
+  const done = new Set(derived.map(e => e.source_ref))
+
+  // Which companies does the ledger already carry through an entry derivation did not make?
+  const companyOfAccount = new Map<string, string>(accounts.map(a => [a.id, a.company_id]))
+  const carried = new Set<string>()
+  for (const ids of chunks([...companyOfAccount.keys()])) {
+    const postings = await readAll<any>((from, to) => admin.from('journal_postings' as any)
+      .select('account_id, journal_entry_id').eq('fund_id', fundId).in('account_id', ids).order('id').range(from, to))
+    const entryIds = [...new Set(postings.map(p => p.journal_entry_id))]
+    const foreign = new Set<string>()
+    for (const eids of chunks(entryIds)) {
+      const entries = await readAll<any>((from, to) => admin.from('journal_entries' as any).select('id, source_ref')
+        .eq('book', ACTUAL_BOOK).eq('fund_id', fundId).neq('status', 'void').in('id', eids).order('id').range(from, to))
+      for (const e of entries) if (!String(e.source_ref ?? '').startsWith(TXN_REF_PREFIX)) foreign.add(e.id)
+    }
+    for (const p of postings) if (foreign.has(p.journal_entry_id)) carried.add(companyOfAccount.get(p.account_id)!)
+  }
+  out.carriedElsewhere = [...carried].map(id => names.get(id) ?? id).sort()
+
+  const pending = txns.filter(t => {
+    if (done.has(txnRef(t.id))) { out.alreadyDerived++; return false }
+    return !carried.has(t.company_id)
+  })
+  out.toDerive = pending.length
+  if (opts.dryRun) return out
+
+  for (const t of pending) {
+    const name = names.get(t.company_id) ?? 'Investment'
+    const r = await draftEntryForTransaction(admin, fundId, userId, t, name)
+    if (r.drafted) r.posted ? out.posted++ : out.awaitingBankMatch++
+    else if (r.reason) out.refused.push(`${name}, ${t.transaction_date}: ${r.reason}`)
+  }
+  return out
+}

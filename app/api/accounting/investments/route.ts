@@ -10,6 +10,7 @@ import {
   previewInvestmentHistory, replayInvestmentHistory, revalueInvestmentFx,
 } from '@/lib/accounting/investments'
 import { buildSoiPositions, type SoiCompany } from '@/lib/accounting/soi'
+import { backfillDerivedEntries } from '@/lib/accounting/investment-backfill'
 
 // GET — each tracked position for the vehicle, alongside what the LEDGER carries for
 // it. The gap between the two is what needs booking.
@@ -57,6 +58,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST
+//   { action: 'backfill', dryRun? }                          → derive what historical rows never did
 //   { action: 'preview',   offset }                          → what bootstrapping would book
 //   { action: 'bootstrap', entryDate, offset, force? }       → book it
 //   { action: 'mark', companyId, companyName, fairValue, entryDate, memo? }
@@ -74,6 +76,12 @@ export async function POST(req: NextRequest) {
   if (group instanceof NextResponse) return group
 
   const offset: 'cash' | 'capital' = body?.offset === 'capital' ? 'capital' : 'cash'
+
+  // Derive the entries historical transactions never derived: marks post, cash entries draft and
+  // wait for their bank match. `dryRun` previews. Idempotent — see lib/accounting/investment-backfill.ts.
+  if (body?.action === 'backfill') {
+    return NextResponse.json(await backfillDerivedEntries(admin, gate.fundId, group, user.id, { dryRun: !!body?.dryRun }))
+  }
 
   if (body?.action === 'preview') {
     const result = await previewBootstrapInvestments(admin, gate.fundId, group, offset)

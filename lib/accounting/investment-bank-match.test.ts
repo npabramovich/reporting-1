@@ -109,7 +109,7 @@ function world() {
 }
 
 describe('matchInvestmentToBank', () => {
-  beforeEach(() => vi.mocked(postExistingEntryWithAllocation).mockClear())
+  beforeEach(() => { vi.mocked(postExistingEntryWithAllocation).mockClear() })
 
   it('posts the entry, reconciles the bank row to it, and retires the auto-draft', async () => {
     const w = world()
@@ -155,7 +155,7 @@ describe('matchInvestmentToBank', () => {
 })
 
 describe('postWithoutBankMatch', () => {
-  beforeEach(() => vi.mocked(postExistingEntryWithAllocation).mockClear())
+  beforeEach(() => { vi.mocked(postExistingEntryWithAllocation).mockClear() })
 
   it('posts the draft and records who decided it had no bank match', async () => {
     const w = world()

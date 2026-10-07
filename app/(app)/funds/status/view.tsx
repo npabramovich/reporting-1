@@ -10,6 +10,7 @@ import { VehicleEditModal, type EditableVehicle } from '@/components/vehicle-edi
 import { AccountingSetup } from '../setup'
 import { DealCarryCard } from './deal-carry-card'
 import { PriceFeedsPanel } from './price-feeds-panel'
+import { BootstrapInvestmentsCard } from './bootstrap-investments'
 import { WalletsPanel } from './wallets-panel'
 import { CarryTerms } from '../allocation-terms/carry-terms'
 import { useCanRead } from '@/components/access-context'
@@ -224,6 +225,9 @@ function EntityStatusView() {
             are watched for on-chain balances. Both are set up once and then run themselves,
             so they belong with the settings rather than on the schedule they feed. */}
         {!manco && <>
+        {/* Renders nothing unless the tracker holds transactions the ledger never derived. */}
+        <BootstrapInvestmentsCard onBooked={load} />
+
         <CollapsibleSection title="Price feeds" subtitle="Attach a quote source to a holding and store its marks">
           <PriceFeedsPanel showHeader={false} />
         </CollapsibleSection>
