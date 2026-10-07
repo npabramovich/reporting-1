@@ -16,7 +16,9 @@
 // IN DATE ORDER, because an exit's entry reads the carried values earlier entries put there.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { draftEntryForTransaction, txnRef } from './from-portfolio'
+import { draftEntryForTransaction, postsOnRecord, txnRef } from './from-portfolio'
+import { accountIdByCode } from './persist'
+import { postExistingEntryWithAllocation } from './continuous-allocation'
 import { vehicleIdByName } from './vehicle-id'
 import { readAll } from './bank-quickbooks-match'
 import { ACTUAL_BOOK } from './books'
@@ -29,6 +31,12 @@ export interface BackfillResult {
   toDerive: number
   /** Already derived earlier (idempotency), left alone. */
   alreadyDerived: number
+  /**
+   * Derived earlier as DRAFTS by the old always-draft code, with no cash leg — marks recorded before
+   * marks posted on record. They post now; otherwise that appreciation would stay off the books
+   * while this card reported nothing to do.
+   */
+  toPost: number
   /** Companies the ledger carries through a non-derived entry, skipped so nothing books twice. */
   carriedElsewhere: string[]
   /** Entries posted on record (marks). */
@@ -39,20 +47,35 @@ export interface BackfillResult {
   refused: string[]
 }
 
+const n = (v: unknown) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
+
+/**
+ * Rows that can never derive an entry, so are never "waiting for the ledger". Counting them kept
+ * the card up forever, listing the same rows under "not booked" on every run. Mirrors the skips
+ * at the top of draftEntryForTransaction; anything subtler is still derived and its reason reported.
+ */
+function impliesNoEntry(t: any): boolean {
+  if (t.transaction_type === 'round_info' || t.transaction_type === 'split') return true
+  if (t.transaction_type === 'unrealized_gain_change') return n(t.unrealized_value_change) === 0 && n(t.fx_value_change) === 0
+  if (t.transaction_type === 'investment' && !t.converts_from_txn_id) return n(t.investment_cost) + n(t.fee_amount) === 0
+  if (t.transaction_type === 'income') return n(t.income_amount) === 0
+  return false
+}
+
 const chunks = <T,>(xs: T[]) => Array.from({ length: Math.ceil(xs.length / CHUNK) }, (_, i) => xs.slice(i * CHUNK, (i + 1) * CHUNK))
 
 export async function backfillDerivedEntries(
   admin: SupabaseClient, fundId: string, group: string, userId: string | null,
   opts: { dryRun?: boolean } = {},
 ): Promise<BackfillResult> {
-  const out: BackfillResult = { toDerive: 0, alreadyDerived: 0, carriedElsewhere: [], posted: 0, awaitingBankMatch: 0, refused: [] }
+  const out: BackfillResult = { toDerive: 0, alreadyDerived: 0, toPost: 0, carriedElsewhere: [], posted: 0, awaitingBankMatch: 0, refused: [] }
   const vehicleId = await vehicleIdByName(admin, fundId, group)
   if (!vehicleId) return out
 
   const [txns, derived, companies, accounts] = await Promise.all([
     readAll<any>((from, to) => admin.from('investment_transactions' as any).select('*')
       .eq('fund_id', fundId).eq('portfolio_group', group).order('transaction_date').order('id').range(from, to)),
-    readAll<any>((from, to) => admin.from('journal_entries' as any).select('source_ref')
+    readAll<any>((from, to) => admin.from('journal_entries' as any).select('id, status, source_ref, entry_date, journal_postings(account_id, amount)')
       .eq('book', ACTUAL_BOOK).eq('fund_id', fundId).eq('vehicle_id', vehicleId)
       .neq('status', 'void').like('source_ref', `${TXN_REF_PREFIX}%`).order('id').range(from, to)),
     readAll<any>((from, to) => admin.from('companies' as any).select('id, name').eq('fund_id', fundId).order('id').range(from, to)),
@@ -80,11 +103,27 @@ export async function backfillDerivedEntries(
   out.carriedElsewhere = [...carried].map(id => names.get(id) ?? id).sort()
 
   const pending = txns.filter(t => {
+    if (impliesNoEntry(t)) return false
     if (done.has(txnRef(t.id))) { out.alreadyDerived++; return false }
     return !carried.has(t.company_id)
   })
   out.toDerive = pending.length
+
+  const cashId = (await accountIdByCode(admin, fundId, group)).get('1000')
+  const oldDrafts = cashId
+    ? derived.filter(e => e.status === 'draft' && postsOnRecord(
+        (e.journal_postings ?? []).map((p: any) => ({ accountId: p.account_id, amount: Number(p.amount) })), cashId))
+    : []
+  out.toPost = oldDrafts.length
   if (opts.dryRun) return out
+
+  const txnById = new Map<string, any>(txns.map(t => [t.id, t]))
+  for (const e of oldDrafts) {
+    const t = txnById.get(String(e.source_ref).slice(TXN_REF_PREFIX.length))
+    const r = await postExistingEntryWithAllocation(admin, fundId, group, userId, e.id)
+    if ('error' in r) out.refused.push(`${names.get(t?.company_id) ?? 'Investment'}, ${e.entry_date}: ${r.error}`)
+    else out.posted++
+  }
 
   for (const t of pending) {
     const name = names.get(t.company_id) ?? 'Investment'

@@ -152,19 +152,32 @@ export async function retractEntriesForTransaction(
         }
       }
 
+      // Release the bank row this entry is matched to, if any. A posted purchase, exit or income
+      // was matched to the row that is the same payment; voiding it would leave that row
+      // "reconciled" against a void entry — the wire gone from the books while the bank page says
+      // it is done. A draft can hold one too, when a match died between claiming the row and
+      // posting. Either way the re-derived entry can then be matched to it again.
+      const releaseBankRow = () => admin.from('bank_transactions' as any)
+        .update({ journal_entry_id: null, status: 'unmatched' })
+        .eq('fund_id', fundId).eq('journal_entry_id', e.id)
+
       if (e.status === 'draft') {
+        await releaseBankRow()
         await admin.from('journal_entries' as any).delete().eq('id', e.id).eq('fund_id', fundId)
       } else {
+        // A posted entry credited partners' capital through its generated allocation. Voiding the
+        // source alone would leave that credit standing while the re-derived entry allocates
+        // again — capital overstated by the old amount, with no error anywhere. Void it first,
+        // and refuse rather than void half the pair.
+        const { setGeneratedAllocationStatus } = await import('./continuous-allocation')
+        const allocation = await setGeneratedAllocationStatus(admin, fundId, e.id, 'void')
+        if (allocation.error) {
+          return { retracted, reason: `Its partner allocation could not be voided: ${allocation.error}` }
+        }
+        await releaseBankRow()
         await admin.from('journal_entries' as any)
           .update({ status: 'void', posted_at: null })
           .eq('id', e.id).eq('fund_id', fundId)
-        // A posted purchase, exit or income was matched to the bank row that is the same
-        // payment. Voiding it would leave that row "reconciled" against a void entry — the wire
-        // vanishes from the books while the bank page says it is done. Release it, so the
-        // re-derived draft can be matched to it again.
-        await admin.from('bank_transactions' as any)
-          .update({ journal_entry_id: null, status: 'unmatched' })
-          .eq('fund_id', fundId).eq('journal_entry_id', e.id)
       }
       retracted++
     }
@@ -340,15 +353,26 @@ async function companyCarrying(
   admin: SupabaseClient,
   fundId: string,
   group: string,
+  vehicleId: string,
   accts: { costId: string; unrealizedId: string; fxId: string }
 ): Promise<{ cost: number; unrealized: number; fx: number }> {
   const { postings } = await loadPostedLedger(admin, fundId, group)
+  // PLUS the entries derived from tracker rows that are still drafts. A purchase now waits as a
+  // draft for its bank match while the marks after it post; an exit derived in that window must
+  // still see the purchase's cost, or a partial exit unwinds the WHOLE accumulated mark and
+  // freezes that figure into its entry. The derived draft is the same fact as the transaction,
+  // so it is the carrying value — it is only waiting on cash.
+  const { data: drafts } = await admin.from('journal_entries' as any)
+    .select('id, journal_postings(account_id, amount)')
+    .eq('book', ACTUAL_BOOK).eq('fund_id', fundId).eq('vehicle_id', vehicleId)
+    .eq('status', 'draft').like('source_ref', `${txnRef('')}%`)
+  const all = [
+    ...postings.map(p => ({ accountId: p.accountId, amount: p.amount })),
+    ...((drafts as any[]) ?? []).flatMap(e => (e.journal_postings ?? [])
+      .map((p: any) => ({ accountId: p.account_id as string, amount: Number(p.amount) }))),
+  ]
   const sum = (accountId: string) =>
-    roundCents(
-      postings
-        .filter(p => p.accountId === accountId)
-        .reduce((s, p) => s + p.amount, 0)
-    )
+    roundCents(all.filter(p => p.accountId === accountId).reduce((s, p) => s + p.amount, 0))
   return {
     cost: sum(accts.costId),
     unrealized: sum(accts.unrealizedId),
@@ -589,7 +613,7 @@ export async function draftEntryForTransaction(
       // done this correctly (investments.ts drop-out reversal); the live draft did not.
       //
       // A partial exit reverses its share: the fraction of the cost basis being retired.
-      const carried = await companyCarrying(admin, fundId, group, a)
+      const carried = await companyCarrying(admin, fundId, group, vehicleId, a)
 
       amount = proceeds
       kind = 'proceeds'
@@ -627,7 +651,18 @@ export async function draftEntryForTransaction(
     // and worth surfacing rather than swallowing.
     const posted = postsOnRecord(entry.postings, cashId)
     const result = await persistEntry(admin, fundId, group, userId, entry, posted ? 'posted' : 'draft')
-    if ('error' in result) return skip(result.error)
+    if ('error' in result) {
+      // Posting promises the partner allocation, and persistEntry rolls the entry back when that
+      // fails (no partner participates yet, a capital account missing). Losing the mark entirely
+      // would be worse than the old always-draft behaviour, so keep it as a draft and say why it
+      // did not post — it posts from the journal once the vehicle's partners are set up.
+      if ('allocationFailed' in result && result.allocationFailed) {
+        const draft = await persistEntry(admin, fundId, group, userId, entry, 'draft')
+        if ('error' in draft) return skip(draft.error)
+        return { drafted: true, posted: false, entryId: draft.entryId, kind, amount, vehicle: group, reason: result.error }
+      }
+      return skip(result.error)
+    }
 
     return { drafted: true, posted, entryId: result.entryId, kind, amount, vehicle: group }
   } catch (e) {

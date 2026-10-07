@@ -23,6 +23,7 @@ import { useLedgerFetch } from '@/components/accounting-vehicle'
 interface Backfill {
   toDerive: number
   alreadyDerived: number
+  toPost: number
   carriedElsewhere: string[]
   posted: number
   awaitingBankMatch: number
@@ -64,7 +65,7 @@ export function BootstrapInvestmentsCard({ onBooked }: { onBooked?: () => void }
   }
 
   if (!preview && !result && !error) return null
-  if (preview && preview.toDerive === 0 && !result && !error) return null
+  if (preview && preview.toDerive + preview.toPost === 0 && !result && !error) return null
 
   return (
     <div className="space-y-2">
@@ -93,11 +94,11 @@ export function BootstrapInvestmentsCard({ onBooked }: { onBooked?: () => void }
         </div>
       )}
 
-      {preview && preview.toDerive > 0 && (
+      {preview && preview.toDerive + preview.toPost > 0 && (
         <div className="rounded-card border border-warning/40 bg-warning/10 p-3 space-y-2">
           <p className="text-sm font-medium text-warning flex items-center gap-1.5">
             <AlertTriangle className="h-4 w-4" />
-            {preview.toDerive} {preview.toDerive === 1 ? 'transaction has' : 'transactions have'} never reached the ledger.
+            {preview.toDerive + preview.toPost} {preview.toDerive + preview.toPost === 1 ? 'transaction has' : 'transactions have'} not reached the ledger.
           </p>
           <p className="text-xs text-muted-foreground">
             Each one books on its own date. Marks post at once — they move no cash. Purchases, exits and cash

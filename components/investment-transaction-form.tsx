@@ -230,6 +230,26 @@ export function LedgerSaveNote({ ledger, onDismiss }: { ledger: LedgerResult | n
     )
   }
 
+  // No cash leg, but it could not post — its partner allocation failed (no partner participates
+  // yet, say). It is kept as a draft rather than lost; say why, and where it is.
+  if (ledger.drafted && ledger.reason) {
+    return (
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+        <span>
+          Kept {LEDGER_KIND_LABEL[ledger.kind ?? ''] ?? 'a journal entry'} as a <strong>draft</strong> in{' '}
+          <strong>{ledger.vehicle}</strong>&rsquo;s ledger. {ledger.reason}
+        </span>
+        <Link href="/funds/journal" className="ml-auto text-xs underline underline-offset-2 hover:text-foreground">
+          Review the entry
+        </Link>
+        <button onClick={onDismiss} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    )
+  }
+
   // Cash moved, so the entry waits for the bank row that is the same payment — posting it now
   // would book the wire twice once the bank feed brings it in. Say so, and point at the match.
   if (ledger.drafted) {

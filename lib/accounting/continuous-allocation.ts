@@ -185,9 +185,14 @@ export async function postExistingEntryWithAllocation(
   ])
   if (!header) return { error: 'Entry not found' }
   if ((header as any).status !== 'draft') return { error: 'Only a draft entry can be posted' }
-  const { error: statusError } = await admin.from('journal_entries' as any)
-    .update({ status: 'posted', posted_at: new Date().toISOString() }).eq('fund_id', fundId).eq('id', entryId)
+  // Compare-and-set: flip it only if it is STILL a draft. Two requests that both read the draft
+  // (a bank match racing a "post without a bank match") would otherwise both post and both run
+  // the partner allocation, doubling it. The loser finds no draft and stops here.
+  const { data: flipped, error: statusError } = await admin.from('journal_entries' as any)
+    .update({ status: 'posted', posted_at: new Date().toISOString() })
+    .eq('book', ACTUAL_BOOK).eq('fund_id', fundId).eq('id', entryId).eq('status', 'draft').select('id')
   if (statusError) return { error: statusError.message }
+  if (!((flipped as any[]) ?? []).length) return { error: 'Only a draft entry can be posted' }
   const entry: JournalEntry = {
     fundId, entryDate: (header as any).entry_date, memo: (header as any).memo,
     sourceType: (header as any).source_type, sourceRef: (header as any).source_ref,

@@ -96,7 +96,7 @@ export async function persistEntry(
   book: LedgerBook = ACTUAL_BOOK,
   /** Generated allocation entries pass false to prevent recursive allocation. */
   allocate: boolean = true,
-): Promise<{ entryId: string } | { error: string }> {
+): Promise<{ entryId: string } | { error: string; allocationFailed?: true }> {
   // DENOMINATE THE ENTRY IN THE FUND'S CURRENCY, here, at the one place everything is written.
   //
   // Every entry builder takes a `currency` and defaults it to 'USD', and no caller ever passed
@@ -225,7 +225,7 @@ export async function persistEntry(
       // posted without the capital allocation that posting promised.
       await rollbackGeneratedAllocations(admin, fundId, entryId)
       await admin.from('journal_entries' as any).delete().eq('id', entryId).eq('fund_id', fundId)
-      return { error: `Entry was not posted because its partner allocation failed: ${allocated.error}` }
+      return { error: `Entry was not posted because its partner allocation failed: ${allocated.error}`, allocationFailed: true }
     }
   }
 

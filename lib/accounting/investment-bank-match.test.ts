@@ -64,7 +64,7 @@ describe('rankBankCandidates', () => {
 
 // ---- The orchestration: a failed post leaves the bank row as it was. ------------------------
 type Row = Record<string, any>
-function fakeAdmin(tables: Record<string, Row[]>) {
+function fakeAdmin(tables: Record<string, Row[]>, failOn?: string) {
   const writes: { table: string; op: string; values?: any; filters: Record<string, any> }[] = []
   const from = (table: string) => {
     const f: Record<string, any> = {}
@@ -86,7 +86,9 @@ function fakeAdmin(tables: Record<string, Row[]>) {
       in: (k: string, v: any[]) => { f[`in:${k}`] = v; return chain },
       is: (k: string, v: any) => { f[k] = v; return chain },
       maybeSingle: async () => ({ data: exec()[0] ?? null, error: null }),
-      then: (res: any) => res({ data: exec(), error: null }),
+      then: (res: any) => failOn === `${table}:${op}`
+        ? res({ data: null, error: { message: `${op} failed` } })
+        : res({ data: exec(), error: null }),
     }
     return chain
   }
@@ -129,6 +131,13 @@ describe('matchInvestmentToBank', () => {
     expect(w.tables.journal_entries.find(e => e.id === 'auto1')).toBeDefined()
   })
 
+  it('says so when the bank row\'s auto-draft could not be retired — it could be posted later and book the wire twice', async () => {
+    const w = world()
+    const failing = fakeAdmin(w.tables, 'journal_entries:delete')
+    const r = await matchInvestmentToBank(failing.admin, 'f1', 'Fund I', 'u1', 't1', 'b1')
+    expect(r).toMatchObject({ ok: true, entryId: 'e1', warning: expect.stringMatching(/auto1|draft/) })
+  })
+
   it('refuses another fund\'s transaction', async () => {
     const w = world()
     const r = await matchInvestmentToBank(w.admin, 'f2', 'Fund I', 'u1', 't1', 'b1')
@@ -157,8 +166,16 @@ describe('matchInvestmentToBank', () => {
 describe('postWithoutBankMatch', () => {
   beforeEach(() => { vi.mocked(postExistingEntryWithAllocation).mockClear() })
 
+  it('refuses while a bank transaction of the same amount is open — that is the match, not a missing feed', async () => {
+    const w = world()
+    const r = await postWithoutBankMatch(w.admin, 'f1', 'Fund I', 'u1', 't1')
+    expect(r).toMatchObject({ error: expect.stringMatching(/bank transaction of the same amount/) })
+    expect(postExistingEntryWithAllocation).not.toHaveBeenCalled()
+  })
+
   it('posts the draft and records who decided it had no bank match', async () => {
     const w = world()
+    w.tables.bank_transactions[0].amount = -999
     const r = await postWithoutBankMatch(w.admin, 'f1', 'Fund I', 'u1', 't1')
     expect(r).toEqual({ ok: true, entryId: 'e1' })
     expect(postExistingEntryWithAllocation).toHaveBeenCalledWith(w.admin, 'f1', 'Fund I', 'u1', 'e1')
@@ -169,6 +186,7 @@ describe('postWithoutBankMatch', () => {
   it('records no waiver when the post fails', async () => {
     vi.mocked(postExistingEntryWithAllocation).mockResolvedValueOnce({ error: 'Period closed.' })
     const w = world()
+    w.tables.bank_transactions = []
     expect(await postWithoutBankMatch(w.admin, 'f1', 'Fund I', 'u1', 't1')).toEqual({ error: 'Period closed.' })
     expect(w.tables.journal_entries.find(e => e.id === 'e1')?.bank_match_waived_by).toBeUndefined()
   })

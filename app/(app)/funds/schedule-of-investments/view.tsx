@@ -133,7 +133,7 @@ export function ScheduleOfInvestmentsView() {
           so a schedule that does not tie is normally waiting on bank matches. The warning is
           left for what that cannot explain — see lib/accounting/tie-out-state.ts. */}
       {(() => {
-        const state = tieOutState({ tied, awaitingMatch: awaiting?.length ?? 0 })
+        const state = tieOutState({ tied, awaitingCash: (awaiting ?? []).reduce((s, a) => s + Math.abs(a.cash), 0), costVariance: soi.costVariance })
         if (state === 'booked') return (
           <div className="flex items-start gap-2 rounded-lg border px-3 py-2 text-sm text-muted-foreground">
             <Check className="h-4 w-4 mt-0.5 shrink-0 text-success" />
