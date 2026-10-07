@@ -1,12 +1,12 @@
-// Portfolio → ledger: a transaction recorded in the tracker drafts the journal entry
-// it implies, for review.
+// Portfolio → ledger: a transaction recorded in the tracker derives the journal entry
+// it implies.
 //
-// WHY A DRAFT AND NOT A POST. The tracker is where you record *what happened* — a
-// round, a mark, a rate move, an exit. The ledger records what the fund *carries*. They
-// have to agree, and the per-company tie-out now proves whether they do. But the entry
-// a transaction implies isn't always the entry you want (a cost basis may need
-// splitting, an exit may have escrow, a period may be closed), so nothing posts itself.
-// It lands as a draft in the journal and waits for you.
+// POSTED OR DRAFTED, SPLIT ON CASH. There is one fact, not two systems: the entry is derived
+// from the transaction, so it cannot disagree with it. What it CAN do is collide with the bank
+// import, which books the same wire from the bank feed. So an entry with no cash leg — a mark,
+// a rate move, a write-off — posts on record, and an entry that moves cash waits as a draft
+// until its cash leg is matched to the bank row that is the same payment. See postsOnRecord
+// and plans/spec-books-follow-investments.md.
 //
 // WHAT IT REFUSES TO GUESS. A row with no `portfolio_group` is company-wide pricing —
 // a round the fund didn't participate in still re-prices the position, but in WHICH
@@ -43,8 +43,13 @@ const DIVIDEND_INCOME = '4130'
 const PORTFOLIO_INCOME = '4120'
 
 export interface LedgerDraftResult {
-  /** A draft entry was created and is waiting in the journal. */
+  /** An entry was created — posted, or drafted to wait for its bank match (see `posted`). */
   drafted: boolean
+  /**
+   * The entry posted on record (no cash leg — a mark, a write-off, an in-kind receipt), as
+   * opposed to waiting as a draft for its cash leg to be matched to a bank row.
+   */
+  posted?: boolean
   entryId?: string
   /** What kind of entry, for the message shown back. */
   kind?: 'investment' | 'valuation' | 'fx_revaluation' | 'proceeds' | 'conversion' | 'income'
@@ -68,6 +73,22 @@ const skip = (reason: string): LedgerDraftResult => ({ drafted: false, reason })
 /** Skipped only because this vehicle keeps no books yet. Nothing to fix, something to offer. */
 const skipNotOnboarded = (vehicle: string, reason: string): LedgerDraftResult =>
   ({ drafted: false, reason, notOnboarded: true, vehicle })
+
+/**
+ * Does an entry derived from a tracker row post the moment it is recorded?
+ *
+ * Only when no posting touches cash. That is exactly where double-representation becomes possible:
+ * a purchase credits cash, and the bank import books the same wire from the bank feed, so the
+ * derived entry waits as a draft until its cash leg is matched to that bank row. A mark, a
+ * write-off, an in-kind reward or a pure conversion has no counterparty and no cash — nothing can
+ * book it twice, and the closed-period trigger already refuses the one case where posting is wrong.
+ *
+ * Decided from the postings, not `transaction_type`: a write-off is a `proceeds` row and a pure
+ * conversion is an `investment` row, and neither can ever be matched to a bank row.
+ */
+export function postsOnRecord(postings: Pick<Posting, 'accountId' | 'amount'>[], cashId: string): boolean {
+  return !postings.some(p => p.accountId === cashId && roundCents(p.amount) !== 0)
+}
 
 /** The `source_ref` that ties a journal entry back to the tracker row that drafted it. */
 export const txnRef = (txnId: string) => `txn:${txnId}`
@@ -122,6 +143,13 @@ export async function retractEntriesForTransaction(
         await admin.from('journal_entries' as any)
           .update({ status: 'void', posted_at: null })
           .eq('id', e.id).eq('fund_id', fundId)
+        // A posted purchase, exit or income was matched to the bank row that is the same
+        // payment. Voiding it would leave that row "reconciled" against a void entry — the wire
+        // vanishes from the books while the bank page says it is done. Release it, so the
+        // re-derived draft can be matched to it again.
+        await admin.from('bank_transactions' as any)
+          .update({ journal_entry_id: null, status: 'unmatched' })
+          .eq('fund_id', fundId).eq('journal_entry_id', e.id)
       }
       retracted++
     }
@@ -579,12 +607,14 @@ export async function draftEntryForTransaction(
     // same mechanism the close uses to find and void its own allocation entries.
     if (txn.id) entry.sourceRef = txnRef(txn.id)
 
-    // Draft, never post. persistEntry still refuses a closed period — which is the right
-    // answer, and worth surfacing rather than swallowing.
-    const result = await persistEntry(admin, fundId, group, userId, entry, 'draft')
+    // Post when nothing touches cash; otherwise draft and wait for the bank match (see
+    // postsOnRecord). persistEntry still refuses a closed period — which is the right answer,
+    // and worth surfacing rather than swallowing.
+    const posted = postsOnRecord(entry.postings, cashId)
+    const result = await persistEntry(admin, fundId, group, userId, entry, posted ? 'posted' : 'draft')
     if ('error' in result) return skip(result.error)
 
-    return { drafted: true, entryId: result.entryId, kind, amount, vehicle: group }
+    return { drafted: true, posted, entryId: result.entryId, kind, amount, vehicle: group }
   } catch (e) {
     // The portfolio write already succeeded. A ledger failure must not undo it.
     return skip(e instanceof Error ? e.message : 'Could not draft a journal entry.')
