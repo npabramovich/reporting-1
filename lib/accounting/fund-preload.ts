@@ -1,10 +1,10 @@
-import type { ReviewedPeriod } from './capital-evidence'
+import type { OpeningLink, ReviewedPeriod } from './capital-evidence'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { currentOwnership, loadLedgerRowsBatch, type InvestmentRow, type Ownership, type LedgerRows } from './load'
 import { loadPositionsBatch, type LpPosition } from './lp-positions'
 import { loadCommitmentEventsBatch, type CommitmentEvent } from './terms'
 import type { VehicleIdMap } from './vehicle-id'
-import type { CapitalSource, VehicleCapitalPreload } from './capital-source'
+import { loadOpeningLinksBatch, type CapitalSource, type VehicleCapitalPreload } from './capital-source'
 
 /**
  * One fund-wide read of the lookups the report paths otherwise re-run once PER VEHICLE.
@@ -34,6 +34,8 @@ export interface FundPreload {
   ledgerByVehicleId: Map<string, LedgerRows>
   /** vehicle_id → its dated positions (batched). */
   positionsByVehicleId: Map<string, LpPosition[]>
+  /** Which statement observation each vehicle's opening entries represent. */
+  openingLinksByVehicleId: Map<string, OpeningLink[]>
   /** vehicle_id → its commitment events, oldest first (batched). */
   commitmentEventsByVehicleId: Map<string, CommitmentEvent[]>
 }
@@ -93,13 +95,14 @@ export async function loadFundPreload(admin: SupabaseClient, fundId: string, asO
   // known. Ledger vehicles have journal rows and no positions; tracking vehicles the reverse —
   // an IN(...) query simply returns rows only for those that have them, so we load both for all.
   const vehicleIds = Array.from(new Set(idMap.values()))
-  const [ledgerByVehicleId, positionsByVehicleId, commitmentEventsByVehicleId] = await Promise.all([
+  const [ledgerByVehicleId, positionsByVehicleId, commitmentEventsByVehicleId, openingLinksByVehicleId] = await Promise.all([
     loadLedgerRowsBatch(admin, fundId, vehicleIds, asOf),
     loadPositionsBatch(admin, fundId, vehicleIds, asOf),
     loadCommitmentEventsBatch(admin, fundId, vehicleIds),
+    loadOpeningLinksBatch(admin, fundId, vehicleIds),
   ])
 
-  return { idMap, entityNames, entityClasses, ownershipByGroup, closedThroughByVehicleId, reviewedPeriodsByVehicleId, vintageByName, ledgerByVehicleId, positionsByVehicleId, commitmentEventsByVehicleId }
+  return { idMap, entityNames, entityClasses, ownershipByGroup, closedThroughByVehicleId, reviewedPeriodsByVehicleId, vintageByName, ledgerByVehicleId, positionsByVehicleId, commitmentEventsByVehicleId, openingLinksByVehicleId }
 }
 
 /** A group's preloaded commitment events (empty if none / not in the id map). */
@@ -117,5 +120,6 @@ export function vehicleCapitalPreload(preload: FundPreload, group: string): Vehi
     closedThrough: vehicleId ? preload.closedThroughByVehicleId.get(vehicleId) ?? null : null,
     ledgerRows: vehicleId ? preload.ledgerByVehicleId.get(vehicleId) : undefined,
     positions: vehicleId ? preload.positionsByVehicleId.get(vehicleId) : undefined,
+    openingLinks: vehicleId ? preload.openingLinksByVehicleId?.get(vehicleId) ?? [] : [],
   }
 }

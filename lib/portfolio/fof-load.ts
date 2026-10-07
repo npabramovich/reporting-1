@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
 import { computeFundPositions, type FundPosition } from './fof-metrics'
 import type { ManagerStatementFigures } from './fof-valuation'
 
@@ -35,23 +36,81 @@ export interface FofRawData {
  * (the statement package with comparison periods) pays for one round trip rather than one
  * per window.
  */
-export async function loadFofRaw(admin: SupabaseClient, fundId: string): Promise<FofRawData | null> {
+export async function loadFofRaw(
+  admin: SupabaseClient,
+  fundId: string,
+  /**
+   * WHICH VEHICLE HOLDS THESE FUNDS, by name — the same thing every other accounting loader
+   * takes, resolved here so no caller has to. Omit it only for the firm-wide holdings register,
+   * which is deliberately cross-vehicle.
+   *
+   * `companies` carries no vehicle for a fund holding and `fund_holding_terms` is unique per
+   * company, so the vehicle lives on the ACTIVITY: `fund_capital_events.vehicle_id`, which
+   * `confirmFundCapitalEvent` refuses to post without. That makes it the same rule the direct
+   * schedule of investments already uses — a holding belongs to this vehicle if this vehicle's
+   * activity is against it (`buildSoiPositions` keys off
+   * `investment_transactions.portfolio_group`, which confirmation sets from this very column).
+   *
+   * Scoping by fund alone is what made these figures firm-wide: one vehicle's report listed every
+   * other vehicle's holdings, and the LP statement PDF carried them too.
+   */
+  group?: string,
+): Promise<FofRawData | null> {
   const { data: holdings } = await admin
     .from('companies').select('id, name')
     .eq('fund_id', fundId).eq('holding_type', 'fund').order('name')
   const holdingRows = ((holdings as any[]) ?? [])
   if (holdingRows.length === 0) return null
 
-  const [{ data: terms }, { data: events }, { data: navs }] = await Promise.all([
+  const vehicleId = group === undefined ? undefined : await vehicleIdByName(admin, fundId, group)
+  // A name that resolves to nothing is not "every vehicle". Refuse rather than widening.
+  if (group !== undefined && !vehicleId) return null
+
+  const scopedEvents = (admin as any).from('fund_capital_events').select('*').eq('fund_id', fundId)
+  const scopedNavs = (admin as any).from('fund_nav_statements').select('*').eq('fund_id', fundId)
+  const [{ data: terms }, { data: events }, { data: navs }, { data: ledgerAccounts }] = await Promise.all([
     (admin as any).from('fund_holding_terms').select('*').eq('fund_id', fundId),
-    (admin as any).from('fund_capital_events').select('*').eq('fund_id', fundId).order('event_date'),
-    (admin as any).from('fund_nav_statements').select('*').eq('fund_id', fundId).order('as_of_date'),
+    (vehicleId ? scopedEvents.eq('vehicle_id', vehicleId) : scopedEvents).order('event_date'),
+    (vehicleId ? scopedNavs.eq('vehicle_id', vehicleId) : scopedNavs).order('as_of_date'),
+    // THE LEDGER IS THE THIRD WITNESS, and usually the first one to exist. A holding imported
+    // from a general ledger has its own 1100-<id>/1200-<id> accounts carrying cost and marks
+    // before anybody records a single notice — so the books know which entity holds it even
+    // though the register is still empty. Scoping on the register alone made a half-entered
+    // fund-of-funds invisible on the very page you use to finish entering it.
+    // Indexed by chart_of_accounts (fund_id, vehicle_id, company_id) where company_id is not null.
+    vehicleId
+      ? (admin as any).from('chart_of_accounts').select('company_id')
+          .eq('fund_id', fundId).eq('vehicle_id', vehicleId).not('company_id', 'is', null)
+      : Promise.resolve({ data: [] as any[] }),
   ])
 
+  const eventRows = ((events as any[]) ?? [])
+  // A holding with no activity for this vehicle is not this vehicle's holding. Terms alone are a
+  // commitment somebody recorded against the firm's register, not a position on these books.
+  const termRows = ((terms as any[]) ?? [])
+  // A holding is this vehicle's if this vehicle's ACTIVITY is against it, or if its terms say so —
+  // a fund committed to but not yet called has no events at all, and leaving it out would hide a
+  // real unfunded obligation from the schedule of investments.
+  const held = vehicleId
+    ? new Set([
+        ...eventRows.map(e => e.company_id as string),
+        ...termRows.filter(t => t.vehicle_id === vehicleId).map(t => t.company_id as string),
+        ...((ledgerAccounts as any[]) ?? []).map(a => a.company_id as string),
+      ])
+    : null
+  const scopedHoldings = held ? holdingRows.filter(h => held.has(h.id as string)) : holdingRows
+  if (scopedHoldings.length === 0) return null
+
+  // One terms row per holding, for THIS vehicle. An unassigned row (vehicle_id null) is the
+  // legacy shape and still applies; a row belonging to another entity does not.
+  const scopedTerms = vehicleId
+    ? termRows.filter(t => t.vehicle_id === vehicleId || t.vehicle_id == null)
+    : termRows
+
   return {
-    holdings: holdingRows.map(h => ({ id: h.id, name: h.name })),
-    terms: ((terms as any[]) ?? []),
-    events: ((events as any[]) ?? []),
+    holdings: scopedHoldings.map(h => ({ id: h.id, name: h.name })),
+    terms: scopedTerms,
+    events: eventRows,
     navs: ((navs as any[]) ?? []),
   }
 }
@@ -61,7 +120,13 @@ export function computeFofFromRaw(raw: FofRawData, asOf: string): {
   positions: FundPosition[]
   managerFigures: ManagerStatementFigures[]
 } {
-  const termByCompany = new Map(raw.terms.map(t => [t.company_id, t]))
+  // Prefer a row that names an entity over an unassigned one, so a holding mid-migration reads
+  // its real commitment rather than whichever row the array happened to end on.
+  const termByCompany = new Map<string, any>()
+  for (const t of raw.terms) {
+    const current = termByCompany.get(t.company_id)
+    if (!current || (current.vehicle_id == null && t.vehicle_id != null)) termByCompany.set(t.company_id, t)
+  }
 
   const positions = computeFundPositions({
     asOf,
@@ -118,8 +183,10 @@ export async function loadFofData(
   admin: SupabaseClient,
   fundId: string,
   asOf: string,
+  /** The vehicle's name. See loadFofRaw — omit only for the firm-wide register. */
+  group?: string,
 ): Promise<FofData> {
-  const raw = await loadFofRaw(admin, fundId)
+  const raw = await loadFofRaw(admin, fundId, group)
   if (!raw) return { positions: [], managerFigures: [], events: [], navStatements: [] }
   const { positions, managerFigures } = computeFofFromRaw(raw, asOf)
   return { positions, managerFigures, events: raw.events, navStatements: raw.navs }

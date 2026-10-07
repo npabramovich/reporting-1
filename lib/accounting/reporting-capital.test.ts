@@ -16,6 +16,7 @@ function fixture(source: 'events' | 'ledger' = 'events'): FundPreload {
       { lpEntityId: 'gp', commitment: 5, paidIn: 0, distributions: 0 },
     ]]]),
     closedThroughByVehicleId: new Map(), vintageByName: new Map([[group, 2025]]),
+    openingLinksByVehicleId: new Map([['v', []]]),
     positionsByVehicleId: new Map([['v', source === 'ledger' ? [] : [
       { lpEntityId: 'lp', asOfDate: '2025-03-31', commitment: 100, calledCapital: 40, distributions: 5, nav: 50, irr: 0.12 },
       { lpEntityId: 'gp', asOfDate: '2025-03-31', commitment: 20, calledCapital: 10, distributions: 2, nav: 12 },

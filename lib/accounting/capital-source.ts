@@ -7,7 +7,7 @@ import { RECEIVABLE_CODE } from './chart'
 import { roundCents } from './ledger'
 import { loadPositions, type LpPosition } from './lp-positions'
 
-import { resolveCapitalEvidence, type CapitalEvidence, type ReviewedPeriod } from './capital-evidence'
+import { resolveCapitalEvidence, type CapitalEvidence, type OpeningLink, type ReviewedPeriod } from './capital-evidence'
 
 /** Data provenance, never a feature or write gate. */
 export type CapitalSource = 'ledger' | 'events' | 'mixed'
@@ -60,6 +60,63 @@ export interface VehicleCapitalPreload {
   positions?: LpPosition[]
   closedThrough?: string | null
   reviewedPeriods?: ReviewedPeriod[]
+  openingLinks?: OpeningLink[]
+}
+
+/**
+ * Which statement observations this vehicle's opening entries represent.
+ *
+ * Service-role only (`capital_opening_links`), like the settlement reviews: the rows name partners
+ * and their capital, and the only reader is this resolver running behind a gated route.
+ */
+export async function loadOpeningLinks(
+  admin: SupabaseClient,
+  fundId: string,
+  vehicleId: string | null,
+): Promise<OpeningLink[]> {
+  if (!vehicleId) return []
+  const { data, error } = await (admin as any)
+    .from('capital_opening_links')
+    .select('lp_entity_id, position_id, journal_entry_id, observed_on, observed_nav, booked_amount')
+    .eq('fund_id', fundId).eq('vehicle_id', vehicleId)
+  if (error) throw error
+  return ((data as any[]) ?? []).map(row => ({
+    lpEntityId: row.lp_entity_id as string,
+    positionId: row.position_id as string,
+    entryId: row.journal_entry_id as string,
+    observedOn: row.observed_on as string,
+    observedNav: row.observed_nav == null ? null : Number(row.observed_nav),
+    bookedAmount: Number(row.booked_amount),
+  }))
+}
+
+/** Every vehicle's opening links in one query, for the batched fund preload. */
+export async function loadOpeningLinksBatch(
+  admin: SupabaseClient,
+  fundId: string,
+  vehicleIds: string[],
+): Promise<Map<string, OpeningLink[]>> {
+  const out = new Map<string, OpeningLink[]>()
+  for (const id of vehicleIds) out.set(id, [])
+  if (vehicleIds.length === 0) return out
+  const { data, error } = await (admin as any)
+    .from('capital_opening_links')
+    .select('vehicle_id, lp_entity_id, position_id, journal_entry_id, observed_on, observed_nav, booked_amount')
+    .eq('fund_id', fundId).in('vehicle_id', vehicleIds)
+  if (error) throw error
+  for (const row of ((data as any[]) ?? [])) {
+    const list = out.get(row.vehicle_id as string) ?? []
+    list.push({
+      lpEntityId: row.lp_entity_id as string,
+      positionId: row.position_id as string,
+      entryId: row.journal_entry_id as string,
+      observedOn: row.observed_on as string,
+      observedNav: row.observed_nav == null ? null : Number(row.observed_nav),
+      bookedAmount: Number(row.booked_amount),
+    })
+    out.set(row.vehicle_id as string, list)
+  }
+  return out
 }
 
 export async function loadCapitalPostings(
@@ -74,14 +131,15 @@ export async function loadCapitalPostings(
   const rows = pre?.ledgerRows && asOf
     ? { ...pre.ledgerRows, entryRows: pre.ledgerRows.entryRows.filter(e => e.entry_date <= asOf) }
     : pre?.ledgerRows
-  const [ledger, positions, reviewedPeriods] = await Promise.all([
+  const [ledger, positions, reviewedPeriods, openingLinks] = await Promise.all([
     loadPostedLedger(admin, fundId, group, asOf, idMap, rows),
     pre?.positions ? Promise.resolve(pre.positions) : loadPositions(admin, fundId, group, asOf, idMap),
     pre?.reviewedPeriods !== undefined ? Promise.resolve(pre.reviewedPeriods) : pre?.closedThrough !== undefined ? Promise.resolve(undefined) : admin.from('fiscal_periods' as any)
       .select('period_start, period_end').eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'closed')
       .then(({ data, error }) => { if (error) throw error; return ((data ?? []) as any[]).map(row => ({ start: row.period_start, end: row.period_end })) }),
+    pre?.openingLinks !== undefined ? Promise.resolve(pre.openingLinks) : loadOpeningLinks(admin, fundId, vehicleId),
   ])
-  const resolved = resolveCapitalEvidence(ledger.capitalPostings, positions, asOf, pre?.closedThrough, reviewedPeriods)
+  const resolved = resolveCapitalEvidence(ledger.capitalPostings, positions, asOf, pre?.closedThrough, reviewedPeriods, openingLinks)
   const bases = new Set(Array.from(resolved.evidenceByLp.values()).map(e => e.basis))
   const source: CapitalSource = bases.size > 1 ? 'mixed' : bases.has('reported') ? 'events' : 'ledger'
   return { source, ...resolved, receivableByLp: receivablesFromLedger(ledger.accounts, ledger.postings) }

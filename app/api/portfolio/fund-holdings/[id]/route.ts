@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { resolveHoldingVehicle } from '@/lib/portfolio/fof-register'
 // portfolio domain, investments feature (lib/access/route-domains.ts).
 import { assertReadAccess, assertWriteAccess } from '@/lib/api-helpers'
 import { ACTUAL_BOOK } from '@/lib/accounting/books'
@@ -27,11 +28,26 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   ])
 
   if (!holding.data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // WHICH ENTITY HOLDS THIS FUND, so the panel can ask only when it does not already know. The
+  // vehicle lives on the register rows (nothing on `companies` or `fund_holding_terms` carries
+  // it), so it is derived from them rather than stored twice. More than one means the register
+  // disagrees with itself and the panel asks.
+  const vehicleIds = Array.from(new Set([
+    ...((events.data as any[]) ?? []), ...((navs.data as any[]) ?? []),
+  ].map(r => r.vehicle_id).filter(Boolean))) as string[]
+  const { data: vehicleRows } = vehicleIds.length > 0
+    ? await admin.from('fund_vehicles' as any).select('id, name').eq('fund_id', gate.fundId).in('id', vehicleIds)
+    : { data: [] as any[] }
+
   return NextResponse.json({
     holding: holding.data,
     terms: terms.data ?? null,
     events: events.data ?? [],
     navStatements: navs.data ?? [],
+    /** Null until the first notice names one; a second entry means the register is inconsistent. */
+    vehicleId: vehicleIds.length === 1 ? vehicleIds[0] : null,
+    vehicles: ((vehicleRows as any[]) ?? []).map(v => ({ id: v.id as string, name: v.name as string })),
   })
 }
 
@@ -68,12 +84,19 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     return NextResponse.json({ error: 'No recognized fields to update' }, { status: 400 })
   }
 
+  // The entity whose commitment this is. Inferred from the register when the caller does not say,
+  // and allowed to stay null while the holding has no activity to infer from — the constraint is
+  // NULLS NOT DISTINCT, so an unassigned terms row keeps the old one-per-fund rule.
+  const held = await resolveHoldingVehicle(admin, gate.fundId, params.id, body?.vehicleId)
+  const vehicleId = 'vehicleId' in held ? held.vehicleId : null
+
   const { error } = await (admin as any).from('fund_holding_terms').upsert({
     fund_id: gate.fundId,
     company_id: params.id,
+    vehicle_id: vehicleId,
     ...patch,
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'company_id' })
+  }, { onConflict: 'company_id,vehicle_id' })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   return NextResponse.json({ ok: true })

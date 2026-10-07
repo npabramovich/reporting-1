@@ -133,7 +133,6 @@ const COLUMNS: Record<string, Col[]> = {
   'capital-accounts': [CLOSED, LAST_ENTRY, POSTED],
   'schedule-of-investments': [AT_COST, AT_VALUE, LAST_ENTRY],
   construction: [AT_VALUE, AT_COST, CLOSED],
-  'fof-report': [AT_COST, AT_VALUE, CLOSED],
   'fof-quarter': [CLOSED, AT_VALUE, LAST_ENTRY],
   tax: [CLOSED, LAST_ENTRY, TIES],
 }
@@ -163,7 +162,6 @@ function summaryFor(section: string | null, rows: Row[]): string | null {
         ?? 'Every trial balance ties.'
     case 'schedule-of-investments':
     case 'construction':
-    case 'fof-report':
     case 'fof-quarter':
       return n(live.filter(r => r.investmentsAtValue !== 0).length, 'holds investments.', 'hold investments.')
         ?? 'No entity carries an investment balance.'

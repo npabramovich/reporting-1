@@ -77,6 +77,18 @@ export async function POST(req: NextRequest) {
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
 
+  // WHICH ENTITY IS COMMITTING. Optional, because a fund can be recorded before anyone decides
+  // which entity will hold it, but validated when given: the commitment and everything derived
+  // from it (unfunded, % called) belongs to one entity, not to the firm.
+  let vehicleId: string | null = null
+  if (typeof body?.vehicleId === 'string' && body.vehicleId) {
+    const { data: vehicle } = await admin
+      .from('fund_vehicles' as any).select('id')
+      .eq('fund_id', gate.fundId).eq('id', body.vehicleId).maybeSingle()
+    if (!vehicle) return NextResponse.json({ error: 'That entity is not in this fund.' }, { status: 400 })
+    vehicleId = body.vehicleId
+  }
+
   const { data: holding, error } = await admin
     .from('companies')
     .insert({ fund_id: gate.fundId, name, holding_type: 'fund', status: 'active' })
@@ -88,6 +100,7 @@ export async function POST(req: NextRequest) {
   const { error: termErr } = await (admin as any).from('fund_holding_terms').insert({
     fund_id: gate.fundId,
     company_id: holding.id,
+    vehicle_id: vehicleId,
     manager_name: body?.managerName ?? null,
     vintage_year: body?.vintageYear ?? null,
     fund_size: body?.fundSize ?? null,

@@ -24,6 +24,7 @@ export const MIGRATIONS = [
   // Applied after the three above, which are already in the owner's database and must not be
   // edited in place (CLAUDE.md). Anything found wrong in them lands here instead.
   '20261006190000_settlement_review_stale_allocations.sql',
+  '20261006200000_statement_opening_entry_links.sql',
 ]
 
 export const RETIREMENT_MIGRATION = '20261006174711_retire_accounting_mode_columns.sql'
@@ -213,6 +214,20 @@ create table public.lp_investments (
   outstanding_balance numeric, dpi numeric, rvpi numeric, tvpi numeric, irr numeric
 );
 
+-- 20260716000000_lp_positions.sql: the dated reported observations an opening entry can represent.
+create table public.lp_positions (
+  id uuid primary key default gen_random_uuid(),
+  fund_id uuid not null references funds(id) on delete cascade,
+  vehicle_id uuid not null references fund_vehicles(id) on delete cascade,
+  lp_entity_id uuid not null references lp_entities(id) on delete cascade,
+  as_of_date date not null,
+  commitment numeric, called_capital numeric, distributions numeric, nav numeric,
+  imported_at timestamptz not null default now(),
+  imported_by uuid,
+  source text not null default 'manual' check (source in ('paste', 'manual', 'migrated')),
+  unique (fund_id, vehicle_id, lp_entity_id, as_of_date)
+);
+
 create table public.qb_import_runs (
   id uuid primary key default gen_random_uuid(),
   fund_id uuid references funds(id) on delete cascade
@@ -334,6 +349,51 @@ export async function draftCall(db, entryId, { callDate = '2026-03-31' } = {}) {
     `insert into capital_calls(fund_id, vehicle_id, call_date, scope, status, journal_entry_id, created_by)
      values ($1,$2,$3,'fund_wide','draft',$4,$5) returning id`,
     [i.fund, i.vehicle, callDate, entryId, i.user])
+  return rows[0].id
+}
+
+/**
+ * A draft opening entry as the opening-balances route prepares it: each partner's opening balance
+ * credited to their own capital account, the total debited to cash.
+ */
+export async function prepareOpeningEntry(db, perLp, { entryDate = '2026-03-31' } = {}) {
+  const i = IDS
+  const { rows } = await db.query(
+    `insert into journal_entries(fund_id, portfolio_group, vehicle_id, entry_date, memo, source_type, source_ref, status, created_by)
+     values ($1,$2,$3,$4,'Opening balances','opening_balance','partner-opening','draft',$5) returning id`,
+    [i.fund, GROUP, i.vehicle, entryDate, i.user])
+  const id = rows[0].id
+  const { rows: [cash] } = await db.query(
+    `insert into chart_of_accounts(fund_id, portfolio_group, vehicle_id, code, name, type, subtype)
+     values ($1,$2,$3,'1000','Cash','asset','cash')
+     on conflict (fund_id, portfolio_group, code) do update set name = excluded.name returning id`,
+    [i.fund, GROUP, i.vehicle])
+  // EVERY POSTING IN ONE STATEMENT. `journal_postings_must_balance` is a deferred constraint
+  // trigger, so it fires at commit — and each statement here autocommits. Inserting the partner
+  // credits and the cash debit separately would leave the entry unbalanced at a commit boundary
+  // and the trigger would (correctly) refuse it.
+  const entries = Object.entries(perLp)
+  const total = entries.reduce((sum, [, amount]) => sum + Number(amount), 0)
+  const rowsSql = entries.map((_, n) => `($1,$2,$3,$4,$${n * 3 + 5},$${n * 3 + 6},$${n * 3 + 7})`)
+  const params = entries.flatMap(([lpEntityId, amount]) => [capitalAccountFor(lpEntityId), -Number(amount), lpEntityId])
+  await db.query(
+    `insert into journal_postings(fund_id, portfolio_group, vehicle_id, journal_entry_id, account_id, amount, lp_entity_id)
+     values ${rowsSql.join(', ')}, ($1,$2,$3,$4,$${entries.length * 3 + 5},$${entries.length * 3 + 6},null)`,
+    [i.fund, GROUP, i.vehicle, id, ...params, cash.id, total])
+  return id
+}
+
+/** A dated reported observation for one partner. */
+export async function reportedPosition(db, lpEntityId, asOfDate, { nav = null, calledCapital = null, distributions = null, commitment = null } = {}) {
+  const i = IDS
+  const { rows } = await db.query(
+    `insert into lp_positions(fund_id, vehicle_id, lp_entity_id, as_of_date, commitment, called_capital, distributions, nav)
+     values ($1,$2,$3,$4,$5,$6,$7,$8)
+     on conflict (fund_id, vehicle_id, lp_entity_id, as_of_date)
+       do update set nav = excluded.nav, called_capital = excluded.called_capital,
+                     distributions = excluded.distributions, commitment = excluded.commitment
+     returning id`,
+    [i.fund, i.vehicle, lpEntityId, asOfDate, commitment, calledCapital, distributions, nav])
   return rows[0].id
 }
 

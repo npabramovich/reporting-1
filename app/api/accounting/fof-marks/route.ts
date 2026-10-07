@@ -19,7 +19,7 @@ import { periodEndMarks, valuationBasisNote } from '@/lib/portfolio/fof-valuatio
  */
 async function marksFor(admin: any, fundId: string, group: string, asOf: string) {
   const [fof, ledger] = await Promise.all([
-    loadFofData(admin, fundId, asOf),
+    loadFofData(admin, fundId, asOf, group),
     loadPostedLedger(admin, fundId, group, asOf),
   ])
   const carrying = ledgerCarryingByHolding(ledger.accounts, ledger.postings)

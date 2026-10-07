@@ -121,7 +121,7 @@ export async function vehicleStatus(
   const nav = totalNav(capitalAccounts)
 
   const positions = buildSoiPositions((txns as any[]) ?? [], ((companies as any[]) ?? []) as SoiCompany[], group)
-  const soi = scheduleOfInvestments(accounts, postings, nav, positions)
+  const soi = scheduleOfInvestments(accounts, postings, nav, positions, ((companies as any[]) ?? []) as SoiCompany[])
 
   const lastClosed = ((periodRows as any[]) ?? [])[0] ?? null
   const nextStart = await nextCloseStart(admin, fundId, group)

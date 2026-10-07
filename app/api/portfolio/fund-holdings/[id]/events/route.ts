@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 // portfolio domain, investments feature (lib/access/route-domains.ts).
 import { assertReadAccess, assertWriteAccess } from '@/lib/api-helpers'
-import { confirmFundCapitalEvent } from '@/lib/portfolio/fof-register'
+import { confirmFundCapitalEvent, resolveHoldingVehicle } from '@/lib/portfolio/fof-register'
 
 // The register for one fund holding: calls and distributions RECEIVED from the manager.
 export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -44,6 +44,19 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'eventDate is required' }, { status: 400 })
   }
 
+  // WHICH OF OUR ENTITIES RECEIVED THIS NOTICE. Required, and validated against this fund.
+  //
+  // This used to be `body?.vehicleId ?? null`, and the form never sent one — so every notice
+  // recorded here landed with a null vehicle. Two things then went wrong: `confirmFundCapitalEvent`
+  // refuses an event with no vehicle ("no books to post to"), so the notice could never be
+  // confirmed and never reached the ledger; and `fund_capital_events.vehicle_id` is the only place
+  // a fund holding's vehicle is recorded, so the schedule of investments had nothing to scope by
+  // and showed every entity's holdings on every entity's page.
+  //
+  // After the first notice names the entity, the rest infer it — see resolveHoldingVehicle.
+  const resolved = await resolveHoldingVehicle(admin, gate.fundId, params.id, body?.vehicleId)
+  if ('error' in resolved) return NextResponse.json({ error: resolved.error }, { status: 400 })
+
   // Default the split to the whole amount so a notice recorded without a breakdown still
   // confirms. transactionForEvent refuses a split that does not reconcile, and defaulting to
   // zero would make every quick entry fail at confirm time for no good reason.
@@ -52,7 +65,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
   const { data, error } = await (admin as any).from('fund_capital_events').insert({
     fund_id: gate.fundId,
-    vehicle_id: body?.vehicleId ?? null,
+    vehicle_id: resolved.vehicleId,
     company_id: params.id,
     kind,
     event_date: body.eventDate,

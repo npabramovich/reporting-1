@@ -18,8 +18,10 @@ export async function GET(req: NextRequest) {
   const gate = await assertReadAccess(admin, user.id)
   if (gate instanceof NextResponse) return gate
 
+  const group = await resolveGroupOr400(admin, gate, req.nextUrl.searchParams.get('group'))
+  if (group instanceof NextResponse) return group
   const asOf = req.nextUrl.searchParams.get('asOf') ?? new Date().toISOString().slice(0, 10)
-  const fof = await loadFofData(admin, gate.fundId, asOf)
+  const fof = await loadFofData(admin, gate.fundId, asOf, group)
 
   return NextResponse.json({
     asOf,
@@ -140,7 +142,7 @@ export async function POST(req: NextRequest) {
   }
   if (navRows.length > 0) {
     const { error } = await (admin as any)
-      .from('fund_nav_statements').upsert(navRows, { onConflict: 'company_id,as_of_date' })
+      .from('fund_nav_statements').upsert(navRows, { onConflict: 'company_id,vehicle_id,as_of_date' })
     if (error) writeErrors.push(error.message)
   }
 

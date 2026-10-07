@@ -40,6 +40,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Provide one finite balance per partner' }, { status: 400 })
   }
   const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
+  // Refuse before anything is written. A null vehicle id is not a wildcard: the overlap check
+  // below would match no rows and pass vacuously, and `publish_opening_balances` scopes on it too.
+  if (!vehicleId) return NextResponse.json({ error: `"${group}" is not in this fund's vehicle registry` }, { status: 400 })
   const { data: existing, error: overlapError } = await admin.from('journal_postings' as any)
     .select('id').eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId).eq('book', 'actual')
     .in('lp_entity_id', balances.map(b => b.lpEntityId)).limit(1)
@@ -65,9 +68,28 @@ export async function POST(req: NextRequest) {
   }
   postings.push({ accountId: offsetId, amount: total, currency: 'USD', lpEntityId: null })
 
+  // DRAFT, then publish. `publish_opening_balances` links each partner's opening to the statement
+  // observation it represents and posts the entry in one transaction, so a refused link cannot
+  // leave a posted opening behind — the same shape as issuing a call or declaring a distribution.
   const entry: JournalEntry = { fundId: gate.fundId, entryDate, memo: 'Opening balances', sourceType: 'opening_balance', sourceRef: 'partner-opening', postings }
-  const result = await persistEntry(admin, gate.fundId, group, user.id, entry, 'posted')
+  const result = await persistEntry(admin, gate.fundId, group, user.id, entry, 'draft')
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 })
 
-  return NextResponse.json({ ok: true, entryId: result.entryId, lpCount: balances.length, total })
+  const { data: published, error: publishError } = await admin.rpc('publish_opening_balances' as any, {
+    p_fund_id: gate.fundId, p_vehicle_id: vehicleId, p_entry_id: result.entryId, p_user_id: user.id,
+  })
+  if (publishError) {
+    const { error: cleanupError } = await admin.rpc('discard_unpublished_opening_draft' as any, {
+      p_fund_id: gate.fundId, p_vehicle_id: vehicleId, p_entry_id: result.entryId,
+    })
+    return NextResponse.json({
+      error: `Opening balances were not posted: ${publishError.message}${cleanupError ? `; draft cleanup failed: ${cleanupError.message}` : ''}`,
+    }, { status: 400 })
+  }
+
+  // `linked` is how many partners' openings are now recorded as representing their statement for
+  // this date. Fewer than `lpCount` means some partners have no statement on file at that date —
+  // legitimate, and surfaced rather than inferred.
+  const linked = Number((published as any)?.linked ?? 0)
+  return NextResponse.json({ ok: true, entryId: result.entryId, lpCount: balances.length, total, linkedObservations: linked })
 }

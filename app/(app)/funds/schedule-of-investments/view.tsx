@@ -28,6 +28,13 @@ interface SoiRow {
   ledgerCost?: number
   ledgerFairValue?: number
   tiesOut?: boolean
+  // Underlying funds only (holdingType === 'fund').
+  commitment?: number
+  called?: number
+  unfunded?: number
+  pctCalled?: number | null
+  navAsOf?: string | null
+  stalenessDays?: number | null
 }
 interface SoiGroup { name: string; cost: number; fairValue: number; pctOfNetAssets: number }
 interface Soi {
@@ -130,8 +137,73 @@ export function ScheduleOfInvestmentsView() {
         )}
       </div>
 
+      {/* UNDERLYING FUNDS GET THEIR OWN COLUMNS. A commitment with capital still callable is a
+          different liquidity fact from a fully-drawn position, and cost cannot express it — so the
+          schedule states commitment, called and unfunded rather than borrowing the share-count
+          columns a fund position has nothing to put in. These figures come from the same
+          fund-of-funds register the quarterly marks and the pre-close check read, so the schedule
+          and the close cannot disagree about what is unfunded. */}
+      {fundRows.length > 0 && (
+        <div className="border rounded-lg overflow-x-auto">
+          <table className="w-full text-sm whitespace-nowrap">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="text-left px-3 py-2 font-medium">Underlying funds</th>
+                <th className="text-right px-3 py-2 font-medium">Commitment</th>
+                <th className="text-right px-3 py-2 font-medium">Called</th>
+                <th className="text-right px-3 py-2 font-medium">Unfunded</th>
+                <th className="text-right px-3 py-2 font-medium">Cost</th>
+                <th className="text-right px-3 py-2 font-medium">Fair value</th>
+                <th className="text-right px-3 py-2 font-medium">MOIC</th>
+                <th className="text-left px-3 py-2 font-medium">NAV as of</th>
+                <th className="text-right px-3 py-2 font-medium">% of net assets</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fundRows.map((r, i) => (
+                <tr key={r.name + i} className="border-b last:border-b-0 hover:bg-muted/20">
+                  <td className="px-3 py-2">
+                    {r.name}
+                    {r.tiesOut === false && (
+                      <span className="ml-1.5 text-[10px] uppercase tracking-wider px-1 py-0.5 rounded bg-warning/15 text-warning">off ledger</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.commitment == null ? '—' : fmt(r.commitment)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {r.called == null ? '—' : fmt(r.called)}
+                    {r.pctCalled != null && <span className="ml-1 text-xs text-muted-foreground">{pct(r.pctCalled)}</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.unfunded == null ? '—' : fmt(r.unfunded)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmt(r.cost)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmt(r.fairValue)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">{r.moic == null ? '—' : `${r.moic.toFixed(2)}×`}</td>
+                  {/* A stale manager NAV is normal (45-90 days); say how stale rather than hiding it. */}
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    {r.navAsOf ?? 'no statement'}
+                    {r.stalenessDays != null && r.stalenessDays > 120 && (
+                      <span className="ml-1 text-warning">{r.stalenessDays}d</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{pct(r.pctOfNetAssets)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t bg-muted/30 font-semibold">
+                <td className="px-3 py-2">Total</td>
+                <td className="px-3 py-2 text-right tabular-nums">{fmt(fundRows.reduce((a, r) => a + (r.commitment ?? 0), 0))}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{fmt(fundRows.reduce((a, r) => a + (r.called ?? 0), 0))}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{fmt(fundRows.reduce((a, r) => a + (r.unfunded ?? 0), 0))}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{fmt(fundRows.reduce((a, r) => a + r.cost, 0))}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{fmt(fundRows.reduce((a, r) => a + r.fairValue, 0))}</td>
+                <td /><td /><td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
       {([
-        ['Underlying funds', fundRows] as const,
         // A token has a quantity and a price, so it shares the table's shape — but no industry,
         // stage or country, so it gets its own heading rather than three blank columns.
         ['Digital assets', cryptoRows] as const,

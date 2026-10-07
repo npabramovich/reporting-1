@@ -308,3 +308,50 @@ export function buildSoiPositions(
 
   return positions.sort((a, b) => b.fairValue - a.fairValue)
 }
+
+/**
+ * Attach each underlying fund's register figures to its schedule-of-investments row.
+ *
+ * WHY HERE AND NOT A SECOND REPORT. A fund-of-funds schedule has to state commitment, called and
+ * unfunded — a position carried at fair value with capital still callable is a different liquidity
+ * fact from a fully-drawn one. That used to live in a separate fund-of-funds report which loaded
+ * the register FIRM-WIDE, so one vehicle's page listed every other vehicle's holdings. The
+ * schedule of investments is already scoped to the vehicle whose activity bought the position, so
+ * decorating its rows is both the simpler surface and the correct scope.
+ *
+ * Pure. Rows with no matching register entry are returned untouched, so a direct company holding
+ * and a fund holding recorded before the register existed both pass through unchanged.
+ */
+export interface FundHoldingFigures {
+  commitment: number
+  /** Drawn by the manager to date. */
+  called: number
+  /** Still callable. The register's own figure, NOT commitment − called: a recallable
+   *  distribution puts capital back on the hook, so subtracting would understate it. */
+  unfunded: number
+  pctCalled: number | null
+  navAsOf: string | null
+  stalenessDays: number | null
+}
+
+export function withFundHoldingFigures<T extends { companyId?: string; holdingType?: 'company' | 'fund' | 'crypto' }>(
+  rows: T[],
+  fundPositions: (Omit<FundHoldingFigures, 'called'> & { companyId: string; contributed: number })[],
+): (T & Partial<FundHoldingFigures>)[] {
+  if (fundPositions.length === 0) return rows
+  const byCompany = new Map(fundPositions.map(p => [p.companyId, p]))
+  return rows.map(row => {
+    if (row.holdingType !== 'fund' || !row.companyId) return row
+    const position = byCompany.get(row.companyId)
+    if (!position) return row
+    return {
+      ...row,
+      commitment: position.commitment,
+      called: position.contributed,
+      unfunded: position.unfunded,
+      pctCalled: position.pctCalled,
+      navAsOf: position.navAsOf,
+      stalenessDays: position.stalenessDays,
+    }
+  })
+}

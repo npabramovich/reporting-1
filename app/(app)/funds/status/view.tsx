@@ -14,7 +14,7 @@ import { WalletsPanel } from './wallets-panel'
 import { CarryTerms } from '../allocation-terms/carry-terms'
 import { useCanRead } from '@/components/access-context'
 import { isManagementCompany, VEHICLE_KIND_LABELS } from '@/lib/vehicle-kinds'
-import { IntercompanyCard, MancoIntercompanyCard } from './intercompany-card'
+import { MancoIntercompanyCard } from './intercompany-card'
 import { AllocationTermsView } from '../allocation-terms/view'
 import { CollapsibleSection } from '@/components/collapsible-section'
 import { ChartOfAccountsCard } from '@/components/accounting/chart-of-accounts-card'
@@ -257,11 +257,16 @@ function EntityStatusView() {
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
       </Link>
 
-      {/* Charges between this vehicle and the firm's management company, seen from this side.
-          Renders nothing for a caller without the management-company grant or a firm without one. */}
-      <div id="intercompany">
-        {manco ? <MancoIntercompanyCard onChanged={load} /> : <IntercompanyCard />}
-      </div>
+      {/* The MANAGEMENT COMPANY's own intercompany register. A fund does not get one: an
+          intercompany charge is already a pair of postings, one in each entity's ledger, so the
+          fund side has nothing to show that its journal and statements do not. The fund-side card
+          rendered one box per management company in the firm whether or not the fund had any
+          relationship with it, which is how every fund ended up displaying every manco. */}
+      {manco && (
+        <div id="intercompany">
+          <MancoIntercompanyCard onChanged={load} />
+        </div>
+      )}
 
       {/* The year's preparer bundle. Lives here beside the other once-a-year work; the same
           control is in the statements page's Download menu. */}

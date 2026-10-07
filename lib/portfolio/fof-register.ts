@@ -208,3 +208,62 @@ function toRegisterEvent(row: any): RegisterEvent {
     purposeExpenses: Number(row.purpose_expenses ?? 0),
   }
 }
+
+/**
+ * Which of our entities holds this fund, from its register OR its ledger accounts.
+ *
+ * A fund holding belongs to exactly one vehicle, and the schema says so: `fund_holding_terms` is
+ * unique per company and `fund_nav_statements` is unique on (company_id, as_of_date). So after the
+ * first notice names the entity, every later notice and NAV can infer it rather than asking again
+ * — and nothing can land with a null vehicle, which is what made these holdings unconfirmable and
+ * unscopeable.
+ *
+ * Returns every distinct vehicle found, so a caller can tell "none yet" from "ambiguous".
+ */
+export async function holdingVehicleIds(
+  admin: SupabaseClient,
+  fundId: string,
+  companyId: string,
+): Promise<string[]> {
+  const [{ data: events }, { data: navs }, { data: accounts }] = await Promise.all([
+    (admin as any).from('fund_capital_events').select('vehicle_id')
+      .eq('fund_id', fundId).eq('company_id', companyId).not('vehicle_id', 'is', null),
+    (admin as any).from('fund_nav_statements').select('vehicle_id')
+      .eq('fund_id', fundId).eq('company_id', companyId).not('vehicle_id', 'is', null),
+    // And the ledger, which usually knows first: a holding imported from a general ledger has
+    // its own per-company investment accounts on one vehicle before any notice is recorded.
+    (admin as any).from('chart_of_accounts').select('vehicle_id')
+      .eq('fund_id', fundId).eq('company_id', companyId).not('vehicle_id', 'is', null),
+  ])
+  const ids = new Set<string>()
+  for (const row of [...((events as any[]) ?? []), ...((navs as any[]) ?? []), ...((accounts as any[]) ?? [])]) {
+    if (row.vehicle_id) ids.add(row.vehicle_id as string)
+  }
+  return Array.from(ids)
+}
+
+/**
+ * The vehicle a new notice or NAV for this holding belongs to: the one the caller named, else the
+ * one the holding already uses. Returns an error message rather than throwing, because every
+ * caller turns it into a 400.
+ */
+export async function resolveHoldingVehicle(
+  admin: SupabaseClient,
+  fundId: string,
+  companyId: string,
+  requested: unknown,
+): Promise<{ vehicleId: string } | { error: string }> {
+  if (typeof requested === 'string' && requested) {
+    const { data } = await admin
+      .from('fund_vehicles' as any).select('id')
+      .eq('fund_id', fundId).eq('id', requested).maybeSingle()
+    if (!data) return { error: 'That entity is not in this fund.' }
+    return { vehicleId: requested }
+  }
+  const existing = await holdingVehicleIds(admin, fundId, companyId)
+  if (existing.length === 1) return { vehicleId: existing[0] }
+  if (existing.length === 0) {
+    return { error: 'Choose which entity holds this fund. A notice with no entity cannot be confirmed or reported.' }
+  }
+  return { error: 'This holding has activity under more than one entity. Say which one this belongs to.' }
+}
