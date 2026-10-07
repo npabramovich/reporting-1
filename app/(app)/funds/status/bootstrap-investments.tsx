@@ -45,7 +45,13 @@ export function BootstrapInvestmentsCard({ onBooked }: { onBooked?: () => void }
     return data as Backfill
   }, [lf])
 
-  useEffect(() => { call(true).then(setPreview) }, [call])
+  // The preview is a POST (it shares the backfill's code path), so a member who can read accounting
+  // but not write it is refused. That is not an error worth showing: the card simply isn't theirs.
+  useEffect(() => {
+    lf('/api/accounting/investments', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'backfill', dryRun: true }),
+    }).then(r => (r.ok ? r.json() : null)).then(setPreview).catch(() => setPreview(null))
+  }, [lf])
 
   async function run() {
     setBusy(true); setError(null)
