@@ -8,7 +8,6 @@ import { BankView } from '@/app/(app)/funds/bank/view'
 import { CapitalAccountsView } from '@/app/(app)/funds/capital-accounts/view'
 import { LpStatementView } from '@/app/(app)/funds/capital-accounts/[lpEntityId]/view'
 import { ConstructionView } from '@/app/(app)/funds/construction/view'
-import { FofQuarterView } from '@/app/(app)/funds/fof-quarter/view'
 import { JournalPageView } from '@/app/(app)/funds/journal/page-view'
 import { LedgerView } from '@/app/(app)/funds/ledger/view'
 import { MigrateView } from '@/app/(app)/funds/migrate/view'
@@ -36,7 +35,6 @@ import { NoData, resolveVehicle, type RouteRender, type Vehicle } from '../route
 const SUBPAGES: Record<string, { title: string; description: string; view: ReactNode }> = {
   'bank': { title: 'Bank transactions', description: 'Import bank transactions and post to the journal', view: <BankView /> },
   'capital-accounts': { title: 'Capital accounts', description: 'Limited partner roll-forward per period', view: <Suspense fallback={null}><CapitalAccountsView /></Suspense> },
-  'fof-quarter': { title: 'Quarterly close — underlying funds', description: "Paste the quarter's underlying-fund figures, confirm the notices, and book the period-end marks", view: <FofQuarterView /> },
   'journal': { title: 'Journal', description: 'Every entry, to view, unpost or edit — or author entries as plain text and post them in one go.', view: <JournalPageView /> },
   'ledger': { title: 'General ledger', description: 'One account at a time: the balance carried in, every posting, and the running balance.', view: <Suspense fallback={null}><LedgerView /></Suspense> },
   'migrate': { title: 'Migrate from QuickBooks', description: 'Import the general ledger, map the accounts, and tie every period out to QuickBooks', view: null },

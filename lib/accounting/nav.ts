@@ -100,14 +100,10 @@ export const ACCOUNTING_SECTIONS: AccountingSection[] = [
   // NOTE: /funds/migrate is deliberately NOT listed. Importing a QuickBooks general
   // ledger is a one-time event at the start of a vehicle's life, not a place you work —
   // so it's linked from Admin, alongside the rest of the onboarding.
-  {
-    href: '/funds/fof-quarter',
-    label: 'Quarterly close (funds)',
-    icon: Layers,
-    desc: 'Paste the quarter\u2019s underlying-fund figures, confirm the notices, and book the period-end marks.',
-    requiresFof: true,
-    hideFor: ['individual', 'associate', 'manco'],
-  },
+  // NOTE: /funds/fof-quarter is deliberately GONE, like the fund-of-funds report before it. A
+  // manager's quarterly statement is an update about ONE holding — the same shape as a company's
+  // KPI update — so it is recorded on that holding, next to the NAV it reports and the mark it
+  // implies. A quarter-wide sheet made it a separate ritual and a second place to look.
   {
     href: '/funds/schedule-of-investments',
     label: 'Schedule of investments',

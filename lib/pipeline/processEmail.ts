@@ -573,12 +573,20 @@ export async function getOpenRouterConfig(supabase: Supabase, fundId: string): P
   }
 }
 
+/**
+ * Everything an inbound update can be ABOUT — including underlying funds.
+ *
+ * This used to exclude `holding_type <> 'company'` on the grounds that "fund holdings have their
+ * own surfaces". Those surfaces were a fund-of-funds report and a quarter-wide close sheet, both
+ * now gone: a manager's quarterly letter is an update about one investment, the same shape as a
+ * portfolio company's update, and it belongs on that holding. Excluding fund holdings here is what
+ * made a forwarded LP letter match nothing and vanish.
+ */
 export async function getCompanies(supabase: Supabase, fundId: string): Promise<CompanyRef[]> {
   const { data } = await supabase
     .from('companies')
     .select('id, name, aliases')
     .eq('fund_id', fundId)
-    .eq('holding_type', 'company')   // fund holdings have their own surfaces
     .eq('status', 'active')
 
   return data ?? []
