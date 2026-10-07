@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, AlertTriangle, Check } from 'lucide-react'
+import { Loader2, AlertTriangle, Check, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCurrency, formatCurrencyPrice, formatSharePrice } from '@/components/currency-context'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 import { PeriodPicker } from '@/components/accounting/period-picker'
 import type { PeriodPreset } from '@/lib/accounting/statement-period'
 import { EmptyState } from '@/components/ui/empty-state'
+import { tieOutState } from '@/lib/accounting/tie-out-state'
 
 interface SoiRow {
   name: string
@@ -59,6 +60,8 @@ export function ScheduleOfInvestmentsView() {
   const fmt = (v: number) => formatCurrencyPrice(v, currency)
   const pct = (v: number) => `${(v * 100).toFixed(1)}%`
   const [soi, setSoi] = useState<Soi | null>(null)
+  // Derived entries waiting for their bank match — what a schedule that does not tie normally means.
+  const [awaiting, setAwaiting] = useState<{ cash: number }[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [preset, setPreset] = useState<PeriodPreset>('itd')
   const [asOf, setAsOf] = useState('') // '' = latest
@@ -72,6 +75,10 @@ export function ScheduleOfInvestmentsView() {
       .then(r => (r.ok ? r.json() : null))
       .then(d => setSoi(d?.scheduleOfInvestments ?? null))
       .finally(() => setLoading(false))
+    lf('/api/accounting/investment-bank-match')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setAwaiting(Array.isArray(d) ? d : null))
+      .catch(() => setAwaiting(null))
   }, [lf, preset, asOf])
   useEffect(() => { load() }, [load])
 
@@ -121,21 +128,49 @@ export function ScheduleOfInvestmentsView() {
 
     return (
       <>
-      {/* The SOI's rows come from the portfolio tracker; the ledger is the control
-          total. If they disagree, say so loudly rather than showing a tidy number. */}
-      <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${tied ? 'text-muted-foreground' : 'border-warning/40 bg-warning/10 text-warning dark:text-warning'}`}>
-        {tied ? <Check className="h-4 w-4 mt-0.5 shrink-0 text-success" /> : <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />}
-        {tied ? (
-          <span>Ties to the ledger — cost {fmt(soi.ledgerCost)}, fair value {fmt(soi.ledgerFairValue)}.</span>
-        ) : (
-          <span>
-            <strong>Does not tie to the ledger.</strong> The tracker says cost {fmt(soi.totalCost)} / fair value {fmt(soi.totalFairValue)};
-            the ledger says {fmt(soi.ledgerCost)} / {fmt(soi.ledgerFairValue)}.
-            Variance: cost <span className="tabular-nums">{fmt(soi.costVariance)}</span>, fair value <span className="tabular-nums">{fmt(soi.fairValueVariance)}</span>.
-            A mark or purchase was recorded in one system and not the other.
-          </span>
-        )}
-      </div>
+      {/* AN EXCEPTION REPORT, NOT A DISCREPANCY. Marks post when recorded and cash entries post
+          when matched to their bank transaction (lib/accounting/from-portfolio.ts, postsOnRecord),
+          so a schedule that does not tie is normally waiting on bank matches. The warning is
+          left for what that cannot explain — see lib/accounting/tie-out-state.ts. */}
+      {(() => {
+        const state = tieOutState({ tied, awaitingMatch: awaiting?.length ?? 0 })
+        if (state === 'booked') return (
+          <div className="flex items-start gap-2 rounded-lg border px-3 py-2 text-sm text-muted-foreground">
+            <Check className="h-4 w-4 mt-0.5 shrink-0 text-success" />
+            <span>Booked — cost {fmt(soi.ledgerCost)}, fair value {fmt(soi.ledgerFairValue)}.</span>
+          </div>
+        )
+        if (state === 'awaiting-match') {
+          const n = awaiting!.length
+          const cash = awaiting!.reduce((s, a) => s + Math.abs(a.cash), 0)
+          return (
+            <div className="flex items-start gap-2 rounded-lg border px-3 py-2 text-sm text-muted-foreground">
+              <Info className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                Booked, except {n} {n === 1 ? 'entry' : 'entries'} (<span className="tabular-nums">{fmt(cash)}</span>) waiting
+                for a bank match &mdash; a purchase, exit or income posts when its cash is matched to the bank
+                transaction that paid it. The schedule below is complete either way.{' '}
+                <Link href="/funds/bank" className="underline underline-offset-2">Match them</Link>.
+              </span>
+            </div>
+          )
+        }
+        return (
+          <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning dark:text-warning">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              <strong>The books disagree with the schedule.</strong> The schedule says cost {fmt(soi.totalCost)} / fair
+              value {fmt(soi.totalFairValue)}; the books carry {fmt(soi.ledgerCost)} / {fmt(soi.ledgerFairValue)}.
+              Variance: cost <span className="tabular-nums">{fmt(soi.costVariance)}</span>, fair
+              value <span className="tabular-nums">{fmt(soi.fairValueVariance)}</span>.
+              Either some transactions have never been put on the ledger, or an entry was edited after it was
+              derived.{' '}
+              <Link href="/funds/status" className="underline underline-offset-2">Put the history on the ledger</Link>, or{' '}
+              <Link href="/funds/journal" className="underline underline-offset-2">check the journal</Link>.
+            </span>
+          </div>
+        )
+      })()}
 
       {/* UNDERLYING FUNDS GET THEIR OWN COLUMNS. A commitment with capital still callable is a
           different liquidity fact from a fully-drawn position, and cost cannot express it — so the

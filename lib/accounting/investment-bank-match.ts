@@ -129,7 +129,7 @@ export async function matchInvestmentToBank(
   let claimedBy: { status: string; source_ref: string | null } | null = null
   if (bank.journal_entry_id) {
     const { data } = await admin.from('journal_entries' as any)
-      .select('status, source_ref').eq('id', bank.journal_entry_id).eq('fund_id', fundId).maybeSingle()
+      .select('status, source_ref').eq('book', ACTUAL_BOOK).eq('id', bank.journal_entry_id).eq('fund_id', fundId).maybeSingle()
     claimedBy = (data as any) ?? null
   }
 

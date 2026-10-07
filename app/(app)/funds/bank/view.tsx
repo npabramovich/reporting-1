@@ -12,6 +12,7 @@ import { useLedgerFetch } from '@/components/accounting-vehicle'
 import { EntryModal } from '../entry-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { NoBooksState } from '@/components/accounting/no-books'
+import { InvestmentMatchQueue } from './investment-matches'
 
 interface DuplicateCandidate { id: string; date: string; amount: number; memo: string; status: string; claimed: boolean }
 interface Txn { import_differences?: import('@/lib/accounting/import-review').ImportDifference[]; duplicate_review?: boolean; quickbooks_linked?: boolean; duplicate_candidates?: DuplicateCandidate[]; id: string; txn_date: string; amount: number; description: string; counterparty: string | null; status: string; suggested_account_code: string | null; journal_entry_id: string | null; entry_account_code: string | null; entry_account_name: string | null; entry_is_split: boolean; settled_lp_entity_id: string | null; settled_lp_name: string | null }
@@ -250,6 +251,10 @@ export function BankView() {
           {rec.unmatchedCount > 0 && <span className="text-muted-foreground">{rec.unmatchedCount} unmatched ({fmt(rec.unmatchedTotal)})</span>}
         </div>
       )}
+
+      {/* Investment entries whose cash leg is waiting for this page. Matching one also retires
+          the bank row's auto-draft, so it reloads the list below. */}
+      <InvestmentMatchQueue onChanged={load} />
 
       {/* Transactions */}
       {txns.some(t => t.status === 'drafted') && (
