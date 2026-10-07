@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { assertReadAccess, assertWriteAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { loadPostedLedger } from '@/lib/accounting/load'
-import { draftEntryForTransaction } from '@/lib/accounting/from-portfolio'
+import { draftEntryForTransaction, tallyLedgerResults } from '@/lib/accounting/from-portfolio'
 import { loadFofData, ledgerCarryingByHolding } from '@/lib/portfolio/fof-load'
 import { periodEndMarks, valuationBasisNote } from '@/lib/portfolio/fof-valuation'
 
@@ -60,10 +60,16 @@ export async function POST(req: NextRequest) {
   if (group instanceof NextResponse) return group
   const asOf = typeof body?.asOf === 'string' ? body.asOf : new Date().toISOString().slice(0, 10)
 
-  const { marks } = await marksFor(admin, gate.fundId, group, asOf)
+  const all = await marksFor(admin, gate.fundId, group, asOf)
+  // ONE HOLDING AT A TIME when asked. A manager NAV is a periodic figure about a single position
+  // — the same shape as a company KPI — so it is booked from that holding's own page. The
+  // unfiltered call remains for anything that wants the whole quarter at once.
+  const companyId = typeof body?.companyId === 'string' ? body.companyId : null
+  const marks = companyId ? all.marks.filter(m => m.companyId === companyId) : all.marks
 
   let booked = 0
   const errors: string[] = []
+  const ledger: Parameters<typeof tallyLedgerResults>[0] = []
   for (const m of marks) {
     const { data: txn, error } = await (admin as any)
       .from('investment_transactions')
@@ -79,10 +85,13 @@ export async function POST(req: NextRequest) {
       .single()
     if (error || !txn) { errors.push(`${m.name}: ${error?.message ?? 'insert failed'}`); continue }
 
-    const drafted = await draftEntryForTransaction(admin, gate.fundId, user.id, txn, m.name)
-    if ((drafted as any)?.skipped) errors.push(`${m.name}: ${(drafted as any).skipped}`)
+    // A mark has no cash leg, so it posts on record — unless its period is closed, which is
+    // refused and reported here (this used to read a `skipped` field that never existed, so
+    // every refusal was swallowed and counted as booked).
+    ledger.push({ name: m.name, result: await draftEntryForTransaction(admin, gate.fundId, user.id, txn, m.name) })
     booked += 1
   }
 
-  return NextResponse.json({ asOf, booked, total: marks.length, errors })
+  const { posted, drafted, errors: ledgerErrors } = tallyLedgerResults(ledger)
+  return NextResponse.json({ asOf, booked, posted, drafted, total: marks.length, errors: [...errors, ...ledgerErrors] })
 }

@@ -260,7 +260,9 @@ ${text}`,
     unrealizedCreated: 0,
     companiesMatched: 0,
     companiesCreated: 0,
-    /** Journal entries drafted from the imported rows. */
+    /** Entries posted on record — marks and anything else with no cash leg. */
+    entriesPosted: 0,
+    /** Entries drafted to wait for their cash leg to be matched to a bank transaction. */
     entriesDrafted: 0,
     errors: [] as string[],
     /** Rows that were imported but implied no ledger entry, and why. Reported, not swallowed —
@@ -398,7 +400,7 @@ ${text}`,
     // accounts. Reasons are collected and reported, never swallowed.
     if (inserted) {
       const draft = await draftEntryForTransaction(admin, fundId, user.id, inserted, companyName)
-      if (draft.drafted) results.entriesDrafted++
+      if (draft.drafted) draft.posted ? results.entriesPosted++ : results.entriesDrafted++
       else if (draft.reason) ledgerSkips.push(`${companyName} (${txnType}): ${draft.reason}`)
     }
   }

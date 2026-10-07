@@ -173,7 +173,7 @@ export function PriceFeedsPanel({ onChanged, showHeader = true }: { onChanged?: 
     const data = await res.json().catch(() => ({}))
     setBusy(false)
     if (!res.ok) { setError(data.error ?? 'Failed'); return }
-    setNote(`Drafted ${data.booked} ${data.booked === 1 ? 'mark' : 'marks'} in the journal for review.`)
+    setNote(`Posted ${data.posted ?? 0} ${data.posted === 1 ? 'mark' : 'marks'} to the ledger.`)
     if (data.errors?.length) setError(data.errors.join(' · '))
     await load(); onChanged?.()
   }

@@ -26,7 +26,9 @@ export async function previewRecordInvestment(deps: ActionDeps, input: RecordInv
       amount,
       vehicle: input.vehicle ?? null,
       ...(convertsFrom ? { convertsFrom } : {}),
-      ledgerEffect: `Drafts a journal entry in ${input.vehicle ?? 'the vehicle'} for review — it does not post.`,
+      ledgerEffect: input.transaction_type === 'unrealized_gain_change'
+        ? `Posts the mark to ${input.vehicle ?? 'the vehicle'}'s ledger — it moves no cash.`
+        : `Drafts a journal entry in ${input.vehicle ?? 'the vehicle'}; one that moves cash posts when matched to its bank transaction.`,
     },
   }
 }

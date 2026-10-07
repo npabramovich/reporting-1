@@ -90,6 +90,21 @@ export function postsOnRecord(postings: Pick<Posting, 'accountId' | 'amount'>[],
   return !postings.some(p => p.accountId === cashId && roundCents(p.amount) !== 0)
 }
 
+/**
+ * A batch of derivations, said back: how many posted, how many wait for a bank match, and every
+ * refusal by name. A vehicle that keeps no books is not an error — see `notOnboarded`.
+ */
+export function tallyLedgerResults(
+  rows: { name: string; result: Pick<LedgerDraftResult, 'drafted' | 'posted' | 'reason' | 'notOnboarded'> }[]
+): { posted: number; drafted: number; errors: string[] } {
+  const out = { posted: 0, drafted: 0, errors: [] as string[] }
+  for (const { name, result } of rows) {
+    if (result.drafted) result.posted ? out.posted++ : out.drafted++
+    else if (result.reason && !result.notOnboarded) out.errors.push(`${name}: ${result.reason}`)
+  }
+  return out
+}
+
 /** The `source_ref` that ties a journal entry back to the tracker row that drafted it. */
 export const txnRef = (txnId: string) => `txn:${txnId}`
 
