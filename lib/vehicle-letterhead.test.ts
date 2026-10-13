@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { pickLetterhead, fundLetterhead, safeLogo, type VehicleLetterhead } from './vehicle-letterhead'
+import { pickLetterhead, fundLetterhead, contactBlock, safeLogo, type VehicleLetterhead } from './vehicle-letterhead'
 
-const FUND = fundLetterhead({ name: 'Ashgrove', logo_url: 'data:image/png;base64,FUND', address: '1 Main St' })
-const NORTHWIND: VehicleLetterhead = { logo: 'data:image/png;base64,NWH', name: 'Northwind Holdings', address: '2 Elm St' }
+const FUND = fundLetterhead({ name: 'Ashgrove', logo_url: 'data:image/png;base64,FUND', address: '1 Main St', contact_email: 'partners@ashgrove.example' })
+const NORTHWIND: VehicleLetterhead = { logo: 'data:image/png;base64,NWH', name: 'Northwind Holdings', address: '2 Elm St', email: 'ir@northwind.example' }
 const vehicles = new Map<string, VehicleLetterhead>([
   ['Northwind Holdings LP', NORTHWIND],
   ['Northwind Holdings II LP', NORTHWIND],
   ['Northwind Holdings Fund I', NORTHWIND], // an alias of Northwind Holdings LP
-  ['Logo Only SPV', { logo: 'data:image/png;base64,SPV', name: null, address: null }],
+  ['Logo Only SPV', { logo: 'data:image/png;base64,SPV', name: null, address: null, email: null }],
+  ['Email Only SPV', { logo: null, name: null, address: null, email: 'spv@example.com' }],
 ])
 
 describe('pickLetterhead', () => {
@@ -21,7 +22,11 @@ describe('pickLetterhead', () => {
   })
 
   it('falls back part by part, so a logo-only vehicle keeps the fund name and address', () => {
-    expect(pickLetterhead(FUND, ['Logo Only SPV'], vehicles)).toEqual({ logo: 'data:image/png;base64,SPV', name: 'Ashgrove', address: '1 Main St' })
+    expect(pickLetterhead(FUND, ['Logo Only SPV'], vehicles)).toEqual({ logo: 'data:image/png;base64,SPV', name: 'Ashgrove', address: '1 Main St', email: 'partners@ashgrove.example' })
+  })
+
+  it("overrides the fund's email on its own", () => {
+    expect(pickLetterhead(FUND, ['Email Only SPV'], vehicles)).toEqual({ ...FUND, email: 'spv@example.com' })
   })
 
   it('uses vehicle values across vehicles only when they all share them', () => {
@@ -36,5 +41,13 @@ describe('pickLetterhead', () => {
   it('never returns a remote logo URL, which headless Chrome cannot render', () => {
     expect(fundLetterhead({ name: 'X', logo_url: 'https://example.com/logo.png' }).logo).toBeNull()
     expect(safeLogo('https://example.com/logo.png')).toBeNull()
+  })
+})
+
+describe('contactBlock', () => {
+  it('prints the email on its own line under the address', () => {
+    expect(contactBlock({ address: '1 Main St\nNew York', email: 'a@b.co' })).toBe('1 Main St\nNew York\na@b.co')
+    expect(contactBlock({ address: null, email: 'a@b.co' })).toBe('a@b.co')
+    expect(contactBlock({ address: null, email: null })).toBeNull()
   })
 })
