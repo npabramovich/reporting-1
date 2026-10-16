@@ -171,6 +171,14 @@ export const AI_CAPABILITIES: AICapability[] = [
     tools: ['company_detail', 'company_metrics', 'get_updates', 'company_save_summary'],
   },
   {
+    key: 'lpa_terms',
+    label: 'Reading waterfall terms out of an LPA',
+    keyless: 'assistant',
+    why: 'Without a key, extract_lpa_terms gives your assistant a pattern reading and the relevant clauses; it reads them and hands its reading back, checked against the document. Applying the terms is always staged for approval.',
+    prompt: 'Read Fund I\'s LPA and propose its carry terms.',
+    tools: ['list_entity_documents', 'extract_lpa_terms', 'set_waterfall_terms'],
+  },
+  {
     key: 'deal_research',
     label: 'Web research on inbound deals',
     keyless: 'assistant',
