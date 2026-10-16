@@ -125,3 +125,39 @@ describe('the catch-up', () => {
     expect(r.toCatchUp).toBe(10) // a full catch-up on 120 of pref is 30; 20 was caught up before
   })
 })
+
+describe('the close trues each LP up to its share of the carry', () => {
+  const straight: VehicleCarryTerms = {
+    kind: 'straight', carryRate: 0.2, prefRate: 0, catchupRate: 1, prefCompounds: true,
+    gpEntityId: 'gp', recipients: [{ lpEntityId: 'gp', pct: 100 }],
+  }
+  // Two LPs with 50 of profit each: a 20 target, 10 apiece.
+  const lp = (id: string, nav: number, charged?: number) => ({ lpEntityId: id, contributed: 100, distributed: 0, nav, ...(charged != null ? { charged } : {}) })
+
+  it('moves carry between LPs when earlier accruals were shared on different profits', () => {
+    // A was in profit first and took 15 of the 20; the total is right but the shares are not.
+    const a = carryAccrual({ lps: [lp('a', 150, 15), lp('b', 150, 5)] }, straight, 20)
+    expect(a.delta).toBe(0)
+    expect(Object.fromEntries(a.perLp)).toEqual({ a: -5, b: 5 })
+  })
+
+  it('charges each LP its share of the whole target, so both end at the same rate on profit', () => {
+    const a = carryAccrual({ lps: [lp('a', 200, 8), lp('b', 125, 0)] }, straight, 8) // profits 100 and 25 → 25 target
+    expect(a.target).toBe(25)
+    expect(a.delta).toBe(17)
+    expect(Object.fromEntries(a.perLp)).toEqual({ a: 12, b: 5 }) // 20 and 5 in all: 20% of each LP's profit
+  })
+
+  it('reverses every LP\'s charge when nobody is in profit', () => {
+    const a = carryAccrual({ lps: [lp('a', 90, 6), lp('b', 100, 4)] }, straight, 10)
+    expect(a.target).toBe(0)
+    expect(a.delta).toBe(-10)
+    expect(Object.fromEntries(a.perLp)).toEqual({ a: -6, b: -4 })
+  })
+
+  it('without each LP\'s charge, shares out only the change, as before', () => {
+    const a = carryAccrual({ lps: [lp('a', 150), lp('b', 150)] }, straight, 20)
+    expect(a.delta).toBe(0)
+    expect(a.perLp.size).toBe(0)
+  })
+})

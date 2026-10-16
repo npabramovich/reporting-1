@@ -1542,7 +1542,7 @@ async function accrueCarry(
   // The books as they now stand, INCLUDING the allocation entries we just posted.
   const { capitalPostings } = await loadPostedLedger(admin, fundId, group, periodEnd)
 
-  // Carry already charged to the LPs — the accrual tops up (or reverses) to target.
+  // Carry already charged to the LPs — the accrual trues each LP up to its share of the target.
   // NOTE: only the per-period DELTA is split by the current recipients/pcts. Changing the split (or
   // removing a recipient) is PROSPECTIVE — it does not rebalance carry already accrued in prior
   // periods. LP-side totals stay correct regardless; treat the recipient split as stable once carry
@@ -1555,7 +1555,7 @@ async function accrueCarry(
   if (lps.length === 0) return {}
 
   const accrual = carryAccrual({ lps, contributions, distributions, asOf: periodEnd }, terms, alreadyAccrued)
-  if (accrual.delta === 0 || accrual.perLp.size === 0) return {}
+  if (accrual.perLp.size === 0) return {}
 
   const capMap = await ensureCapitalAccounts(admin, fundId, group, [
     ...Array.from(accrual.perLp.keys()),
@@ -1571,7 +1571,9 @@ async function accrueCarry(
       memo:
         accrual.delta > 0
           ? `Carried interest accrued at ${periodEnd} NAV`
-          : `Carried interest accrual reversed — NAV fell at ${periodEnd}`,
+          : accrual.delta < 0
+            ? `Carried interest accrual reversed — NAV fell at ${periodEnd}`
+            : `Carried interest trued up across partners at ${periodEnd}`,
     },
     accrual.perLp,
     capMap,

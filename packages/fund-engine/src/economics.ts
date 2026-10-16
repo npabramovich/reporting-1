@@ -41,8 +41,9 @@ export function carryAccrualInputs(
   // it (a debit, so negative). The target is what the GP would take from the LPs' value GROSS of
   // carry, so that charge is added back to the balance, and it is also what is already accrued.
   // The recipients' own balance is the wrong figure for the second: carry PAID is drawn from it, so
-  // measuring against it would accrue again every dollar already paid out.
-  const charged = (a: { carriedInterest: number }) => roundCents(-Math.min(0, a.carriedInterest))
+  // measuring against it would accrue again every dollar already paid out. Passing each LP's charge
+  // makes the accrual a true-up: every LP ends at its share of the whole target.
+  const charged = (a: { carriedInterest: number }) => roundCents(-a.carriedInterest)
   const lpAccounts = Array.from(accounts.entries()).filter(([id]) => !recipientIds.has(id)) // recipients receive carry; they don't pay it
   const alreadyAccrued = roundCents(lpAccounts.reduce((s, [, a]) => s + charged(a), 0))
 
@@ -51,6 +52,7 @@ export function carryAccrualInputs(
     contributed: roundCents(a.contributions),
     distributed: roundCents(-a.distributions), // stored negative on the account
     nav: roundCents(a.ending + charged(a)),
+    charged: charged(a),
   }))
 
   // Dated contributions, for the hurdle. The pref accrues from when cash actually arrived.

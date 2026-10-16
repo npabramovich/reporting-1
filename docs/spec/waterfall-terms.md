@@ -240,10 +240,17 @@ Both bases:
 - It posts `carryTarget − alreadyAccrued`, where `alreadyAccrued` is the carry charged to the LPs
   so far. That is not the recipients' balance: carry PAID is drawn from the recipients, so
   measuring against their balance would accrue every paid dollar again.
-- That delta is debited across LPs in proportion to each LP's positive profit
-  (`NAV + distributed − contributed`), with largest-remainder cents.
-- It is credited across the recipients by `pct`. The last recipient absorbs the rounding.
-- When NAV falls, the accrual reverses on its own.
+- It is a **true-up to the capital accounts**. The whole target is shared across LPs in proportion
+  to each LP's positive profit (`NAV + distributed − contributed`), with largest-remainder cents,
+  and each LP is charged its share less what it has already been charged. Its cumulative charge is
+  then always its share of the GP's entitlement, so at the fund's last close every LP pays the same
+  effective rate on its profit, however earlier accruals were shared. A close whose total does not
+  change can still move carry between LPs.
+- The net is credited across the recipients by `pct`. The last recipient absorbs the rounding.
+- When NAV falls, the accrual reverses on its own; when nobody is in profit, every LP's charge is
+  reversed.
+- Carry paid beyond the target is not clawed back by the close: it shows as a negative carry
+  balance on the recipients' capital accounts, which is what the GP owes back.
 
 **Deal-by-deal entitlement (`dealByDealCarry`).**
 - Fund expenses are allocated to deals by share of cost basis.

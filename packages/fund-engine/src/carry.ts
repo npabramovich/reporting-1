@@ -84,6 +84,12 @@ export interface LpEconomics {
    * value; measuring it on a balance already net of carry counts the carry twice.
    */
   nav: number
+  /**
+   * Carry already charged to this LP by earlier accruals (positive). Given for every LP, the
+   * accrual trues each LP up to its share of the whole target rather than sharing out only the
+   * change; see `carryAccrual`.
+   */
+  charged?: number
 }
 
 export interface CarryTargetInput {
@@ -198,15 +204,36 @@ export interface CarryAccrual {
   perLp: Map<string, number>
 }
 
+/** `total` shared by `weights` to the cent, largest remainder; the odd cent goes to the largest share. */
+function shareByWeight(total: number, weights: { lpEntityId: string; weight: number }[]): Map<string, number> {
+  const out = new Map<string, number>()
+  const sum = weights.reduce((s, w) => s + w.weight, 0)
+  if (sum <= 0) return out
+  const rounded = weights.map(w => ({ ...w, exact: (total * w.weight) / sum, amount: roundCents((total * w.weight) / sum) }))
+  const drift = roundCents(total - rounded.reduce((s, r) => s + r.amount, 0))
+  if (drift !== 0 && rounded.length > 0) {
+    const biggest = rounded.reduce((a, b) => (Math.abs(b.exact) > Math.abs(a.exact) ? b : a))
+    biggest.amount = roundCents(biggest.amount + drift)
+  }
+  for (const r of rounded) out.set(r.lpEntityId, r.amount)
+  return out
+}
+
 /**
  * What this period's close should post.
  *
- * The debit is shared across LPs in proportion to each one's PROFIT — carry is a share of
- * gains, so an LP sitting on a loss does not pay it, and an LP with twice the gain pays twice
- * as much. When the accrual REVERSES (NAV fell), the reversal is shared the same way, so it
- * unwinds along the path it was built.
+ * Carry is shared across LPs in proportion to each one's PROFIT: carry is a share of gains, so an
+ * LP sitting on a loss does not pay it, and an LP with twice the gain pays twice as much.
  *
- * If nobody is in profit there is nothing to take carry from, and the target is zero anyway.
+ * When every LP's `charged` is given, the accrual is a TRUE-UP: each LP is charged its share of the
+ * whole target, by today's profits, less what it has already been charged. Its cumulative charge is
+ * then always its share of the GP's entitlement, so every LP ends the fund at the same effective
+ * carry rate on its profit, however the earlier accruals were shared out. A period whose total
+ * does not change can still move carry between LPs; one in which nobody is in profit reverses
+ * every LP's charge.
+ *
+ * Without `charged`, only the change in the target is shared out, by today's profits, and a
+ * period in which nobody is in profit posts nothing.
  */
 export function carryAccrual(
   input: CarryTargetInput,
@@ -214,40 +241,32 @@ export function carryAccrual(
   alreadyAccrued: number
 ): CarryAccrual {
   const target = carryTarget(input, terms)
-  const delta = roundCents(target - alreadyAccrued)
-  const perLp = new Map<string, number>()
-
-  if (delta === 0) return { target, alreadyAccrued, delta: 0, perLp }
 
   // Each LP's gain, measured the same way the target was: value today plus what they've taken
   // out, less what they put in.
   const profits = input.lps
-    .map(l => ({ lpEntityId: l.lpEntityId, profit: roundCents(l.nav + l.distributed - l.contributed) }))
-    .filter(p => p.profit > 0)
+    .map(l => ({ lpEntityId: l.lpEntityId, weight: roundCents(l.nav + l.distributed - l.contributed) }))
+    .filter(p => p.weight > 0)
 
-  const totalProfit = roundCents(profits.reduce((s, p) => s + p.profit, 0))
-  if (totalProfit <= 0) {
-    // No one is in profit. A positive target can't be sourced from anybody; a reversal has
-    // nothing left to reverse against.
+  if (input.lps.length > 0 && input.lps.every(l => typeof l.charged === 'number')) {
+    const charged = roundCents(input.lps.reduce((s, l) => s + (l.charged ?? 0), 0))
+    // Nobody in profit means a zero target (the target is the fund's profit through the waterfall).
+    const share = shareByWeight(target, profits)
+    const perLp = new Map<string, number>()
+    for (const l of input.lps) {
+      const amount = roundCents((share.get(l.lpEntityId) ?? 0) - (l.charged ?? 0))
+      if (amount !== 0) perLp.set(l.lpEntityId, amount)
+    }
+    return { target, alreadyAccrued: charged, delta: roundCents(target - charged), perLp }
+  }
+
+  const delta = roundCents(target - alreadyAccrued)
+  const perLp = new Map<string, number>()
+  if (delta === 0 || profits.length === 0) {
+    // No change to share, or no one is in profit: a positive target can't be sourced from anybody
+    // and a reversal has nothing left to reverse against.
     return { target, alreadyAccrued, delta: 0, perLp }
   }
-
-  // Largest-remainder, so the per-LP debits sum EXACTLY to delta and no cent is invented.
-  let allocated = 0
-  const shares = profits.map(p => ({ ...p, exact: (delta * p.profit) / totalProfit }))
-  const rounded = shares.map(s => ({ ...s, amount: roundCents(s.exact) }))
-  allocated = roundCents(rounded.reduce((s, r) => s + r.amount, 0))
-
-  const drift = roundCents(delta - allocated)
-  if (drift !== 0 && rounded.length > 0) {
-    // Put the odd cent on the largest share — the conventional tiebreak.
-    const biggest = rounded.reduce((a, b) => (Math.abs(b.exact) > Math.abs(a.exact) ? b : a))
-    biggest.amount = roundCents(biggest.amount + drift)
-  }
-
-  for (const r of rounded) {
-    if (r.amount !== 0) perLp.set(r.lpEntityId, r.amount)
-  }
-
+  for (const [id, amount] of shareByWeight(delta, profits)) if (amount !== 0) perLp.set(id, amount)
   return { target, alreadyAccrued, delta, perLp }
 }
