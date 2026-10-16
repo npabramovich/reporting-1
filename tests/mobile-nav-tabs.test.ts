@@ -30,11 +30,8 @@ const denyAll: Access = () => 'none'
 const allowOnly = (...domains: Domain[]): Access => d => (domains.includes(d) ? 'write' : 'none')
 
 describe('mobileTabsFor', () => {
-  it('fills the bar and leaves the fifth slot for More', () => {
+  it('fills the bar, leaving the fifth slot for More, and leads with the destinations a phone is actually used for', () => {
     expect(mobileTabsFor(true, allowAll)).toHaveLength(MOBILE_TAB_COUNT)
-  })
-
-  it('leads with the destinations a phone is actually used for', () => {
     expect(mobileTabsFor(true, allowAll).map(t => t.href)).toEqual([
       '/dashboard',
       '/emails',
@@ -54,6 +51,8 @@ describe('mobileTabsFor', () => {
     }
     expect(tabs.map(t => t.href)).not.toContain('/lps')
     expect(tabs.map(t => t.href)).not.toContain('/funds')
+    // Admin-only entries are hidden from a member.
+    expect(mobileTabsFor(false, allowAll).map(t => t.href)).not.toContain('/usage')
   })
 
   it('tops the bar up rather than leaving gaps when features are off', () => {
@@ -70,11 +69,6 @@ describe('mobileTabsFor', () => {
     const tabs = mobileTabsFor(false, denyAll)
     expect(tabs.length).toBeGreaterThan(0)
     expect(tabs.map(t => t.href)).toContain('/settings')
-  })
-
-  it('hides admin-only entries from a member', () => {
-    const hrefs = mobileTabsFor(false, allowAll).map(t => t.href)
-    expect(hrefs).not.toContain('/usage')
   })
 })
 
@@ -131,18 +125,17 @@ describe('navSectionsFor', () => {
     expect(reachable).toContain('/support')
   })
 
-  it('drops Review, which is noise when nothing is waiting', () => {
+  it('drops Review and Approvals while nothing is waiting — they are noise then', () => {
     const idle = navSectionsFor(true, allowAll).map(s => s.href)
     expect(idle).not.toContain('/review')
 
     const busy = navSectionsFor(true, allowAll, { review: 1 }).map(s => s.href)
     expect(busy).toContain('/review')
-  })
 
-  it('shows Approvals only while something is waiting for this user', () => {
+    // Approvals likewise shows only while something is waiting for this user.
     expect(navSectionsFor(true, allowAll, { review: 1 }).map(s => s.href)).not.toContain('/pending-actions')
-    const busy = navSectionsFor(false, denyAll, { approvals: 2 }).find(s => s.href === '/pending-actions')
-    expect(busy?.label).toBe('Approvals')
+    const approvals = navSectionsFor(false, denyAll, { approvals: 2 }).find(s => s.href === '/pending-actions')
+    expect(approvals?.label).toBe('Approvals')
   })
 
   it('applies the same access rules as the sidebar and the bar', () => {
