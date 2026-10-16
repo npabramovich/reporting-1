@@ -45,9 +45,8 @@ export function parseVehicleTerms(raw: unknown): VehicleTerms {
   for (const [field, v] of [['carryRate', carryRate], ['prefRate', prefRate], ['catchupRate', catchupRate]] as const) {
     if (v < 0 || v > 1) throw new Error(`terms: carry.${field} is a fraction (0.2 for 20%), got ${v}`)
   }
-  if (kind !== 'straight' && catchupRate > 0 && catchupRate <= carryRate) {
-    throw new Error(`terms: carry.catchupRate must be above carry.carryRate (or 0 for no catch-up), got ${catchupRate}`)
-  }
+  const catchupSize = num(c.catchupSize ?? c.catchup_size, 'carry.catchupSize', 1)
+  if (catchupSize < 0 || catchupSize > 1) throw new Error(`terms: carry.catchupSize is a fraction of a full catch-up (1 = full), got ${catchupSize}`)
   const prefCompounds = (c.prefCompounds ?? c.pref_compounds) !== false
   const prefBaseRaw = c.prefBase ?? c.pref_base ?? 'contributed'
   if (prefBaseRaw !== 'contributed' && prefBaseRaw !== 'unreturned') throw new Error('terms: carry.prefBase must be contributed or unreturned')
@@ -63,7 +62,7 @@ export function parseVehicleTerms(raw: unknown): VehicleTerms {
   }
   const carry: VehicleCarryTerms = kind === 'none'
     ? { ...NO_CARRY, recipients }
-    : { kind, carryRate, prefRate, catchupRate, prefCompounds, prefBase, gpEntityId, recipients }
+    : { kind, carryRate, prefRate, catchupRate, catchupSize, prefCompounds, prefBase, gpEntityId, recipients }
 
   const partners: TermsPartner[] = []
   for (const [i, p] of (Array.isArray(t.partners) ? t.partners : []).entries()) {
@@ -90,7 +89,7 @@ export function parseVehicleTerms(raw: unknown): VehicleTerms {
       preferredPaid: num(s.preferredPaid, 'state.preferredPaid', 0),
       preferredTarget: num(s.preferredTarget, 'state.preferredTarget', 0),
       gpCarryPaid: num(s.gpCarryPaid, 'state.gpCarryPaid', 0),
-      lpProfitPaid: num(s.lpProfitPaid, 'state.lpProfitPaid', 0),
+      ...(s.gpCatchUpPaid === undefined ? {} : { gpCatchUpPaid: num(s.gpCatchUpPaid, 'state.gpCatchUpPaid', 0) }),
     }
   }
 

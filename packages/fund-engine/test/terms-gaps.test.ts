@@ -94,12 +94,34 @@ describe('the close measures carry gross of carry', () => {
 })
 
 describe('the catch-up', () => {
-  it('gives the GP exactly its share once complete, whatever the catch-up rate', () => {
-    for (const k of [1, 0.8, 0.5]) {
-      const r = runWaterfall(2_000, { carryRate: 0.2, catchUpRate: k }, {
-        contributedCapital: 1_000, returnedCapital: 0, preferredPaid: 0, preferredTarget: 80, gpCarryPaid: 0,
-      })
-      expect(r.toGP, `k=${k}`).toBe(200) // 20% of the 1,000 of profit
+  const start = { contributedCapital: 1_000, returnedCapital: 0, preferredPaid: 0, preferredTarget: 80, gpCarryPaid: 0 }
+
+  it('is a full catch-up at any rate: 20 on 80 of pref at 20% carry, taken at the rate', () => {
+    for (const [k, flow] of [[1, 20], [0.8, 25], [0.5, 40], [0.2, 100], [0.1, 200]] as const) {
+      const r = runWaterfall(1_080 + flow, { carryRate: 0.2, catchUpRate: k }, start)
+      expect(r.toCatchUp, `k=${k}`).toBe(20)
+      expect(r.toCatchUpLP, `k=${k}`).toBe(Math.round((flow - 20) * 100) / 100)
+      expect(r.toCarryGP, `k=${k}`).toBe(0) // the flow was exactly the catch-up
     }
+  })
+
+  it('stops at its size: a half catch-up is 10', () => {
+    const r = runWaterfall(1_500, { carryRate: 0.2, catchUpRate: 0.1, catchUpSize: 0.5 }, start)
+    expect(r.toCatchUp).toBe(10)
+    expect(r.toCatchUpLP).toBe(90)
+    expect(r.state.gpCatchUpPaid).toBe(10)
+  })
+
+  it('a size of 0 is no catch-up', () => {
+    const r = runWaterfall(1_500, { carryRate: 0.2, catchUpRate: 1, catchUpSize: 0 }, start)
+    expect(r.toCatchUp).toBe(0)
+    expect(r.toCarryGP).toBe(84)
+  })
+
+  it('split carry does not count toward the catch-up when the hurdle grows', () => {
+    const r = runWaterfall(100, { carryRate: 0.2, catchUpRate: 1 }, {
+      contributedCapital: 1_000, returnedCapital: 1_000, preferredPaid: 80, preferredTarget: 120, gpCarryPaid: 100, gpCatchUpPaid: 20,
+    })
+    expect(r.toCatchUp).toBe(10) // a full catch-up on 120 of pref is 30; 20 was caught up before
   })
 })

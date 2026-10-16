@@ -21,6 +21,7 @@ interface Terms {
   carryRate: number
   prefRate: number
   catchupRate: number
+  catchupSize?: number
   prefCompounds: boolean
   prefBase?: 'contributed' | 'unreturned'
   recipients: Recipient[]
@@ -46,6 +47,7 @@ export function CarryTerms() {
   const [catchup, setCatchup] = useState('0')
   const [compounds, setCompounds] = useState(false)
   const [prefBase, setPrefBase] = useState<'contributed' | 'unreturned'>('contributed')
+  const [catchupSize, setCatchupSize] = useState('100')
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [vehicleName, setVehicleName] = useState('')
@@ -63,6 +65,7 @@ export function CarryTerms() {
     setCatchup(pct(t.catchupRate))
     setCompounds(t.prefCompounds)
     setPrefBase(t.prefBase === 'unreturned' ? 'unreturned' : 'contributed')
+    setCatchupSize(pct(t.catchupSize ?? 1))
     setRecipients(t.recipients ?? [])
     setCandidates(d.candidates ?? [])
     setVehicleName(d.group ?? '')
@@ -94,6 +97,7 @@ export function CarryTerms() {
         carryRate: frac(carry),
         prefRate: frac(pref),
         catchupRate: frac(catchup),
+        catchupSize: catchupSize.trim() === '' ? 1 : frac(catchupSize),
         prefCompounds: compounds,
         prefBase,
         carryRecipients: recipients,
@@ -203,11 +207,18 @@ export function CarryTerms() {
                     <Input value={pref} onChange={e => setPref(e.target.value)} />
                   </Suffix>
                 </Field>
-                <Field label="Catch-up" hint="100% = full catch-up (0 = none)">
+                <Field label="Catch-up rate" hint="GP's share of each dollar while it catches up (0 = none)">
                   <Suffix suffix="%">
                     <Input value={catchup} onChange={e => setCatchup(e.target.value)} />
                   </Suffix>
                 </Field>
+                {frac(catchup) > 0 && (
+                  <Field label="Catch-up size" hint="Share of a full catch-up the GP gets (100% = full)">
+                    <Suffix suffix="%">
+                      <Input value={catchupSize} onChange={e => setCatchupSize(e.target.value)} />
+                    </Suffix>
+                  </Field>
+                )}
               </>
             )}
 

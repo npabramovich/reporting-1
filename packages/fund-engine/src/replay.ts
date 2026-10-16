@@ -52,7 +52,11 @@ export function waterfallTermsOf(terms: VehicleCarryTerms): WaterfallTerms {
   // 'straight' is the waterfall with no hurdle: return of capital, then the split. Setting the
   // preferred target to zero makes the catch-up tier vanish on its own (there is nothing to catch
   // up to), which is exactly the straight definition.
-  return { carryRate: terms.carryRate, catchUpRate: terms.kind === 'straight' ? 1 : terms.catchupRate }
+  return {
+    carryRate: terms.carryRate,
+    catchUpRate: terms.kind === 'straight' ? 1 : terms.catchupRate,
+    catchUpSize: terms.catchupSize ?? 1,
+  }
 }
 
 /** Whether the replay measures an American (realized-deals) capital base. */
@@ -98,7 +102,7 @@ export function replayWaterfallState(
     preferredPaid: 0,
     preferredTarget: 0,
     gpCarryPaid: 0,
-    lpProfitPaid: 0,
+    gpCatchUpPaid: 0,
   }
   const sorted = [...priors].filter(p => p.amount > 0 && p.date <= asOf).sort((a, b) => a.date.localeCompare(b.date))
   for (const p of sorted) {

@@ -117,7 +117,8 @@ The ledger format is what the app's `export_ledger_text` tool (and `serializeLed
     "kind": "european",                  // "none" | "straight" | "european" | "american"
     "carryRate": 0.2,                    // GP share of profit, as a fraction
     "prefRate": 0.08,                    // preferred return (hurdle), annual fraction; ignored for "straight"
-    "catchupRate": 1,                    // GP share during catch-up; 1 = full, 0 = none, else above carryRate
+    "catchupRate": 1,                    // GP's share of each dollar during the catch-up (default 1)
+    "catchupSize": 1,                    // how much of a full catch-up the GP gets (default 1 = full)
     "prefCompounds": true,               // compound the hurdle annually (default true); false = simple
     "prefBase": "contributed",           // hurdle on "contributed" capital (default) or "unreturned" capital
     "recipients": [                      // who receives the carry; pct must sum to 100
@@ -135,7 +136,7 @@ The ledger format is what the app's `export_ledger_text` tool (and `serializeLed
     "preferredPaid": 0,
     "preferredTarget": 80000,
     "gpCarryPaid": 0,
-    "lpProfitPaid": 0                    // LPs' profit beyond the pref so far (default 0)
+    "gpCatchUpPaid": 0                   // GP's catch-up so far (default: all of gpCarryPaid)
   },
   "realizedCapital": [                   // optional, "american" only: LP capital in realized deals
     { "companyId": "deal-a", "date": "2024-03-01", "realizedOn": "2025-06-30", "amount": 400000 }

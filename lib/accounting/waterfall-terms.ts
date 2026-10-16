@@ -17,6 +17,7 @@ export interface WaterfallTermsInput {
   carryRate?: unknown
   prefRate?: unknown
   catchupRate?: unknown
+  catchupSize?: unknown
   prefCompounds?: unknown
   prefBase?: unknown
   gpEntityId?: unknown
@@ -29,6 +30,8 @@ export interface ValidWaterfallTerms {
   carryRate: number
   prefRate: number
   catchupRate: number
+  /** How much of a full catch-up the GP gets, 0–1 (1 = full). `catchupRate` is how fast it gets it. */
+  catchupSize: number
   prefCompounds: boolean
   /** What the hurdle accrues on: all contributions, or only capital not yet returned. */
   prefBase: PrefBase
@@ -59,10 +62,8 @@ export function parseWaterfallTermsInput(body: WaterfallTermsInput): { ok: true;
   if (carryRate < 0 || carryRate >= 1) return { error: 'Carry rate must be a fraction between 0 and 1 (0.2 = 20%).' }
   if (prefRate < 0 || prefRate >= 1) return { error: 'Preferred return must be a fraction between 0 and 1 (0.08 = 8%).' }
   if (catchupRate < 0 || catchupRate > 1) return { error: 'Catch-up rate must be between 0 and 1.' }
-  // A catch-up at or below the carry rate can never bring the GP up to its share (spec §3.2).
-  if (kind !== 'straight' && carryRate > 0 && catchupRate > 0 && catchupRate <= carryRate) {
-    return { error: 'Catch-up rate must be above the carry rate, or 0 for no catch-up.' }
-  }
+  const catchupSize = num(body?.catchupSize, 1)
+  if (catchupSize < 0 || catchupSize > 1) return { error: 'Catch-up size must be between 0 and 1 (1 = a full catch-up).' }
   const prefBase = body?.prefBase ?? 'contributed'
   if (!(PREF_BASES as unknown[]).includes(prefBase)) return { error: 'The preferred return must accrue on contributed or unreturned capital.' }
 
@@ -90,6 +91,7 @@ export function parseWaterfallTermsInput(body: WaterfallTermsInput): { ok: true;
       carryRate,
       prefRate,
       catchupRate,
+      catchupSize,
       prefCompounds: body?.prefCompounds !== false,
       prefBase: prefBase as PrefBase,
       gpEntityId,
@@ -143,6 +145,7 @@ export async function saveWaterfallTerms(
         carry_rate: terms.carryRate,
         pref_rate: terms.prefRate,
         catchup_rate: terms.catchupRate,
+        catchup_size: terms.catchupSize,
         pref_compounds: terms.prefCompounds,
         pref_base: terms.prefBase,
         gp_entity_id: singleGp,

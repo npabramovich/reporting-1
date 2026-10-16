@@ -43,15 +43,16 @@ agreed to is worse than accruing none.
 | `prefRate` | `pref_rate` | 0 ≤ r < 1 | 0 | Annual preferred return (hurdle). Ignored by `straight`. |
 | `prefCompounds` | `pref_compounds` | boolean | true | Hurdle compounds annually (true) or accrues simply (false). |
 | `prefBase` | `pref_base` | `contributed` \| `unreturned` | `contributed` | What the hurdle accrues on (§5). |
-| `catchupRate` | `catchup_rate` | 0, or c < k ≤ 1 | 1 | The GP's share of the catch-up flow. 1 = full catch-up, 0 = none. Ignored by `straight`. |
+| `catchupRate` | `catchup_rate` | 0 ≤ k ≤ 1 | 1 | The catch-up RATE: the GP's share of each dollar while it catches up; the LPs get the rest. 0 = no catch-up. Ignored by `straight`. |
+| `catchupSize` | `catchup_size` | 0 ≤ s ≤ 1 | 1 | The catch-up SIZE: how much of a full catch-up the GP gets (§3.2). 1 = full. Ignored by `straight`. |
 | `recipients` | `carry_recipients` (jsonb `[{lpEntityId, pct}]`) | pct > 0, total 100 ± 0.01 | `[]` | Who receives the carry, and in what split. |
 | `gpEntityId` | `gp_entity_id` | partner id or null | null | Legacy single recipient. Used as `[{gpEntityId, 100}]` when `carry_recipients` is empty. |
 
 Validation (`parseWaterfallTermsInput`, shared by the settings page and `set_waterfall_terms`):
 - `kind` must be one of the four values.
 - Each rate must be in its range.
-- A catch-up rate must be above the carry rate, or 0. One at or below the carry rate can never bring
-  the GP up to its share; the engine treats a stored one as no catch-up.
+- Any catch-up rate in range works, including one at or below the carry rate (10% on 20% carry).
+- `catchupSize` must be between 0 and 1. Omitted, it is 1.
 - `prefBase` must be `contributed` or `unreturned`. Omitted, it is `contributed`.
 - When carry is on (`kind ≠ none` and `carryRate > 0`), there must be at least one recipient.
 - Recipient percentages must total 100.
@@ -80,51 +81,61 @@ the members' carry points.
 ### 3.1 Inputs
 
 ```
-terms  = { carryRate c, catchUpRate k (default 1) }
+terms  = { carryRate c, catchUpRate k (default 1), catchUpSize s (default 1) }
 state  = { contributedCapital C, returnedCapital R, preferredPaid P, preferredTarget T,
-           gpCarryPaid G, lpProfitPaid L (default 0) }
+           gpCarryPaid G, gpCatchUpPaid Q (default G) }
 distributable D
 ```
 
 The function is pure: it takes a distributable amount and the cumulative state. The caller works
-out the accrued hurdle `T` (§5). Timing stays out of the waterfall. `L` is the LPs' profit beyond
-the preferred return so far (their part of the catch-up and of the split); the catch-up needs it
-because it is measured against all the profit distributed.
+out the accrued hurdle `T` (§5). Timing stays out of the waterfall. `Q` is the GP's catch-up so
+far, kept apart from `G` because carry from the split does not count toward the catch-up. Absent,
+it is `G`, which is exact for any state that has not reached the split.
 
 ### 3.2 Tiers, in order
+
+A catch-up is two terms:
+- Its **size** `s` is how much of a full catch-up the GP gets. A full catch-up is the carry the GP
+  would have earned on the profit that paid the preferred return: enough that the GP holds `c` of
+  the pref plus the catch-up, which is `c·P'/(1 − c)`. A size of 0.5 is half of that.
+- Its **rate** `k` is the share of each dollar that goes to the GP while it catches up. The LPs get
+  `1 − k`. The catch-up stops when the GP's catch-up reaches its size, whatever the rate.
+
+Example: 20% carry and 80 of pref paid. A full catch-up is 20 (the GP then holds 20 of 100). At a
+100% rate the GP takes the next 20; at 10% it takes 10% of the next 200, and the LPs get 180.
 
 Let `rem = round(max(0, D))`. Each tier is `take(want) = round(max(0, min(rem, want)))`, and then
 `rem = round(rem − take)`.
 
 1. **Return of capital:** `ROC = take(C − R)`.
 2. **Preferred return:** `PREF = take(T − P)`. Let `P' = round(P + PREF)`.
-3. **GP catch-up.** This tier applies only when `0 < c < 1` and `k > c`.
-   - Profit distributed so far: `Π = P' + G + L`. The GP is short `gap = c × Π − G`. No gap, no
-     catch-up.
-   - Of each catch-up dollar the GP takes `k` and the LPs `1 − k`, so a gross flow `x` closes the
-     gap when `G + k·x = c·(Π + x)`: `x = gap / (k − c)`.
-   - GP part: `N = round(k × gap / (k − c))`. Flow: `want = round(N / k)`, `gross = take(want)`.
+3. **GP catch-up.** This tier applies only when `0 < c < 1`, `k > 0` and `s > 0`.
+   - The GP is owed `N = round(max(0, s·c·P'/(1 − c) − Q))`. Nothing owed, no catch-up.
+   - Flow: `want = round(N / k)`, `gross = take(want)`.
    - `CU = gross = want ? N : round(gross × k)` goes to the GP, and `CUlp = round(gross − CU)` to
-     the LPs. Rounding the GP part, not the flow, lands a completed catch-up on the GP's share to
-     the cent.
+     the LPs. Rounding the GP part, not the flow, lands a completed catch-up to the cent.
 4. **Carry split:** `GPsplit = round(rem × c)`, and `LPsplit = round(rem − GPsplit)`.
 
 Outputs:
 - `toLP = round(ROC + PREF + CUlp + LPsplit)`, with `toCatchUpLP = CUlp`.
 - `toGP = round(CU + GPsplit)`.
-- `state' = { C, R + ROC, P', T, G + toGP, L + CUlp + LPsplit }`.
+- `state' = { C, R + ROC, P', T, G + toGP, Q + CU }`.
 
 The tiers always add up to the rounded distributable. The vector test checks that for every vector.
 
-**Catch-up rate below 1.** The GP takes `k` of the flow and the LPs `1 − k`, literally:
-- When the catch-up completes, the GP holds exactly `c` of the profit so far, and the split keeps
-  it there (vector `partial-catch-up-80`).
+**Rate below 1.** The GP takes `k` of the flow and the LPs `1 − k`, literally:
+- When the catch-up completes, the GP has its catch-up and the split takes over (vectors
+  `partial-catch-up-80`, `catch-up-rate-below-carry`).
 - When the distribution runs out inside the catch-up, the GP has `k` of what there was (vector
   `partial-catch-up-runs-out`: 12 of 15).
+- Because the LPs share the catch-up flow, the GP ends below `c` of all profit until a fund-close
+  true-up says otherwise.
+
+**Size below 1.** The catch-up stops early, at `s` of a full one (vector `catch-up-half-size`).
 
 **After the split.** When the hurdle grows after the fund has reached the split (a later
-distribution, more pref accrued), the new pref is caught up against all profit paid so far, the
-LPs' split share included, so the GP ends at `c` of the total (vector `catch-up-after-split`).
+distribution, more pref accrued), the new pref is caught up in turn: the GP is owed `s` of a full
+catch-up on the larger `P'`, less the catch-up it already has (vector `catch-up-after-split`).
 
 ## 4. Kinds
 
@@ -286,7 +297,7 @@ Every vector in `waterfall-vectors.json`, by section:
   `catch-up-rate-omitted`, `partial-catch-up-80`, `partial-catch-up-runs-out`, `no-catch-up`,
   `resume-mid-catch-up`, `zero-carry`, `straight-shape`, `rounding-to-cents`,
   `sub-cent-distributable`, `negative-distributable`, `carry-25-large`, `catch-up-after-split`,
-  `catch-up-at-or-below-carry`.
+  `catch-up-rate-below-carry`, `catch-up-half-size`.
 - **preferredTarget:** `one-year-compound`, `one-year-simple`, `two-years-compound`,
   `two-years-simple`, `leap-year`, `per-contribution-dates`, `no-reduction-for-returns`,
   `zero-rate`, `unreturned-compound-pref-paid`, `unreturned-capital-back`, `unreturned-simple`.

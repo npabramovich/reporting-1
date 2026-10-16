@@ -35,6 +35,8 @@ export interface VehicleCarryTerms {
   carryRate: number
   prefRate: number
   catchupRate: number
+  /** How much of a full catch-up the GP gets, 0–1 (waterfall.ts). Absent means 1. */
+  catchupSize?: number
   prefCompounds: boolean
   /** What the hurdle accrues on (hurdle.ts). Absent means 'contributed', the original reading. */
   prefBase?: PrefBase
@@ -50,6 +52,7 @@ export const NO_CARRY: VehicleCarryTerms = {
   carryRate: 0,
   prefRate: 0,
   catchupRate: 1,
+  catchupSize: 1,
   prefCompounds: true,
   prefBase: 'contributed',
   gpEntityId: null,
@@ -160,6 +163,7 @@ export function carryTermsFromRow(row: {
   carry_rate?: unknown
   pref_rate?: unknown
   catchup_rate?: unknown
+  catchup_size?: unknown
   pref_compounds?: unknown
   pref_base?: unknown
   gp_entity_id?: unknown
@@ -175,6 +179,7 @@ export function carryTermsFromRow(row: {
     carryRate: Number(row.carry_rate ?? 0),
     prefRate: Number(row.pref_rate ?? 0),
     catchupRate: Number(row.catchup_rate ?? 1),
+    catchupSize: row.catchup_size == null ? 1 : Number(row.catchup_size),
     prefCompounds: row.pref_compounds !== false,
     prefBase: row.pref_base === 'unreturned' ? 'unreturned' : 'contributed',
     gpEntityId,

@@ -17,6 +17,7 @@ import { carryAccrual } from './carry.ts'
 import { carryAccrualInputs, distributionSplitInputs } from './economics.ts'
 import { splitDistribution, suggestedCharacter } from './distribution-waterfall.ts'
 import { runWaterfall, type WaterfallState } from './waterfall.ts'
+import { waterfallTermsOf } from './replay.ts'
 import { allocateAmount } from './allocation.ts'
 import { roundCents } from './ledger.ts'
 import { parseVehicleTerms, type VehicleTerms } from './terms-file.ts'
@@ -153,6 +154,7 @@ export interface StatementsReport {
     carryRate: number
     prefRate: number
     catchupRate: number
+    catchupSize: number
     prefCompounds: boolean
     prefBase: string
     target: number
@@ -244,6 +246,7 @@ function statementsFromEntries(
         carryRate: t.carryRate,
         prefRate: t.prefRate,
         catchupRate: t.catchupRate,
+        catchupSize: t.catchupSize ?? 1,
         prefCompounds: t.prefCompounds,
         prefBase: t.prefBase ?? 'contributed',
         target: accrual.target,
@@ -355,14 +358,14 @@ export function waterfallReport(
   // No ledger: run the waterfall once from the terms file's cumulative state.
   const warnings: string[] = []
   const t = terms.carry
-  const zero: WaterfallState = { contributedCapital: 0, returnedCapital: 0, preferredPaid: 0, preferredTarget: 0, gpCarryPaid: 0, lpProfitPaid: 0 }
+  const zero: WaterfallState = { contributedCapital: 0, returnedCapital: 0, preferredPaid: 0, preferredTarget: 0, gpCarryPaid: 0, gpCatchUpPaid: 0 }
   const stateIn: WaterfallState = terms.state ?? zero
   if (!terms.state) warnings.push('No "state" in the terms file and no --ledger: the waterfall starts from zero contributed capital, so every dollar is profit.')
   const noCarry = t.kind === 'none' || t.carryRate <= 0
   const state: WaterfallState = t.kind === 'straight' ? { ...stateIn, preferredTarget: 0 } : stateIn
   const result = noCarry
     ? { toReturnOfCapital: 0, toPreferred: 0, toCatchUp: 0, toCatchUpLP: 0, toCarryGP: 0, toCarryLP: 0, toLP: total, toGP: 0, state }
-    : runWaterfall(total, { carryRate: t.carryRate, catchUpRate: t.kind === 'straight' ? 1 : t.catchupRate }, state)
+    : runWaterfall(total, waterfallTermsOf(t), state)
   const tiers = {
     returnOfCapital: result.toReturnOfCapital,
     preferred: result.toPreferred,

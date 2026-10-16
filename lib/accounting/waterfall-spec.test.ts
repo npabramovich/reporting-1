@@ -83,7 +83,7 @@ describe('the published waterfall vectors', () => {
         const replayed = replayWaterfallState(priors, contributions, terms, asOf, { realizedCapital })
         expect(replayed, v.id).toEqual(v.expected.stateBefore)
         // And the split's tiers are exactly one more runWaterfall from that state.
-        const step = runWaterfall(v.input.total, { carryRate: terms.carryRate, catchUpRate: terms.kind === 'straight' ? 1 : terms.catchupRate }, replayed)
+        const step = runWaterfall(v.input.total, terms.kind === 'straight' ? { carryRate: terms.carryRate, catchUpRate: 1 } : { carryRate: terms.carryRate, catchUpRate: terms.catchupRate, catchUpSize: terms.catchupSize ?? 1 }, replayed)
         expect(step.state, v.id).toEqual(v.expected.stateAfter)
       }
     })

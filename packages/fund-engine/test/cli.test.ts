@@ -123,7 +123,7 @@ describe('terms.json', () => {
   })
   it('accepts the stored snake_case row', () => {
     const t = parseVehicleTerms({ carry: { kind: 'american', carry_rate: 0.25, pref_rate: 0.06, catchup_rate: 0.8, pref_compounds: false, gp_entity_id: 'gp' } })
-    expect(t.carry).toEqual({ kind: 'american', carryRate: 0.25, prefRate: 0.06, catchupRate: 0.8, prefCompounds: false, prefBase: 'contributed', gpEntityId: 'gp', recipients: [{ lpEntityId: 'gp', pct: 100 }] })
+    expect(t.carry).toEqual({ kind: 'american', carryRate: 0.25, prefRate: 0.06, catchupRate: 0.8, prefCompounds: false, prefBase: 'contributed', catchupSize: 1, gpEntityId: 'gp', recipients: [{ lpEntityId: 'gp', pct: 100 }] })
   })
 })
 

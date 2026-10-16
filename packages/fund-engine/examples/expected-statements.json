@@ -164,6 +164,7 @@
     "carryRate": 0.2,
     "prefRate": 0.08,
     "catchupRate": 1,
+    "catchupSize": 1,
     "prefCompounds": true,
     "prefBase": "contributed",
     "target": 58000,

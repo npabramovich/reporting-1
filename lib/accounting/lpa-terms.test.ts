@@ -239,8 +239,8 @@ describe('proposalToTermsInput', () => {
       carryRate: { value: 0.2, quote: 'thereafter, 80% to the Limited Partners and 20% to the General Partner' },
     }, LPA, 'assistant')
     const { input, filledFrom } = proposalToTermsInput(p, current)
-    expect(input).toEqual({ kind: 'european', carryRate: 0.2, prefRate: 0.06, catchupRate: 0.5, prefCompounds: false, prefBase: 'contributed', carryRecipients: [{ lpEntityId: 'gp-1', pct: 100 }] })
-    expect(filledFrom).toEqual({ kind: 'current', prefRate: 'current', catchupRate: 'current', prefCompounds: 'current', prefBase: 'current', carryRecipients: 'current' })
+    expect(input).toEqual({ kind: 'european', carryRate: 0.2, prefRate: 0.06, catchupRate: 0.5, catchupSize: 1, prefCompounds: false, prefBase: 'contributed', carryRecipients: [{ lpEntityId: 'gp-1', pct: 100 }] })
+    expect(filledFrom).toEqual({ kind: 'current', prefRate: 'current', catchupRate: 'current', catchupSize: 'current', prefCompounds: 'current', prefBase: 'current', carryRecipients: 'current' })
     expect(parseWaterfallTermsInput(input)).toMatchObject({ ok: true })
   })
 
@@ -264,7 +264,7 @@ describe('parseWaterfallTermsInput (the shared write path)', () => {
   it('accepts valid terms and defaults catch-up to full and the hurdle to compounding', () => {
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefRate: 0.08, carryRecipients: [{ lpEntityId: 'gp', pct: 100 }] })).toEqual({
       ok: true,
-      value: { kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, prefCompounds: true, prefBase: 'contributed', gpEntityId: null, recipients: [{ lpEntityId: 'gp', pct: 100 }] },
+      value: { kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, catchupSize: 1, prefCompounds: true, prefBase: 'contributed', gpEntityId: null, recipients: [{ lpEntityId: 'gp', pct: 100 }] },
     })
   })
 
@@ -273,8 +273,10 @@ describe('parseWaterfallTermsInput (the shared write path)', () => {
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 20, gpEntityId: 'gp' })).toEqual({ error: 'Carry rate must be a fraction between 0 and 1 (0.2 = 20%).' })
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefRate: 8, gpEntityId: 'gp' })).toEqual({ error: 'Preferred return must be a fraction between 0 and 1 (0.08 = 8%).' })
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, catchupRate: 1.5, gpEntityId: 'gp' })).toEqual({ error: 'Catch-up rate must be between 0 and 1.' })
-    // A catch-up at or below the carry rate never catches up; 0 is the way to say none.
-    expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, catchupRate: 0.2, gpEntityId: 'gp' })).toEqual({ error: 'Catch-up rate must be above the carry rate, or 0 for no catch-up.' })
+    // Any catch-up rate works, at or below the carry rate included (10% on 20% carry).
+    expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, catchupRate: 0.1, gpEntityId: 'gp' })).toMatchObject({ ok: true, value: { catchupRate: 0.1, catchupSize: 1 } })
+    expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, catchupSize: 0.5, gpEntityId: 'gp' })).toMatchObject({ ok: true, value: { catchupSize: 0.5 } })
+    expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, catchupSize: 1.5, gpEntityId: 'gp' })).toEqual({ error: 'Catch-up size must be between 0 and 1 (1 = a full catch-up).' })
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, catchupRate: 0, gpEntityId: 'gp' })).toMatchObject({ ok: true })
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefBase: 'net', gpEntityId: 'gp' })).toEqual({ error: 'The preferred return must accrue on contributed or unreturned capital.' })
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefBase: 'unreturned', gpEntityId: 'gp' })).toMatchObject({ ok: true, value: { prefBase: 'unreturned' } })
