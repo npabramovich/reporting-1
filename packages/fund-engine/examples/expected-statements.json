@@ -165,6 +165,7 @@
     "prefRate": 0.08,
     "catchupRate": 1,
     "prefCompounds": true,
+    "prefBase": "contributed",
     "target": 58000,
     "alreadyAccrued": 0,
     "delta": 58000,

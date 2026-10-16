@@ -3,8 +3,8 @@
 // Deal-by-deal (American) carry — a REFERENCE calculator, not a posting surface. It computes the
 // GP's per-deal carry entitlement (each deal's gain over its fully-loaded cost) for an American
 // vehicle. The close still ACCRUES the whole-fund figure (= European, which the clawback makes the
-// same total); actual carry distributions arrive as real cash flows, computed outside the app.
-// This lives on Admin as a planning/what-if view — it does not drive the financial statements.
+// same total). Declaring a distribution splits it deal by deal on the realized deals (spec §4.3);
+// this card is the per-deal view beside that, and it does not drive the financial statements.
 
 import { useCallback, useEffect, useState } from 'react'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
@@ -59,8 +59,8 @@ export function DealCarryCard() {
       </div>
       <p className="text-xs text-muted-foreground mb-2 max-w-3xl">
         A reference calculation: carry on each deal&rsquo;s gain over its <strong>fully-loaded cost</strong>
-        {' '}(cost basis plus its share of fund expenses). The close still accrues the whole-fund figure;
-        this is for sizing what a deal-by-deal distribution would be. It does not post anything.
+        {' '}(cost basis plus its share of fund expenses). Distributions are split deal by deal when you
+        declare them; the close still accrues the whole-fund figure. This view does not post anything.
       </p>
       <div className="border rounded-lg overflow-x-auto">
         <table className="w-full text-sm whitespace-nowrap">

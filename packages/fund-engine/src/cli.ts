@@ -154,6 +154,7 @@ export interface StatementsReport {
     prefRate: number
     catchupRate: number
     prefCompounds: boolean
+    prefBase: string
     target: number
     alreadyAccrued: number
     delta: number
@@ -237,13 +238,14 @@ function statementsFromEntries(
       const inputs = carryAccrualInputs(books.capitalPostings, t.recipients, asOf)
       const accrual = inputs.lps.length === 0
         ? { target: 0, alreadyAccrued: inputs.alreadyAccrued, delta: 0, perLp: new Map<string, number>() }
-        : carryAccrual({ lps: inputs.lps, contributions: inputs.contributions, asOf }, t, inputs.alreadyAccrued)
+        : carryAccrual({ lps: inputs.lps, contributions: inputs.contributions, distributions: inputs.distributions, asOf }, t, inputs.alreadyAccrued)
       carry = {
         kind: t.kind,
         carryRate: t.carryRate,
         prefRate: t.prefRate,
         catchupRate: t.catchupRate,
         prefCompounds: t.prefCompounds,
+        prefBase: t.prefBase ?? 'contributed',
         target: accrual.target,
         alreadyAccrued: accrual.alreadyAccrued,
         delta: accrual.delta,
@@ -292,6 +294,7 @@ export interface WaterfallReport {
     returnOfCapital: number
     preferred: number
     catchUp: number
+    catchUpToLP?: number
     carry: number
     profitToLP: number
     toLP: number
@@ -331,6 +334,7 @@ export function waterfallReport(
       priors: inputs.priors,
       asOf,
       carryPaidToDate: terms.carry.recipients.length > 0 ? inputs.carryPaidToDate : undefined,
+      realizedCapital: terms.realizedCapital,
     })
     return {
       vehicle: terms.vehicle ?? null,
@@ -351,18 +355,19 @@ export function waterfallReport(
   // No ledger: run the waterfall once from the terms file's cumulative state.
   const warnings: string[] = []
   const t = terms.carry
-  const zero: WaterfallState = { contributedCapital: 0, returnedCapital: 0, preferredPaid: 0, preferredTarget: 0, gpCarryPaid: 0 }
+  const zero: WaterfallState = { contributedCapital: 0, returnedCapital: 0, preferredPaid: 0, preferredTarget: 0, gpCarryPaid: 0, lpProfitPaid: 0 }
   const stateIn: WaterfallState = terms.state ?? zero
   if (!terms.state) warnings.push('No "state" in the terms file and no --ledger: the waterfall starts from zero contributed capital, so every dollar is profit.')
   const noCarry = t.kind === 'none' || t.carryRate <= 0
   const state: WaterfallState = t.kind === 'straight' ? { ...stateIn, preferredTarget: 0 } : stateIn
   const result = noCarry
-    ? { toReturnOfCapital: 0, toPreferred: 0, toCatchUp: 0, toCarryGP: 0, toCarryLP: 0, toLP: total, toGP: 0, state }
+    ? { toReturnOfCapital: 0, toPreferred: 0, toCatchUp: 0, toCatchUpLP: 0, toCarryGP: 0, toCarryLP: 0, toLP: total, toGP: 0, state }
     : runWaterfall(total, { carryRate: t.carryRate, catchUpRate: t.kind === 'straight' ? 1 : t.catchupRate }, state)
   const tiers = {
     returnOfCapital: result.toReturnOfCapital,
     preferred: result.toPreferred,
     catchUp: result.toCatchUp,
+    catchUpToLP: result.toCatchUpLP,
     carry: result.toCarryGP,
     profitToLP: result.toCarryLP,
     toLP: result.toLP,
@@ -464,6 +469,7 @@ export function waterfallTable(r: WaterfallReport): string {
     ['Return of capital', money(r.tiers.returnOfCapital)],
     ['Preferred return', money(r.tiers.preferred)],
     ['GP catch-up', money(r.tiers.catchUp)],
+    ...(r.tiers.catchUpToLP ? [['Catch-up — LPs', money(r.tiers.catchUpToLP)]] : []),
     ['Carry split — GP', money(r.tiers.carry)],
     ['Carry split — LPs', money(r.tiers.profitToLP)],
     ['To LPs', money(r.tiers.toLP)],

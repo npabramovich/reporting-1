@@ -16,9 +16,11 @@ the code here is the same code that runs in production, not a copy of it.
 | `trial-balance.ts` | The trial balance, plus period scoping (`postingsInPeriod`, `postingsAsOf`). |
 | `capital-account.ts` | The capital-account roll-forward: source type to statement line, period statements, NAV and the tie-out check. |
 | `allocation.ts` | Pro-rata allocation that ties to the cent (largest remainder), including the cumulative residual variant the close uses. |
-| `waterfall.ts` | The European waterfall: return of capital, then preferred return, then GP catch-up, then the carry split. |
-| `carry.ts` | Preferred-return accrual, the carry target on a hypothetical liquidation at NAV, and the per-LP accrual. Also `carryTermsFromRow`, which reads stored terms. |
-| `american-carry.ts` | Deal-by-deal (American) carry on fully-loaded deal cost. |
+| `waterfall.ts` | One distribution through the tiers: return of capital, then preferred return, then GP catch-up, then the carry split. |
+| `hurdle.ts` | The preferred return, on contributed or on unreturned capital. |
+| `replay.ts` | Where the tiers stand on a date: every earlier distribution replayed, whole-fund or on realized deals. |
+| `carry.ts` | The carry target on a hypothetical liquidation at NAV, and the per-LP accrual. Also `carryTermsFromRow`, which reads stored terms. |
+| `american-carry.ts` | Deal-by-deal (American): the realized-capital base a distribution returns before carry, and each deal's carry on fully-loaded cost. |
 | `distribution-waterfall.ts` | Splits a distribution by replaying every earlier distribution through the waterfall. |
 | `economics.ts` | Turns capital postings into the inputs for the carry accrual and the distribution split. The close and the distribution preview both use it. |
 | `text-ledger.ts` | Writes the books to plain-text double-entry, and parses that text back. This is the format the app exports. |
@@ -115,8 +117,9 @@ The ledger format is what the app's `export_ledger_text` tool (and `serializeLed
     "kind": "european",                  // "none" | "straight" | "european" | "american"
     "carryRate": 0.2,                    // GP share of profit, as a fraction
     "prefRate": 0.08,                    // preferred return (hurdle), annual fraction; ignored for "straight"
-    "catchupRate": 1,                    // GP share during catch-up; 1 = full catch-up (default 1)
+    "catchupRate": 1,                    // GP share during catch-up; 1 = full, 0 = none, else above carryRate
     "prefCompounds": true,               // compound the hurdle annually (default true); false = simple
+    "prefBase": "contributed",           // hurdle on "contributed" capital (default) or "unreturned" capital
     "recipients": [                      // who receives the carry; pct must sum to 100
       { "partner": "gp", "pct": 100 }
     ]
@@ -131,8 +134,12 @@ The ledger format is what the app's `export_ledger_text` tool (and `serializeLed
     "returnedCapital": 0,
     "preferredPaid": 0,
     "preferredTarget": 80000,
-    "gpCarryPaid": 0
-  }
+    "gpCarryPaid": 0,
+    "lpProfitPaid": 0                    // LPs' profit beyond the pref so far (default 0)
+  },
+  "realizedCapital": [                   // optional, "american" only: LP capital in realized deals
+    { "companyId": "deal-a", "date": "2024-03-01", "realizedOn": "2025-06-30", "amount": 400000 }
+  ]
 }
 ```
 
@@ -143,8 +150,11 @@ The ledger format is what the app's `export_ledger_text` tool (and `serializeLed
   `pref_rate`, `catchup_rate`, `pref_compounds`, `gp_entity_id`, `carry_recipients`) are also
   accepted inside `carry`.
 - **Carry kinds.** `european` and `american` accrue the same whole-fund target. American carry only
-  changes when carry is paid, not how much is earned in total; see the note in `carry.ts`.
-  `dealByDealCarry` computes the deal-by-deal early entitlement.
+  changes when carry is paid, not how much is earned in total; see the note in `carry.ts`. An
+  `american` distribution returns the capital in deals realized so far (`realizedCapital`, built by
+  `realizedCapitalFromDeals`) before carry; without it the split is whole-fund and warns.
+  `dealByDealCarry` computes each deal's own carry.
+- **The full spec** is `docs/spec/waterfall-terms.md` in the repository, with test vectors.
 
 ## Examples and the golden test
 

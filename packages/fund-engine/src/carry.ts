@@ -14,8 +14,13 @@
 // AFTER every other category has landed: carry is computed on the NAV that those allocations
 // produce.
 
-import { runWaterfall, type WaterfallTerms } from './waterfall.ts'
+import { runWaterfall } from './waterfall.ts'
 import { roundCents } from './ledger.ts'
+import { preferredTarget, type DatedContribution, type PrefBase } from './hurdle.ts'
+import { replayWaterfallState, waterfallTermsOf, type PriorDistribution } from './replay.ts'
+
+export { preferredTarget } from './hurdle.ts'
+export type { DatedContribution, HurdleReduction, PrefBase } from './hurdle.ts'
 
 export type CarryKind = 'none' | 'straight' | 'american' | 'european'
 
@@ -31,6 +36,8 @@ export interface VehicleCarryTerms {
   prefRate: number
   catchupRate: number
   prefCompounds: boolean
+  /** What the hurdle accrues on (hurdle.ts). Absent means 'contributed', the original reading. */
+  prefBase?: PrefBase
   /** Single-recipient legacy field; kept for back-compat and as the fallback source. */
   gpEntityId: string | null
   /** Who receives the carry and in what split. Resolved from `carry_recipients`, or
@@ -44,6 +51,7 @@ export const NO_CARRY: VehicleCarryTerms = {
   prefRate: 0,
   catchupRate: 1,
   prefCompounds: true,
+  prefBase: 'contributed',
   gpEntityId: null,
   recipients: [],
 }
@@ -67,47 +75,12 @@ export interface LpEconomics {
   contributed: number
   /** Cumulative distributions received (positive). */
   distributed: number
-  /** Current capital account balance, BEFORE this period's carry accrual. */
+  /**
+   * Capital account balance BEFORE any carry accrual: today's balance with the carry already
+   * debited from this LP added back. The target is what the GP would take from the LPs' gross
+   * value; measuring it on a balance already net of carry counts the carry twice.
+   */
   nav: number
-}
-
-/** A dated contribution, for accruing the preferred return. */
-export interface DatedContribution {
-  date: string
-  amount: number
-}
-
-/**
- * The preferred return owed to LPs as at `asOf`.
- *
- * The hurdle accrues on each contribution from the day it was made — money committed on paper
- * earns nothing; money actually WIRED does. The ledger has these dates, so we use them rather
- * than approximating from a fund vintage.
- */
-export function preferredTarget(
-  contributions: DatedContribution[],
-  asOf: string,
-  rate: number,
-  compounds: boolean
-): number {
-  if (rate <= 0) return 0
-
-  const end = Date.parse(asOf)
-  if (Number.isNaN(end)) return 0
-
-  let total = 0
-  for (const c of contributions) {
-    const start = Date.parse(c.date)
-    if (Number.isNaN(start) || start >= end || c.amount <= 0) continue
-    // ACTUAL/365, the usual convention in an LPA. Using 365.25 would make "one year" 0.9993 of
-    // a year and quietly understate the hurdle — small, but it compounds, and it is the kind of
-    // difference an LP's accountant will find.
-    const years = (end - start) / (365 * 24 * 60 * 60 * 1000)
-    total += compounds
-      ? c.amount * (Math.pow(1 + rate, years) - 1)
-      : c.amount * rate * years
-  }
-  return roundCents(total)
 }
 
 export interface CarryTargetInput {
@@ -116,6 +89,11 @@ export interface CarryTargetInput {
   contributions?: DatedContribution[]
   /** The date the accrual is measured at. European/American. */
   asOf?: string
+  /**
+   * Every prior distribution as a fund-wide total per date. Needed only when the hurdle accrues on
+   * unreturned capital, because then what came back, and when, shrinks the hurdle.
+   */
+  distributions?: PriorDistribution[]
 }
 
 /**
@@ -149,17 +127,18 @@ export function carryTarget(input: CarryTargetInput, terms: VehicleCarryTerms): 
   // the prudent accrued MARK is the whole-fund result for both. (Accruing a deal-by-deal "winners
   // only" figure would overstate the GP and understate LP NAV.) The genuine American difference —
   // distributing realized carry cash per deal before the whole fund is made whole — is a
-  // distribution-timing concern, not an accrual one, and lives outside this mark. Run the real
-  // waterfall on the hypothetical liquidation proceeds.
-  const pref = preferredTarget(
-    input.contributions ?? [],
-    input.asOf ?? new Date(0).toISOString().slice(0, 10),
-    terms.prefRate,
-    terms.prefCompounds
-  )
+  // distribution-timing concern, not an accrual one: it is how `splitDistribution` splits an
+  // American distribution (replay.ts). A liquidation realizes every deal, so here the deal-by-deal
+  // capital base IS the whole fund. Run the real waterfall on the hypothetical liquidation.
+  const asOf = input.asOf ?? new Date(0).toISOString().slice(0, 10)
+  const contributions = input.contributions ?? []
+  // On an unreturned base the hurdle depends on what the actual distributions returned and paid,
+  // so replay them (whole-fund: the liquidation realizes every deal) and read its hurdle.
+  const pref = terms.prefBase === 'unreturned'
+    ? replayWaterfallState(input.distributions ?? [], contributions, { ...terms, kind: 'european' }, asOf).preferredTarget
+    : preferredTarget(contributions, asOf, terms.prefRate, terms.prefCompounds)
 
-  const wfTerms: WaterfallTerms = { carryRate: terms.carryRate, catchUpRate: terms.catchupRate }
-  const result = runWaterfall(liquidation, wfTerms, {
+  const result = runWaterfall(liquidation, waterfallTermsOf(terms), {
     contributedCapital: contributed,
     returnedCapital: 0,
     preferredPaid: 0,
@@ -182,6 +161,7 @@ export function carryTermsFromRow(row: {
   pref_rate?: unknown
   catchup_rate?: unknown
   pref_compounds?: unknown
+  pref_base?: unknown
   gp_entity_id?: unknown
   carry_recipients?: unknown
 } | null | undefined): VehicleCarryTerms {
@@ -196,6 +176,7 @@ export function carryTermsFromRow(row: {
     prefRate: Number(row.pref_rate ?? 0),
     catchupRate: Number(row.catchup_rate ?? 1),
     prefCompounds: row.pref_compounds !== false,
+    prefBase: row.pref_base === 'unreturned' ? 'unreturned' : 'contributed',
     gpEntityId,
     recipients: resolveCarryRecipients(row.carry_recipients, gpEntityId),
   }

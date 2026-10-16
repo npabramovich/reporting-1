@@ -3,9 +3,9 @@
 // For each company the vehicle holds, its total invested / realized / remaining value comes from
 // the portfolio tracker (the source of truth for exits — the ledger pools realized gains), and
 // `dealByDealCarry` computes the GP's per-deal carry entitlement: carry on each deal's gain over
-// its fully-loaded cost (cost basis + its share of fund expenses). This is the EARLY entitlement
-// an American waterfall pays as deals realize; the whole-fund clawback (carry paid vs. accrued) is
-// surfaced separately on the GP panel.
+// its fully-loaded cost (cost basis + its share of fund expenses). A per-deal view: the split of an
+// actual distribution runs the waterfall on the realized deals (lib/accounting/realized-capital.ts),
+// and the whole-fund clawback (carry paid vs. accrued) is surfaced separately on the GP panel.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'

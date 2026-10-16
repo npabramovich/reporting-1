@@ -5,10 +5,11 @@
 // The spec for what these terms mean is docs/spec/waterfall-terms.md.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { CarryKind, CarryRecipient } from './carry'
+import type { CarryKind, CarryRecipient, PrefBase } from './carry'
 import { vehicleIdByName } from './vehicle-id'
 
 export const CARRY_KINDS: CarryKind[] = ['none', 'straight', 'american', 'european']
+export const PREF_BASES: PrefBase[] = ['contributed', 'unreturned']
 
 /** The terms as a caller supplies them (the route's PUT body, the pending action's input). */
 export interface WaterfallTermsInput {
@@ -17,6 +18,7 @@ export interface WaterfallTermsInput {
   prefRate?: unknown
   catchupRate?: unknown
   prefCompounds?: unknown
+  prefBase?: unknown
   gpEntityId?: unknown
   carryRecipients?: unknown
 }
@@ -28,6 +30,8 @@ export interface ValidWaterfallTerms {
   prefRate: number
   catchupRate: number
   prefCompounds: boolean
+  /** What the hurdle accrues on: all contributions, or only capital not yet returned. */
+  prefBase: PrefBase
   gpEntityId: string | null
   recipients: CarryRecipient[]
 }
@@ -55,6 +59,12 @@ export function parseWaterfallTermsInput(body: WaterfallTermsInput): { ok: true;
   if (carryRate < 0 || carryRate >= 1) return { error: 'Carry rate must be a fraction between 0 and 1 (0.2 = 20%).' }
   if (prefRate < 0 || prefRate >= 1) return { error: 'Preferred return must be a fraction between 0 and 1 (0.08 = 8%).' }
   if (catchupRate < 0 || catchupRate > 1) return { error: 'Catch-up rate must be between 0 and 1.' }
+  // A catch-up at or below the carry rate can never bring the GP up to its share (spec §3.2).
+  if (kind !== 'straight' && carryRate > 0 && catchupRate > 0 && catchupRate <= carryRate) {
+    return { error: 'Catch-up rate must be above the carry rate, or 0 for no catch-up.' }
+  }
+  const prefBase = body?.prefBase ?? 'contributed'
+  if (!(PREF_BASES as unknown[]).includes(prefBase)) return { error: 'The preferred return must accrue on contributed or unreturned capital.' }
 
   // Carry has to accrue TO somebody. A vehicle may have ONE recipient (legacy gpEntityId) or a
   // split across several (carryRecipients: [{lpEntityId, pct}] summing to 100). Without any the
@@ -81,6 +91,7 @@ export function parseWaterfallTermsInput(body: WaterfallTermsInput): { ok: true;
       prefRate,
       catchupRate,
       prefCompounds: body?.prefCompounds !== false,
+      prefBase: prefBase as PrefBase,
       gpEntityId,
       recipients,
     },
@@ -133,6 +144,7 @@ export async function saveWaterfallTerms(
         pref_rate: terms.prefRate,
         catchup_rate: terms.catchupRate,
         pref_compounds: terms.prefCompounds,
+        pref_base: terms.prefBase,
         gp_entity_id: singleGp,
         carry_recipients: recipients.length > 0 ? recipients : null,
         updated_at: new Date().toISOString(),

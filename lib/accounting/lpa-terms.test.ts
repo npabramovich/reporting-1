@@ -59,7 +59,15 @@ describe('heuristicLpaTerms', () => {
     expect(p.terms.prefRate?.value).toBe(0.08)
     expect(p.terms.prefCompounds?.value).toBe(true)
     expect(p.terms.catchupRate?.value).toBe(1)
-    expect(p.notFound).toEqual([])
+    // "on such Capital Contributions" is how both hurdle bases are written, so it is not guessed.
+    expect(p.notFound).toEqual(['prefBase'])
+  })
+
+  it('reads a hurdle on unreturned capital', () => {
+    const unreturned = LPA.replace('compounded annually, on such Capital Contributions', 'compounded annually, on their unreturned Capital Contributions')
+    const q = heuristicLpaTerms(unreturned)
+    expect(q.terms.prefBase).toMatchObject({ value: 'unreturned', confidence: 'medium' })
+    expect(q.unsupported.map(u => u.provision).join(' ')).not.toMatch(/unreturned/i)
   })
 
   it('never claims high confidence', () => {
@@ -103,7 +111,7 @@ describe('heuristicLpaTerms', () => {
 
   it('lists what it cannot find, and warns when nothing mentions carry', () => {
     const none = heuristicLpaTerms('[Page 1]\nThe Partnership shall keep books at its principal office.')
-    expect(none.notFound).toEqual(['kind', 'carryRate', 'prefRate', 'prefCompounds', 'catchupRate', 'managementFeeRate', 'managementFeeBasis'])
+    expect(none.notFound).toEqual(['kind', 'carryRate', 'prefRate', 'prefCompounds', 'prefBase', 'catchupRate', 'managementFeeRate', 'managementFeeBasis'])
     expect(none.warnings.join(' ')).toMatch(/No clause mentions carried interest/)
   })
 })
@@ -165,7 +173,7 @@ describe('parseLpaTermsResponse', () => {
     expect(p.terms.carryRate).toMatchObject({ value: 0.2, confidence: 'high', quoteVerified: true, section: 'Section 6.2', page: 22 })
     expect(p.terms.prefRate).toMatchObject({ value: 0.08, quoteVerified: true, page: 22, section: 'Section 6.2 Distributions' })
     expect(p.info.managementFeeRate?.value).toBe(0.02)
-    expect(p.notFound).toEqual([])
+    expect(p.notFound).toEqual(['prefBase'])
     expect(p.warnings).toContain('Clause (iii) is a full catch-up.')
     // The reader did not mention the clawback; the pattern check adds it.
     expect(p.unsupported.map(u => u.provision).join(' ')).toMatch(/clawback/i)
@@ -231,8 +239,8 @@ describe('proposalToTermsInput', () => {
       carryRate: { value: 0.2, quote: 'thereafter, 80% to the Limited Partners and 20% to the General Partner' },
     }, LPA, 'assistant')
     const { input, filledFrom } = proposalToTermsInput(p, current)
-    expect(input).toEqual({ kind: 'european', carryRate: 0.2, prefRate: 0.06, catchupRate: 0.5, prefCompounds: false, carryRecipients: [{ lpEntityId: 'gp-1', pct: 100 }] })
-    expect(filledFrom).toEqual({ kind: 'current', prefRate: 'current', catchupRate: 'current', prefCompounds: 'current', carryRecipients: 'current' })
+    expect(input).toEqual({ kind: 'european', carryRate: 0.2, prefRate: 0.06, catchupRate: 0.5, prefCompounds: false, prefBase: 'contributed', carryRecipients: [{ lpEntityId: 'gp-1', pct: 100 }] })
+    expect(filledFrom).toEqual({ kind: 'current', prefRate: 'current', catchupRate: 'current', prefCompounds: 'current', prefBase: 'current', carryRecipients: 'current' })
     expect(parseWaterfallTermsInput(input)).toMatchObject({ ok: true })
   })
 
@@ -256,7 +264,7 @@ describe('parseWaterfallTermsInput (the shared write path)', () => {
   it('accepts valid terms and defaults catch-up to full and the hurdle to compounding', () => {
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefRate: 0.08, carryRecipients: [{ lpEntityId: 'gp', pct: 100 }] })).toEqual({
       ok: true,
-      value: { kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, prefCompounds: true, gpEntityId: null, recipients: [{ lpEntityId: 'gp', pct: 100 }] },
+      value: { kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, prefCompounds: true, prefBase: 'contributed', gpEntityId: null, recipients: [{ lpEntityId: 'gp', pct: 100 }] },
     })
   })
 
@@ -265,6 +273,11 @@ describe('parseWaterfallTermsInput (the shared write path)', () => {
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 20, gpEntityId: 'gp' })).toEqual({ error: 'Carry rate must be a fraction between 0 and 1 (0.2 = 20%).' })
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefRate: 8, gpEntityId: 'gp' })).toEqual({ error: 'Preferred return must be a fraction between 0 and 1 (0.08 = 8%).' })
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, catchupRate: 1.5, gpEntityId: 'gp' })).toEqual({ error: 'Catch-up rate must be between 0 and 1.' })
+    // A catch-up at or below the carry rate never catches up; 0 is the way to say none.
+    expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, catchupRate: 0.2, gpEntityId: 'gp' })).toEqual({ error: 'Catch-up rate must be above the carry rate, or 0 for no catch-up.' })
+    expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, catchupRate: 0, gpEntityId: 'gp' })).toMatchObject({ ok: true })
+    expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefBase: 'net', gpEntityId: 'gp' })).toEqual({ error: 'The preferred return must accrue on contributed or unreturned capital.' })
+    expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefBase: 'unreturned', gpEntityId: 'gp' })).toMatchObject({ ok: true, value: { prefBase: 'unreturned' } })
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, carryRecipients: [{ lpEntityId: 'a', pct: 60 }, { lpEntityId: 'b', pct: 30 }] }))
       .toEqual({ error: 'Carry recipient percentages must total 100 (they total 90).' })
   })
@@ -277,6 +290,7 @@ describe('parseWaterfallTermsInput (the shared write path)', () => {
     expect(describeTerms({ kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, prefCompounds: true }))
       .toBe('European (whole-fund) 20% carry, 8% compounding preferred return, 100% GP catch-up')
     expect(describeTerms({ kind: 'straight', carryRate: 0.2, prefRate: 0, catchupRate: 1, prefCompounds: true })).toBe('straight 20% carry, no hurdle')
+    expect(describeTerms({ kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, prefCompounds: true, prefBase: 'unreturned' })).toMatch(/preferred return on unreturned capital/)
     expect(describeTerms({ kind: 'none', carryRate: 0, prefRate: 0, catchupRate: 1, prefCompounds: true })).toBe('no carry')
   })
 })

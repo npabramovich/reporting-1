@@ -19,7 +19,7 @@
 // not appear in the document (whitespace, case and typographic quotes aside) caps that field at
 // low confidence and says so.
 
-import type { CarryKind, VehicleCarryTerms } from './carry'
+import type { CarryKind, PrefBase, VehicleCarryTerms } from './carry'
 import type { FeeBasis } from './fees'
 
 export type Confidence = 'high' | 'medium' | 'low'
@@ -43,7 +43,7 @@ export interface ProposedField<T> extends TermSource {
 }
 
 /** The fields the engine stores in vehicle_waterfall_terms (recipients are matched separately). */
-export const TERM_FIELDS = ['kind', 'carryRate', 'prefRate', 'prefCompounds', 'catchupRate'] as const
+export const TERM_FIELDS = ['kind', 'carryRate', 'prefRate', 'prefCompounds', 'prefBase', 'catchupRate'] as const
 export type TermField = typeof TERM_FIELDS[number]
 
 /** Read for the record only: the management fee is a forecast-plan rule and a per-close input, not a waterfall term. */
@@ -55,6 +55,7 @@ export interface ProposedTerms {
   carryRate?: ProposedField<number>
   prefRate?: ProposedField<number>
   prefCompounds?: ProposedField<boolean>
+  prefBase?: ProposedField<PrefBase>
   catchupRate?: ProposedField<number>
 }
 
@@ -356,6 +357,10 @@ export function heuristicLpaTerms(text: string): LpaTermsProposal {
       terms.prefCompounds = field(true, c, 'low', 'An IRR hurdle compounds; the engine compounds annually from each contribution date.'); break
     }
   }
+  // What the hurdle accrues on. Only the unreturned wording is distinctive; "capital contributions"
+  // alone is how both readings are written, so silence is left as not found.
+  const unreturnedAt = prefClauses.find(c => UNRETURNED.test(c.text))
+  if (unreturnedAt) terms.prefBase = field<PrefBase>('unreturned', unreturnedAt, 'medium')
 
   // Kind.
   const all = passages.map(p => p.text).join('\n')
@@ -397,13 +402,15 @@ export function heuristicLpaTerms(text: string): LpaTermsProposal {
   return finish({ method: 'heuristic', terms, info, unsupported, warnings })
 }
 
+/** A hurdle that accrues only on capital not yet returned (prefBase 'unreturned'). */
+const UNRETURNED = /(?:preferred return|hurdle|per annum)[^.]{0,200}(?:unreturned|outstanding|net of (?:prior )?distributions|not (?:yet )?(?:been )?returned)/i
+
 /** Provisions the engine does not model, each with the clause that has it. */
 export function detectUnsupported(passages: Passage[]): UnsupportedProvision[] {
   const checks: { provision: string; re: RegExp }[] = [
     { provision: 'GP clawback (carry give-back)', re: /claw[- ]?back|give[- ]?back|return[^.]{0,60}excess[^.]{0,40}(?:carried interest|distributions)/i },
     { provision: 'Carry escrow or holdback', re: /(?:escrow|holdback|held back|reserve)[^.]{0,80}carried interest|carried interest[^.]{0,80}(?:escrow|holdback|held back)/i },
     { provision: 'Management fee offset', re: /(?:offset|reduce[ds]?|credit(?:ed)?)[^.]{0,80}management fee[^.]{0,120}(?:transaction|monitoring|director|break[- ]up|other) fees|(?:transaction|monitoring|director|break[- ]up) fees[^.]{0,120}(?:offset|reduce|credit)[^.]{0,60}management fee/i },
-    { provision: 'Hurdle accrues on unreturned capital', re: /(?:preferred return|hurdle)[^.]{0,200}(?:unreturned|outstanding|net of (?:prior )?distributions|not (?:yet )?(?:been )?returned)/i },
     { provision: 'Tax distributions', re: /tax distributions?/i },
     { provision: 'Tiered or multiple hurdles', re: /(?:second|additional|further|higher)\s+(?:hurdle|preferred return|tier)/i },
     { provision: 'GP commitment carry-free or fee-free treatment', re: /(?:no|not bear|shall not be subject to)[^.]{0,40}(?:carried interest|management fee)[^.]{0,80}general partner|general partner[^.]{0,80}(?:not bear|shall not be subject to|exempt)[^.]{0,40}(?:carried interest|management fee)/i },
@@ -425,7 +432,7 @@ function finish(p: Omit<LpaTermsProposal, 'notFound'>): LpaTermsProposal {
   const straight = p.terms.kind?.value === 'straight' || p.terms.kind?.value === 'none'
   return {
     ...p,
-    notFound: straight ? notFound.filter(f => f !== 'prefRate' && f !== 'prefCompounds' && f !== 'catchupRate') : notFound,
+    notFound: straight ? notFound.filter(f => f !== 'prefRate' && f !== 'prefCompounds' && f !== 'prefBase' && f !== 'catchupRate') : notFound,
   }
 }
 
@@ -437,6 +444,7 @@ export const LPA_TERMS_RESPONSE_SHAPE = `{
   "carryRate":          { "value": 0.20, ... } | null,
   "prefRate":           { "value": 0.08, ... } | null,
   "prefCompounds":      { "value": true, ... } | null,
+  "prefBase":           { "value": "contributed" | "unreturned", ... } | null,
   "catchupRate":        { "value": 1.0, ... } | null,
   "managementFeeRate":  { "value": 0.02, ... } | null,
   "managementFeeBasis": { "value": "committed" | "invested" | "nav", ... } | null,
@@ -448,10 +456,12 @@ export const LPA_TERMS_RULES = `Rules:
 - Rates are FRACTIONS: 20% carry is 0.20; an 8% preferred return is 0.08; a full catch-up is 1.0 (the GP's share of the catch-up flow; 0.8 for an 80/20 catch-up).
 - kind: "european" = whole-fund (all contributed capital and the preferred return come back before any carry); "american" = deal-by-deal carry; "straight" = carry on profit with no preferred return or catch-up; "none" = no carried interest.
 - prefCompounds: true when the preferred return compounds (annually, or an IRR hurdle), false when it is simple.
+- prefBase: "unreturned" when the preferred return accrues only on capital contributions not yet returned (or "outstanding", "net of distributions"); "contributed" when it plainly accrues on all capital contributions regardless of returns; null when the text does not say.
+- kind "american" also covers a waterfall that returns the capital of realized investments (and write-offs) before carry, rather than all contributed capital.
 - managementFeeBasis: "committed" (on capital commitments), "invested" (on invested capital / cost of investments), "nav" (on net asset value).
 - quote: copy the clause VERBATIM from the text (you may shorten with "..." but never reword). section: the section or article it sits under. page: from the nearest [Page N] marker before it, or null.
 - Use null for a term the text does not state. Never guess a market-standard value.
-- unsupported: list every provision that changes who gets what but is not one of the fields above: GP clawback, carry escrow/holdback, management fee offsets, multiple hurdles or tiered carry, a hurdle that accrues only on unreturned capital, tax distributions, step-downs.`
+- unsupported: list every provision that changes who gets what but is not one of the fields above: GP clawback, carry escrow/holdback, management fee offsets, multiple hurdles or tiered carry, tax distributions, step-downs.`
 
 /** The server model's prompt: the relevant passages, the shape, the rules. */
 export function buildLpaTermsPrompt(passages: Passage[]): string {
@@ -557,6 +567,8 @@ export function parseLpaTermsResponse(raw: unknown, documentText: string, method
   if (prefRate) terms.prefRate = prefRate
   const prefCompounds = read<boolean>('prefCompounds', v => (typeof v === 'boolean' ? v : v === 'true' ? true : v === 'false' ? false : null))
   if (prefCompounds) terms.prefCompounds = prefCompounds
+  const prefBase = read<PrefBase>('prefBase', v => (v === 'contributed' || v === 'unreturned' ? v : null))
+  if (prefBase) terms.prefBase = prefBase
   const catchupRate = read<number>('catchupRate', v => rateFraction(v, 'catchupRate'))
   if (catchupRate) terms.catchupRate = catchupRate
   const fee = read<number>('managementFeeRate', v => rateFraction(v, 'managementFeeRate'))
@@ -605,6 +617,7 @@ export interface ProposedTermsInput {
   prefRate: number
   catchupRate: number
   prefCompounds: boolean
+  prefBase: PrefBase
   /** Recipients are not in an LPA by entity id: today's are kept, or a person names them. */
   carryRecipients: { lpEntityId: string; pct: number }[]
 }
@@ -633,11 +646,13 @@ export function proposalToTermsInput(
     prefRate: pick('prefRate', 0, current.prefRate) as number,
     catchupRate: pick('catchupRate', 1, current.catchupRate) as number,
     prefCompounds: pick('prefCompounds', true, current.prefCompounds) as boolean,
+    prefBase: pick('prefBase', 'contributed', current.prefBase ?? 'contributed') as PrefBase,
     carryRecipients: current.recipients.map(r => ({ lpEntityId: r.lpEntityId, pct: r.pct })),
   }
   if (input.carryRecipients.length > 0) filledFrom.carryRecipients = 'current'
   if (kind === 'straight' || kind === 'none') {
     delete filledFrom.prefRate
+    delete filledFrom.prefBase
     delete filledFrom.catchupRate
     input.prefRate = 0
     input.catchupRate = 1

@@ -22,6 +22,7 @@ interface Terms {
   prefRate: number
   catchupRate: number
   prefCompounds: boolean
+  prefBase?: 'contributed' | 'unreturned'
   recipients: Recipient[]
 }
 
@@ -44,6 +45,7 @@ export function CarryTerms() {
   const [pref, setPref] = useState('0')
   const [catchup, setCatchup] = useState('0')
   const [compounds, setCompounds] = useState(false)
+  const [prefBase, setPrefBase] = useState<'contributed' | 'unreturned'>('contributed')
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [vehicleName, setVehicleName] = useState('')
@@ -60,6 +62,7 @@ export function CarryTerms() {
     setPref(pct(t.prefRate))
     setCatchup(pct(t.catchupRate))
     setCompounds(t.prefCompounds)
+    setPrefBase(t.prefBase === 'unreturned' ? 'unreturned' : 'contributed')
     setRecipients(t.recipients ?? [])
     setCandidates(d.candidates ?? [])
     setVehicleName(d.group ?? '')
@@ -92,6 +95,7 @@ export function CarryTerms() {
         prefRate: frac(pref),
         catchupRate: frac(catchup),
         prefCompounds: compounds,
+        prefBase,
         carryRecipients: recipients,
       }),
     })
@@ -113,7 +117,7 @@ export function CarryTerms() {
   }
 
   const carryOn = kind !== 'none'
-  const hasHurdle = kind === 'european' // pref + catch-up only apply to the whole-fund waterfall
+  const hasHurdle = kind === 'european' || kind === 'american' // a straight split has no pref or catch-up
   const carryMissing = carryOn && frac(carry) <= 0
 
   const totalPct = recipients.reduce((sum, r) => sum + (r.pct || 0), 0)
@@ -173,11 +177,13 @@ export function CarryTerms() {
 
       {kind === 'american' && (
         <p className="text-xs text-muted-foreground max-w-3xl">
-          Deal-by-deal: the GP is paid carry as individual deals realize, before the whole fund is
-          made whole — with a clawback that pulls back any carry later deals prove was overpaid.
-          <strong> Total carry is the same as European; only the timing differs.</strong> The
-          accrued mark here is the whole-fund figure (the ultimate entitlement); the earlier
-          deal-by-deal <em>distribution</em> of realized carry is handled at payout, not in the accrual.
+          Deal-by-deal: a distribution first returns the LPs&rsquo; capital in every deal realized so
+          far, written-off deals included, with its share of fees and expenses and the preferred
+          return on it. Carry is paid on what is left, before the whole fund is made whole. Realized
+          deals come from the portfolio&rsquo;s exits and write-offs.
+          <strong> Total carry is the same as European; only the timing differs.</strong> The accrued
+          mark is the whole-fund figure, the GP&rsquo;s ultimate entitlement once the clawback is
+          applied.
         </p>
       )}
 
@@ -247,6 +253,25 @@ export function CarryTerms() {
               <input type="checkbox" checked={compounds} onChange={e => setCompounds(e.target.checked)} />
               The preferred return compounds annually
             </label>
+          )}
+
+          {hasHurdle && (
+            <Field label="Preferred return accrues on" hint="Most LPAs say unreturned capital">
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  ['contributed', 'All contributed capital'],
+                  ['unreturned', 'Unreturned capital'],
+                ] as ['contributed' | 'unreturned', string][]).map(([b, label]) => (
+                  <button
+                    key={b}
+                    onClick={() => setPrefBase(b)}
+                    className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${ prefBase === b ? 'border-foreground/30 bg-accent font-medium' : 'border-border text-muted-foreground hover:text-foreground' }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </Field>
           )}
 
           {/* Carry of 0% accrues nothing — the single most common reason "carry isn't showing up".

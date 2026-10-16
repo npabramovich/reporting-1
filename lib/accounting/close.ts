@@ -1519,7 +1519,7 @@ async function accrueNoteInterest(
  *
  * Everything it needs comes from the ledger as at `periodEnd`:
  *   - each LP's contributions, distributions and current capital (the roll-forward buckets)
- *   - how much carry is ALREADY accrued (the GP partner's `carriedInterest` bucket)
+ *   - how much carry is ALREADY accrued (what earlier accruals charged the LPs' `carriedInterest`)
  *   - dated contributions, for the preferred-return hurdle
  *
  * The GP partner is excluded from the LP economics — it is receiving the carry, not paying it.
@@ -1542,7 +1542,7 @@ async function accrueCarry(
   // The books as they now stand, INCLUDING the allocation entries we just posted.
   const { capitalPostings } = await loadPostedLedger(admin, fundId, group, periodEnd)
 
-  // Carry already sitting in the recipients' accounts — the accrual tops up (or reverses) to target.
+  // Carry already charged to the LPs — the accrual tops up (or reverses) to target.
   // NOTE: only the per-period DELTA is split by the current recipients/pcts. Changing the split (or
   // removing a recipient) is PROSPECTIVE — it does not rebalance carry already accrued in prior
   // periods. LP-side totals stay correct regardless; treat the recipient split as stable once carry
@@ -1550,11 +1550,11 @@ async function accrueCarry(
   //
   // The recipients receive carry; they don't pay it, so they are outside `lps` and their own
   // contributions are outside the hurdle (carryAccrualInputs, in the fund engine).
-  const { lps, contributions, alreadyAccrued } = carryAccrualInputs(capitalPostings, terms.recipients, periodEnd)
+  const { lps, contributions, alreadyAccrued, distributions } = carryAccrualInputs(capitalPostings, terms.recipients, periodEnd)
 
   if (lps.length === 0) return {}
 
-  const accrual = carryAccrual({ lps, contributions, asOf: periodEnd }, terms, alreadyAccrued)
+  const accrual = carryAccrual({ lps, contributions, distributions, asOf: periodEnd }, terms, alreadyAccrued)
   if (accrual.delta === 0 || accrual.perLp.size === 0) return {}
 
   const capMap = await ensureCapitalAccounts(admin, fundId, group, [

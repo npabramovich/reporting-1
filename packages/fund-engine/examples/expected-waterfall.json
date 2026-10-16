@@ -8,6 +8,7 @@
     "returnOfCapital": 400000,
     "preferred": 59589.32,
     "catchUp": 14897.33,
+    "catchUpToLP": 0,
     "carry": 25102.67,
     "profitToLP": 100410.68,
     "toLP": 560000,
@@ -42,14 +43,16 @@
     "returnedCapital": 100000,
     "preferredPaid": 0,
     "preferredTarget": 59589.32,
-    "gpCarryPaid": 0
+    "gpCarryPaid": 0,
+    "lpProfitPaid": 0
   },
   "stateAfter": {
     "contributedCapital": 500000,
     "returnedCapital": 500000,
     "preferredPaid": 59589.32,
     "preferredTarget": 59589.32,
-    "gpCarryPaid": 40000
+    "gpCarryPaid": 40000,
+    "lpProfitPaid": 100410.68
   },
   "warnings": []
 }

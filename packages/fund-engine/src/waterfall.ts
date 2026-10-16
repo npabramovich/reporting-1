@@ -3,7 +3,8 @@
 // A distribution flows through tiers in order:
 //   1. Return of capital — to LPs until cumulative distributions = contributed capital
 //   2. Preferred return  — to LPs until the accrued hurdle (preferredTarget) is met
-//   3. GP catch-up       — to GP until GP holds carryRate of (preferred + catch-up)
+//   3. GP catch-up       — catchUpRate of the flow to the GP, the rest to LPs, until the GP holds
+//                          carryRate of every profit dollar distributed so far
 //   4. Carry split       — remainder split carryRate to GP, the rest to LPs
 //
 // This is a pure function of a distributable amount and the cumulative state, so
@@ -28,12 +29,21 @@ export interface WaterfallState {
   preferredTarget: number
   /** Carry already paid to the GP. */
   gpCarryPaid: number
+  /**
+   * Profit already paid to LPs beyond the preferred return: their share of the catch-up flow and of
+   * the split. The catch-up is measured against ALL profit distributed, so it needs this. Absent
+   * means 0, which is exact for a state that has never reached the catch-up.
+   */
+  lpProfitPaid?: number
 }
 
 export interface WaterfallResult {
   toReturnOfCapital: number
   toPreferred: number
+  /** The GP's part of the catch-up flow. */
   toCatchUp: number
+  /** The LPs' part of the catch-up flow: 1 − catchUpRate of it. 0 for a full catch-up. */
+  toCatchUpLP: number
   toCarryLP: number
   toCarryGP: number
   toLP: number
@@ -67,22 +77,28 @@ export function runWaterfall(
   // 2. Preferred return
   const toPreferred = take(state.preferredTarget - state.preferredPaid)
 
-  // 3. GP catch-up: GP takes catchUpRate of the flow until it holds carry of (pref + catchup).
-  //    Target GP catch-up C satisfies (gpCarryPaid + C) = carry × (preferredPaid+toPreferred + C/catchUpRate).
+  // 3. GP catch-up. Of every dollar in this tier the GP takes catchUpRate (k) and the LPs the rest,
+  //    until the GP holds carryRate (c) of all the profit distributed so far. Profit so far is the
+  //    preferred return plus everything the GP has taken plus the LPs' profit beyond the pref, so
+  //    a gross catch-up flow x closes the gap when  G + k·x = c·(Π + x),  i.e.
+  //    x = (c·Π − G) / (k − c). A catch-up rate at or below the carry rate never closes the gap,
+  //    so it is no catch-up at all.
   const prefAfter = r(state.preferredPaid + toPreferred)
+  const lpProfitBefore = state.lpProfitPaid ?? 0
   let toCatchUp = 0
-  if (carry > 0 && carry < 1) {
-    const fullCatchUp = r((carry * prefAfter) / (1 - carry)) // GP total at end of catch-up
-    const catchUpNeeded = r(Math.max(0, fullCatchUp - state.gpCarryPaid))
-    // The distribution consumed to fund a GP catch-up of X is X / catchUpRate.
-    const grossForCatchUp = catchUpRate > 0 ? r(catchUpNeeded / catchUpRate) : 0
-    const grossTaken = take(grossForCatchUp)
-    toCatchUp = r(grossTaken * catchUpRate)
-    // The non-GP portion of the catch-up flow (if catchUpRate < 1) goes to LPs.
-    const lpCatchUpShare = r(grossTaken - toCatchUp)
-    // Fold the LP portion into the carry-split LP bucket below via `remaining` — it
-    // was already removed from `remaining`, so add it back so the split sees it.
-    remaining = r(remaining + lpCatchUpShare)
+  let toCatchUpLP = 0
+  if (carry > 0 && carry < 1 && catchUpRate > carry) {
+    const profitSoFar = prefAfter + state.gpCarryPaid + lpProfitBefore
+    const gap = carry * profitSoFar - state.gpCarryPaid
+    if (gap > 0) {
+      // Round the GP's catch-up, not the gross flow, so a completed catch-up lands the GP on its
+      // share to the cent; the LPs' part is what is left of the flow.
+      const gpNeeded = r((catchUpRate * gap) / (catchUpRate - carry))
+      const want = r(gpNeeded / catchUpRate)
+      const gross = take(want)
+      toCatchUp = gross === want ? gpNeeded : r(gross * catchUpRate)
+      toCatchUpLP = r(gross - toCatchUp)
+    }
   }
 
   // 4. Carry split on the remainder
@@ -90,7 +106,7 @@ export function runWaterfall(
   const toCarryLP = r(remaining - toCarryGP)
   remaining = 0
 
-  const toLP = r(toReturnOfCapital + toPreferred + toCarryLP)
+  const toLP = r(toReturnOfCapital + toPreferred + toCatchUpLP + toCarryLP)
   const toGP = r(toCatchUp + toCarryGP)
 
   const newState: WaterfallState = {
@@ -99,7 +115,8 @@ export function runWaterfall(
     preferredPaid: prefAfter,
     preferredTarget: state.preferredTarget,
     gpCarryPaid: r(state.gpCarryPaid + toGP),
+    lpProfitPaid: r(lpProfitBefore + toCatchUpLP + toCarryLP),
   }
 
-  return { toReturnOfCapital, toPreferred, toCatchUp, toCarryLP, toCarryGP, toLP, toGP, state: newState }
+  return { toReturnOfCapital, toPreferred, toCatchUp, toCatchUpLP, toCarryLP, toCarryGP, toLP, toGP, state: newState }
 }
