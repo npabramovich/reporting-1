@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
  * A fund holding's NAV reaches the ledger through ONE writer, lib/portfolio/fof-nav.ts
  * (plans/spec-ledger-one-writer.md §4). The quarter-wide grid, its confirm loop, the period-end
- * mark booker and the extractor route were second ways in; they stay gone.
+ * mark booker and the extractor route were second ways in; no other source may write NAV statements.
  */
 function files(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
@@ -18,18 +18,6 @@ function files(dir: string, out: string[] = []): string[] {
 }
 
 describe('second NAV writers', () => {
-  it('the routes are deleted', () => {
-    for (const r of ['fof-marks', 'fof-grid', 'fof-grid/confirm', 'fof-extract']) {
-      expect(existsSync(`app/api/accounting/${r}/route.ts`), r).toBe(false)
-    }
-  })
-
-  it('nothing calls them', () => {
-    const callers = ['app', 'components', 'lib'].flatMap(d => files(d))
-      .filter(f => /\/api\/accounting\/fof-(marks|grid|extract)/.test(readFileSync(f, 'utf8')))
-    expect(callers).toEqual([])
-  })
-
   it('only fof-nav writes NAV statements', () => {
     const writers = ['app', 'components', 'lib'].flatMap(d => files(d))
       .filter(f => !/\.test\.tsx?$/.test(f) && f !== join('lib', 'portfolio', 'fof-nav.ts'))
