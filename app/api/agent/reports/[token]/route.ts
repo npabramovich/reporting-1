@@ -25,6 +25,8 @@ import { PortalError, portalLetterShare, portalStatementInvestors } from '@/lib/
 import { getLetter } from '@/lib/lp-letters/service'
 import { renderPdf as renderTemplateDocumentPdf } from '@/lib/document-templates/pdf'
 import { callNoticePreviewPdf } from '@/lib/accounting/notice-preview'
+import { closeBundleZip, loadCloseBundle } from '@/lib/accounting/close-bundle'
+import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -205,6 +207,20 @@ async function fundDocument(admin: ReturnType<typeof createAdminClient>, claims:
         const group = await resolveVehicle(admin, fundId, a.vehicle ?? undefined, { access })
         const out = await callNoticePreviewPdf(admin, { fundId, group }, a.call, a.lp)
         doc = out.ok ? { body: out.value.pdf, fileName: out.value.fileName, contentType: 'application/pdf' } : null
+        break
+      }
+      // /api/accounting/close-bundle?format=zip — accounting, plus lp_capital and gp_economics (the
+      // bundle holds every partner's capital and the carry), and the bundle's entity.
+      case 'close_bundle': {
+        if (!hasAccess(access, 'accounting', 'read') || !hasAccess(access, 'lp_capital', 'read') || !hasAccess(access, 'gp_economics', 'read')) return notFound()
+        if (!a.period) return notFound()
+        const group = await resolveVehicle(admin, fundId, a.vehicle ?? undefined, { access })
+        const vehicleId = await vehicleIdByName(admin, fundId, group)
+        if (!vehicleId || !canSeeVehicle(access, vehicleId)) return notFound()
+        const bundle = await loadCloseBundle(admin, fundId, vehicleId, { periodId: a.period })
+        if (!bundle) return notFound()
+        const zip = await closeBundleZip(bundle, group)
+        doc = { body: zip.body, fileName: zip.fileName, contentType: 'application/zip' }
         break
       }
       default:

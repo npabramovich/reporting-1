@@ -114,6 +114,9 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   'api/accounting/periods': { domain: 'accounting' },
   // The books' audit trail. Partner and carry events are filtered in the handler (lib/audit/read.ts).
   'api/accounting/audit-log': { domain: 'accounting', level: 'read' },
+  // A close's reproducibility bundle. It holds every partner's capital and the carry, so the
+  // handler also requires lp_capital and gp_economics (lib/accounting/close-bundle.ts).
+  'api/accounting/close-bundle': { domain: 'accounting', level: 'read' },
 
   'api/accounting/statements': { domain: 'accounting' },
   // The Excel workpaper export ships the exact same computed package as the statements

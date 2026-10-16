@@ -64,9 +64,49 @@ export const ENTITY_OPERATIONS_TOOL_MANIFEST: AgentToolMeta[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'close_bundle',
+    description:
+      "A closed period's reproducibility bundle: the close's ledger snapshot (books.ledger), the entity's terms as the open " +
+      'fund engine reads them (terms.json), the statements the engine computed (statements.json), and manifest.json, which ' +
+      "records each file's SHA-256, the engine version and the audit trail's chain head. Returns the bundle hash (the SHA-256 " +
+      'of manifest.json, also recorded on the close and in its period.close audit event), the result of verifying the stored ' +
+      'bundle, a download link for the ZIP, and the files inline when they are small. Anyone can check the ZIP without this app: ' +
+      '`fund-engine verify --bundle <dir> --expect-sha256 <hash>`. Needs LP capital and GP economics access: the bundle holds ' +
+      "every partner's capital and the carry.",
+    scope: 'read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        period_end: { type: 'string', description: 'The closed period ending on this date (YYYY-MM-DD). Default: the latest close.' },
+        include_files: { type: 'boolean', description: 'Return the files inline even when they are large (default: only when small).' },
+      },
+      additionalProperties: false,
+    },
+  },
 ]
 
 export const OPERATIONS_TOOL_MANIFEST: AgentToolMeta[] = [
+  {
+    name: 'verify_audit_trail',
+    description:
+      "Check that the books' audit trail has not been altered. Every event is hash-chained per fund (each row stores the " +
+      "previous row's hash and its own), so this walks the chain in the database and again independently, and reports how many " +
+      'events hold, the chain head (sequence and hash), and the first break if there is one: a row changed, removed or out of ' +
+      'order. Pass a close bundle\'s pinned head (auditChain in its manifest) to also check the trail still reaches it, which ' +
+      'catches rows cut off the end.',
+    scope: 'read',
+    domain: 'portfolio',
+    accessDomain: 'accounting',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pinned_seq: { type: 'integer', description: "A pinned chain head's sequence number, e.g. from a close bundle manifest's auditChain.headSeq." },
+        pinned_hash: { type: 'string', description: "That head's hash (auditChain.headHash). Send with pinned_seq." },
+      },
+      additionalProperties: false,
+    },
+  },
   {
     name: 'close_status',
     description:

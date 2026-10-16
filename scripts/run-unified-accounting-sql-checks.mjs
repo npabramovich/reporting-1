@@ -46,6 +46,7 @@ try {
     ['unified_check', 'scripts/check-unified-accounting-migrations.mjs'],
     ['unified_concurrency', 'scripts/check-unified-accounting-concurrency.mjs'],
     ['investment_ownership', 'scripts/check-investment-ownership.mjs'],
+    ['audit_hash_chain', 'scripts/check-audit-hash-chain.mjs'],
   ]) {
     psql(['-c', `create database ${database}`])
     console.log(`\n• ${script}`)

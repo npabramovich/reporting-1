@@ -1,0 +1,39 @@
+{
+  "vehicle": "Sample Fund I",
+  "carry": {
+    "kind": "european",
+    "carryRate": 0.2,
+    "prefRate": 0.08,
+    "catchupRate": 1,
+    "prefCompounds": true,
+    "gpEntityId": "c0ffee00-3333-4333-8333-333333333333",
+    "recipients": [
+      {
+        "partner": "c0ffee00-3333-4333-8333-333333333333",
+        "pct": 100
+      }
+    ]
+  },
+  "partners": [
+    {
+      "id": "aaaaaaaa-1111-4111-8111-111111111111",
+      "name": "Alpha Pension",
+      "account": "3100-aaaaaaaa",
+      "commitment": 600000
+    },
+    {
+      "id": "bbbbbbbb-2222-4222-8222-222222222222",
+      "name": "Beta Family Office",
+      "account": "3100-bbbbbbbb",
+      "commitment": 400000
+    },
+    {
+      "id": "c0ffee00-3333-4333-8333-333333333333",
+      "name": "Sample GP",
+      "account": "3100-c0ffee00"
+    }
+  ],
+  "allocation": {
+    "basis": "commitment"
+  }
+}
