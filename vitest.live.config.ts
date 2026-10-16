@@ -31,5 +31,10 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 30_000,
   },
-  resolve: { alias: { '@': path.resolve(__dirname, '.') } },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, '.'),
+      '@hemrock/fund-engine': path.resolve(__dirname, 'packages/fund-engine/src/index.ts'),
+    },
+  },
 })

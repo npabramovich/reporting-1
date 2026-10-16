@@ -1,0 +1,60 @@
+2024-01-15 open Assets:Due-From-LPs:1300
+2024-01-15 open Equity:Partners-Capital-Alpha-Pension:3100-aaaaaaaa
+2024-01-15 open Equity:Partners-Capital-Beta-Family-Office:3100-bbbbbbbb
+2024-01-15 open Assets:Cash:1000
+2024-01-15 open Assets:Acme-Robotics:1100-acme0001
+2024-01-15 open Expenses:Management-Fee:5000
+2024-01-15 open Equity:Undistributed-Earnings-Bridge:3200
+2024-01-15 open Assets:Acme-Robotics-Unrealized:1200-acme0001
+2024-01-15 open Income:Change-In-Unrealized-Appreciation:4200
+2024-01-15 open Liabilities:Distributions-Payable:2300
+2024-01-15 open Liabilities:Accrued-Expenses:2000
+
+2024-01-15 * "Capital call 1 (50%)"
+  source: "capital_call"
+  ref: "call:1"
+  Assets:Due-From-LPs:1300  500000.00 USD
+  Equity:Partners-Capital-Alpha-Pension:3100-aaaaaaaa  -300000.00 USD
+  Equity:Partners-Capital-Beta-Family-Office:3100-bbbbbbbb  -200000.00 USD
+
+2024-01-31 * "Capital call 1 received"
+  source: "capital_call"
+  Assets:Cash:1000  500000.00 USD
+  Assets:Due-From-LPs:1300  -500000.00 USD
+
+2024-02-01 * "Investment in Acme Robotics"
+  source: "investment"
+  Assets:Acme-Robotics:1100-acme0001  350000.00 USD
+  Assets:Cash:1000  -350000.00 USD
+
+2024-03-31 * "Q1 management fee"
+  source: "management_fee"
+  Expenses:Management-Fee:5000  10000.00 USD
+  Assets:Cash:1000  -10000.00 USD
+  Equity:Partners-Capital-Alpha-Pension:3100-aaaaaaaa  6000.00 USD
+  Equity:Partners-Capital-Beta-Family-Office:3100-bbbbbbbb  4000.00 USD
+  Equity:Undistributed-Earnings-Bridge:3200  -10000.00 USD
+
+2024-12-31 * "Acme Robotics marked to Series B price"
+  source: "valuation"
+  Assets:Acme-Robotics-Unrealized:1200-acme0001  300000.00 USD
+  Income:Change-In-Unrealized-Appreciation:4200  -300000.00 USD
+  Equity:Undistributed-Earnings-Bridge:3200  300000.00 USD
+  Equity:Partners-Capital-Alpha-Pension:3100-aaaaaaaa  -180000.00 USD
+  Equity:Partners-Capital-Beta-Family-Office:3100-bbbbbbbb  -120000.00 USD
+
+2025-06-30 * "Distribution declared"
+  source: "distribution"
+  Equity:Partners-Capital-Alpha-Pension:3100-aaaaaaaa  60000.00 USD
+  Equity:Partners-Capital-Beta-Family-Office:3100-bbbbbbbb  40000.00 USD
+  Liabilities:Distributions-Payable:2300  -100000.00 USD
+
+2025-07-02 * "Distribution paid"
+  source: "distribution"
+  Liabilities:Distributions-Payable:2300  100000.00 USD
+  Assets:Cash:1000  -100000.00 USD
+
+2025-09-30 ! "Q3 management fee (draft)"
+  source: "management_fee"
+  Expenses:Management-Fee:5000  10000.00 USD
+  Liabilities:Accrued-Expenses:2000  -10000.00 USD

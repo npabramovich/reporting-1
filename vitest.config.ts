@@ -10,6 +10,7 @@ export default defineConfig({
       'tests/**/*.{test,spec}.{ts,tsx}',
       'app/**/*.{test,spec}.{ts,tsx}',
       'demo-widget/**/*.{test,spec}.{ts,tsx}',
+      'packages/*/test/**/*.{test,spec}.ts',
     ],
     globals: false,
     environment: 'node',
@@ -17,6 +18,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
+      // The open fund engine (packages/fund-engine), consumed from source as tsconfig.json maps it.
+      '@hemrock/fund-engine': path.resolve(__dirname, 'packages/fund-engine/src/index.ts'),
     },
   },
 })

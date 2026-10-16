@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dealByDealCarry } from './american-carry'
+import { dealByDealCarry } from '../src/american-carry.ts'
 
 const deal = (companyId: string, costBasis: number, proceeds: number, remainingValue = 0) =>
   ({ companyId, name: companyId, costBasis, proceeds, remainingValue })

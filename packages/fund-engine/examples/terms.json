@@ -1,0 +1,16 @@
+{
+  "vehicle": "Sample Fund I",
+  "carry": {
+    "kind": "european",
+    "carryRate": 0.2,
+    "prefRate": 0.08,
+    "catchupRate": 1,
+    "prefCompounds": true,
+    "recipients": [{ "partner": "gp", "pct": 100 }]
+  },
+  "partners": [
+    { "id": "lp-alpha", "name": "Alpha Pension", "account": "3100-aaaaaaaa", "commitment": 600000 },
+    { "id": "lp-beta", "name": "Beta Family Office", "account": "3100-bbbbbbbb", "commitment": 400000 },
+    { "id": "gp", "name": "Sample GP", "account": "3100-c0ffee00" }
+  ]
+}

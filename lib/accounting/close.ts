@@ -46,10 +46,8 @@ import { buildCarryEntry, buildAssociateMarkupEntry } from './entries'
 import { associateMembers, lookThroughAccount } from './look-through'
 import { loadCapitalPostings } from './capital-source'
 import { gpLinkFor, loadOwnershipBasis } from './gp-economics'
-import {
-  loadCarryTerms, carryAccrual,
-  type LpEconomics, type DatedContribution,
-} from './carry'
+import { loadCarryTerms, carryAccrual } from './carry'
+import { carryAccrualInputs } from '@hemrock/fund-engine'
 import { loadNotes, noteAccruals } from './note-interest'
 import { ensureInvestmentAccounts } from './investments'
 import { accountBalances } from './ledger'
@@ -1543,33 +1541,18 @@ async function accrueCarry(
 
   // The books as they now stand, INCLUDING the allocation entries we just posted.
   const { capitalPostings } = await loadPostedLedger(admin, fundId, group, periodEnd)
-  const accounts = computeCapitalAccounts(capitalPostings)
 
   // Carry already sitting in the recipients' accounts — the accrual tops up (or reverses) to target.
   // NOTE: only the per-period DELTA is split by the current recipients/pcts. Changing the split (or
   // removing a recipient) is PROSPECTIVE — it does not rebalance carry already accrued in prior
   // periods. LP-side totals stay correct regardless; treat the recipient split as stable once carry
   // has begun accruing.
-  const alreadyAccrued = roundCents(
-    terms.recipients.reduce((s, r) => s + (accounts.get(r.lpEntityId)?.carriedInterest ?? 0), 0)
-  )
-
-  const lps: LpEconomics[] = Array.from(accounts.entries())
-    .filter(([id]) => !recipientIds.has(id)) // recipients receive carry; they don't pay it
-    .map(([lpEntityId, a]) => ({
-      lpEntityId,
-      contributed: roundCents(a.contributions),
-      distributed: roundCents(-a.distributions), // stored negative on the account
-      nav: roundCents(a.ending),
-    }))
+  //
+  // The recipients receive carry; they don't pay it, so they are outside `lps` and their own
+  // contributions are outside the hurdle (carryAccrualInputs, in the fund engine).
+  const { lps, contributions, alreadyAccrued } = carryAccrualInputs(capitalPostings, terms.recipients, periodEnd)
 
   if (lps.length === 0) return {}
-
-  // Dated contributions, for the hurdle. The pref accrues from when cash actually arrived.
-  const contributions: DatedContribution[] = capitalPostings
-    .filter(p => !recipientIds.has(p.lpEntityId ?? '') && bucketForSourceType(p.sourceType) === 'contributions')
-    .map(p => ({ date: p.entryDate ?? periodEnd, amount: roundCents(-p.amount) }))
-    .filter(c => c.amount > 0)
 
   const accrual = carryAccrual({ lps, contributions, asOf: periodEnd }, terms, alreadyAccrued)
   if (accrual.delta === 0 || accrual.perLp.size === 0) return {}

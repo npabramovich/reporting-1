@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { xirr, type CashFlow } from './xirr'
+import { xirr, type CashFlow } from '../src/xirr.ts'
 
 const d = (s: string) => new Date(s + 'T00:00:00')
 

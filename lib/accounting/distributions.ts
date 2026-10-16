@@ -29,9 +29,10 @@ import { DISTRIBUTION_PAYABLE_CODE } from './chart'
 import { buildDistributionDeclarationEntry } from './entries'
 import { loadPostedLedger, loadEntityNames } from './load'
 import { loadCapitalPostings } from './capital-source'
-import { computeCapitalAccounts, bucketForSourceType } from './capital-account'
+import { computeCapitalAccounts } from './capital-account'
 import { vehicleIdByName } from './vehicle-id'
-import { loadCarryTerms, type DatedContribution } from './carry'
+import { loadCarryTerms } from './carry'
+import { distributionSplitInputs } from '@hemrock/fund-engine'
 import { reconcileSettlements, registerStatus, type LineStatus, type RegisterStatus, type Settlement } from './settlement'
 import { loadSettlements } from './capital-calls'
 import {
@@ -39,7 +40,6 @@ import {
   suggestedCharacter,
   ZERO_TIERS,
   type DistributionSplit,
-  type PriorDistribution,
   type SplitMethod,
   type WaterfallTiers,
 } from './distribution-waterfall'
@@ -128,35 +128,10 @@ export async function previewDistribution(
   const effectiveTerms = method === 'pro_rata' ? { ...terms, kind: 'none' as const } : terms
   const recipientIds = new Set(terms.recipients.map(r => r.lpEntityId))
 
-  const accounts = computeCapitalAccounts(capitalPostings, { end: asOf })
-  const partners = Array.from(accounts.entries()).map(([lpEntityId, a]) => ({
-    lpEntityId,
-    contributed: roundCents(a.contributions),
-    distributed: roundCents(-a.distributions),
-    ending: roundCents(a.ending),
-  }))
-
-  // Dated LP contributions for the hurdle — recipients excluded, as the close excludes them.
-  const contributions: DatedContribution[] = capitalPostings
-    .filter(p => p.lpEntityId && !recipientIds.has(p.lpEntityId) && bucketForSourceType(p.sourceType) === 'contributions')
-    .map(p => ({ date: p.entryDate ?? asOf, amount: roundCents(-p.amount) }))
-    .filter(c => c.amount > 0)
-
-  // Every prior distribution, as a fund-wide total per date: LP distributions and carry paid
-  // both left the fund, and the waterfall is defined over what left.
-  const priorByDate = new Map<string, number>()
-  let carryPaidToDate = 0
-  for (const p of capitalPostings) {
-    if (!p.lpEntityId || p.amount <= 0) continue
-    const isDist = bucketForSourceType(p.sourceType) === 'distributions'
-    const isCarry = p.sourceType === 'carry_distribution'
-    if (!isDist && !isCarry) continue
-    const date = p.entryDate ?? asOf
-    if (date > asOf) continue
-    priorByDate.set(date, roundCents((priorByDate.get(date) ?? 0) + p.amount))
-    if (isCarry && recipientIds.has(p.lpEntityId)) carryPaidToDate = roundCents(carryPaidToDate + p.amount)
-  }
-  const priors: PriorDistribution[] = Array.from(priorByDate.entries()).map(([date, amount]) => ({ date, amount }))
+  // Partner economics at the date, the hurdle's dated contributions (recipients excluded, as the
+  // close excludes them) and every prior distribution as a fund-wide total per date — from the
+  // capital postings, in the fund engine (distributionSplitInputs).
+  const { partners, contributions, priors, carryPaidToDate } = distributionSplitInputs(capitalPostings, terms.recipients, asOf)
 
   const split = splitDistribution({
     total,
