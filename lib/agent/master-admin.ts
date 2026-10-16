@@ -7,7 +7,7 @@
  * acts in that fund as that address — its role, its grants, its audit trail. The web app never
  * sees any of this.
  *
- *   MASTER_ADMIN_EMAILS=taylor@ashgrove.example,taylor@northwind.example
+ *   MASTER_ADMIN_EMAILS=admin@fund-a.example,admin@fund-b.example
  *
  * Unset (the default) is a deployment with no pooling at all: every function here returns the
  * credential unchanged.
