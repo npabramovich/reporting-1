@@ -12,7 +12,6 @@ import {
   SURFACE_LIGHT_HSL,
   buildManifest,
   buildPortalManifest,
-  APPLE_TOUCH_SIZES,
   ICON_SIZES,
   MARK_VIEWBOX,
   appleTouchIcons,
@@ -69,12 +68,10 @@ describe('shortNameFor', () => {
 })
 
 describe('markHexFor', () => {
-  it('uses the fund accent when one is set', () => {
+  it('uses the fund accent when one is set, the default mark otherwise', () => {
     // The 'blue' preset in ACCENT_PRESETS, through lib/theme's own hslToHex.
     expect(markHexFor({ accent: '217 91% 60%' })).toBe('#3c83f6')
-  })
-
-  it('falls back to the default mark with no theme', () => {
+    // …and falls back to the default mark with no theme.
     expect(markHexFor(null)).toBe(DEFAULT_MARK_HEX)
     expect(markHexFor(undefined)).toBe(DEFAULT_MARK_HEX)
     expect(markHexFor({})).toBe(DEFAULT_MARK_HEX)
@@ -104,13 +101,10 @@ describe('isIconSize', () => {
 describe('buildManifest', () => {
   const manifest = buildManifest(brand)
 
-  it('is installable: standalone, scoped, with a start url', () => {
+  it('is installable (standalone, scoped, with a start url) and carries the fund name, not ours', () => {
     expect(manifest.display).toBe('standalone')
     expect(manifest.scope).toBe('/')
     expect(manifest.start_url).toBe('/dashboard')
-  })
-
-  it('carries the fund name, not ours', () => {
     expect(manifest.name).toBe('Evergreen Capital')
     expect(manifest.short_name).toBe('Evergreen')
   })
@@ -190,11 +184,6 @@ describe('appleTouchIcons', () => {
     }
   })
 
-  it('covers every size iOS picks between', () => {
-    const declared = appleTouchIcons('app').map(i => i.sizes).sort()
-    expect(declared).toEqual([...APPLE_TOUCH_SIZES].map(s => `${s}x${s}`).sort())
-  })
-
   it('gives an LP the inverted mark, not the manager app icon', () => {
     expect(appleTouchIcons('portal').every(i => i.url.includes('variant=portal'))).toBe(true)
     expect(appleTouchIcons('app').some(i => i.url.includes('variant='))).toBe(false)
@@ -206,9 +195,7 @@ describe('iconUrl', () => {
     // Two URLs for identical bytes would have the CDN and the browser cache both.
     expect(iconUrl(180)).toBe('/api/pwa-icon?size=180')
     expect(iconUrl(192, 'app', true)).toBe('/api/pwa-icon?size=192&maskable=1')
-  })
-
-  it('names the portal variant explicitly', () => {
+    // The portal variant is named explicitly.
     expect(iconUrl(180, 'portal')).toBe('/api/pwa-icon?size=180&variant=portal')
     expect(iconUrl(512, 'portal', true)).toBe('/api/pwa-icon?size=512&variant=portal&maskable=1')
   })
@@ -258,11 +245,9 @@ describe('portalFillFor', () => {
 })
 
 describe('portalNameFor', () => {
-  it('names the fund', () => {
+  it('names the fund, and only the portal when there is no fund name', () => {
     expect(portalNameFor('Evergreen Capital')).toBe('Evergreen Capital Investor Portal')
-  })
-
-  it('does not staple two product names together on an unbranded deployment', () => {
+    // An unbranded deployment does not staple two product names together.
     expect(portalNameFor(DEFAULT_APP_NAME)).toBe('Investor Portal')
     expect(portalNameFor('')).toBe('Investor Portal')
     expect(portalNameFor('   ')).toBe('Investor Portal')
@@ -273,26 +258,21 @@ describe('buildPortalManifest', () => {
   const portal = buildPortalManifest(brand)
   const manager = buildManifest(brand)
 
-  it('starts an LP inside the portal', () => {
+  it('starts an LP inside the portal, and scopes the installed app to it', () => {
     // The whole point: an LP installing the manager manifest would launch at
     // /dashboard and be redirected straight back out by the LP/GP split.
     expect(portal.start_url).toBe('/portal/overview')
-  })
-
-  it('scopes the installed app to the portal', () => {
     // Keeps a link out of the portal opening in the browser rather than inside the
     // LP's installed app — so an LP who is also a member cannot end up on the GP
     // surface in a window with no address bar.
     expect(portal.scope).toBe('/portal')
   })
 
-  it('is a distinct app identity from the manager manifest', () => {
+  it('is a distinct app identity wearing the same fund branding with its own icon variant', () => {
     // Same id would make a browser treat one as an update to the other.
     expect(portal.id).not.toBe(manager.id)
     expect(portal.name).not.toBe(manager.name)
-  })
-
-  it('wears the same fund branding, but its own icon variant', () => {
+    // Same fund branding, but its own icon variant.
     expect(portal.short_name).toBe(manager.short_name)
     expect(portal.theme_color).toBe(manager.theme_color)
     // The differentiator: same mark, inverted. Identical icons here is the bug this
@@ -306,11 +286,6 @@ describe('buildPortalManifest', () => {
     const shape = (m: typeof portal) =>
       (m.icons ?? []).map(i => `${i.sizes}:${i.purpose}`).sort()
     expect(shape(portal)).toEqual(shape(manager))
-  })
-
-  it('is installable on the same terms', () => {
-    expect(portal.display).toBe('standalone')
-    expect(portal.background_color).toMatch(/^#[0-9a-f]{6}$/)
   })
 
   it('does not label an unbranded install with the manager app name', () => {

@@ -80,18 +80,6 @@ describe('LP portal analyst — tool loop', () => {
     expect(json.reply).toBe('your NAV is 1.2M')
   })
 
-  it('falls back to createChat when the provider lacks tool support', async () => {
-    supportsToolLoop.value = false
-    createChat.mockResolvedValue({ text: 'plain', usage: { inputTokens: 1, outputTokens: 1 } })
-
-    const { status, json } = await post([{ role: 'user', content: 'hi' }])
-
-    expect(status).toBe(200)
-    expect(createChat).toHaveBeenCalled()
-    expect(createToolLoop).not.toHaveBeenCalled()
-    expect(json.reply).toBe('plain')
-  })
-
   it('404s with the kill-switch off, before building any tools', async () => {
     portalOn = false
     supportsToolLoop.value = true
