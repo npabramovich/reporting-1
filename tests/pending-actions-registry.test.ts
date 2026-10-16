@@ -24,6 +24,14 @@ describe('write-action registry', () => {
     }
   })
 
+  it('stages carry terms behind GP economics write, pinned to one vehicle', () => {
+    const a = getWriteAction('set_waterfall_terms')!
+    expect(a.domain).toBe('gp_economics')
+    expect(a.stageAccess).toBe('write')
+    expect(a.entity).toBe('required')
+    expect(a.managementCompanies).toBeUndefined()
+  })
+
   it('carries the investments feature on record_investment', () => {
     expect(getWriteAction('record_investment')?.accessFeature).toBe('investments')
   })
@@ -48,7 +56,7 @@ describe('agent tools that stage a pending action', () => {
   it('take the same input as the action they stage, and agree on its domain', async () => {
     const { AGENT_TOOLS } = await import('@/lib/accounting/agent-tools')
     const staged = AGENT_TOOLS.filter(t => t.stagesAs)
-    expect(staged.map(t => t.name).sort()).toEqual(['issue_capital_call', 'publish_call_notices'])
+    expect(staged.map(t => t.name).sort()).toEqual(['issue_capital_call', 'publish_call_notices', 'set_waterfall_terms'])
     for (const tool of staged) {
       const action = getWriteAction(tool.stagesAs!)!
       expect(action, tool.name).toBeTruthy()
