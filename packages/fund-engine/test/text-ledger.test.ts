@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { serializeLedger, parseLedgerText, textAccountName, codeFromAccountName, resolvePostingAccounts } from './text-ledger'
-import type { Account } from './types'
+import { serializeLedger, parseLedgerText, textAccountName, codeFromAccountName, resolvePostingAccounts } from '../src/text-ledger.ts'
+import type { Account } from '../src/types.ts'
 
 const accounts: Account[] = [
   { id: 'cash', fundId: 'f', code: '1000', name: 'Cash', type: 'asset' },

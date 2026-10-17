@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { Fragment, useCallback, useEffect, useState } from 'react'
-import { Loader2, Lock, Unlock, AlertTriangle, ChevronRight } from 'lucide-react'
+import { Loader2, Lock, Unlock, AlertTriangle, ChevronRight, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
@@ -210,6 +210,23 @@ export function PeriodsView() {
     const self = (data.approved ?? []).some((a: { selfApproved: boolean }) => a.selfApproved)
     if (self) setNotice('Approved by the person who prepared it — you are the only member who can do the books, and the record says so.')
     load()
+  }
+  // The close's reproducibility bundle (lib/accounting/close-bundle.ts) as a ZIP, for
+  // `fund-engine verify --bundle <dir>`. Closes made before bundles shipped have none (404).
+  async function downloadBundle(id: string) {
+    setError(null)
+    const res = await lf(`/api/accounting/close-bundle?periodId=${encodeURIComponent(id)}&format=zip`)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error ?? 'Could not download the close bundle')
+      return
+    }
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'close-bundle.zip'
+    const url = URL.createObjectURL(await res.blob())
+    const a = document.createElement('a')
+    a.href = url; a.download = name
+    document.body.appendChild(a); a.click(); a.remove()
+    URL.revokeObjectURL(url)
   }
   const awaitingApproval = periods.filter(p => p.status === 'closed' && p.close_review?.status === 'prepared')
 
@@ -541,6 +558,12 @@ export function PeriodsView() {
                         <td colSpan={4} className="px-3 py-2.5">
                           {/* Wide detail scrolls inside this panel instead of widening the table. */}
                           <div className="min-w-0 max-w-full overflow-x-auto">
+                          <div className="mb-2 flex justify-end">
+                            <Button size="sm" variant="outline" onClick={e => { e.stopPropagation(); downloadBundle(p.id) }}
+                              title="The ledger snapshot, terms and engine statements for this close, hashed — check it with fund-engine verify">
+                              <Download className="h-3.5 w-3.5 mr-1" />Reproducibility bundle
+                            </Button>
+                          </div>
                           {p.close_review && (
                             <div className="mb-3 rounded border bg-background overflow-hidden">
                               <div className="px-3 py-2 border-b bg-muted/30">

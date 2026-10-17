@@ -36,6 +36,8 @@ const eslintConfig = [
       ".claude/**",
       // Vendored tarballs and generated output.
       "vendor/**",
+      // The fund engine's build output (packages/fund-engine, `npm run build`).
+      "packages/*/dist/**",
       "supabase/functions/**",
     ],
   },

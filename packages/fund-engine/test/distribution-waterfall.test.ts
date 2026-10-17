@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { NO_CARRY, type VehicleCarryTerms } from './carry'
-import { replayWaterfallState, splitDistribution, suggestedCharacter } from './distribution-waterfall'
+import { NO_CARRY, type VehicleCarryTerms } from '../src/carry.ts'
+import { replayWaterfallState, splitDistribution, suggestedCharacter } from '../src/distribution-waterfall.ts'
 
 const GP = 'gp'
 const straight = (rate = 0.2): VehicleCarryTerms => ({

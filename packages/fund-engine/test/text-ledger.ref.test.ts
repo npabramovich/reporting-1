@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { serializeLedger, parseLedgerText } from './text-ledger'
+import { serializeLedger, parseLedgerText } from '../src/text-ledger.ts'
 
 const accounts = [
   { id: 'cash', fundId: 'f', code: '1000', name: 'Cash', type: 'asset' as const, subtype: 'cash' },

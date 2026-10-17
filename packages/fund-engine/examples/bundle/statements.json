@@ -1,0 +1,187 @@
+{
+  "vehicle": "Sample Fund I",
+  "asOf": "2025-06-30",
+  "from": null,
+  "entries": {
+    "included": 6,
+    "skippedDrafts": 0,
+    "skippedAfterAsOf": 0
+  },
+  "currencies": [
+    "USD"
+  ],
+  "trialBalance": {
+    "rows": [
+      {
+        "code": "1000",
+        "name": "Cash",
+        "type": "asset",
+        "debit": 140000,
+        "credit": 0,
+        "balance": 140000
+      },
+      {
+        "code": "1100-acme0001",
+        "name": "Acme Robotics",
+        "type": "asset",
+        "debit": 350000,
+        "credit": 0,
+        "balance": 350000
+      },
+      {
+        "code": "1200-acme0001",
+        "name": "Acme Robotics Unrealized",
+        "type": "asset",
+        "debit": 300000,
+        "credit": 0,
+        "balance": 300000
+      },
+      {
+        "code": "2300",
+        "name": "Distributions Payable",
+        "type": "liability",
+        "debit": 0,
+        "credit": 100000,
+        "balance": 100000
+      },
+      {
+        "code": "3100-aaaaaaaa",
+        "name": "Partners Capital Alpha Pension",
+        "type": "equity",
+        "debit": 0,
+        "credit": 414000,
+        "balance": 414000
+      },
+      {
+        "code": "3100-bbbbbbbb",
+        "name": "Partners Capital Beta Family Office",
+        "type": "equity",
+        "debit": 0,
+        "credit": 276000,
+        "balance": 276000
+      },
+      {
+        "code": "3200",
+        "name": "Undistributed Earnings Bridge",
+        "type": "equity",
+        "debit": 290000,
+        "credit": 0,
+        "balance": -290000
+      },
+      {
+        "code": "4200",
+        "name": "Change In Unrealized Appreciation",
+        "type": "income",
+        "debit": 0,
+        "credit": 300000,
+        "balance": 300000
+      },
+      {
+        "code": "5000",
+        "name": "Management Fee",
+        "type": "expense",
+        "debit": 10000,
+        "credit": 0,
+        "balance": 10000
+      }
+    ],
+    "totalDebits": 1090000,
+    "totalCredits": 1090000,
+    "balanced": true
+  },
+  "partners": [
+    {
+      "id": "aaaaaaaa-1111-4111-8111-111111111111",
+      "name": "Alpha Pension",
+      "account": "3100-aaaaaaaa",
+      "commitment": 600000,
+      "carryRecipient": false,
+      "capitalAccount": {
+        "beginning": 0,
+        "contributions": 300000,
+        "distributions": -60000,
+        "managementFees": -6000,
+        "expenses": 0,
+        "operatingIncome": 0,
+        "realizedGains": 0,
+        "unrealizedGains": 180000,
+        "fxTranslation": 0,
+        "transfers": 0,
+        "carriedInterest": 0,
+        "unclassified": 0,
+        "ending": 414000
+      },
+      "ties": true
+    },
+    {
+      "id": "bbbbbbbb-2222-4222-8222-222222222222",
+      "name": "Beta Family Office",
+      "account": "3100-bbbbbbbb",
+      "commitment": 400000,
+      "carryRecipient": false,
+      "capitalAccount": {
+        "beginning": 0,
+        "contributions": 200000,
+        "distributions": -40000,
+        "managementFees": -4000,
+        "expenses": 0,
+        "operatingIncome": 0,
+        "realizedGains": 0,
+        "unrealizedGains": 120000,
+        "fxTranslation": 0,
+        "transfers": 0,
+        "carriedInterest": 0,
+        "unclassified": 0,
+        "ending": 276000
+      },
+      "ties": true
+    },
+    {
+      "id": "c0ffee00-3333-4333-8333-333333333333",
+      "name": "Sample GP",
+      "account": "3100-c0ffee00",
+      "commitment": null,
+      "carryRecipient": true,
+      "capitalAccount": {
+        "beginning": 0,
+        "contributions": 0,
+        "distributions": 0,
+        "managementFees": 0,
+        "expenses": 0,
+        "operatingIncome": 0,
+        "realizedGains": 0,
+        "unrealizedGains": 0,
+        "fxTranslation": 0,
+        "transfers": 0,
+        "carriedInterest": 0,
+        "unclassified": 0,
+        "ending": 0
+      },
+      "ties": true
+    }
+  ],
+  "nav": 690000,
+  "checks": {
+    "trialBalanceBalanced": true,
+    "everyRollForwardTies": true,
+    "navTiesToLedger": true,
+    "ledgerPartnerCapital": 690000
+  },
+  "carry": {
+    "kind": "european",
+    "carryRate": 0.2,
+    "prefRate": 0.08,
+    "catchupRate": 1,
+    "catchupSize": 1,
+    "prefCompounds": true,
+    "prefBase": "contributed",
+    "target": 58000,
+    "alreadyAccrued": 0,
+    "delta": 58000,
+    "perPartner": {
+      "aaaaaaaa-1111-4111-8111-111111111111": 34800,
+      "bbbbbbbb-2222-4222-8222-222222222222": 23200
+    }
+  },
+  "warnings": []
+}

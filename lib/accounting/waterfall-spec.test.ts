@@ -44,7 +44,7 @@ describe('the published waterfall vectors', () => {
         const e: WaterfallResult = v.expected
         const distributed = roundCents(Math.max(0, roundCents(v.input.distributable)))
         expect(roundCents(e.toLP + e.toGP), v.id).toBe(distributed)
-        expect(roundCents(e.toReturnOfCapital + e.toPreferred + e.toCarryLP), v.id).toBe(e.toLP)
+        expect(roundCents(e.toReturnOfCapital + e.toPreferred + e.toCatchUpLP + e.toCarryLP), v.id).toBe(e.toLP)
         expect(roundCents(e.toCatchUp + e.toCarryGP), v.id).toBe(e.toGP)
       }
     })
@@ -53,7 +53,7 @@ describe('the published waterfall vectors', () => {
   describe('preferredTarget', () => {
     for (const v of vectors.preferredTarget) {
       it(v.id, () => {
-        expect(preferredTarget(v.input.contributions, v.input.asOf, v.input.rate, v.input.compounds)).toBe(v.expected)
+        expect(preferredTarget(v.input.contributions, v.input.asOf, v.input.rate, v.input.compounds, v.input.reductions)).toBe(v.expected)
       })
     }
   })
@@ -61,7 +61,7 @@ describe('the published waterfall vectors', () => {
   describe('carryTarget (the close\'s accrual target)', () => {
     for (const v of vectors.carryTarget) {
       it(v.id, () => {
-        expect(carryTarget({ lps: v.input.lps, contributions: v.input.contributions, asOf: v.input.asOf }, v.input.terms)).toBe(v.expected)
+        expect(carryTarget({ lps: v.input.lps, contributions: v.input.contributions, asOf: v.input.asOf, distributions: v.input.distributions }, v.input.terms)).toBe(v.expected)
       })
     }
   })
@@ -79,11 +79,11 @@ describe('the published waterfall vectors', () => {
 
     it('the replay is runWaterfall over each prior in date order, with the hurdle accrued to its date', () => {
       for (const v of vectors.splitDistribution.filter((x: any) => x.input.terms.kind !== 'none')) {
-        const { priors, contributions, terms, asOf } = v.input
-        const replayed = replayWaterfallState(priors, contributions, terms, asOf)
+        const { priors, contributions, terms, asOf, realizedCapital } = v.input
+        const replayed = replayWaterfallState(priors, contributions, terms, asOf, { realizedCapital })
         expect(replayed, v.id).toEqual(v.expected.stateBefore)
         // And the split's tiers are exactly one more runWaterfall from that state.
-        const step = runWaterfall(v.input.total, { carryRate: terms.carryRate, catchUpRate: terms.kind === 'straight' ? 1 : terms.catchupRate }, replayed)
+        const step = runWaterfall(v.input.total, terms.kind === 'straight' ? { carryRate: terms.carryRate, catchUpRate: 1 } : { carryRate: terms.carryRate, catchUpRate: terms.catchupRate, catchUpSize: terms.catchupSize ?? 1 }, replayed)
         expect(step.state, v.id).toEqual(v.expected.stateAfter)
       }
     })

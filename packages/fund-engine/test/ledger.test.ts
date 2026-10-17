@@ -8,8 +8,8 @@ import {
   capitalByEntity,
   simpleEntry,
   roundCents,
-} from './ledger'
-import type { Account, JournalEntry } from './types'
+} from '../src/ledger.ts'
+import type { Account, JournalEntry } from '../src/types.ts'
 
 const base = { fundId: 'fund-1', entryDate: '2026-06-30' }
 

@@ -1,17 +1,23 @@
 # Waterfall terms: specification
 
-Spec version 1. This document sets out every economic term the accounting engine supports today,
+Spec version 2. This document sets out every economic term the accounting engine supports today,
 how each one is computed, and what the engine does **not** model yet. It is written from the code,
 and the code backs it up. `docs/spec/waterfall-vectors.json` holds machine-readable test vectors.
 `lib/accounting/waterfall-spec.test.ts` runs every one of those vectors through the engine, so a
 change to the engine that breaks the spec fails the test suite.
 
+The math lives in the open fund engine, `packages/fund-engine` (`@hemrock/fund-engine`). The
+`lib/accounting` modules of the same names re-export it.
+
 | Concern | Code |
 |---|---|
-| Tier order and formulas | `lib/accounting/waterfall.ts` (`runWaterfall`) |
-| Stored terms, hurdle accrual, close accrual | `lib/accounting/carry.ts` (`VehicleCarryTerms`, `preferredTarget`, `carryTarget`, `carryAccrual`) |
-| Splitting a distribution (replay, then split) | `lib/accounting/distribution-waterfall.ts` (`replayWaterfallState`, `splitDistribution`) |
-| Deal-by-deal entitlement | `lib/accounting/american-carry.ts` (`dealByDealCarry`) |
+| Tier order and formulas | `waterfall.ts` (`runWaterfall`) |
+| The hurdle | `hurdle.ts` (`preferredTarget`) |
+| Replaying prior distributions | `replay.ts` (`replayWaterfallState`) |
+| Stored terms, close accrual | `carry.ts` (`VehicleCarryTerms`, `carryTarget`, `carryAccrual`) |
+| The close's inputs from the books | `economics.ts` (`carryAccrualInputs`) |
+| Splitting a distribution | `distribution-waterfall.ts` (`splitDistribution`) |
+| Deal-by-deal capital base and entitlement | `american-carry.ts` (`realizedCapitalFromDeals`, `dealByDealCarry`); rows read by `lib/accounting/realized-capital.ts` |
 | Validating and storing terms | `lib/accounting/waterfall-terms.ts` (`parseWaterfallTermsInput`, `saveWaterfallTerms`) |
 | Allocation basis | `lib/accounting/terms.ts` (`AllocationBasis`, `allocationWeights`) |
 
@@ -36,13 +42,18 @@ agreed to is worse than accruing none.
 | `carryRate` | `carry_rate` | 0 ≤ r < 1 | 0 | The GP's share of profits. |
 | `prefRate` | `pref_rate` | 0 ≤ r < 1 | 0 | Annual preferred return (hurdle). Ignored by `straight`. |
 | `prefCompounds` | `pref_compounds` | boolean | true | Hurdle compounds annually (true) or accrues simply (false). |
-| `catchupRate` | `catchup_rate` | 0 ≤ r ≤ 1 | 1 | The GP's share of the catch-up flow. 1 = full catch-up. Ignored by `straight`. |
+| `prefBase` | `pref_base` | `contributed` \| `unreturned` | `contributed` | What the hurdle accrues on (§5). |
+| `catchupRate` | `catchup_rate` | 0 ≤ k ≤ 1 | 1 | The catch-up RATE: the GP's share of each dollar while it catches up; the LPs get the rest. 0 = no catch-up. Ignored by `straight`. |
+| `catchupSize` | `catchup_size` | 0 ≤ s ≤ 1 | 1 | The catch-up SIZE: how much of a full catch-up the GP gets (§3.2). 1 = full. Ignored by `straight`. |
 | `recipients` | `carry_recipients` (jsonb `[{lpEntityId, pct}]`) | pct > 0, total 100 ± 0.01 | `[]` | Who receives the carry, and in what split. |
 | `gpEntityId` | `gp_entity_id` | partner id or null | null | Legacy single recipient. Used as `[{gpEntityId, 100}]` when `carry_recipients` is empty. |
 
 Validation (`parseWaterfallTermsInput`, shared by the settings page and `set_waterfall_terms`):
 - `kind` must be one of the four values.
 - Each rate must be in its range.
+- Any catch-up rate in range works, including one at or below the carry rate (10% on 20% carry).
+- `catchupSize` must be between 0 and 1. Omitted, it is 1.
+- `prefBase` must be `contributed` or `unreturned`. Omitted, it is `contributed`.
 - When carry is on (`kind ≠ none` and `carryRate > 0`), there must be at least one recipient.
 - Recipient percentages must total 100.
 - Every recipient must be a partner (`lp_entities`) of the same fund.
@@ -70,37 +81,61 @@ the members' carry points.
 ### 3.1 Inputs
 
 ```
-terms  = { carryRate c, catchUpRate k (default 1) }
-state  = { contributedCapital C, returnedCapital R, preferredPaid P, preferredTarget T, gpCarryPaid G }
+terms  = { carryRate c, catchUpRate k (default 1), catchUpSize s (default 1) }
+state  = { contributedCapital C, returnedCapital R, preferredPaid P, preferredTarget T,
+           gpCarryPaid G, gpCatchUpPaid Q (default G) }
 distributable D
 ```
 
 The function is pure: it takes a distributable amount and the cumulative state. The caller works
-out the accrued hurdle `T` (§5). Timing stays out of the waterfall.
+out the accrued hurdle `T` (§5). Timing stays out of the waterfall. `Q` is the GP's catch-up so
+far, kept apart from `G` because carry from the split does not count toward the catch-up. Absent,
+it is `G`, which is exact for any state that has not reached the split.
 
 ### 3.2 Tiers, in order
+
+A catch-up is two terms:
+- Its **size** `s` is how much of a full catch-up the GP gets. A full catch-up is the carry the GP
+  would have earned on the profit that paid the preferred return: enough that the GP holds `c` of
+  the pref plus the catch-up, which is `c·P'/(1 − c)`. A size of 0.5 is half of that.
+- Its **rate** `k` is the share of each dollar that goes to the GP while it catches up. The LPs get
+  `1 − k`. The catch-up stops when the GP's catch-up reaches its size, whatever the rate.
+
+Example: 20% carry and 80 of pref paid. A full catch-up is 20 (the GP then holds 20 of 100). At a
+100% rate the GP takes the next 20; at 10% it takes 10% of the next 200, and the LPs get 180.
 
 Let `rem = round(max(0, D))`. Each tier is `take(want) = round(max(0, min(rem, want)))`, and then
 `rem = round(rem − take)`.
 
 1. **Return of capital:** `ROC = take(C − R)`.
 2. **Preferred return:** `PREF = take(T − P)`. Let `P' = round(P + PREF)`.
-3. **GP catch-up.** This tier applies only when `0 < c < 1`.
-   - GP target at the end of catch-up: `F = round(c × P' / (1 − c))`. At that point the GP holds
-     `c` of (preferred + catch-up).
-   - Still needed: `N = round(max(0, F − G))`.
-   - Distribution consumed: `gross = take(k > 0 ? round(N / k) : 0)`.
-   - `CU = round(gross × k)` goes to the GP.
-   - The non-GP part of that flow, `round(gross − CU)`, is **added back to `rem`**, so the split
-     below shares it (see §4.4).
+3. **GP catch-up.** This tier applies only when `0 < c < 1`, `k > 0` and `s > 0`.
+   - The GP is owed `N = round(max(0, s·c·P'/(1 − c) − Q))`. Nothing owed, no catch-up.
+   - Flow: `want = round(N / k)`, `gross = take(want)`.
+   - `CU = gross = want ? N : round(gross × k)` goes to the GP, and `CUlp = round(gross − CU)` to
+     the LPs. Rounding the GP part, not the flow, lands a completed catch-up to the cent.
 4. **Carry split:** `GPsplit = round(rem × c)`, and `LPsplit = round(rem − GPsplit)`.
 
 Outputs:
-- `toLP = round(ROC + PREF + LPsplit)`.
+- `toLP = round(ROC + PREF + CUlp + LPsplit)`, with `toCatchUpLP = CUlp`.
 - `toGP = round(CU + GPsplit)`.
-- `state' = { C, R + ROC, P', T, G + toGP }`.
+- `state' = { C, R + ROC, P', T, G + toGP, Q + CU }`.
 
 The tiers always add up to the rounded distributable. The vector test checks that for every vector.
+
+**Rate below 1.** The GP takes `k` of the flow and the LPs `1 − k`, literally:
+- When the catch-up completes, the GP has its catch-up and the split takes over (vectors
+  `partial-catch-up-80`, `catch-up-rate-below-carry`).
+- When the distribution runs out inside the catch-up, the GP has `k` of what there was (vector
+  `partial-catch-up-runs-out`: 12 of 15).
+- Because the LPs share the catch-up flow, the GP ends below `c` of all profit until a fund-close
+  true-up says otherwise.
+
+**Size below 1.** The catch-up stops early, at `s` of a full one (vector `catch-up-half-size`).
+
+**After the split.** When the hurdle grows after the fund has reached the split (a later
+distribution, more pref accrued), the new pref is caught up in turn: the GP is owed `s` of a full
+catch-up on the larger `P'`, less the catch-up it already has (vector `catch-up-after-split`).
 
 ## 4. Kinds
 
@@ -119,28 +154,33 @@ Carry is a share of profit over contributed capital, with no hurdle and no catch
 
 ### 4.3 `european` and `american`
 - **Accrual target (the close):** the hypothetical-liquidation method. The waterfall runs once
-  from a clean state, `{C = contributed, R = 0, P = 0, T = preferredTarget(asOf), G = 0}`, on
-  `D = NAV + distributed`. The target is `toCatchUp + toCarryGP`.
-- **`american` accrues exactly the `european` target.** Under an American waterfall, a clawback
-  makes the GP's ultimate entitlement equal to the whole-fund result. The accrual marks that
-  ultimate entitlement.
-- **Distributions under `american` are split by the same whole-fund waterfall** as `european`
-  (vector `american-splits-as-european`).
-- The deal-by-deal *early* entitlement is reported separately by `dealByDealCarry` (§6). Nothing
-  posts or distributes from it.
-
-### 4.4 Catch-up rate below 1
-With `k < 1`, the engine routes the LP part of the catch-up flow back into the final split, not
-straight to the LPs:
-- When the catch-up completes in one distribution, the GP still ends at `c` of total profit, the
-  same as a full catch-up (vector `partial-catch-up-80`).
-- When the distribution runs out *inside* the catch-up, the LP part is split again at `c`. The GP
-  then receives slightly more than a literal "k to the GP, 1 − k to the LPs" reading would give.
-  In vector `partial-catch-up-runs-out`, the GP receives 12.60 where that reading gives 12.00.
-
-This is how the engine behaves today, and the vectors pin it.
+  from a clean state, `{C = contributed, R = 0, P = 0, T = hurdle(asOf), G = 0}`, on
+  `D = NAV + distributed`. The target is `toCatchUp + toCarryGP`. On the `unreturned` base the
+  hurdle is the one the actual distributions leave (§5), found by replaying them whole-fund.
+- **`american` accrues exactly the `european` target.** A liquidation realizes every deal, so the
+  deal-by-deal capital base is the whole fund, and a clawback makes the GP's ultimate entitlement
+  the whole-fund result. The accrual marks that ultimate entitlement.
+- **`european` distributions** run the replay and split of §6 on all contributed capital.
+- **`american` distributions** run the same replay and split, but the capital tier is the LP
+  capital in deals **realized** by each distribution's date, and the hurdle accrues only on that
+  capital, from when it was invested (vector `american-realized-deals`):
+  - A realization is a sale, a partial sale or a write-off, with the cost basis it took out
+    (`cost_basis_exited` on a proceeds row; none stated means all the basis left). A deal closed
+    by status alone realizes what is left on the date of its last transaction.
+  - Each realized dollar of cost is LP capital times
+    `factor = (LP contributions ÷ all contributions) × (1 + fund fees and expenses ÷ total cost)`,
+    so fees and expenses ride with the deals by cost share and the GP's own capital is left out.
+    The slice is spread over the deal's investments in proportion, each dated when it was made.
+  - Written-off deals count: their capital is owed back before carry on the next winner.
+  - The base never exceeds the LPs' contributions to that date.
+  - With no deal data supplied the split falls back to whole-fund and warns (vector
+    `american-without-deals-is-whole-fund`). With deal data but nothing realized yet, every dollar
+    is profit, and the split warns that a return of uninvested capital belongs pro-rata.
+- `dealByDealCarry` (§6) still reports each deal's own carry, for the GP panel.
 
 ## 5. The hurdle (`preferredTarget`)
+
+**`contributed` base** (the default):
 
 ```
 T(asOf) = Σ over contributions with amount > 0 and date < asOf of
@@ -150,21 +190,37 @@ years = (asOf − date) / 365 days      (ACTUAL/365)
 ```
 
 - The hurdle accrues on each contribution from the day the cash arrived. Commitments earn nothing.
+- Capital coming back does not stop it (vector `no-reduction-for-returns`).
+
+**`unreturned` base.** Walk the dated events in order: contributions add to unreturned capital
+`K`; each prior distribution's return-of-capital tier takes from `K` and its preferred tier from the
+unpaid pref `U` (on one date, contributions land first). Between events, over `years`:
+
+```
+growth = compounds ? (K + U) × ((1 + rate)^years − 1)
+                   : K × rate × years
+T += growth;  U += growth
+```
+
+`T` is still cumulative, everything accrued whether paid or not, because the waterfall compares it
+with cumulative `P`. What each distribution returned and paid comes from replaying the waterfall
+itself (§6), so the hurdle a distribution sees is the one the earlier tiers leave. Vectors
+`unreturned-compound-pref-paid`, `unreturned-capital-back`, `unreturned-simple`,
+`unreturned-replay-then-split`, `european-unreturned`.
+
+Both bases:
 - A contribution dated on or after `asOf` accrues nothing.
 - A year under ACTUAL/365 is 365 days, so a 366-day leap year accrues slightly more than one year
   (vector `leap-year`).
 - The result is rounded to cents. `rate ≤ 0`, or an unparseable `asOf`, gives 0.
-- **The hurdle accrues on gross contributions.** Distributions do not reduce the base: returned
-  capital keeps accruing (vectors `no-reduction-for-returns` and `replay-then-split`). Many LPAs
-  accrue only on unreturned capital. See §7.
 
 ## 6. Splitting a distribution (`splitDistribution`)
 
 1. **Replay.** Nothing stores the waterfall state, so it is replayed:
    - Every prior distribution with `amount > 0` and `date ≤ asOf` runs through `runWaterfall` in
      date order.
-   - For each prior, `C` is the contributions dated on or before the prior's date, and `T` is the
-     hurdle accrued to that date.
+   - For each prior, `C` is the contributions dated on or before the prior's date (for `american`,
+     the realized capital, §4.3), and `T` is the hurdle accrued to that date (§5).
    - The final state is then re-based to `asOf`: `C` and `T` are recomputed as of `asOf`.
 2. **Split.** This distribution runs from the replayed state.
 3. **LP lines.** `toLP` is split pro-rata by each non-recipient partner's contributed capital. When
@@ -177,12 +233,24 @@ years = (asOf − date) / 365 days      (ACTUAL/365)
    the rest = gain.
 
 **Close accrual.**
-- The close posts `carryTarget − alreadyAccrued`, where `alreadyAccrued` is the recipients'
-  `carriedInterest` buckets.
-- That delta is debited across LPs in proportion to each LP's positive profit
-  (`NAV + distributed − contributed`), with largest-remainder cents.
-- It is credited across the recipients by `pct`. The last recipient absorbs the rounding.
-- When NAV falls, the accrual reverses on its own.
+- The close measures each LP **gross of carry**: `NAV = ending capital + carry already charged to
+  that LP` (what earlier accruals debited from its `carriedInterest` line). Measuring on a balance
+  already net of carry would count it twice, and a second close on unchanged books would propose
+  reversing part of what the first accrued.
+- It posts `carryTarget − alreadyAccrued`, where `alreadyAccrued` is the carry charged to the LPs
+  so far. That is not the recipients' balance: carry PAID is drawn from the recipients, so
+  measuring against their balance would accrue every paid dollar again.
+- It is a **true-up to the capital accounts**. The whole target is shared across LPs in proportion
+  to each LP's positive profit (`NAV + distributed − contributed`), with largest-remainder cents,
+  and each LP is charged its share less what it has already been charged. Its cumulative charge is
+  then always its share of the GP's entitlement, so at the fund's last close every LP pays the same
+  effective rate on its profit, however earlier accruals were shared. A close whose total does not
+  change can still move carry between LPs.
+- The net is credited across the recipients by `pct`. The last recipient absorbs the rounding.
+- When NAV falls, the accrual reverses on its own; when nobody is in profit, every LP's charge is
+  reversed.
+- Carry paid beyond the target is not clawed back by the close: it shows as a negative carry
+  balance on the recipients' capital accounts, which is what the GP owes back.
 
 **Deal-by-deal entitlement (`dealByDealCarry`).**
 - Fund expenses are allocated to deals by share of cost basis.
@@ -196,14 +264,12 @@ one it finds under `unsupported`.
 
 | Provision | What the engine does instead |
 |---|---|
-| GP clawback / give-back | Not modelled. Carry paid in excess of the whole-fund accrual shows only as accrued vs paid on the GP panel. |
+| GP clawback / give-back | Not posted. The close's accrual marks the whole-fund entitlement, so carry paid early under `american` beyond it shows as accrued vs paid on the GP panel. |
 | Carry escrow / holdback | Not modelled. |
 | Management fee offsets (transaction, monitoring or director fees) | Not modelled. The fee is a separate allocation (§2). |
 | Multiple hurdles, or carry rates that step up by IRR or multiple | One hurdle and one carry rate per vehicle. |
-| Hurdle on unreturned capital, or net of distributions | Accrues on gross contributions (§5). |
 | Hurdle compounding other than annual (quarterly, daily) | Annual compounding or simple only. |
-| Catch-up paid literally k / (1 − k) inside a partial catch-up | See §4.4. |
-| Real deal-by-deal distribution of carry | `american` distributions follow the whole-fund waterfall (§4.3). The per-deal figure is informational. |
+| Deal-by-deal on a different capital base (all invested capital, or unrealized write-downs) | Realized deals only, with fees and expenses by cost share (§4.3). |
 | Per-partner carry rates (side letters on carry) | Carry is fund-level. Side-letter *fee* rates are supported (`rate_override`). |
 | Tax distributions | Not modelled. |
 | Fee step-downs as a waterfall term | Belongs to the forecast plan's fee rule, not these terms. |
@@ -237,14 +303,16 @@ Every vector in `waterfall-vectors.json`, by section:
 - **runWaterfall:** `roc-only`, `roc-and-partial-pref`, `european-full-catch-up`,
   `catch-up-rate-omitted`, `partial-catch-up-80`, `partial-catch-up-runs-out`, `no-catch-up`,
   `resume-mid-catch-up`, `zero-carry`, `straight-shape`, `rounding-to-cents`,
-  `sub-cent-distributable`, `negative-distributable`, `carry-25-large`.
+  `sub-cent-distributable`, `negative-distributable`, `carry-25-large`, `catch-up-after-split`,
+  `catch-up-rate-below-carry`, `catch-up-half-size`.
 - **preferredTarget:** `one-year-compound`, `one-year-simple`, `two-years-compound`,
   `two-years-simple`, `leap-year`, `per-contribution-dates`, `no-reduction-for-returns`,
-  `zero-rate`.
+  `zero-rate`, `unreturned-compound-pref-paid`, `unreturned-capital-back`, `unreturned-simple`.
 - **carryTarget:** `none`, `straight`, `straight-loss`, `european`, `european-below-hurdle`,
-  `american-equals-european`.
-- **splitDistribution:** `replay-then-split`, `american-splits-as-european`, `straight-split`,
-  `two-recipients`, `no-terms-pro-rata`.
+  `american-equals-european`, `european-unreturned`, `european-contributed-same-books`.
+- **splitDistribution:** `replay-then-split`, `american-without-deals-is-whole-fund`,
+  `straight-split`, `two-recipients`, `no-terms-pro-rata`, `unreturned-replay-then-split`,
+  `american-realized-deals`.
 - **dealByDealCarry:** `two-deals`.
 
 Changing the engine means changing this document and its vectors in the same change.

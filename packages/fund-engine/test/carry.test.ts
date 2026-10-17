@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { carryTarget, carryAccrual, preferredTarget, NO_CARRY, type VehicleCarryTerms } from './carry'
+import { carryTarget, carryAccrual, preferredTarget, NO_CARRY, type VehicleCarryTerms } from '../src/carry.ts'
 
 const straight = (rate = 0.2): VehicleCarryTerms => ({
   ...NO_CARRY, kind: 'straight', carryRate: rate,

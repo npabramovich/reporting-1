@@ -1,0 +1,58 @@
+{
+  "vehicle": "Sample Fund I",
+  "asOf": "2025-07-02",
+  "amount": 600000,
+  "method": "waterfall",
+  "source": "ledger",
+  "tiers": {
+    "returnOfCapital": 400000,
+    "preferred": 59589.32,
+    "catchUp": 14897.33,
+    "catchUpToLP": 0,
+    "carry": 25102.67,
+    "profitToLP": 100410.68,
+    "toLP": 560000,
+    "toGP": 40000
+  },
+  "lines": [
+    {
+      "partner": "lp-alpha",
+      "name": "Alpha Pension",
+      "amount": 336000
+    },
+    {
+      "partner": "lp-beta",
+      "name": "Beta Family Office",
+      "amount": 224000
+    }
+  ],
+  "carryLines": [
+    {
+      "partner": "gp",
+      "name": "Sample GP",
+      "amount": 40000
+    }
+  ],
+  "suggestedCharacter": {
+    "returnOfCapital": 400000,
+    "realizedGain": 200000,
+    "income": 0
+  },
+  "stateBefore": {
+    "contributedCapital": 500000,
+    "returnedCapital": 100000,
+    "preferredPaid": 0,
+    "preferredTarget": 59589.32,
+    "gpCarryPaid": 0,
+    "gpCatchUpPaid": 0
+  },
+  "stateAfter": {
+    "contributedCapital": 500000,
+    "returnedCapital": 500000,
+    "preferredPaid": 59589.32,
+    "preferredTarget": 59589.32,
+    "gpCarryPaid": 40000,
+    "gpCatchUpPaid": 14897.33
+  },
+  "warnings": []
+}
