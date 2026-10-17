@@ -191,7 +191,7 @@ begin
   end if;
   insert into split_summary values (1, 'fund_settings', 'created (no keys, no Drive)', 1);
 
-  insert into allowed_signups (email_pattern) values ('*@' || p.email_domain) on conflict do nothing;
+  insert into allowed_signups (email_pattern, fund_id) values ('*@' || p.email_domain, v_new) on conflict do nothing;
   get diagnostics n = row_count;
   insert into split_summary values (1, 'allowed_signups', '*@' || p.email_domain, n);
 

@@ -39,7 +39,7 @@ async function main() {
   const fund = funds[0] as { id: string; name: string }
 
   // 2. Past the signup gate, so the address can exist and sign in.
-  const { error: allowError } = await db.from('allowed_signups').insert({ email_pattern: email })
+  const { error: allowError } = await db.from('allowed_signups').insert({ email_pattern: email, fund_id: fund.id })
   if (allowError && allowError.code !== '23505') fail(`Could not add ${email} to the signup allow-list: ${allowError.message}`)
 
   // 3. The account.
