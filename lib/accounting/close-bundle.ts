@@ -13,7 +13,7 @@ import JSZip from 'jszip'
 import {
   BUNDLE_FILES, buildBundle, termsFileFrom, verifyBundle,
   type BundleManifest, type CloseBundle, type VerifyResult,
-} from '@hemrock/fund-engine'
+} from '@portfolio/fund-engine'
 import { loadCarryTerms } from './carry'
 import { loadAllocationBasis, loadResolvedCommitments } from './terms'
 import { fetchAllRows, loadEntityNames } from './load'

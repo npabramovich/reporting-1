@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import * as engine from '@hemrock/fund-engine'
+import * as engine from '@portfolio/fund-engine'
 import * as ledger from './ledger'
 import * as types from './types'
 import * as waterfall from './waterfall'

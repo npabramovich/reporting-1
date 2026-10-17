@@ -1,4 +1,4 @@
-# @hemrock/fund-engine
+# @portfolio/fund-engine
 
 The fund-accounting math behind Hemrock Portfolio, as a standalone package you can read, test and
 run yourself. It has no database, no framework and no runtime dependencies. Every function is a
@@ -211,7 +211,7 @@ files with the commands above, redirected to the files, and review the diff.
 
 ## Use in the app
 
-The repository's `tsconfig.json` maps `@hemrock/fund-engine` to `src/index.ts`, and
+The repository's `tsconfig.json` maps `@portfolio/fund-engine` to `src/index.ts`, and
 `vitest.config.ts` has the same alias. Next.js (Turbopack), tsx and the esbuild scripts all honour
 the tsconfig path, so the app compiles the engine from source with no build step and no
 workspace install. `lib/accounting/{ledger,types,waterfall,carry,american-carry,

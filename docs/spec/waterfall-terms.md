@@ -6,7 +6,7 @@ and the code backs it up. `docs/spec/waterfall-vectors.json` holds machine-reada
 `lib/accounting/waterfall-spec.test.ts` runs every one of those vectors through the engine, so a
 change to the engine that breaks the spec fails the test suite.
 
-The math lives in the open fund engine, `packages/fund-engine` (`@hemrock/fund-engine`). The
+The math lives in the open fund engine, `packages/fund-engine` (`@portfolio/fund-engine`). The
 `lib/accounting` modules of the same names re-export it.
 
 | Concern | Code |
