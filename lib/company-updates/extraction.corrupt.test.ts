@@ -101,8 +101,11 @@ describe('resource limits become partial results with the skipped range recorded
   })
 
   it('a workbook beyond the cell budget records which sheets were cut or skipped', async () => {
-    // 3 sheets × 1,000 rows × 200 columns = 600k cells > the 400k budget.
-    const bytes = workbookBytes([wideSheet('One', 1_000, 200), wideSheet('Two', 1_000, 200), wideSheet('Three', 1_000, 200)])
+    // The budget is charged on each sheet's declared range, so a header row plus one cell at GR1001
+    // declares 1,001 rows × 200 columns per sheet: 3 sheets = 600k cells > the 400k budget, without
+    // writing and parsing 600k real cells (which took ~5s).
+    const declared = (name: string) => ({ ...wideSheet(name, 0, 200), formulas: { GR1001: '1+1' } })
+    const bytes = workbookBytes([declared('One'), declared('Two'), declared('Three')])
     const extracted = await extractArtifact({ filename: 'model.xlsx', content: bytes.toString('base64') })
     expect(extracted.result.status).toBe('partial')
     const warnings = extracted.result.warnings.join('\n')

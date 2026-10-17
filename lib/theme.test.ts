@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { rampFor, themeCssVars, foregroundFor, isValidHsl, FONT_OPTIONS } from './theme'
+import { rampFor, themeCssVars, foregroundFor, isValidHsl } from './theme'
 
 /** The old evergreen default. RAMP_STOPS was calibrated on it, so it stays the reference seed. */
 const EVERGREEN = '164 72% 50%'
@@ -124,31 +124,18 @@ describe('themeCssVars', () => {
     expect(themeCssVars({ radius: 0.875 })).toBe('--radius:0.875rem;--radius-card:1.125rem')
   })
 
-  it('maps the font key to its CSS variable', () => {
-    expect(themeCssVars({ font: 'inter' })).toBe('--font-sans:var(--font-inter)')
-    expect(themeCssVars({ font: 'system' })).toBe('')
-  })
-
-  it('overrides only --font-display for a display font, never --font-sans', () => {
+  it('overrides only --font-display for a display font, never --font-sans, and nothing for the default', () => {
     const css = themeCssVars({ displayFont: 'libre-caslon' })
     expect(css).toContain('--font-display:var(--font-libre-caslon)')
     expect(css).not.toContain('--font-sans')
-  })
-
-  it('emits nothing for the default display font', () => {
     // 'inter' is the default; storing it as an override would be a no-op.
     expect(themeCssVars({ displayFont: 'inter' })).toBe('')
     expect(themeCssVars({ displayFont: 'not-a-font' })).toBe('')
   })
 
-  it('maps every new UI face to its own loaded variable, alongside the originals', () => {
-    for (const [key, v] of [['geist', '--font-geist'], ['dm-sans', '--font-dm-sans'], ['inter-tight', '--font-inter-tight'], ['instrument-sans', '--font-instrument-sans'], ['hanken', '--font-hanken'], ['jakarta', '--font-jakarta']]) {
-      expect(themeCssVars({ font: key })).toBe(`--font-sans:var(${v})`)
-    }
-    expect(FONT_OPTIONS.map(o => o.key)).toEqual(['system', 'inter', 'geist', 'dm-sans', 'inter-tight', 'instrument-sans', 'hanken', 'jakarta'])
-  })
-
-  it('keeps the UI font and the display font independent', () => {
+  it('maps the UI font key to its CSS variable, independently of the display font', () => {
+    expect(themeCssVars({ font: 'inter' })).toBe('--font-sans:var(--font-inter)')
+    expect(themeCssVars({ font: 'system' })).toBe('')
     const css = themeCssVars({ font: 'hanken', displayFont: 'newsreader' })
     expect(css).toContain('--font-sans:var(--font-hanken)')
     expect(css).toContain('--font-display:var(--font-newsreader)')

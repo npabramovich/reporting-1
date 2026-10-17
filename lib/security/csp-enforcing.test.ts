@@ -13,11 +13,8 @@ const directive = (csp: string, name: string) =>
 describe('the enforcing policy', () => {
   const prod = buildEnforcingCsp()
 
-  it('has no unsafe-eval in production', () => {
+  it('has no unsafe-eval in production, and keeps it in development for React Refresh', () => {
     expect(directive(prod, 'script-src')).not.toContain("'unsafe-eval'")
-  })
-
-  it('keeps unsafe-eval in development, for React Refresh', () => {
     expect(directive(buildEnforcingCsp({ development: true }), 'script-src')).toContain("'unsafe-eval'")
   })
 
