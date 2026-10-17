@@ -19,11 +19,12 @@ import { createHmac, hkdfSync, timingSafeEqual } from 'crypto'
 // The rest are the fund's own documents (lib/reports/documents.ts), each re-gated at the click
 // exactly as its web route gates it. `template_document` is a stored render of one of the fund's
 // own document templates (lib/document-templates). `call_notice_preview` is one partner's notice for
-// an issued capital call, marked DRAFT, before it is published (preview_call_notices).
+// an issued capital call, marked DRAFT, before it is published (preview_call_notices). `close_bundle`
+// is a closed period's reproducibility bundle as a ZIP (close_bundle; lib/accounting/close-bundle.ts).
 export const REPORT_KINDS = [
   'lp_statement', 'lp_report_card', 'portal_statement', 'portal_letter',
   'fund_performance', 'financial_statements', 'k1', 'lp_snapshot', 'tax_package', 'lp_letter',
-  'template_document', 'call_notice_preview',
+  'template_document', 'call_notice_preview', 'close_bundle',
 ] as const
 export type ReportKind = typeof REPORT_KINDS[number]
 

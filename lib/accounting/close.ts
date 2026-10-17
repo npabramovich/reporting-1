@@ -63,6 +63,8 @@ import {
   type AllocationBasis, type AllocationCategory,
 } from './terms'
 import { exportLedgerText } from './text-ledger-run'
+import { isMissingSchema, prepareCloseBundle, storeCloseBundle } from './close-bundle'
+import type { CloseBundle } from '@hemrock/fund-engine'
 import { vehicleIdByName } from './vehicle-id'
 import { loadStrandedCapital } from './pooled-capital-check'
 import { roundCents } from './ledger'
@@ -531,6 +533,7 @@ export interface CloseThroughPreview {
 async function persistCloseReview(
   admin: SupabaseClient, fundId: string, group: string, vehicleId: string, periodId: string,
   userId: string | null, readiness: CloseReadiness, snapshot: string, periodEnd: string,
+  bundle: { sha256: string; engineVersion: string; auditHead: { headSeq: number; headHash: string } | null } | { error: string },
 ): Promise<{ error?: string }> {
   const { accounts, postings } = await loadPostedLedger(admin, fundId, group, periodEnd)
   const tb = trialBalance(accounts, postings)
@@ -583,6 +586,10 @@ async function persistCloseReview(
       periodEnd, reviewId,
       checks: checks.map(c => ({ key: c.key, status: c.status, detail: c.detail })),
       trialBalance: { balanced: tb.balanced, totalDebits: tb.totalDebits, totalCredits: tb.totalCredits },
+      // The reproducibility bundle this close produced (lib/accounting/close-bundle.ts): its hash
+      // is the SHA-256 of its manifest, which pins the ledger, the terms, the engine's statements
+      // and the audit trail's head before this event.
+      closeBundle: 'error' in bundle ? { error: bundle.error } : bundle,
     },
   })
   return checksError ? { error: checksError.message } : {}
@@ -1364,20 +1371,50 @@ export async function closePeriodWithAllocation(
     await reopenPeriodWithReversal(admin, fundId, group, periodId)
     return { error: refusal }
   }
-  const review = await persistCloseReview(admin, fundId, group, vehicleId!, periodId, userId, readiness, snapshot, periodEnd)
+  // The reproducibility bundle: built now, from the snapshot this close locks, so its hash can go
+  // into the period.close audit event. Best-effort — a bundle that cannot be built is recorded as
+  // such and never refuses the close (lib/accounting/close-bundle.ts).
+  const bundleInput = { fundId, group, vehicleId: vehicleId!, fiscalPeriodId: periodId, periodStart, periodEnd, snapshot }
+  let bundle: CloseBundle | null = null
+  let bundleError: string | null = null
+  try {
+    bundle = await prepareCloseBundle(admin, bundleInput)
+  } catch (e) {
+    bundleError = `The reproducibility bundle could not be built: ${e instanceof Error ? e.message : String(e)}`
+    console.error('[close] bundle', bundleError)
+  }
+  const review = await persistCloseReview(admin, fundId, group, vehicleId!, periodId, userId, readiness, snapshot, periodEnd,
+    bundle
+      ? { sha256: bundle.sha256, engineVersion: bundle.manifest.engine.version, auditHead: bundle.manifest.auditChain }
+      : { error: bundleError ?? 'not built' })
   if (review.error) {
     await reopenPeriodWithReversal(admin, fundId, group, periodId)
     return { error: `Could not preserve the close review record: ${review.error}` }
   }
-  const { error: closeErr } = await admin
+  const lock = { status: 'closed', closed_at: new Date().toISOString(), closed_by: userId, snapshot_text: snapshot }
+  const lockPeriod = (values: Record<string, unknown>) => admin
     .from('fiscal_periods' as any)
-    .update({ status: 'closed', closed_at: new Date().toISOString(), closed_by: userId, snapshot_text: snapshot })
+    .update(values)
     .eq('id', periodId)
     .eq('fund_id', fundId)
+  let { error: closeErr } = await lockPeriod({ ...lock, close_bundle_sha256: bundle?.sha256 ?? null })
+  // Released before the migration adding close_bundle_sha256 is pushed: lock without it.
+  if (isMissingSchema(closeErr)) ({ error: closeErr } = await lockPeriod(lock))
   if (closeErr) {
     await admin.from('close_reviews' as any).update({ status: 'reopened', updated_at: new Date().toISOString() })
       .eq('fiscal_period_id', periodId).eq('fund_id', fundId)
     return { error: closeErr.message }
+  }
+
+  // Kept after the lock, so a bundle exists only for a close that happened. A failure here leaves
+  // the close standing; the audit event still carries the hash.
+  if (bundle) {
+    try {
+      const stored = await storeCloseBundle(admin, bundleInput, bundle, userId)
+      if ('error' in stored) console.error('[close] bundle not stored', stored.error)
+    } catch (e) {
+      console.error('[close] bundle not stored', e)
+    }
   }
 
   await removeSupersededPeriods(admin, fundId, vehicleId, periodId, periodStart, periodEnd)
@@ -1850,12 +1887,15 @@ export async function reopenPeriodWithReversal(
   // `closePeriodWithAllocation` voids any pre-existing `close:<periodId>` entries before it
   // posts. The old order could leave a period LOCKED with its allocation already reversed:
   // capital accounts wrong, and no way to fix them without reopening again.
-  const { error: openErr } = await admin
+  const unlock = (values: Record<string, unknown>) => admin
     .from('fiscal_periods' as any)
-    .update({ status: 'open', closed_at: null, snapshot_text: null })
+    .update(values)
     .eq('id', periodId)
     .eq('fund_id', fundId)
     .eq('vehicle_id', vehicleId)
+  // The bundle stays in close_bundles as the record of that close; the period no longer claims it.
+  let { error: openErr } = await unlock({ status: 'open', closed_at: null, snapshot_text: null, close_bundle_sha256: null })
+  if (isMissingSchema(openErr)) ({ error: openErr } = await unlock({ status: 'open', closed_at: null, snapshot_text: null }))
   if (openErr) return { error: openErr.message }
 
   const voided = await voidCloseEntries(admin, fundId, vehicleId, periodId)

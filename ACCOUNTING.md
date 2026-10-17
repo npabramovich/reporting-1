@@ -745,6 +745,45 @@ Checks that should always hold — use these to confirm a new setup and to sanit
 - **Per-vehicle isolation.** Each `portfolio_group` has its own chart, entries, and capital accounts;
   switching the vehicle selector should change every figure.
 
+## Verifying a close independently
+
+Every close keeps a **reproducibility bundle**: the ledger snapshot the close locked
+(`books.ledger`), the entity's terms (`terms.json`: carry, allocation basis, partners, commitments),
+the open fund engine's statements for the period end (`statements.json`), and `manifest.json`, which
+records each file's SHA-256 and size, the engine version, the command that produced the statements,
+and the audit trail's chain head at the moment of the close. The bundle's hash is the SHA-256 of
+`manifest.json`; it is stored on the period (`fiscal_periods.close_bundle_sha256`) and in the
+`period.close` audit event, and the bundle itself is kept in `close_bundles`, append-only (a
+re-close keeps a new bundle beside the old one).
+
+To check one without trusting the app:
+
+1. Download it: **Periods → the closed period → Reproducibility bundle** (a ZIP), or
+   `GET /api/accounting/close-bundle?periodId=…&format=zip`, or the `close_bundle` tool. Reading
+   one needs LP capital and GP economics access as well as accounting.
+2. Run the engine from this repository (`packages/fund-engine`, no dependencies, Node 22.18+):
+   `node packages/fund-engine/bin/fund-engine.mjs verify --bundle <dir> --expect-sha256 <hash>`.
+   It checks every file against the manifest, recomputes the statements from the ledger and terms
+   and compares them exactly, and checks that the trial balance balances and the capital roll-forward
+   ties. It exits 0 on a pass and 1 on any failure, naming each one.
+3. Check the audit trail still reaches the bundle's chain head: the `verify_audit_trail` tool with
+   `pinned_seq` and `pinned_hash` from the manifest's `auditChain`, or
+   `select * from verify_accounting_audit_chain('<fund id>')` as the service role.
+
+**The audit trail is hash-chained.** Each `accounting_audit_events` row carries `chain_seq`,
+`prev_hash` and `row_hash = sha256(prev_hash || canonical JSON of the row)`, set by a trigger under a
+per-fund advisory lock, so the client cannot choose them and concurrent writers cannot fork the
+chain. Rows that predate the chain were backfilled in `created_at` order. Editing, deleting or
+reordering any row breaks every hash after it, and the verifier reports the first break. Removing
+rows from the *end* leaves a shorter chain that still verifies on its own, which is why a bundle
+pins the head: a chain that no longer reaches a bundle's `headSeq`/`headHash` has been truncated.
+The canonical form (keys in code-point order, no whitespace, numbers as plain decimals, timestamps
+as UTC microseconds) is implemented identically in SQL (`canonical_jsonb`) and in the engine
+(`packages/fund-engine/src/audit-chain.ts`), so the trail can be re-verified from an export too.
+
+Bundles exist for closes made after this shipped; earlier periods have none until they are
+re-closed.
+
 ---
 
 # Authoring in text — quick rules

@@ -26,7 +26,9 @@ the code here is the same code that runs in production, not a copy of it.
 | `text-ledger.ts` | Writes the books to plain-text double-entry, and parses that text back. This is the format the app exports. |
 | `books.ts` | Builds a chart, postings and partner capital postings from parsed text. |
 | `xirr.ts` | XIRR (Newton's method with several starting guesses). |
-| `cli.ts`, `terms-file.ts` | The `fund-engine` command line and its terms file. |
+| `cli.ts`, `reports.ts`, `terms-file.ts` | The `fund-engine` command line, the reports it prints, and its terms file. |
+| `bundle.ts` | A period close's reproducibility bundle: building it, and verifying one (`fund-engine verify`). |
+| `audit-chain.ts`, `sha256.ts` | Canonical JSON, SHA-256 (pure, no `node:crypto`), and the hash chain over the app's audit trail, with a verifier that reports the first break. |
 
 ## Command line
 
@@ -85,6 +87,42 @@ shows the suggested tax character and the waterfall state before and after the d
   distribution preview does.
 - **Without `--ledger`:** the run starts from the terms file's `state`, and the LP share is split
   by commitment.
+
+### `fund-engine verify`
+
+```
+fund-engine verify --bundle <dir> [--expect-sha256 <hash>] [--format json|table]
+```
+
+Checks a close's reproducibility bundle, a directory holding:
+
+| File | What it is |
+| --- | --- |
+| `books.ledger` | The ledger snapshot the close locked. |
+| `terms.json` | The entity's terms (the format below), with every partner's capital account and commitment. |
+| `statements.json` | Exactly what `fund-engine statements --ledger books.ledger --terms terms.json --as-of <period end>` prints. |
+| `manifest.json` | Format `hemrock-close-bundle/1`: the engine name and version, the period, the command, each file's SHA-256 and size, and the audit trail's chain head (`auditChain`). |
+
+The bundle's hash is the SHA-256 of `manifest.json`. `verify` checks that hash (against
+`--expect-sha256` when given), every file's hash and size, that the manifest names only plain file
+names, that recomputing the statements reproduces `statements.json` exactly, that the trial balance
+balances and that the capital roll-forward ties. It exits 0 when everything passes and 1 when
+anything fails, listing each check. Files other than the four (such as the app's `VERIFY.txt`) are
+ignored. `examples/bundle/` is a sample bundle for the sample fund closed through 2025-06-30.
+
+A newer engine can verify an older bundle as long as the statements it computes are unchanged; when
+the math changes on purpose, the recompute check fails and says so, and the manifest records which
+engine version produced the bundle.
+
+### The audit chain
+
+`verifyAuditChain(rows, expectHead?)` takes the app's `accounting_audit_events` rows in `chain_seq`
+order and recomputes each `row_hash` as the SHA-256 of `prev_hash` followed by the row's canonical
+JSON, starting from the genesis hash (64 zeros). It returns the first break: a sequence gap, a
+`prev_hash` that is not the previous row's hash, or a row whose content no longer hashes to its
+`row_hash`. Pass a bundle's chain head as `expectHead` (`{ seq: auditChain.headSeq, hash: auditChain.headHash }`) to also catch rows removed from the end.
+The SQL trigger and `verify_accounting_audit_chain` use the same canonical form, and a test pins the
+two to each other.
 
 ### The ledger format
 
@@ -165,6 +203,7 @@ The ledger format is what the app's `export_ledger_text` tool (and `serializeLed
   that the file stays byte-for-byte identical to what the serializer writes.
 - `terms.json`: the sample fund's terms.
 - `expected-statements.json` and `expected-waterfall.json`: the CLI's expected output.
+- `bundle/`: a sample close bundle (see `fund-engine verify`). `test/bundle.test.ts` checks it is byte-for-byte what `buildBundle` writes and that it verifies.
 
 `test/golden.test.ts` runs the CLI on the sample, both in-process and through `bin/`, and compares
 the output to the expected files. If you change the math on purpose, regenerate the expected

@@ -21,6 +21,11 @@ import { collectReminders } from '@/lib/reminders/collect'
 import { loadFundReminderData, loadReminderSettings } from '@/lib/reminders/load'
 import type { ReminderSource } from '@/lib/reminders/types'
 import { PROFILE_COLUMNS, parseProfilePatch, profileFromRow } from '@/lib/vehicle-profile'
+import { BUNDLE_FILES, verifyAuditChain, type AuditEventRow } from '@hemrock/fund-engine'
+import { isMissingSchema, loadCloseBundle, verifyStoredBundle } from '@/lib/accounting/close-bundle'
+import { fetchAllRows } from '@/lib/accounting/load'
+import { reportLinkUrl, signReportLink } from '@/lib/agent/report-links'
+import { siteOrigin } from '@/lib/site-links'
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
@@ -34,6 +39,9 @@ function isoArg(input: any, key: string): string | undefined {
 }
 
 const todayIso = () => new Date().toISOString().slice(0, 10)
+
+/** A close bundle's files are returned inline up to this many characters together. */
+const INLINE_BUNDLE_CHARS = 60_000
 
 const MISSING_COLUMNS = /column|schema cache/i
 const NOT_MIGRATED = 'Entity profiles are not available yet: the database migration that adds them has not been applied.'
@@ -81,6 +89,84 @@ export const OPERATIONS_HANDLERS: Record<string, AgentToolHandler> = {
     const result = await approveCloses(ctx.admin, ctx.fundId, ctx.portfolioGroup, ctx.userId, { through }, attestation)
     if ('error' in result) throw new Error(result.error)
     return { vehicle: ctx.portfolioGroup, ...result }
+  },
+
+  close_bundle: async (ctx, input) => {
+    if (!hasAccess(ctx.access, 'lp_capital', 'read') || !hasAccess(ctx.access, 'gp_economics', 'read')) {
+      throw new Error("A close bundle holds every partner's capital and the carry, so it needs LP capital and GP economics access.")
+    }
+    const periodEnd = isoArg(input, 'period_end')
+    const bundle = await loadCloseBundle(ctx.admin, ctx.fundId, await entityId(ctx), { periodEnd })
+    if (!bundle) {
+      return { vehicle: ctx.portfolioGroup, bundle: null, note: `No close bundle is recorded for ${ctx.portfolioGroup}${periodEnd ? ` for the period ending ${periodEnd}` : ''}. Bundles are kept for closes made since the feature shipped; reopening and re-closing a period makes one.` }
+    }
+    const verification = verifyStoredBundle(bundle)
+    const size = Object.values(bundle.files).reduce((n, f) => n + f.length, 0)
+    const inline = input?.include_files === true || size <= INLINE_BUNDLE_CHARS
+    let download: { url: string; expires_at: string; note: string } | null = null
+    if (ctx.userId) {
+      const { token, expiresAt } = signReportLink({ fundId: ctx.fundId, userId: ctx.userId, kind: 'close_bundle', args: { vehicle: ctx.portfolioGroup, period: bundle.fiscalPeriodId } })
+      download = { url: reportLinkUrl(ctx.origin ?? siteOrigin(), token), expires_at: expiresAt, note: 'A ZIP of the bundle directory. The link works for an hour, and only for this member.' }
+    }
+    return {
+      vehicle: ctx.portfolioGroup,
+      period_start: bundle.periodStart,
+      period_end: bundle.periodEnd,
+      bundle_sha256: bundle.sha256,
+      current: bundle.current,
+      created_at: bundle.createdAt,
+      manifest: bundle.manifest,
+      verification: { ok: verification.ok, checks: verification.checks },
+      verify_command: `fund-engine verify --bundle <unzipped directory> --expect-sha256 ${bundle.sha256}`,
+      download,
+      ...(inline
+        ? { files: bundle.files }
+        : { files: null, files_note: `The files are ${size} characters together; use the download link, or call again with include_files: true. ${BUNDLE_FILES.manifest} is in "manifest".` }),
+    }
+  },
+
+  verify_audit_trail: async (ctx, input) => {
+    const pinnedSeq = input?.pinned_seq == null ? null : Number(input.pinned_seq)
+    const pinnedHash = typeof input?.pinned_hash === 'string' ? input.pinned_hash.trim().toLowerCase() : null
+    if ((pinnedSeq == null) !== (pinnedHash == null)) throw new Error('Send pinned_seq and pinned_hash together.')
+    if (pinnedSeq != null && (!Number.isInteger(pinnedSeq) || pinnedSeq < 1)) throw new Error('pinned_seq must be a positive whole number')
+
+    // 1. The database walks its own chain.
+    const { data, error } = await (ctx.admin as any).rpc('verify_accounting_audit_chain', { p_fund_id: ctx.fundId })
+    if (error) {
+      if (isMissingSchema(error) || /verify_accounting_audit_chain/.test(error.message ?? '')) {
+        return { chained: false, note: 'The audit trail is not hash-chained yet: the migration that adds the chain has not been applied.' }
+      }
+      throw new Error(error.message)
+    }
+    const db = (Array.isArray(data) ? data[0] : data) ?? {}
+
+    // 2. The same chain recomputed here, by the open fund engine, from the rows as read — so the
+    //    answer does not rest on the database that wrote them.
+    const rows = await fetchAllRows<AuditEventRow>((f, t) => (ctx.admin as any).from('accounting_audit_events')
+      .select('id, fund_id, vehicle_id, actor_id, action, subject_type, subject_id, reason, details, source, created_at, chain_seq, prev_hash, row_hash')
+      .eq('fund_id', ctx.fundId).order('chain_seq', { ascending: true }).range(f, t))
+    const independent = verifyAuditChain(rows, pinnedSeq != null ? { seq: pinnedSeq, hash: pinnedHash! } : null)
+
+    const dbBreak = db.ok ? null : { seq: db.break_seq == null ? null : Number(db.break_seq), id: db.break_id, problem: db.problem }
+    return {
+      chained: true,
+      ok: !!db.ok && independent.ok,
+      events_checked: Number(db.checked ?? 0),
+      head: db.head_seq == null ? null : { seq: Number(db.head_seq), hash: db.head_hash },
+      first_break: dbBreak ?? independent.firstBreak,
+      database: { ok: !!db.ok, first_break: dbBreak },
+      independent: { ok: independent.ok, checked: independent.checked, first_break: independent.firstBreak },
+      // reached: true = the trail still holds that head; false = it does not; null = an earlier
+      // break means the question cannot be answered.
+      ...(pinnedSeq != null ? {
+        pinned: {
+          seq: pinnedSeq, hash: pinnedHash,
+          reached: independent.ok ? true : /pinned head/.test(independent.firstBreak?.problem ?? '') ? false : null,
+        },
+      } : {}),
+      note: 'A chain shows rows changed, removed or reordered anywhere before its head. Rows cut off the end only show against a pinned head, such as the one in a close bundle manifest.',
+    }
   },
 
   close_status: async (ctx, input) => {

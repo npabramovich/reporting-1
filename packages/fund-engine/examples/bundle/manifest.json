@@ -1,0 +1,36 @@
+{
+  "format": "hemrock-close-bundle/1",
+  "engine": {
+    "name": "@hemrock/fund-engine",
+    "version": "0.2.0"
+  },
+  "subject": {
+    "fundId": "00000000-0000-4000-8000-000000000001",
+    "vehicleId": "00000000-0000-4000-8000-000000000002",
+    "vehicle": "Sample Fund I",
+    "fiscalPeriodId": "00000000-0000-4000-8000-000000000003",
+    "periodStart": "2025-06-01",
+    "periodEnd": "2025-06-30"
+  },
+  "createdAt": "2025-07-01T12:00:00.000Z",
+  "command": "fund-engine statements --ledger books.ledger --terms terms.json --as-of 2025-06-30",
+  "files": {
+    "books.ledger": {
+      "sha256": "ca1f7afc86286a2ae669b0e25af77581dcbd50c979de5bc3e6850762c69901fc",
+      "bytes": 2116
+    },
+    "terms.json": {
+      "sha256": "76bdfd0b4dadcc4dc2ee52b4aa8d913b6422e51c930e14f98cc3d71e50012067",
+      "bytes": 859
+    },
+    "statements.json": {
+      "sha256": "5e0165848c2937e1cd8aa4c28434863f3673977a4432d3cea76ab128f4a4739d",
+      "bytes": 4348
+    }
+  },
+  "auditChain": {
+    "headSeq": 42,
+    "headHash": "369870c7908e05abb9526f9b38c369d57a40cf2c7fa3b93db273d5ec7c1fe66b"
+  },
+  "notes": []
+}
