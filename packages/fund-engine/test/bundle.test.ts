@@ -40,7 +40,7 @@ describe('close bundle', () => {
   })
 
   it('the terms file reads back to the carry terms the close used', () => {
-    const carry = { kind: 'european' as const, carryRate: 0.2, prefRate: 0.08, catchupRate: 0.8, prefCompounds: false, gpEntityId: 'gp', recipients: [{ lpEntityId: 'gp', pct: 60 }, { lpEntityId: 'gp2', pct: 40 }] }
+    const carry = { kind: 'european' as const, carryRate: 0.2, prefRate: 0.08, catchupRate: 0.8, catchupSize: 0.5, prefCompounds: false, prefBase: 'unreturned' as const, gpEntityId: 'gp', recipients: [{ lpEntityId: 'gp', pct: 60 }, { lpEntityId: 'gp2', pct: 40 }] }
     const file = termsFileFrom({ vehicle: 'V', carry, partners: [{ id: 'b', commitment: 1 }, { id: 'a', name: 'A', account: '3100-a' }] })
     expect(parseVehicleTerms(file).carry).toEqual(carry)
     expect((file.partners as any[]).map(p => p.id)).toEqual(['a', 'b'])
