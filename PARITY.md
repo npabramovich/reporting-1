@@ -8,13 +8,13 @@ Audited 2026-10-14 against `main` at a162894. This compares every action a membe
 
 | Area | Actions | Covered | Partial | Gap | n/a |
 |---|---:|---:|---:|---:|---:|
-| Accounting: ledger, bank, close, statements | 97 | 36 | 20 | 36 | 5 |
+| Accounting: ledger, bank, close, statements | 98 | 37 | 20 | 36 | 5 |
 | LP capital, carry, tax, LP relations, management company | 116 | 35 | 17 | 55 | 9 |
 | Portfolio: companies, updates, metrics, emails, compliance | 128 | 29 | 22 | 63 | 14 |
 | Deal flow and diligence | 66 | 23 | 10 | 33 | 0 |
 | Settings, team, approvals, AI usage | 90 | 17 | 10 | 38 | 25 |
 | Investor portal (separate portal MCP) | 20 | 8 | 1 | 6 | 5 |
-| **Total** | **517** | **148** | **80** | **231** | **58** |
+| **Total** | **518** | **149** | **80** | **231** | **58** |
 
 Of the 311 gaps and partials, **25 are deliberate**: secrets, credentials and email-provider setup, outbound email to LPs, the remaining browser-only uploads, deleting all fund data, and cosmetic settings. The other **286 have no recorded reason**. Most are oversights that grew as the app outpaced the registry, and many are small wrappers around `lib` functions that already exist.
 
@@ -37,6 +37,11 @@ These are ranked by how often they block a chat- or script-driven workflow, not 
 - `list_runs` and `undo_run`: the Approvals page's *Recent runs* and *Undo*, through `listAgentRuns` and `undoAgentRun`. The same rule as approving applies: the credential that staged a run cannot undo it.
 - `discard_drafts`: the journal's bulk discard (`runBulkDraftAction` with `void`). Drafts only.
 - `close_period`: the description and schema now say what the handler does (close through a date, month by month). The old text promised a `periodStart`/`periodEnd` range lock.
+
+## Closed with close reproducibility
+
+- `close_bundle` (accounting read, plus LP capital and GP economics, since the bundle holds every partner's capital and the carry): a closed period's reproducibility bundle, the same one `GET /api/accounting/close-bundle` serves. It returns the manifest, the bundle hash, the engine's verification of it, a signed ZIP link (`/api/agent/reports/<token>`, kind `close_bundle`), and the files inline when they are small or `include_files` is set.
+- `verify_audit_trail` (accounting read): walks the fund's hash-chained audit trail twice, in Postgres (`verify_accounting_audit_chain`) and in the open engine (`verifyAuditChain`), and reports the first break. With `pinned_seq`/`pinned_hash` (a bundle manifest's `auditChain`) it also says whether the chain still reaches that head. It has no app route: the check is new, not a parity gap.
 
 ## Closed in feat/lp-portal-tools
 
@@ -510,6 +515,8 @@ Effort is a guess: S is a tool wrapping an existing `lib` function, M needs logi
 | acct-core | Download statements PDF | financial_statements_pdf |
 | acct-core | Fund performance PDF | fund_performance_pdf |
 | acct-core | Firm close grid | close_status |
+| acct-core | Download a closed period's reproducibility bundle | close_bundle |
+| acct-core | Check the audit trail's hash chain | verify_audit_trail |
 | acct-core | Firm holdings across entities | portfolio_summary |
 | acct-core | List LP entities with ownership | list_entities |
 | acct-core | Reconcile capital accounts vs administrator | reconcile |
