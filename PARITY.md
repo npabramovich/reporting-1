@@ -9,14 +9,14 @@ Audited 2026-10-14 against `main` at a162894. This compares every action a membe
 | Area | Actions | Covered | Partial | Gap | n/a |
 |---|---:|---:|---:|---:|---:|
 | Accounting: ledger, bank, close, statements | 97 | 42 | 19 | 31 | 5 |
-| LP capital, carry, tax, LP relations, management company | 116 | 39 | 16 | 52 | 9 |
+| LP capital, carry, tax, LP relations, management company | 116 | 41 | 16 | 50 | 9 |
 | Portfolio: companies, updates, metrics, emails, compliance | 128 | 31 | 22 | 61 | 14 |
 | Deal flow and diligence | 66 | 23 | 10 | 33 | 0 |
 | Settings, team, approvals, AI usage | 90 | 17 | 10 | 38 | 25 |
 | Investor portal (separate portal MCP) | 20 | 8 | 1 | 6 | 5 |
-| **Total** | **517** | **160** | **78** | **221** | **58** |
+| **Total** | **517** | **162** | **78** | **219** | **58** |
 
-Of the 299 gaps and partials, **25 are deliberate**: secrets, credentials and email-provider setup, outbound email to LPs, the remaining browser-only uploads, deleting all fund data, and cosmetic settings. The other **274 have no recorded reason**. Most are oversights that grew as the app outpaced the registry, and many are small wrappers around `lib` functions that already exist.
+Of the 297 gaps and partials, **25 are deliberate**: secrets, credentials and email-provider setup, outbound email to LPs, the remaining browser-only uploads, deleting all fund data, and cosmetic settings. The other **272 have no recorded reason**. Most are oversights that grew as the app outpaced the registry, and many are small wrappers around `lib` functions that already exist.
 
 ## What would most help running the fund headless
 
@@ -46,6 +46,13 @@ The exception work automation leaves behind. Each tool calls the page's own func
 - `list_runs` and `undo_run`: the Approvals page's *Recent runs* and *Undo*, through `listAgentRuns` and `undoAgentRun`. The same rule as approving applies: the credential that staged a run cannot undo it.
 - `discard_drafts`: the journal's bulk discard (`runBulkDraftAction` with `void`). Drafts only.
 - `close_period`: the description and schema now say what the handler does (close through a date, month by month). The old text promised a `periodStart`/`periodEnd` range lock.
+
+## Closed in claude/lpa-terms-extraction
+
+- `waterfall_terms`: a vehicle's carry terms (`loadCarryTerms`) with recipient names, gated on GP economics like the route.
+- `extract_lpa_terms`: reads an LPA (an entity document's text, or pasted text) into a PROPOSAL of those terms. Each term carries its quoted clause, section, page, confidence and whether the quote was found in the document, plus the terms not found and the provisions the engine does not model. The fund's model reads it when there is a server key. Without one, the assistant reads the passages and hands its reading back as `assistantProposal`, which is checked the same way. It writes nothing.
+- `set_waterfall_terms`: always staged as the `set_waterfall_terms` pending action (GP economics write to stage and to approve). The preview re-checks each clause against the document, and approval goes through `saveWaterfallTerms`, the PUT route's own write path.
+- The terms are now an open spec, `docs/spec/waterfall-terms.md`, with vectors that `lib/accounting/waterfall-spec.test.ts` runs through the engine.
 
 ## Closed in feat/lp-portal-tools
 
@@ -182,7 +189,7 @@ Effort is a guess: S is a tool wrapping an existing `lib` function, M needs logi
 | View LP portal accounts and invite status | `/api/lps/invites (GET)` | covered | lp_portal_accounts | Closed in feat/lp-portal-tools (admin-only, as the route) | - | - |
 | View LP portal activity log (logins, views, downloads) | `/api/lp-activity (GET)` | gap | - | No reason found; feature-gated admin view | lp_portal_activity read tool | S easy-win |
 | View allocation basis, partner terms and current commitments | `/api/accounting/allocation-terms (GET)` | partial | lp_commitments; capital_accounts | Commitments are readable; allocation basis and per-partner fee/carry terms (participates, weight/rate overrides) are not exposed by any tool. No reason found - likely oversight. | Add allocation_terms read tool wrapping loadResolvedCommitments + terms loader | S easy-win |
-| View carry (waterfall) terms | `/api/accounting/waterfall-terms (GET)` | gap | - | No reason found (run_waterfall makes the caller supply terms) | carry_terms read tool (loadCarryTerms) | S easy-win |
+| View carry (waterfall) terms | `/api/accounting/waterfall-terms (GET)` | covered | waterfall_terms | Closed in claude/lpa-terms-extraction (loadCarryTerms, gp_economics) | - | - |
 | View declared distributions | `/api/accounting/distributions (GET)` | gap | - | No reason found; listDistributions not wrapped (capital_accounts shows only aggregate distributions) | lp_distributions read tool calling listDistributions | S easy-win |
 | View intercompany charge register and balances | `/api/manco/intercompany (GET)` | gap | - | No reason found - likely oversight. | intercompany_charges read tool (listIntercompanyCharges + intercompanyBalances) | S easy-win |
 | View management company overview (cash, quarterly cycle, expense breakdown, intercompany balances) | `/api/manco/overview (GET)` | partial | financial_statements; query_ledger | Statements available per manco vehicle, but not the assembled overview (cycle, intercompany balances) | manco_overview read tool calling loadMancoOverview | S easy-win |
@@ -210,7 +217,7 @@ Effort is a guess: S is a tool wrapping an existing `lib` function, M needs logi
 | Reply to an LP message (emails the LP) | `/api/lps/messages (POST)` | gap | - | Outbound email to LPs; plausible to stage | staged lp_reply_message | M |
 | Review an onboarding item (verify/reject/waive, attach doc, record tax form) | `/api/lps/onboarding (PATCH)` | gap | - | No reason found; doc attach needs browser upload | lp_review_onboarding tool | M |
 | Send capital-call receipts for funded lines (preview, portal, email) | `/api/accounting/notices/receipt (POST)` | gap | - | Goes out to LPs (email); no tool or staged action | preview via receiptCandidates as read tool; send staged (sendReceipts) | M |
-| Set carry (waterfall) terms | `/api/accounting/waterfall-terms (PUT)` | gap | - | Admin-only; changes carry accrual. Defensible but could be staged. | set_carry_terms tool, staged | M |
+| Set carry (waterfall) terms | `/api/accounting/waterfall-terms (PUT)` | covered | set_waterfall_terms (always staged); extract_lpa_terms proposes them from the LPA | Closed in claude/lpa-terms-extraction: the route and the approved action share saveWaterfallTerms | - | - |
 | Set the fund's required onboarding document kinds | `/api/lps/onboarding (PUT)` | gap | - | Settings-like; no reason found | Optional tool | S |
 | Upload an LP document (signed URL) and record/share it (fund, investor or vehicle scope) | `/api/lps/documents/upload-url (POST); /api/lps/documents (POST)` | covered | lp_document_upload_url; lp_add_document (both admin-only) | Closed in feat/agent-uploads: signed URL in the fund's folder, then lib/lps/documents.ts recordLpDocument (scan, share by scope, index), the route's own function | - | - |
 | View K-1 furnishing plan (electronic vs paper, consent status) | `/api/accounting/k1-deliveries (GET)` | gap | - | No UI caller yet (feature not surfaced in app); parity not required | Revisit when UI ships | - |

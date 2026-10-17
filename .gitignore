@@ -40,8 +40,9 @@ next-env.d.ts
 supabase/.branches
 supabase/.temp
 
-# local development plans
-/docs
+# local development plans (docs/spec is the published spec, and is committed)
+/docs/*
+!/docs/spec/
 # Demo fixtures — local only, not part of the product.
 #
 # The demo fund is this install's marketing demo, not something another fund wants when they

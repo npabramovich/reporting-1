@@ -189,6 +189,28 @@ describe('agent tool registry', () => {
     }
   })
 
+  it('exposes waterfall terms as GP-economics tools on one vehicle, with setting them always staged', () => {
+    for (const name of ['waterfall_terms', 'extract_lpa_terms', 'set_waterfall_terms']) {
+      const tool = getTool(name)!
+      expect(tool, name).toBeTruthy()
+      expect(tool.accessDomain, name).toBe('gp_economics')
+      expect(isLedgerTool(tool), name).toBe(true)
+      expect(tool.inputSchema.properties.vehicle, name).toBeTruthy()
+    }
+    expect(getTool('waterfall_terms')!.scope).toBe('read')
+    // Reading an LPA writes nothing, so it is a read: it stages nothing and needs no write grant.
+    expect(getTool('extract_lpa_terms')!.scope).toBe('read')
+    const set = getTool('set_waterfall_terms')!
+    expect(set.scope).toBe('write')
+    expect(set.stagesAs).toBe('set_waterfall_terms')
+    // Staged from every credential: a script's key cannot change the partners' carry on its own.
+    expect(shouldStage(set, {}, { keyId: 'a-script-key' })).toBe(true)
+  })
+
+  it('set_waterfall_terms never runs its handler directly', async () => {
+    await expect(getTool('set_waterfall_terms')!.handler({} as any, {})).rejects.toThrow(/always staged/)
+  })
+
   it('exposes construction as a fund-scoped, accounting-read tool', () => {
     const tool = getTool('portfolio_construction')!
     expect(tool.scope).toBe('read')
