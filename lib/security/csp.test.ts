@@ -33,11 +33,9 @@ describe('script-src', () => {
     expect(script).not.toContain("'unsafe-inline'")
   })
 
-  it('leaves unsafe-eval out in production — report-only is how we learn whether anything needs it', () => {
+  it('leaves unsafe-eval out in production, admitting it in development only for React Refresh', () => {
+    // Report-only is how we learn whether anything in production needs it.
     expect(script).not.toContain("'unsafe-eval'")
-  })
-
-  it('admits unsafe-eval in development only, for React Refresh', () => {
     expect(directive(buildReportOnlyCsp('n', { development: true }), 'script-src')).toContain("'unsafe-eval'")
   })
 
