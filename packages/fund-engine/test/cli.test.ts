@@ -60,18 +60,15 @@ describe('statements', () => {
     expect(r.carry!.delta).toBe(0)
   })
 
-  it('carry already booked to the recipient reduces what is left to post', () => {
+  it('carry already booked leaves nothing more to post on unchanged books', () => {
     const extra = `\n2025-07-02 * "Carried interest accrued"\n  source: "carried_interest"\n` +
       `  Equity:Partners-Capital-Alpha-Pension:3100-aaaaaaaa  34800.00 USD\n` +
       `  Equity:Partners-Capital-Beta-Family-Office:3100-bbbbbbbb  23200.00 USD\n` +
       `  Equity:Partners-Capital-Sample-GP:3100-c0ffee00  -58000.00 USD\n`
     const r = statementsReport(ledger + extra, terms)
-    // This mirrors the app's close (lib/accounting/close.ts) exactly: the LP NAV the target is
-    // measured on is the capital balance AFTER earlier carry accruals, so a second run on unchanged
-    // books measures 690k − 58k and proposes reversing 11.6k. lib/accounting/book-tax.ts adds the
-    // accrued carry back before measuring (`ending − carriedInterest`), which would give delta 0.
-    // Pinned here so a change to either side is a deliberate one; flagged for review.
-    expect(r.carry).toMatchObject({ target: 46400, alreadyAccrued: 58000, delta: -11600 })
+    // A second close on unchanged books posts nothing: the target is measured on the LPs' value
+    // gross of the 58k already charged to them, which is also what counts as already accrued.
+    expect(r.carry).toMatchObject({ target: 58000, alreadyAccrued: 58000, delta: 0 })
     expect(r.nav).toBe(690000)
     expect(r.partners.find(p => p.id === 'gp')!.capitalAccount.carriedInterest).toBe(58000)
   })
@@ -127,7 +124,7 @@ describe('terms.json', () => {
   })
   it('accepts the stored snake_case row', () => {
     const t = parseVehicleTerms({ carry: { kind: 'american', carry_rate: 0.25, pref_rate: 0.06, catchup_rate: 0.8, pref_compounds: false, gp_entity_id: 'gp' } })
-    expect(t.carry).toEqual({ kind: 'american', carryRate: 0.25, prefRate: 0.06, catchupRate: 0.8, prefCompounds: false, gpEntityId: 'gp', recipients: [{ lpEntityId: 'gp', pct: 100 }] })
+    expect(t.carry).toEqual({ kind: 'american', carryRate: 0.25, prefRate: 0.06, catchupRate: 0.8, prefCompounds: false, prefBase: 'contributed', catchupSize: 1, gpEntityId: 'gp', recipients: [{ lpEntityId: 'gp', pct: 100 }] })
   })
 })
 
@@ -144,8 +141,11 @@ describe('economics', () => {
 
   it('carryAccrualInputs keeps the recipients out of the hurdle and reads what is accrued', () => {
     const i = carryAccrualInputs(postings, recipients, '2025-06-30')
-    expect(i.alreadyAccrued).toBe(1) // 5 accrued, 4 paid out
-    expect(i.lps).toEqual([{ lpEntityId: 'lp', contributed: 100, distributed: 30, nav: 65 }])
+    // 5 was charged to the LP; paying 4 of it out does not make it any less accrued.
+    expect(i.alreadyAccrued).toBe(5)
+    // Measured gross of carry: the 65 balance plus the 5 charged.
+    expect(i.lps).toEqual([{ lpEntityId: 'lp', contributed: 100, distributed: 30, nav: 70, charged: 5 }])
+    expect(i.distributions).toEqual([{ date: '2025-01-15', amount: 34 }])
     expect(i.contributions).toEqual([{ date: '2024-01-01', amount: 100 }])
   })
 

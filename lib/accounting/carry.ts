@@ -19,6 +19,8 @@ export {
 } from '@hemrock/fund-engine'
 export type {
   CarryKind,
+  PrefBase,
+  HurdleReduction,
   CarryRecipient,
   VehicleCarryTerms,
   LpEconomics,
@@ -39,7 +41,9 @@ export async function loadCarryTerms(
 
   const { data } = await admin
     .from('vehicle_waterfall_terms' as any)
-    .select('kind, carry_rate, pref_rate, catchup_rate, pref_compounds, gp_entity_id, carry_recipients')
+    // '*', not a column list: a column this release reads but the database has not been migrated
+    // to yet would fail the whole select, and a failed read here is no carry at all.
+    .select('*')
     .eq('fund_id', fundId)
     .eq('vehicle_id', vehicleId)
     .maybeSingle()

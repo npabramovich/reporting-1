@@ -5,7 +5,9 @@
     "carryRate": 0.2,
     "prefRate": 0.08,
     "catchupRate": 1,
+    "catchupSize": 1,
     "prefCompounds": true,
+    "prefBase": "contributed",
     "gpEntityId": "c0ffee00-3333-4333-8333-333333333333",
     "recipients": [
       {

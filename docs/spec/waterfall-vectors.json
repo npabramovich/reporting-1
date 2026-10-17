@@ -1,0 +1,1889 @@
+{
+  "$comment": "Test vectors for docs/spec/waterfall-terms.md. Every vector is run against the engine by lib/accounting/waterfall-spec.test.ts, so this file and the code cannot disagree. Money is in currency units, rounded to cents; rates are fractions (0.2 = 20%). Section names are the engine functions each vector exercises.",
+  "specVersion": 2,
+  "runWaterfall": [
+    {
+      "id": "roc-only",
+      "description": "A distribution smaller than unreturned capital is all return of capital.",
+      "input": {
+        "distributable": 600,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 1
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 600,
+        "toPreferred": 0,
+        "toCatchUp": 0,
+        "toCatchUpLP": 0,
+        "toCarryLP": 0,
+        "toCarryGP": 0,
+        "toLP": 600,
+        "toGP": 0,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 600,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        }
+      }
+    },
+    {
+      "id": "roc-and-partial-pref",
+      "description": "Capital comes back first, then the preferred return; nothing is left for the catch-up.",
+      "input": {
+        "distributable": 1050,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 1
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 1000,
+        "toPreferred": 50,
+        "toCatchUp": 0,
+        "toCatchUpLP": 0,
+        "toCarryLP": 0,
+        "toCarryGP": 0,
+        "toLP": 1050,
+        "toGP": 0,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 50,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        }
+      }
+    },
+    {
+      "id": "european-full-catch-up",
+      "description": "All four tiers: 1000 capital, 80 pref, 20 catch-up (GP reaches 20% of 100), remainder 80/20. GP ends with 20% of the 500 profit.",
+      "input": {
+        "distributable": 1500,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 1
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 1000,
+        "toPreferred": 80,
+        "toCatchUp": 20,
+        "toCatchUpLP": 0,
+        "toCarryLP": 320,
+        "toCarryGP": 80,
+        "toLP": 1400,
+        "toGP": 100,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 80,
+          "preferredTarget": 80,
+          "gpCarryPaid": 100,
+          "gpCatchUpPaid": 20
+        }
+      }
+    },
+    {
+      "id": "catch-up-rate-omitted",
+      "description": "catchUpRate omitted defaults to 1.0 (full catch-up).",
+      "input": {
+        "distributable": 1500,
+        "terms": {
+          "carryRate": 0.2
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 1000,
+        "toPreferred": 80,
+        "toCatchUp": 20,
+        "toCatchUpLP": 0,
+        "toCarryLP": 320,
+        "toCarryGP": 80,
+        "toLP": 1400,
+        "toGP": 100,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 80,
+          "preferredTarget": 80,
+          "gpCarryPaid": 100,
+          "gpCatchUpPaid": 20
+        }
+      }
+    },
+    {
+      "id": "partial-catch-up-80",
+      "description": "An 80% catch-up rate: 25 of flow gives the GP its full catch-up of 20 (20% of the 80 pref plus the catch-up) and the LPs 5. The split takes the rest (spec 3.2).",
+      "input": {
+        "distributable": 1500,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 0.8
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 1000,
+        "toPreferred": 80,
+        "toCatchUp": 20,
+        "toCatchUpLP": 5,
+        "toCarryLP": 316,
+        "toCarryGP": 79,
+        "toLP": 1401,
+        "toGP": 99,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 80,
+          "preferredTarget": 80,
+          "gpCarryPaid": 99,
+          "gpCatchUpPaid": 20
+        }
+      }
+    },
+    {
+      "id": "partial-catch-up-runs-out",
+      "description": "An 80% catch-up rate the distribution does not fill: 15 of flow gives the GP 12 and the LPs 3, the literal reading of the catch-up rate (spec 3.2).",
+      "input": {
+        "distributable": 1095,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 0.8
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 1000,
+        "toPreferred": 80,
+        "toCatchUp": 12,
+        "toCatchUpLP": 3,
+        "toCarryLP": 0,
+        "toCarryGP": 0,
+        "toLP": 1083,
+        "toGP": 12,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 80,
+          "preferredTarget": 80,
+          "gpCarryPaid": 12,
+          "gpCatchUpPaid": 12
+        }
+      }
+    },
+    {
+      "id": "no-catch-up",
+      "description": "catchUpRate 0: there is no catch-up tier; after the pref the remainder splits at the carry rate.",
+      "input": {
+        "distributable": 1500,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 0
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 1000,
+        "toPreferred": 80,
+        "toCatchUp": 0,
+        "toCatchUpLP": 0,
+        "toCarryLP": 336,
+        "toCarryGP": 84,
+        "toLP": 1416,
+        "toGP": 84,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 80,
+          "preferredTarget": 80,
+          "gpCarryPaid": 84,
+          "gpCatchUpPaid": 0
+        }
+      }
+    },
+    {
+      "id": "resume-mid-catch-up",
+      "description": "State carries over: capital and pref already paid, GP 10 of 20 caught up. The catch-up finishes, the rest splits.",
+      "input": {
+        "distributable": 100,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 1
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 80,
+          "preferredTarget": 80,
+          "gpCarryPaid": 10
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 0,
+        "toPreferred": 0,
+        "toCatchUp": 10,
+        "toCatchUpLP": 0,
+        "toCarryLP": 72,
+        "toCarryGP": 18,
+        "toLP": 72,
+        "toGP": 28,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 80,
+          "preferredTarget": 80,
+          "gpCarryPaid": 38,
+          "gpCatchUpPaid": 20
+        }
+      }
+    },
+    {
+      "id": "zero-carry",
+      "description": "carryRate 0: no catch-up tier and the split gives the GP nothing.",
+      "input": {
+        "distributable": 1500,
+        "terms": {
+          "carryRate": 0,
+          "catchUpRate": 1
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 1000,
+        "toPreferred": 80,
+        "toCatchUp": 0,
+        "toCatchUpLP": 0,
+        "toCarryLP": 420,
+        "toCarryGP": 0,
+        "toLP": 1500,
+        "toGP": 0,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 80,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        }
+      }
+    },
+    {
+      "id": "straight-shape",
+      "description": "preferredTarget 0 (how straight carry runs): no pref, no catch-up, capital then the split.",
+      "input": {
+        "distributable": 1500,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 1
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 0,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 1000,
+        "toPreferred": 0,
+        "toCatchUp": 0,
+        "toCatchUpLP": 0,
+        "toCarryLP": 400,
+        "toCarryGP": 100,
+        "toLP": 1400,
+        "toGP": 100,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 0,
+          "preferredTarget": 0,
+          "gpCarryPaid": 100,
+          "gpCatchUpPaid": 0
+        }
+      }
+    },
+    {
+      "id": "rounding-to-cents",
+      "description": "Every tier is rounded to cents; the GP's split share is rounded and the LP takes the rest.",
+      "input": {
+        "distributable": 133.33,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 1
+        },
+        "state": {
+          "contributedCapital": 100,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 10,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 100,
+        "toPreferred": 10,
+        "toCatchUp": 2.5,
+        "toCatchUpLP": 0,
+        "toCarryLP": 16.66,
+        "toCarryGP": 4.17,
+        "toLP": 126.66,
+        "toGP": 6.67,
+        "state": {
+          "contributedCapital": 100,
+          "returnedCapital": 100,
+          "preferredPaid": 10,
+          "preferredTarget": 10,
+          "gpCarryPaid": 6.67,
+          "gpCatchUpPaid": 2.5
+        }
+      }
+    },
+    {
+      "id": "sub-cent-distributable",
+      "description": "The distributable itself is rounded to cents first.",
+      "input": {
+        "distributable": 100.004,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 1
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 0,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 100,
+        "toPreferred": 0,
+        "toCatchUp": 0,
+        "toCatchUpLP": 0,
+        "toCarryLP": 0,
+        "toCarryGP": 0,
+        "toLP": 100,
+        "toGP": 0,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 100,
+          "preferredPaid": 0,
+          "preferredTarget": 0,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        }
+      }
+    },
+    {
+      "id": "negative-distributable",
+      "description": "A negative distributable distributes nothing.",
+      "input": {
+        "distributable": -50,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 1
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 0,
+        "toPreferred": 0,
+        "toCatchUp": 0,
+        "toCatchUpLP": 0,
+        "toCarryLP": 0,
+        "toCarryGP": 0,
+        "toLP": 0,
+        "toGP": 0,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        }
+      }
+    },
+    {
+      "id": "carry-25-large",
+      "description": "25% carry at fund scale: the catch-up target 0.25 x 320000 / 0.75 rounds to 106666.67.",
+      "input": {
+        "distributable": 3000000,
+        "terms": {
+          "carryRate": 0.25,
+          "catchUpRate": 1
+        },
+        "state": {
+          "contributedCapital": 2000000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 320000,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 2000000,
+        "toPreferred": 320000,
+        "toCatchUp": 106666.67,
+        "toCatchUpLP": 0,
+        "toCarryLP": 430000,
+        "toCarryGP": 143333.33,
+        "toLP": 2750000,
+        "toGP": 250000,
+        "state": {
+          "contributedCapital": 2000000,
+          "returnedCapital": 2000000,
+          "preferredPaid": 320000,
+          "preferredTarget": 320000,
+          "gpCarryPaid": 250000,
+          "gpCatchUpPaid": 106666.67
+        }
+      }
+    },
+    {
+      "id": "catch-up-after-split",
+      "description": "The hurdle grew after the fund had already reached the split. 40 more pref makes a full catch-up 30 (20% of 120 + 30), of which the GP already has 20 from its catch-up; split carry does not count. It catches up 10, then the split resumes (spec 3.2).",
+      "input": {
+        "distributable": 100,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 1
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 80,
+          "preferredTarget": 120,
+          "gpCarryPaid": 100,
+          "gpCatchUpPaid": 20
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 0,
+        "toPreferred": 40,
+        "toCatchUp": 10,
+        "toCatchUpLP": 0,
+        "toCarryLP": 40,
+        "toCarryGP": 10,
+        "toLP": 80,
+        "toGP": 20,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 120,
+          "preferredTarget": 120,
+          "gpCarryPaid": 120,
+          "gpCatchUpPaid": 30
+        }
+      }
+    },
+    {
+      "id": "catch-up-rate-below-carry",
+      "description": "A 10% catch-up rate on 20% carry: the GP still gets its full catch-up of 20, but at 10% of each dollar it takes 200 of flow, 180 of it to the LPs. The split takes the rest (spec 3.2).",
+      "input": {
+        "distributable": 1500,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 0.1
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 1000,
+        "toPreferred": 80,
+        "toCatchUp": 20,
+        "toCatchUpLP": 180,
+        "toCarryLP": 176,
+        "toCarryGP": 44,
+        "toLP": 1436,
+        "toGP": 64,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 80,
+          "preferredTarget": 80,
+          "gpCarryPaid": 64,
+          "gpCatchUpPaid": 20
+        }
+      }
+    },
+    {
+      "id": "catch-up-half-size",
+      "description": "A catch-up sized at half a full one: the GP catches up 10 rather than 20 (half of 20% of the 80 pref plus a full catch-up), then the split takes the rest (spec 3.2).",
+      "input": {
+        "distributable": 1500,
+        "terms": {
+          "carryRate": 0.2,
+          "catchUpRate": 1,
+          "catchUpSize": 0.5
+        },
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0
+        }
+      },
+      "expected": {
+        "toReturnOfCapital": 1000,
+        "toPreferred": 80,
+        "toCatchUp": 10,
+        "toCatchUpLP": 0,
+        "toCarryLP": 328,
+        "toCarryGP": 82,
+        "toLP": 1408,
+        "toGP": 92,
+        "state": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 80,
+          "preferredTarget": 80,
+          "gpCarryPaid": 92,
+          "gpCatchUpPaid": 10
+        }
+      }
+    }
+  ],
+  "preferredTarget": [
+    {
+      "id": "one-year-compound",
+      "description": "One contribution, 365 days, 8% compounding.",
+      "input": {
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 1000
+          }
+        ],
+        "asOf": "2026-01-01",
+        "rate": 0.08,
+        "compounds": true
+      },
+      "expected": 80
+    },
+    {
+      "id": "one-year-simple",
+      "description": "Same, simple.",
+      "input": {
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 1000
+          }
+        ],
+        "asOf": "2026-01-01",
+        "rate": 0.08,
+        "compounds": false
+      },
+      "expected": 80
+    },
+    {
+      "id": "two-years-compound",
+      "description": "730 days is exactly 2 years under ACTUAL/365: 1000 x (1.08^2 - 1).",
+      "input": {
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 1000
+          }
+        ],
+        "asOf": "2027-01-01",
+        "rate": 0.08,
+        "compounds": true
+      },
+      "expected": 166.4
+    },
+    {
+      "id": "two-years-simple",
+      "description": "1000 x 0.08 x 2.",
+      "input": {
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 1000
+          }
+        ],
+        "asOf": "2027-01-01",
+        "rate": 0.08,
+        "compounds": false
+      },
+      "expected": 160
+    },
+    {
+      "id": "leap-year",
+      "description": "2024 has 366 days, so a calendar year is 366/365 years.",
+      "input": {
+        "contributions": [
+          {
+            "date": "2024-01-01",
+            "amount": 1000
+          }
+        ],
+        "asOf": "2025-01-01",
+        "rate": 0.08,
+        "compounds": true
+      },
+      "expected": 80.23
+    },
+    {
+      "id": "per-contribution-dates",
+      "description": "Each contribution accrues from its own date; one on or after asOf accrues nothing; non-positive amounts are ignored.",
+      "input": {
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 1000
+          },
+          {
+            "date": "2025-07-02",
+            "amount": 500
+          },
+          {
+            "date": "2026-01-01",
+            "amount": 700
+          },
+          {
+            "date": "2025-03-01",
+            "amount": -200
+          }
+        ],
+        "asOf": "2026-01-01",
+        "rate": 0.08,
+        "compounds": true
+      },
+      "expected": 99.67
+    },
+    {
+      "id": "no-reduction-for-returns",
+      "description": "On the contributed base the hurdle accrues on gross contributions; capital already returned keeps accruing (spec 5).",
+      "input": {
+        "contributions": [
+          {
+            "date": "2020-01-01",
+            "amount": 1000
+          }
+        ],
+        "asOf": "2025-01-01",
+        "rate": 0.08,
+        "compounds": true
+      },
+      "expected": 469.95
+    },
+    {
+      "id": "zero-rate",
+      "description": "rate 0 is no hurdle.",
+      "input": {
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 1000
+          }
+        ],
+        "asOf": "2026-01-01",
+        "rate": 0,
+        "compounds": true
+      },
+      "expected": 0
+    },
+    {
+      "id": "unreturned-compound-pref-paid",
+      "description": "Unreturned base, compounding: 80 of pref is paid after a year, so the second year accrues on the 1,000 of capital alone. 160, against 166.40 on the contributed base (spec 5).",
+      "input": {
+        "contributions": [
+          {
+            "date": "2021-01-01",
+            "amount": 1000
+          }
+        ],
+        "reductions": [
+          {
+            "date": "2022-01-01",
+            "capital": 0,
+            "preferred": 80
+          }
+        ],
+        "asOf": "2023-01-01",
+        "rate": 0.08,
+        "compounds": true
+      },
+      "expected": 160
+    },
+    {
+      "id": "unreturned-capital-back",
+      "description": "Unreturned base, compounding: all capital comes back after a year, so only the 80 of unpaid pref keeps compounding (spec 5).",
+      "input": {
+        "contributions": [
+          {
+            "date": "2021-01-01",
+            "amount": 1000
+          }
+        ],
+        "reductions": [
+          {
+            "date": "2022-01-01",
+            "capital": 1000,
+            "preferred": 0
+          }
+        ],
+        "asOf": "2023-01-01",
+        "rate": 0.08,
+        "compounds": true
+      },
+      "expected": 86.4
+    },
+    {
+      "id": "unreturned-simple",
+      "description": "Unreturned base, simple: half the capital comes back after a year and the second year accrues on the other half; unpaid pref never accrues (spec 5).",
+      "input": {
+        "contributions": [
+          {
+            "date": "2021-01-01",
+            "amount": 1000
+          }
+        ],
+        "reductions": [
+          {
+            "date": "2022-01-01",
+            "capital": 500,
+            "preferred": 0
+          }
+        ],
+        "asOf": "2023-01-01",
+        "rate": 0.08,
+        "compounds": false
+      },
+      "expected": 120
+    }
+  ],
+  "carryTarget": [
+    {
+      "id": "none",
+      "description": "kind none accrues nothing.",
+      "input": {
+        "terms": {
+          "kind": "none",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": null,
+          "recipients": []
+        },
+        "lps": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 1000,
+            "distributed": 0,
+            "nav": 1500
+          }
+        ],
+        "contributions": [],
+        "asOf": "2026-01-01"
+      },
+      "expected": 0
+    },
+    {
+      "id": "straight",
+      "description": "Straight: carryRate x (NAV + distributed - contributed).",
+      "input": {
+        "terms": {
+          "kind": "straight",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 100
+            }
+          ]
+        },
+        "lps": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 600,
+            "distributed": 100,
+            "nav": 800
+          },
+          {
+            "lpEntityId": "lp-b",
+            "contributed": 400,
+            "distributed": 0,
+            "nav": 600
+          }
+        ],
+        "contributions": [],
+        "asOf": "2026-01-01"
+      },
+      "expected": 100
+    },
+    {
+      "id": "straight-loss",
+      "description": "Straight with a loss accrues nothing.",
+      "input": {
+        "terms": {
+          "kind": "straight",
+          "carryRate": 0.2,
+          "prefRate": 0,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 100
+            }
+          ]
+        },
+        "lps": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 1000,
+            "distributed": 0,
+            "nav": 900
+          }
+        ],
+        "contributions": [],
+        "asOf": "2026-01-01"
+      },
+      "expected": 0
+    },
+    {
+      "id": "european",
+      "description": "European: the waterfall on a hypothetical liquidation (NAV + distributed) from a clean state, pref accrued to asOf.",
+      "input": {
+        "terms": {
+          "kind": "european",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 100
+            }
+          ]
+        },
+        "lps": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 1000,
+            "distributed": 0,
+            "nav": 1500
+          }
+        ],
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 1000
+          }
+        ],
+        "asOf": "2026-01-01"
+      },
+      "expected": 100
+    },
+    {
+      "id": "european-below-hurdle",
+      "description": "Liquidation value inside the hurdle: no carry.",
+      "input": {
+        "terms": {
+          "kind": "european",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 100
+            }
+          ]
+        },
+        "lps": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 1000,
+            "distributed": 0,
+            "nav": 1070
+          }
+        ],
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 1000
+          }
+        ],
+        "asOf": "2026-01-01"
+      },
+      "expected": 0
+    },
+    {
+      "id": "american-equals-european",
+      "description": "American accrues exactly the European target (spec 4.3).",
+      "input": {
+        "terms": {
+          "kind": "american",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 100
+            }
+          ]
+        },
+        "lps": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 1000,
+            "distributed": 0,
+            "nav": 1500
+          }
+        ],
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 1000
+          }
+        ],
+        "asOf": "2026-01-01"
+      },
+      "expected": 100
+    },
+    {
+      "id": "european-unreturned",
+      "description": "Unreturned base at the close: the 1,000 already distributed returned all capital a year in, so the hurdle is 86.40, not 166.40, and the GP catches up on the 13.60 left above it (spec 4.3, 5).",
+      "input": {
+        "terms": {
+          "kind": "european",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 100
+            }
+          ],
+          "prefBase": "unreturned"
+        },
+        "lps": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 1000,
+            "distributed": 1000,
+            "nav": 100
+          }
+        ],
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 1000
+          }
+        ],
+        "asOf": "2027-01-01",
+        "distributions": [
+          {
+            "date": "2026-01-01",
+            "amount": 1000
+          }
+        ]
+      },
+      "expected": 13.6
+    },
+    {
+      "id": "european-contributed-same-books",
+      "description": "The same books on the contributed base: the hurdle is 166.40, the 100 of profit does not clear it, and there is no carry (spec 5).",
+      "input": {
+        "terms": {
+          "kind": "european",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 100
+            }
+          ]
+        },
+        "lps": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 1000,
+            "distributed": 1000,
+            "nav": 100
+          }
+        ],
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 1000
+          }
+        ],
+        "asOf": "2027-01-01",
+        "distributions": [
+          {
+            "date": "2026-01-01",
+            "amount": 1000
+          }
+        ]
+      },
+      "expected": 0
+    }
+  ],
+  "splitDistribution": [
+    {
+      "id": "replay-then-split",
+      "description": "A prior 500 (all capital) is replayed first; this 1000 then finishes capital, pays the 2-year pref on the 1000 contributed, catches up and splits. LP lines follow contributed capital.",
+      "input": {
+        "total": 1000,
+        "terms": {
+          "kind": "european",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 100
+            }
+          ]
+        },
+        "partners": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 600,
+            "distributed": 300,
+            "ending": 700
+          },
+          {
+            "lpEntityId": "lp-b",
+            "contributed": 400,
+            "distributed": 200,
+            "ending": 500
+          },
+          {
+            "lpEntityId": "gp",
+            "contributed": 0,
+            "distributed": 0,
+            "ending": 0
+          }
+        ],
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 600
+          },
+          {
+            "date": "2025-01-01",
+            "amount": 400
+          }
+        ],
+        "priors": [
+          {
+            "date": "2026-01-01",
+            "amount": 500
+          }
+        ],
+        "asOf": "2027-01-01"
+      },
+      "expected": {
+        "method": "waterfall",
+        "tiers": {
+          "returnOfCapital": 500,
+          "preferred": 166.4,
+          "catchUp": 41.6,
+          "catchUpToLP": 0,
+          "carry": 58.4,
+          "profitToLP": 233.6,
+          "toLP": 900,
+          "toGP": 100
+        },
+        "stateBefore": {
+          "contributedCapital": 1000,
+          "returnedCapital": 500,
+          "preferredPaid": 0,
+          "preferredTarget": 166.4,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        },
+        "stateAfter": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 166.4,
+          "preferredTarget": 166.4,
+          "gpCarryPaid": 100,
+          "gpCatchUpPaid": 41.6
+        },
+        "lines": [
+          {
+            "lpEntityId": "lp-a",
+            "amount": 540
+          },
+          {
+            "lpEntityId": "lp-b",
+            "amount": 360
+          }
+        ],
+        "carryLines": [
+          {
+            "lpEntityId": "gp",
+            "amount": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "american-without-deals-is-whole-fund",
+      "description": "American terms with no realized deals supplied: the split falls back to the whole-fund waterfall, with a warning (spec 4.3).",
+      "input": {
+        "total": 1000,
+        "terms": {
+          "kind": "american",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 100
+            }
+          ]
+        },
+        "partners": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 600,
+            "distributed": 300,
+            "ending": 700
+          },
+          {
+            "lpEntityId": "lp-b",
+            "contributed": 400,
+            "distributed": 200,
+            "ending": 500
+          },
+          {
+            "lpEntityId": "gp",
+            "contributed": 0,
+            "distributed": 0,
+            "ending": 0
+          }
+        ],
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 600
+          },
+          {
+            "date": "2025-01-01",
+            "amount": 400
+          }
+        ],
+        "priors": [
+          {
+            "date": "2026-01-01",
+            "amount": 500
+          }
+        ],
+        "asOf": "2027-01-01"
+      },
+      "expected": {
+        "method": "waterfall",
+        "tiers": {
+          "returnOfCapital": 500,
+          "preferred": 166.4,
+          "catchUp": 41.6,
+          "catchUpToLP": 0,
+          "carry": 58.4,
+          "profitToLP": 233.6,
+          "toLP": 900,
+          "toGP": 100
+        },
+        "stateBefore": {
+          "contributedCapital": 1000,
+          "returnedCapital": 500,
+          "preferredPaid": 0,
+          "preferredTarget": 166.4,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        },
+        "stateAfter": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 166.4,
+          "preferredTarget": 166.4,
+          "gpCarryPaid": 100,
+          "gpCatchUpPaid": 41.6
+        },
+        "lines": [
+          {
+            "lpEntityId": "lp-a",
+            "amount": 540
+          },
+          {
+            "lpEntityId": "lp-b",
+            "amount": 360
+          }
+        ],
+        "carryLines": [
+          {
+            "lpEntityId": "gp",
+            "amount": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "straight-split",
+      "description": "Straight: no hurdle and no catch-up, capital then the split.",
+      "input": {
+        "total": 1500,
+        "terms": {
+          "kind": "straight",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 100
+            }
+          ]
+        },
+        "partners": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 600,
+            "distributed": 300,
+            "ending": 700
+          },
+          {
+            "lpEntityId": "lp-b",
+            "contributed": 400,
+            "distributed": 200,
+            "ending": 500
+          },
+          {
+            "lpEntityId": "gp",
+            "contributed": 0,
+            "distributed": 0,
+            "ending": 0
+          }
+        ],
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 600
+          },
+          {
+            "date": "2025-01-01",
+            "amount": 400
+          }
+        ],
+        "priors": [],
+        "asOf": "2027-01-01"
+      },
+      "expected": {
+        "method": "waterfall",
+        "tiers": {
+          "returnOfCapital": 1000,
+          "preferred": 0,
+          "catchUp": 0,
+          "catchUpToLP": 0,
+          "carry": 100,
+          "profitToLP": 400,
+          "toLP": 1400,
+          "toGP": 100
+        },
+        "stateBefore": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 0,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        },
+        "stateAfter": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 0,
+          "preferredTarget": 0,
+          "gpCarryPaid": 100,
+          "gpCatchUpPaid": 0
+        },
+        "lines": [
+          {
+            "lpEntityId": "lp-a",
+            "amount": 840
+          },
+          {
+            "lpEntityId": "lp-b",
+            "amount": 560
+          }
+        ],
+        "carryLines": [
+          {
+            "lpEntityId": "gp",
+            "amount": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "two-recipients",
+      "description": "The GP take splits across recipients by pct; the last absorbs the rounding cent.",
+      "input": {
+        "total": 1500,
+        "terms": {
+          "kind": "european",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 33.3
+            },
+            {
+              "lpEntityId": "gp-2",
+              "pct": 66.7
+            }
+          ]
+        },
+        "partners": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 600,
+            "distributed": 300,
+            "ending": 700
+          },
+          {
+            "lpEntityId": "lp-b",
+            "contributed": 400,
+            "distributed": 200,
+            "ending": 500
+          },
+          {
+            "lpEntityId": "gp",
+            "contributed": 0,
+            "distributed": 0,
+            "ending": 0
+          }
+        ],
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 600
+          },
+          {
+            "date": "2025-01-01",
+            "amount": 400
+          }
+        ],
+        "priors": [],
+        "asOf": "2026-01-01"
+      },
+      "expected": {
+        "method": "waterfall",
+        "tiers": {
+          "returnOfCapital": 1000,
+          "preferred": 80,
+          "catchUp": 20,
+          "catchUpToLP": 0,
+          "carry": 80,
+          "profitToLP": 320,
+          "toLP": 1400,
+          "toGP": 100
+        },
+        "stateBefore": {
+          "contributedCapital": 1000,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 80,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        },
+        "stateAfter": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 80,
+          "preferredTarget": 80,
+          "gpCarryPaid": 100,
+          "gpCatchUpPaid": 20
+        },
+        "lines": [
+          {
+            "lpEntityId": "lp-a",
+            "amount": 840
+          },
+          {
+            "lpEntityId": "lp-b",
+            "amount": 560
+          }
+        ],
+        "carryLines": [
+          {
+            "lpEntityId": "gp",
+            "amount": 33.3
+          },
+          {
+            "lpEntityId": "gp-2",
+            "amount": 66.7
+          }
+        ]
+      }
+    },
+    {
+      "id": "no-terms-pro-rata",
+      "description": "kind none: pro-rata by capital balance across every partner, method pro_rata.",
+      "input": {
+        "total": 1000,
+        "terms": {
+          "kind": "none",
+          "carryRate": 0,
+          "prefRate": 0,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": null,
+          "recipients": []
+        },
+        "partners": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 600,
+            "distributed": 300,
+            "ending": 700
+          },
+          {
+            "lpEntityId": "lp-b",
+            "contributed": 400,
+            "distributed": 200,
+            "ending": 500
+          },
+          {
+            "lpEntityId": "gp",
+            "contributed": 0,
+            "distributed": 0,
+            "ending": 0
+          }
+        ],
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 600
+          },
+          {
+            "date": "2025-01-01",
+            "amount": 400
+          }
+        ],
+        "priors": [],
+        "asOf": "2026-01-01"
+      },
+      "expected": {
+        "method": "pro_rata",
+        "tiers": {
+          "returnOfCapital": 0,
+          "preferred": 0,
+          "catchUp": 0,
+          "catchUpToLP": 0,
+          "carry": 0,
+          "profitToLP": 0,
+          "toLP": 1000,
+          "toGP": 0
+        },
+        "stateBefore": {
+          "contributedCapital": 0,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 0,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        },
+        "stateAfter": {
+          "contributedCapital": 0,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 0,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        },
+        "lines": [
+          {
+            "lpEntityId": "lp-a",
+            "amount": 583.33
+          },
+          {
+            "lpEntityId": "lp-b",
+            "amount": 416.67
+          }
+        ],
+        "carryLines": []
+      }
+    },
+    {
+      "id": "unreturned-replay-then-split",
+      "description": "The replay-then-split books on the unreturned base: the prior 500 returned half the capital, so the second year accrues on 500 plus the unpaid first-year pref (spec 5).",
+      "input": {
+        "total": 1000,
+        "terms": {
+          "kind": "european",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 100
+            }
+          ],
+          "prefBase": "unreturned"
+        },
+        "partners": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 600,
+            "distributed": 300,
+            "ending": 700
+          },
+          {
+            "lpEntityId": "lp-b",
+            "contributed": 400,
+            "distributed": 200,
+            "ending": 500
+          },
+          {
+            "lpEntityId": "gp",
+            "contributed": 0,
+            "distributed": 0,
+            "ending": 0
+          }
+        ],
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 600
+          },
+          {
+            "date": "2025-01-01",
+            "amount": 400
+          }
+        ],
+        "priors": [
+          {
+            "date": "2026-01-01",
+            "amount": 500
+          }
+        ],
+        "asOf": "2027-01-01"
+      },
+      "expected": {
+        "method": "waterfall",
+        "tiers": {
+          "returnOfCapital": 500,
+          "preferred": 126.4,
+          "catchUp": 31.6,
+          "catchUpToLP": 0,
+          "carry": 68.4,
+          "profitToLP": 273.6,
+          "toLP": 900,
+          "toGP": 100
+        },
+        "stateBefore": {
+          "contributedCapital": 1000,
+          "returnedCapital": 500,
+          "preferredPaid": 0,
+          "preferredTarget": 126.4,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        },
+        "stateAfter": {
+          "contributedCapital": 1000,
+          "returnedCapital": 1000,
+          "preferredPaid": 126.4,
+          "preferredTarget": 126.4,
+          "gpCarryPaid": 100,
+          "gpCatchUpPaid": 31.6
+        },
+        "lines": [
+          {
+            "lpEntityId": "lp-a",
+            "amount": 540
+          },
+          {
+            "lpEntityId": "lp-b",
+            "amount": 360
+          }
+        ],
+        "carryLines": [
+          {
+            "lpEntityId": "gp",
+            "amount": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "american-realized-deals",
+      "description": "American: a 400 deal sells for 1,000 after a 200 deal was written off. The capital tier is the 600 in realized deals, not the 1,000 contributed, so the GP is paid carry now: 20% of the 400 of realized profit (spec 4.3).",
+      "input": {
+        "total": 1000,
+        "terms": {
+          "kind": "american",
+          "carryRate": 0.2,
+          "prefRate": 0.08,
+          "catchupRate": 1,
+          "prefCompounds": true,
+          "gpEntityId": "gp",
+          "recipients": [
+            {
+              "lpEntityId": "gp",
+              "pct": 100
+            }
+          ]
+        },
+        "partners": [
+          {
+            "lpEntityId": "lp-a",
+            "contributed": 600,
+            "distributed": 0,
+            "ending": 600
+          },
+          {
+            "lpEntityId": "lp-b",
+            "contributed": 400,
+            "distributed": 0,
+            "ending": 400
+          },
+          {
+            "lpEntityId": "gp",
+            "contributed": 0,
+            "distributed": 0,
+            "ending": 0
+          }
+        ],
+        "contributions": [
+          {
+            "date": "2025-01-01",
+            "amount": 600
+          },
+          {
+            "date": "2025-01-01",
+            "amount": 400
+          }
+        ],
+        "priors": [],
+        "asOf": "2026-06-01",
+        "realizedCapital": [
+          {
+            "companyId": "deal-a",
+            "date": "2025-01-01",
+            "realizedOn": "2026-06-01",
+            "amount": 400
+          },
+          {
+            "companyId": "deal-b",
+            "date": "2025-01-01",
+            "realizedOn": "2026-03-01",
+            "amount": 200
+          }
+        ]
+      },
+      "expected": {
+        "method": "waterfall",
+        "tiers": {
+          "returnOfCapital": 600,
+          "preferred": 68.96,
+          "catchUp": 17.24,
+          "catchUpToLP": 0,
+          "carry": 62.76,
+          "profitToLP": 251.04,
+          "toLP": 920,
+          "toGP": 80
+        },
+        "stateBefore": {
+          "contributedCapital": 600,
+          "returnedCapital": 0,
+          "preferredPaid": 0,
+          "preferredTarget": 68.96,
+          "gpCarryPaid": 0,
+          "gpCatchUpPaid": 0
+        },
+        "stateAfter": {
+          "contributedCapital": 600,
+          "returnedCapital": 600,
+          "preferredPaid": 68.96,
+          "preferredTarget": 68.96,
+          "gpCarryPaid": 80,
+          "gpCatchUpPaid": 17.24
+        },
+        "lines": [
+          {
+            "lpEntityId": "lp-a",
+            "amount": 552
+          },
+          {
+            "lpEntityId": "lp-b",
+            "amount": 368
+          }
+        ],
+        "carryLines": [
+          {
+            "lpEntityId": "gp",
+            "amount": 80
+          }
+        ]
+      }
+    }
+  ],
+  "dealByDealCarry": [
+    {
+      "id": "two-deals",
+      "description": "A winner pays carry on its gain over cost plus its share of expenses; a loser pays nothing and does not offset.",
+      "input": {
+        "deals": [
+          {
+            "companyId": "a",
+            "name": "A",
+            "costBasis": 100,
+            "proceeds": 300,
+            "remainingValue": 0
+          },
+          {
+            "companyId": "b",
+            "name": "B",
+            "costBasis": 100,
+            "proceeds": 0,
+            "remainingValue": 50
+          }
+        ],
+        "carryRate": 0.2,
+        "totalExpenses": 20
+      },
+      "expected": {
+        "deals": [
+          {
+            "companyId": "a",
+            "name": "A",
+            "costBasis": 100,
+            "proceeds": 300,
+            "remainingValue": 0,
+            "allocatedExpense": 10,
+            "fullyLoadedCost": 110,
+            "profit": 190,
+            "carry": 38
+          },
+          {
+            "companyId": "b",
+            "name": "B",
+            "costBasis": 100,
+            "proceeds": 0,
+            "remainingValue": 50,
+            "allocatedExpense": 10,
+            "fullyLoadedCost": 110,
+            "profit": -60,
+            "carry": 0
+          }
+        ],
+        "totalCarry": 38,
+        "totalExpenses": 20
+      }
+    }
+  ]
+}

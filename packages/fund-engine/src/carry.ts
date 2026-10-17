@@ -14,8 +14,13 @@
 // AFTER every other category has landed: carry is computed on the NAV that those allocations
 // produce.
 
-import { runWaterfall, type WaterfallTerms } from './waterfall.ts'
+import { runWaterfall } from './waterfall.ts'
 import { roundCents } from './ledger.ts'
+import { preferredTarget, type DatedContribution, type PrefBase } from './hurdle.ts'
+import { replayWaterfallState, waterfallTermsOf, type PriorDistribution } from './replay.ts'
+
+export { preferredTarget } from './hurdle.ts'
+export type { DatedContribution, HurdleReduction, PrefBase } from './hurdle.ts'
 
 export type CarryKind = 'none' | 'straight' | 'american' | 'european'
 
@@ -30,7 +35,11 @@ export interface VehicleCarryTerms {
   carryRate: number
   prefRate: number
   catchupRate: number
+  /** How much of a full catch-up the GP gets, 0–1 (waterfall.ts). Absent means 1. */
+  catchupSize?: number
   prefCompounds: boolean
+  /** What the hurdle accrues on (hurdle.ts). Absent means 'contributed', the original reading. */
+  prefBase?: PrefBase
   /** Single-recipient legacy field; kept for back-compat and as the fallback source. */
   gpEntityId: string | null
   /** Who receives the carry and in what split. Resolved from `carry_recipients`, or
@@ -43,7 +52,9 @@ export const NO_CARRY: VehicleCarryTerms = {
   carryRate: 0,
   prefRate: 0,
   catchupRate: 1,
+  catchupSize: 1,
   prefCompounds: true,
+  prefBase: 'contributed',
   gpEntityId: null,
   recipients: [],
 }
@@ -67,47 +78,18 @@ export interface LpEconomics {
   contributed: number
   /** Cumulative distributions received (positive). */
   distributed: number
-  /** Current capital account balance, BEFORE this period's carry accrual. */
+  /**
+   * Capital account balance BEFORE any carry accrual: today's balance with the carry already
+   * debited from this LP added back. The target is what the GP would take from the LPs' gross
+   * value; measuring it on a balance already net of carry counts the carry twice.
+   */
   nav: number
-}
-
-/** A dated contribution, for accruing the preferred return. */
-export interface DatedContribution {
-  date: string
-  amount: number
-}
-
-/**
- * The preferred return owed to LPs as at `asOf`.
- *
- * The hurdle accrues on each contribution from the day it was made — money committed on paper
- * earns nothing; money actually WIRED does. The ledger has these dates, so we use them rather
- * than approximating from a fund vintage.
- */
-export function preferredTarget(
-  contributions: DatedContribution[],
-  asOf: string,
-  rate: number,
-  compounds: boolean
-): number {
-  if (rate <= 0) return 0
-
-  const end = Date.parse(asOf)
-  if (Number.isNaN(end)) return 0
-
-  let total = 0
-  for (const c of contributions) {
-    const start = Date.parse(c.date)
-    if (Number.isNaN(start) || start >= end || c.amount <= 0) continue
-    // ACTUAL/365, the usual convention in an LPA. Using 365.25 would make "one year" 0.9993 of
-    // a year and quietly understate the hurdle — small, but it compounds, and it is the kind of
-    // difference an LP's accountant will find.
-    const years = (end - start) / (365 * 24 * 60 * 60 * 1000)
-    total += compounds
-      ? c.amount * (Math.pow(1 + rate, years) - 1)
-      : c.amount * rate * years
-  }
-  return roundCents(total)
+  /**
+   * Carry already charged to this LP by earlier accruals (positive). Given for every LP, the
+   * accrual trues each LP up to its share of the whole target rather than sharing out only the
+   * change; see `carryAccrual`.
+   */
+  charged?: number
 }
 
 export interface CarryTargetInput {
@@ -116,6 +98,11 @@ export interface CarryTargetInput {
   contributions?: DatedContribution[]
   /** The date the accrual is measured at. European/American. */
   asOf?: string
+  /**
+   * Every prior distribution as a fund-wide total per date. Needed only when the hurdle accrues on
+   * unreturned capital, because then what came back, and when, shrinks the hurdle.
+   */
+  distributions?: PriorDistribution[]
 }
 
 /**
@@ -149,17 +136,18 @@ export function carryTarget(input: CarryTargetInput, terms: VehicleCarryTerms): 
   // the prudent accrued MARK is the whole-fund result for both. (Accruing a deal-by-deal "winners
   // only" figure would overstate the GP and understate LP NAV.) The genuine American difference —
   // distributing realized carry cash per deal before the whole fund is made whole — is a
-  // distribution-timing concern, not an accrual one, and lives outside this mark. Run the real
-  // waterfall on the hypothetical liquidation proceeds.
-  const pref = preferredTarget(
-    input.contributions ?? [],
-    input.asOf ?? new Date(0).toISOString().slice(0, 10),
-    terms.prefRate,
-    terms.prefCompounds
-  )
+  // distribution-timing concern, not an accrual one: it is how `splitDistribution` splits an
+  // American distribution (replay.ts). A liquidation realizes every deal, so here the deal-by-deal
+  // capital base IS the whole fund. Run the real waterfall on the hypothetical liquidation.
+  const asOf = input.asOf ?? new Date(0).toISOString().slice(0, 10)
+  const contributions = input.contributions ?? []
+  // On an unreturned base the hurdle depends on what the actual distributions returned and paid,
+  // so replay them (whole-fund: the liquidation realizes every deal) and read its hurdle.
+  const pref = terms.prefBase === 'unreturned'
+    ? replayWaterfallState(input.distributions ?? [], contributions, { ...terms, kind: 'european' }, asOf).preferredTarget
+    : preferredTarget(contributions, asOf, terms.prefRate, terms.prefCompounds)
 
-  const wfTerms: WaterfallTerms = { carryRate: terms.carryRate, catchUpRate: terms.catchupRate }
-  const result = runWaterfall(liquidation, wfTerms, {
+  const result = runWaterfall(liquidation, waterfallTermsOf(terms), {
     contributedCapital: contributed,
     returnedCapital: 0,
     preferredPaid: 0,
@@ -181,7 +169,9 @@ export function carryTermsFromRow(row: {
   carry_rate?: unknown
   pref_rate?: unknown
   catchup_rate?: unknown
+  catchup_size?: unknown
   pref_compounds?: unknown
+  pref_base?: unknown
   gp_entity_id?: unknown
   carry_recipients?: unknown
 } | null | undefined): VehicleCarryTerms {
@@ -195,7 +185,9 @@ export function carryTermsFromRow(row: {
     carryRate: Number(row.carry_rate ?? 0),
     prefRate: Number(row.pref_rate ?? 0),
     catchupRate: Number(row.catchup_rate ?? 1),
+    catchupSize: row.catchup_size == null ? 1 : Number(row.catchup_size),
     prefCompounds: row.pref_compounds !== false,
+    prefBase: row.pref_base === 'unreturned' ? 'unreturned' : 'contributed',
     gpEntityId,
     recipients: resolveCarryRecipients(row.carry_recipients, gpEntityId),
   }
@@ -212,15 +204,36 @@ export interface CarryAccrual {
   perLp: Map<string, number>
 }
 
+/** `total` shared by `weights` to the cent, largest remainder; the odd cent goes to the largest share. */
+function shareByWeight(total: number, weights: { lpEntityId: string; weight: number }[]): Map<string, number> {
+  const out = new Map<string, number>()
+  const sum = weights.reduce((s, w) => s + w.weight, 0)
+  if (sum <= 0) return out
+  const rounded = weights.map(w => ({ ...w, exact: (total * w.weight) / sum, amount: roundCents((total * w.weight) / sum) }))
+  const drift = roundCents(total - rounded.reduce((s, r) => s + r.amount, 0))
+  if (drift !== 0 && rounded.length > 0) {
+    const biggest = rounded.reduce((a, b) => (Math.abs(b.exact) > Math.abs(a.exact) ? b : a))
+    biggest.amount = roundCents(biggest.amount + drift)
+  }
+  for (const r of rounded) out.set(r.lpEntityId, r.amount)
+  return out
+}
+
 /**
  * What this period's close should post.
  *
- * The debit is shared across LPs in proportion to each one's PROFIT — carry is a share of
- * gains, so an LP sitting on a loss does not pay it, and an LP with twice the gain pays twice
- * as much. When the accrual REVERSES (NAV fell), the reversal is shared the same way, so it
- * unwinds along the path it was built.
+ * Carry is shared across LPs in proportion to each one's PROFIT: carry is a share of gains, so an
+ * LP sitting on a loss does not pay it, and an LP with twice the gain pays twice as much.
  *
- * If nobody is in profit there is nothing to take carry from, and the target is zero anyway.
+ * When every LP's `charged` is given, the accrual is a TRUE-UP: each LP is charged its share of the
+ * whole target, by today's profits, less what it has already been charged. Its cumulative charge is
+ * then always its share of the GP's entitlement, so every LP ends the fund at the same effective
+ * carry rate on its profit, however the earlier accruals were shared out. A period whose total
+ * does not change can still move carry between LPs; one in which nobody is in profit reverses
+ * every LP's charge.
+ *
+ * Without `charged`, only the change in the target is shared out, by today's profits, and a
+ * period in which nobody is in profit posts nothing.
  */
 export function carryAccrual(
   input: CarryTargetInput,
@@ -228,40 +241,32 @@ export function carryAccrual(
   alreadyAccrued: number
 ): CarryAccrual {
   const target = carryTarget(input, terms)
-  const delta = roundCents(target - alreadyAccrued)
-  const perLp = new Map<string, number>()
-
-  if (delta === 0) return { target, alreadyAccrued, delta: 0, perLp }
 
   // Each LP's gain, measured the same way the target was: value today plus what they've taken
   // out, less what they put in.
   const profits = input.lps
-    .map(l => ({ lpEntityId: l.lpEntityId, profit: roundCents(l.nav + l.distributed - l.contributed) }))
-    .filter(p => p.profit > 0)
+    .map(l => ({ lpEntityId: l.lpEntityId, weight: roundCents(l.nav + l.distributed - l.contributed) }))
+    .filter(p => p.weight > 0)
 
-  const totalProfit = roundCents(profits.reduce((s, p) => s + p.profit, 0))
-  if (totalProfit <= 0) {
-    // No one is in profit. A positive target can't be sourced from anybody; a reversal has
-    // nothing left to reverse against.
+  if (input.lps.length > 0 && input.lps.every(l => typeof l.charged === 'number')) {
+    const charged = roundCents(input.lps.reduce((s, l) => s + (l.charged ?? 0), 0))
+    // Nobody in profit means a zero target (the target is the fund's profit through the waterfall).
+    const share = shareByWeight(target, profits)
+    const perLp = new Map<string, number>()
+    for (const l of input.lps) {
+      const amount = roundCents((share.get(l.lpEntityId) ?? 0) - (l.charged ?? 0))
+      if (amount !== 0) perLp.set(l.lpEntityId, amount)
+    }
+    return { target, alreadyAccrued: charged, delta: roundCents(target - charged), perLp }
+  }
+
+  const delta = roundCents(target - alreadyAccrued)
+  const perLp = new Map<string, number>()
+  if (delta === 0 || profits.length === 0) {
+    // No change to share, or no one is in profit: a positive target can't be sourced from anybody
+    // and a reversal has nothing left to reverse against.
     return { target, alreadyAccrued, delta: 0, perLp }
   }
-
-  // Largest-remainder, so the per-LP debits sum EXACTLY to delta and no cent is invented.
-  let allocated = 0
-  const shares = profits.map(p => ({ ...p, exact: (delta * p.profit) / totalProfit }))
-  const rounded = shares.map(s => ({ ...s, amount: roundCents(s.exact) }))
-  allocated = roundCents(rounded.reduce((s, r) => s + r.amount, 0))
-
-  const drift = roundCents(delta - allocated)
-  if (drift !== 0 && rounded.length > 0) {
-    // Put the odd cent on the largest share — the conventional tiebreak.
-    const biggest = rounded.reduce((a, b) => (Math.abs(b.exact) > Math.abs(a.exact) ? b : a))
-    biggest.amount = roundCents(biggest.amount + drift)
-  }
-
-  for (const r of rounded) {
-    if (r.amount !== 0) perLp.set(r.lpEntityId, r.amount)
-  }
-
+  for (const [id, amount] of shareByWeight(delta, profits)) if (amount !== 0) perLp.set(id, amount)
   return { target, alreadyAccrued, delta, perLp }
 }

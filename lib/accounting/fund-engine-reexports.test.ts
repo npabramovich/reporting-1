@@ -41,6 +41,6 @@ describe('lib/accounting re-exports the fund engine', () => {
     expect(engine.carryTermsFromRow(null)).toBe(engine.NO_CARRY)
     expect(engine.carryTermsFromRow({ kind: 'bogus', carry_rate: 0.2 }).kind).toBe('none')
     expect(engine.carryTermsFromRow({ kind: 'european', carry_rate: '0.2', pref_rate: '0.08', catchup_rate: null, pref_compounds: null, gp_entity_id: 'gp', carry_recipients: null }))
-      .toEqual({ kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, prefCompounds: true, gpEntityId: 'gp', recipients: [{ lpEntityId: 'gp', pct: 100 }] })
+      .toEqual({ kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, prefCompounds: true, prefBase: 'contributed', catchupSize: 1, gpEntityId: 'gp', recipients: [{ lpEntityId: 'gp', pct: 100 }] })
   })
 })

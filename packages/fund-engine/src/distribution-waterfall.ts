@@ -7,17 +7,17 @@
 // from the first one, sized by whatever carry the close happened to have accrued — a number that
 // depends on when the last close ran, not on what the partners agreed.
 //
-// HOW IT WORKS. `runWaterfall` (waterfall.ts) is pure over a cumulative STATE — capital returned so
-// far, preferred paid so far, carry paid so far. Nothing stores that state, and it should not be
-// stored: it is a function of the distributions that came before. So we REPLAY them. Every prior
-// distribution total, in date order, runs through the waterfall with the preferred return accrued
-// to that date, and the state it leaves behind is where this distribution starts. Declaring twice
-// on the same books gives the same split; a corrected prior distribution corrects every later one.
+// HOW IT WORKS. Replay every prior distribution through the waterfall to find where its tiers
+// stand (replay.ts), then run this one from there. Declaring twice on the same books gives the same
+// split; a corrected prior distribution corrects every later one. The gap between what the GP has
+// actually been paid and what the replay says it should hold is surfaced as a warning, never
+// silently corrected.
 //
-// The replay is over TOTALS, not over who received what. The LPA defines the tiers on cumulative
-// amounts, so the tier state is what the agreement implies given the money that has left the fund,
-// whether or not an earlier split honoured it. The gap between what the GP has actually been paid
-// and what the replay says it should hold is surfaced as a warning, never silently corrected.
+// AMERICAN. Under a deal-by-deal waterfall the capital tier is the LP capital in deals realized so
+// far (sold or written off, with their share of fees and expenses), not all contributed capital, so
+// the GP is paid carry on a winner once the realized deals are made whole. The caller supplies that
+// base as `realizedCapital`; without it an American split falls back to the whole-fund waterfall
+// and says so.
 //
 // CONSISTENCY WITH THE CLOSE. The close accrues carry on a hypothetical liquidation using the same
 // `runWaterfall`, with the carry recipients excluded from the LP economics (they receive carry;
@@ -26,8 +26,16 @@
 // therefore outside the waterfall here exactly as it is there — a warning says so, and the GP can
 // edit the lines.
 
-import { runWaterfall, type WaterfallState, type WaterfallTerms } from './waterfall.ts'
-import { preferredTarget, type DatedContribution, type VehicleCarryTerms } from './carry.ts'
+import { runWaterfall, type WaterfallState } from './waterfall.ts'
+import type { DatedContribution } from './hurdle.ts'
+import type { VehicleCarryTerms } from './carry.ts'
+import {
+  replayWaterfallState,
+  usesRealizedBase,
+  waterfallTermsOf,
+  type PriorDistribution,
+  type RealizedCapital,
+} from './replay.ts'
 import { allocateAmount } from './allocation.ts'
 import { roundCents } from './ledger.ts'
 
@@ -42,11 +50,8 @@ export interface PartnerEconomics {
   ending: number
 }
 
-/** A prior distribution — the fund-wide total that left on that date, carry included. */
-export interface PriorDistribution {
-  date: string
-  amount: number
-}
+export { replayWaterfallState } from './replay.ts'
+export type { PriorDistribution, RealizedCapital, ReplayOptions } from './replay.ts'
 
 export type SplitMethod = 'waterfall' | 'pro_rata' | 'manual'
 
@@ -54,7 +59,10 @@ export type SplitMethod = 'waterfall' | 'pro_rata' | 'manual'
 export interface WaterfallTiers {
   returnOfCapital: number
   preferred: number
+  /** The GP's part of the catch-up tier. */
   catchUp: number
+  /** The LPs' part of the catch-up tier (below a full catch-up). Absent on older stored tiers. */
+  catchUpToLP?: number
   /** The GP's share of the final split tier. */
   carry: number
   /** The LPs' share of the final split tier. */
@@ -76,59 +84,7 @@ export interface DistributionSplit {
 }
 
 export const ZERO_TIERS: WaterfallTiers = {
-  returnOfCapital: 0, preferred: 0, catchUp: 0, carry: 0, profitToLP: 0, toLP: 0, toGP: 0,
-}
-
-function wfTerms(terms: VehicleCarryTerms): WaterfallTerms {
-  // 'straight' is the waterfall with no hurdle: return of capital, then the split. Setting the
-  // preferred target to zero makes the catch-up tier vanish on its own (there is nothing to catch
-  // up to), which is exactly the straight definition.
-  return { carryRate: terms.carryRate, catchUpRate: terms.kind === 'straight' ? 1 : terms.catchupRate }
-}
-
-function prefTarget(terms: VehicleCarryTerms, contributions: DatedContribution[], asOf: string): number {
-  if (terms.kind === 'straight') return 0
-  return preferredTarget(contributions, asOf, terms.prefRate, terms.prefCompounds)
-}
-
-/**
- * Replay every prior distribution through the waterfall to find where the tiers stand today.
- *
- * `contributedCapital` is the LPs' total contributed capital AS OF the replay date: contributions
- * dated after `asOf` are not yet capital to be returned. Each prior runs with the preferred return
- * accrued to ITS date, so a distribution made before the hurdle had accrued much correctly went
- * mostly to capital.
- */
-export function replayWaterfallState(
-  priors: PriorDistribution[],
-  contributions: DatedContribution[],
-  terms: VehicleCarryTerms,
-  asOf: string,
-): WaterfallState {
-  const contributedAsOf = (date: string) =>
-    roundCents(contributions.filter(c => c.date <= date && c.amount > 0).reduce((s, c) => s + c.amount, 0))
-
-  let state: WaterfallState = {
-    contributedCapital: 0,
-    returnedCapital: 0,
-    preferredPaid: 0,
-    preferredTarget: 0,
-    gpCarryPaid: 0,
-  }
-  const sorted = [...priors].filter(p => p.amount > 0 && p.date <= asOf).sort((a, b) => a.date.localeCompare(b.date))
-  for (const p of sorted) {
-    state = {
-      ...state,
-      contributedCapital: contributedAsOf(p.date),
-      preferredTarget: prefTarget(terms, contributions, p.date),
-    }
-    state = runWaterfall(p.amount, wfTerms(terms), state).state
-  }
-  return {
-    ...state,
-    contributedCapital: contributedAsOf(asOf),
-    preferredTarget: prefTarget(terms, contributions, asOf),
-  }
+  returnOfCapital: 0, preferred: 0, catchUp: 0, catchUpToLP: 0, carry: 0, profitToLP: 0, toLP: 0, toGP: 0,
 }
 
 /** Pro-rata across a basis, falling back to equal shares when the basis is empty. */
@@ -153,6 +109,8 @@ export interface SplitInput {
   asOf: string
   /** The GP's carry actually paid to date, for the reconciliation warning. Optional. */
   carryPaidToDate?: number
+  /** American only: LP capital in deals realized to date, which is the capital tier. */
+  realizedCapital?: RealizedCapital[]
 }
 
 /**
@@ -174,7 +132,7 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
       warnings.push('Carry terms are set but no recipient is named, so the distribution is split pro-rata by capital balance with no carry.')
     }
     const lines = share(total, input.partners.map(p => ({ lpEntityId: p.lpEntityId, weight: Math.max(0, p.ending) })))
-    const empty: WaterfallState = { contributedCapital: 0, returnedCapital: 0, preferredPaid: 0, preferredTarget: 0, gpCarryPaid: 0 }
+    const empty: WaterfallState = { contributedCapital: 0, returnedCapital: 0, preferredPaid: 0, preferredTarget: 0, gpCarryPaid: 0, gpCatchUpPaid: 0 }
     return {
       method: 'pro_rata',
       lines,
@@ -193,13 +151,20 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
     }
   }
 
-  const stateBefore = replayWaterfallState(input.priors, input.contributions, terms, input.asOf)
-  const result = runWaterfall(total, wfTerms(terms), stateBefore)
+  const opts = { realizedCapital: input.realizedCapital }
+  if (terms.kind === 'american' && !usesRealizedBase(terms, opts)) {
+    warnings.push('These are American (deal-by-deal) terms, but no realized deals were supplied, so the distribution is split by the whole-fund waterfall.')
+  } else if (terms.kind === 'american' && !input.realizedCapital!.some(c => c.realizedOn <= input.asOf && c.amount > 0)) {
+    warnings.push('No deal has been realized yet, so under the deal-by-deal waterfall none of this distribution is a return of capital. If it returns capital that was never invested, split it pro-rata instead.')
+  }
+  const stateBefore = replayWaterfallState(input.priors, input.contributions, terms, input.asOf, opts)
+  const result = runWaterfall(total, waterfallTermsOf(terms), stateBefore)
 
   const tiers: WaterfallTiers = {
     returnOfCapital: result.toReturnOfCapital,
     preferred: result.toPreferred,
     catchUp: result.toCatchUp,
+    catchUpToLP: result.toCatchUpLP,
     carry: result.toCarryGP,
     profitToLP: result.toCarryLP,
     toLP: result.toLP,

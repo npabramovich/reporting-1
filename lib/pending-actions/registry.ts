@@ -17,6 +17,8 @@ import {
 import { CREATE_PLAN_SCHEMA, PUBLISH_PLAN_SCHEMA, UPDATE_PLAN_SCHEMA } from '@/lib/forecast/actions'
 import { previewSetEntityLink, executeSetEntityLink } from './entity-link'
 import { UPDATE_CONSTRUCTION_SCHEMA } from './construction-schema'
+import { previewSetWaterfallTerms, executeSetWaterfallTerms } from './waterfall-terms'
+import { SET_WATERFALL_TERMS_SCHEMA } from '@/lib/accounting/waterfall-terms-schema'
 
 /**
  * One write action the Analyst may DRAFT. Each maps to the access `domain` (+ optional feature)
@@ -267,6 +269,20 @@ export const WRITE_ACTIONS: Record<ActionType, WriteAction> = {
     },
     preview: previewSetEntityLink as any,
     execute: executeSetEntityLink as any,
+  },
+  set_waterfall_terms: {
+    entity: 'required',
+    // The partners' carry: GP economics, and only a writer there may even propose a change.
+    domain: 'gp_economics',
+    stageAccess: 'write',
+    description:
+      "Propose a vehicle's carry (waterfall) terms: kind (none, straight, american, european), carry rate, preferred return " +
+      'and whether it compounds, GP catch-up, and who receives the carry. Usually from extract_lpa_terms, passing its ' +
+      'proposedTerms (with documentId and sources, so the approver sees each clause checked against the LPA). Stages a ' +
+      'before/after preview for human approval; nothing changes until approved. Rates are fractions (0.2 = 20%).',
+    inputSchema: SET_WATERFALL_TERMS_SCHEMA as any,
+    preview: previewSetWaterfallTerms,
+    execute: executeSetWaterfallTerms,
   },
 }
 

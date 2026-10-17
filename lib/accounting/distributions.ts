@@ -32,6 +32,8 @@ import { loadCapitalPostings } from './capital-source'
 import { computeCapitalAccounts } from './capital-account'
 import { vehicleIdByName } from './vehicle-id'
 import { loadCarryTerms } from './carry'
+import { loadRealizedCapital } from './realized-capital'
+import type { RealizedCapital } from '@hemrock/fund-engine'
 import { distributionSplitInputs } from '@hemrock/fund-engine'
 import { reconcileSettlements, registerStatus, type LineStatus, type RegisterStatus, type Settlement } from './settlement'
 import { loadSettlements } from './capital-calls'
@@ -102,7 +104,7 @@ export interface DistributionPreview extends DistributionSplit {
   /** What the waterfall suggests for the K-1 character. Editable before declaring. */
   suggestedCharacter: DistributionCharacter
   /** The carry terms in force, so the UI can say what it applied. */
-  terms: { kind: string; carryRate: number; prefRate: number; recipients: string[] }
+  terms: { kind: string; carryRate: number; prefRate: number; prefBase: string; recipients: string[] }
 }
 
 /**
@@ -133,6 +135,15 @@ export async function previewDistribution(
   // capital postings, in the fund engine (distributionSplitInputs).
   const { partners, contributions, priors, carryPaidToDate } = distributionSplitInputs(capitalPostings, terms.recipients, asOf)
 
+  // American terms split on the deals realized so far, not the whole fund (lib/accounting/realized-capital.ts).
+  let realizedCapital: RealizedCapital[] | undefined
+  const extraWarnings: string[] = []
+  if (effectiveTerms.kind === 'american') {
+    const base = await loadRealizedCapital(admin, fundId, group, capitalPostings, recipientIds, asOf)
+    if ('error' in base) extraWarnings.push(base.error)
+    else realizedCapital = base
+  }
+
   const split = splitDistribution({
     total,
     terms: effectiveTerms,
@@ -141,7 +152,9 @@ export async function previewDistribution(
     priors,
     asOf,
     carryPaidToDate: recipientIds.size > 0 ? carryPaidToDate : undefined,
+    realizedCapital,
   })
+  split.warnings.unshift(...extraWarnings)
 
   const nameOf = (id: string) => names.get(id) ?? id
   return {
@@ -154,6 +167,7 @@ export async function previewDistribution(
       kind: effectiveTerms.kind,
       carryRate: effectiveTerms.carryRate,
       prefRate: effectiveTerms.prefRate,
+      prefBase: effectiveTerms.prefBase ?? 'contributed',
       recipients: effectiveTerms.recipients.map(r => nameOf(r.lpEntityId)),
     },
   }

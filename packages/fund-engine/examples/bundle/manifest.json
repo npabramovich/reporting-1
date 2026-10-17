@@ -20,12 +20,12 @@
       "bytes": 2116
     },
     "terms.json": {
-      "sha256": "76bdfd0b4dadcc4dc2ee52b4aa8d913b6422e51c930e14f98cc3d71e50012067",
-      "bytes": 859
+      "sha256": "a9535b6d0d310ff31091de2c1e01c462215cc8684427e5c4d77775ad66c6f6a2",
+      "bytes": 912
     },
     "statements.json": {
-      "sha256": "5e0165848c2937e1cd8aa4c28434863f3673977a4432d3cea76ab128f4a4739d",
-      "bytes": 4348
+      "sha256": "9880b96f7efef8c893530a02226c24ab54adfdab8566da594a2e2e4b702e8b21",
+      "bytes": 4401
     }
   },
   "auditChain": {

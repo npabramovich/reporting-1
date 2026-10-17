@@ -70,3 +70,66 @@ export function dealByDealCarry(
     totalExpenses,
   }
 }
+
+// ---------------------------------------------------------------------------------------------
+// The American capital base: which LP capital is owed back, and from when, as deals realize.
+
+/** One deal's history, as the portfolio records it. */
+export interface DealHistory {
+  companyId: string
+  /** Each investment (cost, fees capitalised) and the date it was made. */
+  investments: { date: string; amount: number }[]
+  /**
+   * Each realization: a sale, partial sale or write-off, with the cost basis it took out. A null
+   * `costExited` means the record does not say, and is read as the whole remaining basis.
+   */
+  realizations: { date: string; costExited: number | null }[]
+  /**
+   * When the deal is closed out (exited or written off) with basis still on it — a write-off
+   * recorded only as a status, say. The remaining basis is realized on this date. Null otherwise.
+   */
+  closedOn?: string | null
+}
+
+/**
+ * The LP capital an American waterfall must return before carry, deal by deal.
+ *
+ * A realization takes cost out of a deal; that cost, and the deal's share of the fund's fees and
+ * expenses, is LP capital the waterfall owes back from the realization date, with the hurdle
+ * accruing from when the money went in. `factor` turns a dollar of deal cost into LP capital:
+ * the LPs' share of contributions × (1 + fund expenses ÷ total cost), so fees and expenses ride
+ * along with the deals by cost share, as `dealByDealCarry` allocates them.
+ *
+ * Each realized slice of cost is spread over the deal's investments in proportion, so the hurdle
+ * on a partial exit accrues from the investments it came out of on average.
+ */
+export function realizedCapitalFromDeals(
+  deals: DealHistory[],
+  opts: { factor: number },
+): { companyId: string; date: string; realizedOn: string; amount: number }[] {
+  const out: { companyId: string; date: string; realizedOn: string; amount: number }[] = []
+  const factor = Number.isFinite(opts.factor) && opts.factor > 0 ? opts.factor : 0
+  if (factor === 0) return out
+
+  for (const d of deals) {
+    const investments = d.investments.filter(i => i.amount > 0 && i.date)
+    const basis = investments.reduce((s, i) => s + i.amount, 0)
+    if (basis <= 0) continue
+
+    let remaining = basis
+    const realize = (cost: number, on: string) => {
+      const take = Math.min(remaining, Math.max(0, cost))
+      if (take <= 0) return
+      remaining -= take
+      for (const i of investments) {
+        const amount = roundCents(take * (i.amount / basis) * factor)
+        if (amount > 0) out.push({ companyId: d.companyId, date: i.date, realizedOn: on, amount })
+      }
+    }
+
+    const realizations = [...d.realizations].filter(r => r.date).sort((a, b) => a.date.localeCompare(b.date))
+    for (const r of realizations) realize(r.costExited == null ? remaining : Math.abs(r.costExited), r.date)
+    if (d.closedOn && remaining > 0.005) realize(remaining, d.closedOn)
+  }
+  return out
+}

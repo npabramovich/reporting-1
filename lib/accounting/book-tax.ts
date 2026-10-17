@@ -37,6 +37,7 @@
 import { roundCents } from './ledger'
 import { bucketForSourceType, computeCapitalAccounts, type CapitalPosting } from './capital-account'
 import { carryAccrual, carryTarget, type DatedContribution, type LpEconomics, type VehicleCarryTerms } from './carry'
+import { priorDistributions } from '@hemrock/fund-engine'
 
 export type TaxDifferenceKind =
   | 'unrealized'
@@ -309,7 +310,9 @@ export function carryOnUnrealizedForYear(
       .filter(p => !recipientIds.has(p.lpEntityId) && bucketForSourceType(p.sourceType) === 'contributions')
       .map(p => ({ date: p.entryDate ?? asOf, amount: roundCents(-p.amount) }))
       .filter(c => c.amount > 0)
-    return { lps, contributions, asOf }
+    // An unreturned-capital hurdle needs what came back, and when.
+    const distributions = priorDistributions(upTo, recipientIds, asOf).priors
+    return { lps, contributions, asOf, distributions }
   }
   const yearCarry = (taxBasis: boolean) => {
     const prior = economicsAt(priorYearEnd, taxBasis)

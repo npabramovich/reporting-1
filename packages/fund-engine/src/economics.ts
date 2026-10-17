@@ -16,8 +16,13 @@ export interface CarryAccrualInputs {
   lps: LpEconomics[]
   /** Dated non-recipient contributions, for the preferred return. */
   contributions: DatedContribution[]
-  /** Carry already sitting in the recipients' carriedInterest lines. */
+  /**
+   * Carry already charged to the LPs: what earlier accruals debited from their carriedInterest
+   * lines. Not the recipients' balance, which carry PAID has already drawn down.
+   */
   alreadyAccrued: number
+  /** Every prior distribution as a fund-wide total per date, for an unreturned-capital hurdle. */
+  distributions: PriorDistribution[]
 }
 
 /**
@@ -32,19 +37,23 @@ export function carryAccrualInputs(
   const recipientIds = new Set(recipients.map(r => r.lpEntityId))
   const accounts = computeCapitalAccounts(capitalPostings)
 
-  // Carry already sitting in the recipients' accounts — the accrual tops up (or reverses) to target.
-  const alreadyAccrued = roundCents(
-    recipients.reduce((s, r) => s + (accounts.get(r.lpEntityId)?.carriedInterest ?? 0), 0)
-  )
+  // Carry is measured LP-side. Each LP's carriedInterest line holds what earlier accruals charged
+  // it (a debit, so negative). The target is what the GP would take from the LPs' value GROSS of
+  // carry, so that charge is added back to the balance, and it is also what is already accrued.
+  // The recipients' own balance is the wrong figure for the second: carry PAID is drawn from it, so
+  // measuring against it would accrue again every dollar already paid out. Passing each LP's charge
+  // makes the accrual a true-up: every LP ends at its share of the whole target.
+  const charged = (a: { carriedInterest: number }) => roundCents(-a.carriedInterest)
+  const lpAccounts = Array.from(accounts.entries()).filter(([id]) => !recipientIds.has(id)) // recipients receive carry; they don't pay it
+  const alreadyAccrued = roundCents(lpAccounts.reduce((s, [, a]) => s + charged(a), 0))
 
-  const lps: LpEconomics[] = Array.from(accounts.entries())
-    .filter(([id]) => !recipientIds.has(id)) // recipients receive carry; they don't pay it
-    .map(([lpEntityId, a]) => ({
-      lpEntityId,
-      contributed: roundCents(a.contributions),
-      distributed: roundCents(-a.distributions), // stored negative on the account
-      nav: roundCents(a.ending),
-    }))
+  const lps: LpEconomics[] = lpAccounts.map(([lpEntityId, a]) => ({
+    lpEntityId,
+    contributed: roundCents(a.contributions),
+    distributed: roundCents(-a.distributions), // stored negative on the account
+    nav: roundCents(a.ending + charged(a)),
+    charged: charged(a),
+  }))
 
   // Dated contributions, for the hurdle. The pref accrues from when cash actually arrived.
   const contributions: DatedContribution[] = capitalPostings
@@ -52,7 +61,34 @@ export function carryAccrualInputs(
     .map(p => ({ date: p.entryDate ?? asOf, amount: roundCents(-p.amount) }))
     .filter(c => c.amount > 0)
 
-  return { lps, contributions, alreadyAccrued }
+  const { priors: distributions } = priorDistributions(capitalPostings, recipientIds, asOf)
+  return { lps, contributions, alreadyAccrued, distributions }
+}
+
+/**
+ * Every distribution that left the fund on or before `asOf`, as a fund-wide total per date — LP
+ * distributions and carry paid both, because the waterfall is defined over what left — and the
+ * carry paid to the recipients.
+ */
+export function priorDistributions(
+  capitalPostings: CapitalPosting[],
+  recipientIds: Set<string>,
+  asOf: string,
+): { priors: PriorDistribution[]; carryPaidToDate: number } {
+  const priorByDate = new Map<string, number>()
+  let carryPaidToDate = 0
+  for (const p of capitalPostings) {
+    if (!p.lpEntityId || p.amount <= 0) continue
+    const isDist = bucketForSourceType(p.sourceType) === 'distributions'
+    const isCarry = p.sourceType === 'carry_distribution'
+    if (!isDist && !isCarry) continue
+    const date = p.entryDate ?? asOf
+    if (date > asOf) continue
+    priorByDate.set(date, roundCents((priorByDate.get(date) ?? 0) + p.amount))
+    if (isCarry && recipientIds.has(p.lpEntityId)) carryPaidToDate = roundCents(carryPaidToDate + p.amount)
+  }
+  const priors = Array.from(priorByDate.entries()).map(([date, amount]) => ({ date, amount }))
+  return { priors, carryPaidToDate }
 }
 
 export interface DistributionSplitInputs {
@@ -91,21 +127,7 @@ export function distributionSplitInputs(
     .map(p => ({ date: p.entryDate ?? asOf, amount: roundCents(-p.amount) }))
     .filter(c => c.amount > 0)
 
-  // Every prior distribution, as a fund-wide total per date: LP distributions and carry paid
-  // both left the fund, and the waterfall is defined over what left.
-  const priorByDate = new Map<string, number>()
-  let carryPaidToDate = 0
-  for (const p of capitalPostings) {
-    if (!p.lpEntityId || p.amount <= 0) continue
-    const isDist = bucketForSourceType(p.sourceType) === 'distributions'
-    const isCarry = p.sourceType === 'carry_distribution'
-    if (!isDist && !isCarry) continue
-    const date = p.entryDate ?? asOf
-    if (date > asOf) continue
-    priorByDate.set(date, roundCents((priorByDate.get(date) ?? 0) + p.amount))
-    if (isCarry && recipientIds.has(p.lpEntityId)) carryPaidToDate = roundCents(carryPaidToDate + p.amount)
-  }
-  const priors: PriorDistribution[] = Array.from(priorByDate.entries()).map(([date, amount]) => ({ date, amount }))
+  const { priors, carryPaidToDate } = priorDistributions(capitalPostings, recipientIds, asOf)
 
   return { partners, contributions, priors, carryPaidToDate }
 }

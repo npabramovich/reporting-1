@@ -831,3 +831,19 @@ see DOCS → Connecting Claude, ChatGPT and other agents): import a
 bank feed, categorize, book calls, record investment transactions (approved by a person before they
 post), author entries as text, reconcile, close periods, and read, draft and publish budgets and forecasts
 — each scoped to a vehicle via the `vehicle` argument, and only to entities the member can see.
+
+**Carry terms from the LPA.** The waterfall terms (kind, carry rate, preferred return and its
+compounding, GP catch-up, recipients) are specified in [docs/spec/waterfall-terms.md](./docs/spec/waterfall-terms.md),
+with test vectors the suite runs through the engine. `waterfall_terms` reads a vehicle's terms.
+`extract_lpa_terms` reads them out of the vehicle's LPA, from an entity document or pasted text, and
+returns a proposal. It writes nothing. Each term in the proposal comes with its quoted clause, section,
+page and confidence, and with whether the quote was found in the document. The proposal also lists
+the terms the reader could not find and the provisions the engine does not model (clawback, fee
+offsets, multiple hurdles).
+- With a server AI key, the fund's model reads the LPA.
+- Without one, the tool returns a pattern reading and the relevant passages. The assistant reads
+  them and hands its reading back as `assistantProposal`, which is checked the same way.
+
+`set_waterfall_terms` is always staged. Staging and approving both need GP economics write. The
+approver sees today's terms beside the new ones, with each clause re-checked against the document.
+On approval, the terms go through the same write path as Admin → Allocation terms.

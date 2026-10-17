@@ -3,6 +3,7 @@
 
 import { NO_CARRY, resolveCarryRecipients, type CarryKind, type VehicleCarryTerms } from './carry.ts'
 import type { WaterfallState } from './waterfall.ts'
+import type { RealizedCapital } from './replay.ts'
 import type { PartnerMapping } from './books.ts'
 
 export interface TermsPartner extends PartnerMapping {
@@ -17,6 +18,8 @@ export interface VehicleTerms {
   capitalAccountPattern?: RegExp
   /** Cumulative waterfall state, for `waterfall` without a ledger. */
   state?: WaterfallState
+  /** American terms: LP capital in realized deals, the deal-by-deal capital tier. */
+  realizedCapital?: RealizedCapital[]
 }
 
 const KINDS: CarryKind[] = ['none', 'straight', 'american', 'european']
@@ -42,7 +45,12 @@ export function parseVehicleTerms(raw: unknown): VehicleTerms {
   for (const [field, v] of [['carryRate', carryRate], ['prefRate', prefRate], ['catchupRate', catchupRate]] as const) {
     if (v < 0 || v > 1) throw new Error(`terms: carry.${field} is a fraction (0.2 for 20%), got ${v}`)
   }
+  const catchupSize = num(c.catchupSize ?? c.catchup_size, 'carry.catchupSize', 1)
+  if (catchupSize < 0 || catchupSize > 1) throw new Error(`terms: carry.catchupSize is a fraction of a full catch-up (1 = full), got ${catchupSize}`)
   const prefCompounds = (c.prefCompounds ?? c.pref_compounds) !== false
+  const prefBaseRaw = c.prefBase ?? c.pref_base ?? 'contributed'
+  if (prefBaseRaw !== 'contributed' && prefBaseRaw !== 'unreturned') throw new Error('terms: carry.prefBase must be contributed or unreturned')
+  const prefBase = prefBaseRaw as 'contributed' | 'unreturned'
   const gpEntityId = typeof (c.gpEntityId ?? c.gp_entity_id) === 'string' ? (c.gpEntityId ?? c.gp_entity_id) : null
   const recipientsRaw = Array.isArray(c.recipients)
     ? c.recipients.map((r: any) => ({ lpEntityId: r?.partner ?? r?.lpEntityId, pct: r?.pct }))
@@ -54,7 +62,7 @@ export function parseVehicleTerms(raw: unknown): VehicleTerms {
   }
   const carry: VehicleCarryTerms = kind === 'none'
     ? { ...NO_CARRY, recipients }
-    : { kind, carryRate, prefRate, catchupRate, prefCompounds, gpEntityId, recipients }
+    : { kind, carryRate, prefRate, catchupRate, catchupSize, prefCompounds, prefBase, gpEntityId, recipients }
 
   const partners: TermsPartner[] = []
   for (const [i, p] of (Array.isArray(t.partners) ? t.partners : []).entries()) {
@@ -81,7 +89,17 @@ export function parseVehicleTerms(raw: unknown): VehicleTerms {
       preferredPaid: num(s.preferredPaid, 'state.preferredPaid', 0),
       preferredTarget: num(s.preferredTarget, 'state.preferredTarget', 0),
       gpCarryPaid: num(s.gpCarryPaid, 'state.gpCarryPaid', 0),
+      ...(s.gpCatchUpPaid === undefined ? {} : { gpCatchUpPaid: num(s.gpCatchUpPaid, 'state.gpCatchUpPaid', 0) }),
     }
+  }
+
+  let realizedCapital: RealizedCapital[] | undefined
+  if (Array.isArray(t.realizedCapital)) {
+    realizedCapital = t.realizedCapital.map((rc: any, i: number) => {
+      const date = rc?.date, realizedOn = rc?.realizedOn
+      if (typeof date !== 'string' || typeof realizedOn !== 'string') throw new Error(`terms: realizedCapital[${i}] needs date and realizedOn (YYYY-MM-DD)`)
+      return { companyId: typeof rc.companyId === 'string' ? rc.companyId : undefined, date, realizedOn, amount: num(rc.amount, `realizedCapital[${i}].amount`, 0) }
+    })
   }
 
   return {
@@ -90,5 +108,6 @@ export function parseVehicleTerms(raw: unknown): VehicleTerms {
     partners,
     capitalAccountPattern,
     state,
+    realizedCapital,
   }
 }

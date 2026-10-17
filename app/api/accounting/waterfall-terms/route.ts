@@ -13,7 +13,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // caller's grant for this route + method; these resolve identity and keep the demo out of writes.
 import { assertWriteAccess, assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
-import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
+import { saveWaterfallTerms } from '@/lib/accounting/waterfall-terms'
 import { loadCarryTerms } from '@/lib/accounting/carry'
 import { loadEntityNames } from '@/lib/accounting/load'
 import { dbError } from '@/lib/api-error'
@@ -65,84 +65,12 @@ export async function PUT(req: NextRequest) {
   const group = await resolveGroupOr400(admin, gate, body?.group ?? req.nextUrl.searchParams.get('group'))
   if (group instanceof NextResponse) return group
 
-  const vehicleId = await vehicleIdByName(admin, gate.fundId, group)
-  if (!vehicleId) return NextResponse.json({ error: `Unknown vehicle "${group}".` }, { status: 400 })
-
-  const kind = body?.kind
-  if (!['none', 'straight', 'american', 'european'].includes(kind)) {
-    return NextResponse.json({ error: 'kind must be none, straight, american, or european.' }, { status: 400 })
+  // The one write path, shared with the approved set_waterfall_terms action (lib/accounting/waterfall-terms.ts).
+  const saved = await saveWaterfallTerms(admin, gate.fundId, group, body ?? {})
+  if ('error' in saved) {
+    if (saved.dbError) return dbError(saved.dbError, 'waterfall-terms-put')
+    return NextResponse.json({ error: saved.error }, { status: saved.status })
   }
-
-  const num = (v: any, fallback = 0) => {
-    const n = Number(v)
-    return Number.isFinite(n) ? n : fallback
-  }
-  const carryRate = num(body?.carryRate)
-  const prefRate = num(body?.prefRate)
-  const catchupRate = num(body?.catchupRate, 1)
-
-  if (carryRate < 0 || carryRate >= 1) {
-    return NextResponse.json({ error: 'Carry rate must be a fraction between 0 and 1 (0.2 = 20%).' }, { status: 400 })
-  }
-  if (prefRate < 0 || prefRate >= 1) {
-    return NextResponse.json({ error: 'Preferred return must be a fraction between 0 and 1 (0.08 = 8%).' }, { status: 400 })
-  }
-  if (catchupRate < 0 || catchupRate > 1) {
-    return NextResponse.json({ error: 'Catch-up rate must be between 0 and 1.' }, { status: 400 })
-  }
-
-  // Carry has to accrue TO somebody. A vehicle may have ONE recipient (legacy gpEntityId) or a
-  // split across several (carryRecipients: [{lpEntityId, pct}] summing to 100). Without any the
-  // close would compute an accrual it cannot post — refuse here rather than fail mid-close.
-  const gpEntityId = body?.gpEntityId || null
-  const recipients: { lpEntityId: string; pct: number }[] = Array.isArray(body?.carryRecipients)
-    ? body.carryRecipients
-        .filter((r: any) => r && typeof r.lpEntityId === 'string')
-        .map((r: any) => ({ lpEntityId: r.lpEntityId, pct: Number(r.pct) }))
-        .filter((r: { pct: number }) => Number.isFinite(r.pct) && r.pct > 0)
-    : []
-  const carryOn = kind !== 'none' && carryRate > 0
-
-  if (carryOn && recipients.length === 0 && !gpEntityId) {
-    return NextResponse.json({ error: 'Choose who receives the carry.' }, { status: 400 })
-  }
-  if (recipients.length > 0) {
-    const sum = recipients.reduce((s, r) => s + r.pct, 0)
-    if (Math.abs(sum - 100) > 0.01) {
-      return NextResponse.json({ error: `Carry recipient percentages must total 100 (they total ${sum}).` }, { status: 400 })
-    }
-  }
-  // Every named recipient (and the legacy single GP) must be a partner in this fund.
-  const idsToCheck = [...recipients.map(r => r.lpEntityId), ...(gpEntityId ? [gpEntityId] : [])]
-  if (idsToCheck.length > 0) {
-    const { data: ents } = await admin.from('lp_entities' as any).select('id').eq('fund_id', gate.fundId).in('id', idsToCheck)
-    const known = new Set(((ents as any[]) ?? []).map(e => e.id))
-    const foreign = idsToCheck.filter(id => !known.has(id))
-    if (foreign.length > 0) return NextResponse.json({ error: 'A carry recipient is not in this fund.' }, { status: 400 })
-  }
-
-  // Keep gp_entity_id meaningful as the single-recipient fallback: the sole recipient when there
-  // is exactly one, otherwise the explicit legacy value (or null).
-  const singleGp = recipients.length === 1 ? recipients[0].lpEntityId : recipients.length === 0 ? gpEntityId : null
-
-  const { error } = await admin
-    .from('vehicle_waterfall_terms' as any)
-    .upsert(
-      {
-        fund_id: gate.fundId,
-        vehicle_id: vehicleId,
-        kind,
-        carry_rate: carryRate,
-        pref_rate: prefRate,
-        catchup_rate: catchupRate,
-        pref_compounds: body?.prefCompounds !== false,
-        gp_entity_id: singleGp,
-        carry_recipients: recipients.length > 0 ? recipients : null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'fund_id,vehicle_id' }
-    )
-  if (error) return dbError(error, 'waterfall-terms-put')
 
   return NextResponse.json({ ok: true })
 }
