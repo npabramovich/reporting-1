@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import JSZip from 'jszip'
-import { BUNDLE_FILES, sha256Hex } from '@hemrock/fund-engine'
+import { BUNDLE_FILES, sha256Hex } from '@portfolio/fund-engine'
 import { bundleDirName, closeBundleZip, isMissingSchema, verifyStoredBundle, type StoredCloseBundle } from './close-bundle'
 
 // The open engine's checked-in sample bundle (packages/fund-engine/examples/bundle), as the

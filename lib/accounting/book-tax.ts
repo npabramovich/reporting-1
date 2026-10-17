@@ -37,7 +37,7 @@
 import { roundCents } from './ledger'
 import { bucketForSourceType, computeCapitalAccounts, type CapitalPosting } from './capital-account'
 import { carryAccrual, carryTarget, type DatedContribution, type LpEconomics, type VehicleCarryTerms } from './carry'
-import { priorDistributions } from '@hemrock/fund-engine'
+import { priorDistributions } from '@portfolio/fund-engine'
 
 export type TaxDifferenceKind =
   | 'unrealized'

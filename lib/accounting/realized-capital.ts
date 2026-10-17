@@ -8,7 +8,7 @@
 // only reads the rows.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { realizedCapitalFromDeals, type DealHistory, type RealizedCapital } from '@hemrock/fund-engine'
+import { realizedCapitalFromDeals, type DealHistory, type RealizedCapital } from '@portfolio/fund-engine'
 import { computeCapitalAccounts, type CapitalPosting } from './capital-account'
 import { roundCents } from './ledger'
 

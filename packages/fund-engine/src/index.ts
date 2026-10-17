@@ -1,4 +1,4 @@
-// @hemrock/fund-engine — the pure fund-accounting math behind Hemrock Portfolio.
+// @portfolio/fund-engine — the pure fund-accounting math behind Hemrock Portfolio.
 //
 // No database, no framework, no runtime dependencies. Every function here is a function of its
 // arguments, so a number the app shows can be reproduced from the books it was computed from.

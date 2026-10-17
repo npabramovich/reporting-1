@@ -9,12 +9,12 @@ import { ACTIVITY_FIELDS, emptyAccount } from './capital-account'
 import { apportionCents } from './allocation'
 import type { CompanyStatus } from '@/lib/types/database'
 import type { ChainBalance } from './soi'
-import { trialBalance, postingsInPeriod, postingsAsOf, type TrialBalance } from '@hemrock/fund-engine'
+import { trialBalance, postingsInPeriod, postingsAsOf, type TrialBalance } from '@portfolio/fund-engine'
 
 // The trial balance and period scoping live in the open fund engine
 // (packages/fund-engine/src/trial-balance.ts); re-exported so existing imports keep working.
 export { trialBalance, postingsInPeriod, postingsAsOf }
-export type { TrialBalance, TrialBalanceRow } from '@hemrock/fund-engine'
+export type { TrialBalance, TrialBalanceRow } from '@portfolio/fund-engine'
 
 function r(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100

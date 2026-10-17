@@ -1,7 +1,7 @@
 {
   "format": "hemrock-close-bundle/1",
   "engine": {
-    "name": "@hemrock/fund-engine",
+    "name": "@portfolio/fund-engine",
     "version": "0.2.0"
   },
   "subject": {

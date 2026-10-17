@@ -19,7 +19,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, '.'),
       // The open fund engine (packages/fund-engine), consumed from source as tsconfig.json maps it.
-      '@hemrock/fund-engine': path.resolve(__dirname, 'packages/fund-engine/src/index.ts'),
+      '@portfolio/fund-engine': path.resolve(__dirname, 'packages/fund-engine/src/index.ts'),
     },
   },
 })
