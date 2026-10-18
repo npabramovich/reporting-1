@@ -271,8 +271,7 @@ export function FundHoldingDetail({
 
   return (
     <section className="space-y-3" aria-label={name ? `${name} register` : 'Fund register'}>
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-base font-medium">Fund register</h2>
+      <div className="flex items-center justify-end gap-2">
         {canWrite && (
           <Popover open={menuOpen} onOpenChange={setMenuOpen}>
             <PopoverTrigger asChild>
