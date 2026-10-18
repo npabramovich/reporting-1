@@ -5,6 +5,7 @@
 
 import type { Domain } from '@/lib/access/domains'
 import type { FeatureKey } from '@/lib/types/features'
+import { RECEIVED_K1_FIELDS } from '@/lib/tax/received-k1-amounts'
 
 export interface AgentToolMeta {
   name: string
@@ -484,7 +485,7 @@ export const AGENT_TOOL_MANIFEST: AgentToolMeta[] = [
   },
   {
     name: 'holding_k_ones',
-    description: "The K-1s this vehicle's fund holdings owe it for a tax year: outstanding (the chase list), amended upstream, how many arrived, and whether the outstanding ones hold up closing the tax year. The expectation comes from the holdings, so a new fund holding is on the list without anyone adding it.",
+    description: "The K-1s this vehicle's fund holdings owe it for a tax year: outstanding (the chase list), amended upstream, how many arrived, and whether the outstanding ones hold up closing the tax year. `holdings` lists every fund holding with its status and the K-1 amounts entered so far (null when none). The expectation comes from the holdings, so a new fund holding is on the list without anyone adding it.",
     scope: 'read',
     accessDomain: 'tax',
     accessFeature: 'tax_reporting',
@@ -496,7 +497,7 @@ export const AGENT_TOOL_MANIFEST: AgentToolMeta[] = [
   },
   {
     name: 'mark_holding_k_one',
-    description: "Record what became of a K-1 a fund holding owes this vehicle: received (with the date and, if you have them, the reported ordinary income, capital gain and ending capital), amended, not_expected, or back to expected. companyId is the fund holding's company id (holding_k_ones lists them).",
+    description: "Record what became of a K-1 a fund holding owes this vehicle: received (with the date), amended, not_expected, or back to expected. companyId is the fund holding's company id (holding_k_ones lists them). With status received or amended, pass `amounts` to record what the K-1 says, box by box, as printed: income and gain signed (a loss negative), deductions (boxes 12, 13) and distributions (box 19) positive, Item L lines as reported. `amounts` replaces any amounts already recorded (a box left out is cleared); omit it to change only the status, or pass null to clear them. Recorded amounts become tax-book entries the next time the year's book-to-tax adjustments are posted on the Tax page, and flow by character to this fund's own K-1s.",
     scope: 'write',
     accessDomain: 'tax',
     accessFeature: 'tax_reporting',
@@ -512,6 +513,15 @@ export const AGENT_TOOL_MANIFEST: AgentToolMeta[] = [
         reportedCapitalGain: { type: 'number' },
         reportedEndingCapital: { type: 'number' },
         notes: { type: 'string' },
+        amounts: {
+          type: ['object', 'null'],
+          description: 'The K-1 boxes, keyed as listed. Amounts in the fund currency.',
+          additionalProperties: false,
+          properties: Object.fromEntries(RECEIVED_K1_FIELDS.map(f => [f.key, {
+            type: 'number',
+            description: f.box === 'L' ? `Item L — ${f.label}` : `Box ${f.box} — ${f.label}`,
+          }])),
+        },
       },
     },
   },

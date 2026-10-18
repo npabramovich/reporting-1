@@ -22,6 +22,7 @@ ledger, capital accounts, bank feed, periods).
 - [Going live & keeping the books](#going-live--keeping-the-books)
 - [Management companies](#management-companies) — the firm's own books, and intercompany
 - [Double-entry reference](#double-entry-reference) — how each entry type is booked
+- [Lower-tier K-1s](#lower-tier-k-1s-funds-that-hold-funds) — a fund holding's K-1 in the tax book and on this fund's own K-1s
 - [The capital-account roll-forward](#the-capital-account-roll-forward)
 - [Verifying the books](#verifying-the-books) — the checks that should always hold
 - [Authoring in text](#authoring-in-text)
@@ -702,6 +703,58 @@ with no interest books *only* the step-up.)
   ledger ties to the tracker because the step-up actually posted to `1200`.
 - **Changes in partners' capital** — the step-up allocates to LPs (line **gains**) at the next
   **period close**; until then it sits in unallocated earnings.
+
+---
+
+# Lower-tier K-1s (funds that hold funds)
+
+A vehicle that holds another fund is a partner in it. For tax it is taxed on its **share of that
+fund's income, by character**, as the underlying fund's Schedule K-1 reports it — not on the
+distributions it received, and not on the NAV mark. The actual book can't say that (it carries the
+holding at fair value and books distributions against cost and gain), so each K-1 is a book-to-tax
+difference and goes in the **tax book**.
+
+**Recording one.** Tax page → *K-1s owed to this vehicle* → *Enter amounts* (or `mark_holding_k_one`
+with `amounts`). The form takes the Part III boxes as printed — 1, 2, 3, 4, 5, 6a, 6b, 7, 8, 9a, 10,
+11, 12, 13 (investment interest, code H, apart from the rest), 19A, 19C — and Item L as reported. They
+are stored on `received_k1s` (`20261018181000_received_k1_amounts.sql`). Income is signed; deductions
+and distributions are positive.
+
+**What posts.** *Post to the tax book* posts the year's adjustments and every recorded K-1 together
+(`postPassThroughAdjustments`, called from `postTaxAdjustments`). Per holding, dated 31 December,
+`source_ref = tax-k1:<year>:<holding>`:
+
+```
+  Income      (tax_adj_k1_income)     Dr 1700-<holding>   Cr 4600 / 4605 / 4606 / 4608 / 4610 / 4620 / 4621 / 4625 / 4660
+  Gain        (tax_adj_k1_gain)       Dr 1700-<holding>   Cr 4630 ST / 4640 LT / 4650 §1231
+  Deductions  (tax_adj_k1_deduction)  Dr 5950 / 5960 / 5970                  Cr 1700-<holding>
+  each with its capital side:         Dr 3200 bridge      Cr each partner's capital, by the allocation weights
+  Book gain   (tax_adj_k1_gain)       Dr 4000-<holding>   Cr 1700-<holding>   (with its capital side)
+```
+
+The book gain reversal is there because, for tax, a distribution only reduces basis and the K-1 is
+the income; leaving the book gain in would count it twice. The accounts are created on the first post
+(`PASS_THROUGH_CHART` in `chart.ts`) and found by subtype, never by code. The holding's tax basis is
+`1100 + 1700` on a tax basis (the existing run already reverses `1200`).
+
+**The payoff — this fund's own K-1s.** `k1-load.ts` reads the pass-through accounts by subtype and
+puts each on its box (`PASS_THROUGH_K1_CATEGORY`): interest → 5, both dividend accounts → 6a and the
+qualified one → 6b, short/long-term → 8/9a, §1231 → 10, other income → 11, §179 → 12, investment
+interest → 13H, other deductions → 13, ordinary business income and guaranteed payments → 1, rentals
+→ 2/3, royalties → 7. A holding whose K-1 has been posted is left out of the lot-based gain split,
+so its distributions aren't reported as gain alongside its K-1. The capital side lands on the
+partners' operating income, realized gains and expenses lines, so each K-1 still ties to tax capital.
+
+**Re-running** voids only `tax-k1:<year>:*` entries and posts the current set; hand-authored tax
+entries are never touched (a holding with one is flagged, since the two together may double count).
+A closed tax year is refused.
+
+**Not derived — hand-authored if needed:** distributions in excess of basis (§731(a) gain), the
+share of the lower tier's liabilities (§752, Item K), §1061 three-year information (box 20 code AH —
+none of the pass-through long-term gain is recharacterized for a carry recipient), every other box
+20 code, foreign taxes (box 16), state items, and per-partner special allocations. The partner split
+uses the vehicle's allocation weights at year end, not the weights in force when each distribution
+was booked.
 
 ---
 

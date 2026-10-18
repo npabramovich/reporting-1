@@ -15,7 +15,7 @@
 
 import { renderHtmlToPdf } from '@/lib/lp-report-pdf'
 import { pdfFontCss, PDF_SANS, PDF_DISPLAY } from '@/lib/pdf-fonts'
-import { K1_BOX, K1_CATEGORIES, K1_SUBSET_OF, type K1Category, type K1Lines } from '@/lib/accounting/k1-allocation'
+import { K1_BOX, K1_CATEGORIES, K1_PASS_THROUGH_ONLY, K1_SUBSET_OF, type K1Category, type K1Lines } from '@/lib/accounting/k1-allocation'
 
 function esc(s: string): string {
   return String(s ?? '')
@@ -31,6 +31,13 @@ function money(v: number): string {
 }
 
 const LINE_LABEL: Record<K1Category, string> = {
+  ordinaryBusinessIncome: 'Ordinary business income (loss)',
+  netRentalRealEstate: 'Net rental real estate income (loss)',
+  otherNetRental: 'Other net rental income (loss)',
+  royalties: 'Royalties',
+  section1231Gain: 'Net section 1231 gain (loss)',
+  section179: 'Section 179 deduction',
+  investmentInterest: 'Investment interest expense',
   interest: 'Interest income',
   ordinaryDividends: 'Ordinary dividends',
   qualifiedDividends: 'Qualified dividends',
@@ -76,7 +83,8 @@ export function buildK1Html(d: K1PdfData): string {
   const { displayFont } = d
 
   const isDistribution = (c: K1Category) => c.startsWith('distributions')
-  const incomeLines = K1_CATEGORIES.filter(c => !isDistribution(c))
+  // A line only a lower-tier K-1 can produce is printed only when it has something in it.
+  const incomeLines = K1_CATEGORIES.filter(c => !isDistribution(c) && (!K1_PASS_THROUGH_ONLY.has(c) || (d.lines[c] ?? 0) !== 0))
   const distributionLines = K1_CATEGORIES.filter(isDistribution)
 
   const row = (c: K1Category) => {

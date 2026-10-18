@@ -7,6 +7,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
 import { K1_EXPECTED_HOLDING_TYPE, reportK1Dependencies, type ReceivedK1 } from './received-k1s'
+import { amountsFromRow } from './received-k1-amounts'
 
 export interface TaxYearState {
   taxYear: number
@@ -103,7 +104,8 @@ export async function loadK1Dependencies(
       .contains('portfolio_group', [group]),
     admin
       .from('received_k1s' as any)
-      .select('company_id, tax_year, status, received_date, vehicle_id')
+      // Every column: the amount columns (20261018181000) ride along for the K-1 form and the agent.
+      .select('*')
       .eq('fund_id', fundId)
       .eq('tax_year', taxYear),
   ])
@@ -121,6 +123,7 @@ export async function loadK1Dependencies(
       // No row yet means nobody has said it arrived, which is exactly 'expected'.
       status: (s?.status ?? 'expected') as ReceivedK1['status'],
       receivedDate: s?.received_date ?? null,
+      amounts: amountsFromRow(s),
     }
   })
 

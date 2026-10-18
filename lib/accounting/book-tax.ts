@@ -21,6 +21,8 @@
 //     * carried interest accrued on unrealized gains — its own source_type
 //     * organizational costs — its own account (5200), with §709 mechanics below
 //     * syndication costs — its own account (5250), permanently non-deductible
+//     * a fund holding's share of its lower-tier K-1 — from the amounts recorded on received_k1s,
+//       derived and posted by k1-passthrough-run.ts in the same run (its own source_ref)
 //
 //   NOT derivable, and deliberately absent rather than approximated:
 //     * §704(b) capital, which is a third basis again and governs ALLOCATIONS rather than

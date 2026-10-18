@@ -25,6 +25,7 @@ import {
   type TaxAdjustmentAccounts,
   type UnbuildableAdjustment,
 } from './book-tax-entries'
+import { postPassThroughAdjustments, taxYearClosed, type PassThroughRunResult } from './k1-passthrough-run'
 
 /** Accounts the adjustments post to. Codes, so the mapping is legible in one place. */
 const CODES = {
@@ -227,6 +228,12 @@ export interface TaxRunResult {
   voided: number
   /** Accounts the vehicle's chart is missing — the run refuses rather than posting a partial set. */
   missingAccounts: string[]
+  /**
+   * Lower-tier K-1s: each fund holding's share of its K-1, by character, and the entries derived
+   * from it (k1-passthrough-run.ts). Part of the same run so one post does both; its entries carry
+   * their own source_ref (`tax-k1:<year>:<holding>`), so either half re-runs without the other.
+   */
+  passThrough?: PassThroughRunResult
 }
 
 /**
@@ -244,6 +251,15 @@ export async function postTaxAdjustments(
   taxYear: number,
   opts?: { preview?: boolean; inceptionDate?: string; entryDate?: string },
 ): Promise<TaxRunResult | { error: string }> {
+  // A closed tax year is refused before anything is read or voided. The database trigger is the
+  // boundary (assert_tax_year_open_for); this is the message a person can act on.
+  if (!opts?.preview) {
+    const vehicleId = await vehicleIdByName(admin, fundId, group)
+    if (vehicleId && await taxYearClosed(admin, fundId, vehicleId, taxYear)) {
+      return { error: `Tax year ${taxYear} is closed. Reopen it on the Tax page (a reason is required) before posting adjustments.` }
+    }
+  }
+
   const loaded = await loadActualBookYear(admin, fundId, group, taxYear, opts)
   if ('error' in loaded) return loaded
   const { year, perLpCarry, perLpUnrealized, perLpFx, assetMoves } = loaded
@@ -270,6 +286,10 @@ export async function postTaxAdjustments(
   // and the missing piece is invisible on the resulting statements. The fix is adding the account
   // under the entity's Admin → Chart of accounts, which is worth saying rather than making someone infer it.
   if (missingAccounts.length > 0 && proposals.length > 0) {
+    // The K-1 half is still previewed, so the page shows everything that is waiting on the chart.
+    const passThrough = opts?.preview
+      ? await postPassThroughAdjustments(admin, fundId, group, userId, taxYear, { preview: true, entryDate: opts?.entryDate })
+      : null
     return {
       taxYear,
       proposals,
@@ -277,6 +297,7 @@ export async function postTaxAdjustments(
       skipped: [],
       voided: 0,
       missingAccounts,
+      ...(passThrough && !('error' in passThrough) ? { passThrough } : {}),
     }
   }
 
@@ -310,7 +331,9 @@ export async function postTaxAdjustments(
   })
 
   if (opts?.preview) {
-    return { taxYear, proposals, entryIds: [], skipped: built.skipped, voided: 0, missingAccounts: [] }
+    const passThrough = await postPassThroughAdjustments(admin, fundId, group, userId, taxYear, { preview: true, entryDate: opts?.entryDate })
+    if ('error' in passThrough) return passThrough
+    return { taxYear, proposals, entryIds: [], skipped: built.skipped, voided: 0, missingAccounts: [], passThrough }
   }
 
   const voided = await voidPriorTaxRun(admin, fundId, group, taxYear)
@@ -331,7 +354,12 @@ export async function postTaxAdjustments(
     entryIds.push(result.entryId)
   }
 
-  return { taxYear, proposals, entryIds, skipped: built.skipped, voided, missingAccounts: [] }
+  // The lower-tier K-1s, in the same run. After the adjustments above, so a refusal there (a missing
+  // account) leaves both halves unposted rather than one.
+  const passThrough = await postPassThroughAdjustments(admin, fundId, group, userId, taxYear, { entryDate: opts?.entryDate })
+  if ('error' in passThrough) return { error: `The adjustments were posted, but the K-1 pass-through entries were not: ${passThrough.error}` }
+
+  return { taxYear, proposals, entryIds, skipped: built.skipped, voided, missingAccounts: [], passThrough }
 }
 
 /** The vehicle's asset and income accounts of one subtype (the parent, lowest code, of each). */

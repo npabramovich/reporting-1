@@ -132,6 +132,57 @@ export const DEFAULT_CHART: ChartAccountSeed[] = [
 ]
 
 /**
+ * TAX-BOOK accounts for a holding's share of a LOWER-TIER K-1 — what a fund that invests in other
+ * funds is allocated by each of them (lib/accounting/k1-passthrough.ts).
+ *
+ * Not in any starter chart: most vehicles never hold a fund, and a dozen always-empty lines would
+ * clutter every chart for nothing. The pass-through run creates the ones it posts to, the same way
+ * `ensureInvestmentAccounts` backfills a company's accounts on first use.
+ *
+ * ONE ACCOUNT PER CHARACTER because the character is the whole point. The fund's own K-1s read
+ * these by subtype (k1-load.ts) and put each on its box — interest on 5, dividends on 6a, the
+ * qualified part on 6b, short- and long-term gain on 8 and 9a, §1231 on 10. Folded into one
+ * "K-1 income" account, the character would be gone by the time the fund prepared its own K-1s,
+ * and recovering it would mean reading the PDFs again.
+ *
+ * Dividends are TWO accounts — qualified and the rest — so 6b comes off the ledger like every other
+ * box instead of off a side table: 6a is their sum, 6b the qualified one alone.
+ *
+ * Codes chosen to be free on every starter chart (fund, GP entity, management company,
+ * individual), since an individual can hold a fund as easily as a fund can. Lookups go by SUBTYPE,
+ * never by code, so a vehicle that already used one of these codes for something else is not
+ * misread.
+ */
+export const PASS_THROUGH_BASIS_CODE = '1700'
+export const PASS_THROUGH_BASIS_SUBTYPE = 'passthrough_basis'
+
+export const PASS_THROUGH_CHART: ChartAccountSeed[] = [
+  // The parent of the per-holding basis accounts (1700-<company>): the tax-basis adjustment to
+  // each investment that its K-1 makes. Carrying value on a tax basis is 1100 + 1700.
+  { code: PASS_THROUGH_BASIS_CODE, name: 'Pass-through basis adjustments (tax)', type: 'asset', subtype: PASS_THROUGH_BASIS_SUBTYPE },
+  { code: '4600', name: 'Pass-through ordinary business income (loss) (tax)', type: 'income', subtype: 'passthrough_ordinary' },
+  { code: '4605', name: 'Pass-through net rental real estate income (loss) (tax)', type: 'income', subtype: 'passthrough_rental_real_estate' },
+  { code: '4606', name: 'Pass-through other net rental income (loss) (tax)', type: 'income', subtype: 'passthrough_other_rental' },
+  { code: '4608', name: 'Pass-through guaranteed payments (tax)', type: 'income', subtype: 'passthrough_guaranteed_payments' },
+  { code: '4610', name: 'Pass-through interest income (tax)', type: 'income', subtype: 'passthrough_interest' },
+  { code: '4620', name: 'Pass-through dividends — non-qualified (tax)', type: 'income', subtype: 'passthrough_dividends' },
+  { code: '4621', name: 'Pass-through dividends — qualified (tax)', type: 'income', subtype: 'passthrough_qualified_dividends' },
+  { code: '4625', name: 'Pass-through royalties (tax)', type: 'income', subtype: 'passthrough_royalties' },
+  { code: '4630', name: 'Pass-through net short-term capital gain (loss) (tax)', type: 'income', subtype: 'passthrough_st_gain' },
+  { code: '4640', name: 'Pass-through net long-term capital gain (loss) (tax)', type: 'income', subtype: 'passthrough_lt_gain' },
+  { code: '4650', name: 'Pass-through net §1231 gain (loss) (tax)', type: 'income', subtype: 'passthrough_1231_gain' },
+  { code: '4660', name: 'Pass-through other income (loss) (tax)', type: 'income', subtype: 'passthrough_other_income' },
+  { code: '5950', name: 'Pass-through §179 deduction (tax)', type: 'expense', subtype: 'passthrough_section_179' },
+  { code: '5960', name: 'Pass-through investment interest expense (tax)', type: 'expense', subtype: 'passthrough_investment_interest' },
+  { code: '5970', name: 'Pass-through other deductions (tax)', type: 'expense', subtype: 'passthrough_other_deductions' },
+]
+
+/** The per-holding pass-through basis account code, e.g. 1700-<company>. */
+export function passThroughBasisCode(companyId: string): string {
+  return `${PASS_THROUGH_BASIS_CODE}-${companyId.slice(0, 8)}`
+}
+
+/**
  * Starter chart for a GP / associate entity's own books (a separate vehicle from
  * the fund). Its stake in the fund is an asset carried at capital-account value
  * (equity method); its equity is members' capital; income is carry + its share
