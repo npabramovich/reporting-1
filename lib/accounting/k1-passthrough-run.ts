@@ -26,7 +26,7 @@ import { closesToOwnerEquity } from '@/lib/vehicle-kinds'
 import { keepsRetainedEarnings } from './statements'
 import { computeCapitalAccounts } from './capital-account'
 import { allocationWeights, loadAllocationBasis, loadPartnerTerms, loadResolvedCommitments } from './terms'
-import { PASS_THROUGH_BASIS_SUBTYPE, PASS_THROUGH_CHART, passThroughBasisCode } from './chart'
+import { PASS_THROUGH_BASIS_SUBTYPE, PASS_THROUGH_CHARACTER_SUBTYPES, PASS_THROUGH_CHART, passThroughBasisCode, passThroughHoldingAccount } from './chart'
 import {
   buildPassThroughDrafts,
   passThroughSourceRef,
@@ -50,7 +50,7 @@ export interface PassThroughHolding {
   companyName: string
   status: string
   amounts: ReceivedK1Amounts
-  /** Each postable box, with the account it goes to. */
+  /** Each postable box, with the holding's own account it goes to (e.g. 4610-<company>). */
   lines: (PassThroughLine & { accountCode: string; accountName: string })[]
   /** The actual book's realized gain on the holding in the year, reversed in the tax book. */
   bookRealizedGainReversed: number
@@ -184,11 +184,13 @@ export async function postPassThroughAdjustments(
   const companyAccounts = chart.filter(a => a.company_id && candidateIds.has(a.company_id))
   const realizedIds = new Set(companyAccounts.filter(a => a.type === 'income' && a.subtype === 'realized_gain').map(a => a.id))
   const assetIds = new Set(companyAccounts.filter(a => a.type === 'asset').map(a => a.id))
+  // The holding's own character accounts (4610-<company>, …): only read for hand entries on them.
+  const characterIds = new Set(companyAccounts.filter(a => a.subtype && PASS_THROUGH_CHARACTER_SUBTYPES.has(a.subtype)).map(a => a.id))
   const companyOf = new Map(companyAccounts.map(a => [a.id, a.company_id as string]))
 
   // Both books, stated in the query (books.test.ts): the gain to reverse is actual-book, the basis
   // tie-out is actual plus tax, and hand entries are found in the tax book.
-  const watched = Array.from(new Set([...Array.from(realizedIds), ...Array.from(assetIds)]))
+  const watched = Array.from(new Set([...Array.from(realizedIds), ...Array.from(assetIds), ...Array.from(characterIds)]))
   const postingRows = watched.length === 0 ? [] : await fetchAllRows<any>((from, to) => admin
     .from('journal_postings' as any)
     .select('id, journal_entry_id, account_id, amount, journal_entries!inner(entry_date, status, book, source_ref)')
@@ -276,10 +278,11 @@ export async function postPassThroughAdjustments(
   }
 
   // --- Derive ----------------------------------------------------------------
-  const codeForSlot = (subtype: string) => {
-    const existing = chart.filter(a => a.subtype === subtype && !a.company_id).sort((a, b) => a.code.localeCompare(b.code))[0]
-    const seed = PASS_THROUGH_CHART.find(s => s.subtype === subtype)!
-    return { code: existing?.code ?? seed.code, name: existing?.name ?? seed.name }
+  // Each line names the HOLDING's account: the one it already has, or the one a post will create
+  // under the character's parent (the chart's own parent, else the seed).
+  const accountForLine = (subtype: string, companyId: string, holdingName: string) => {
+    const own = holdingCharacterAccount(chart, subtype, companyId)
+    return own ? { code: own.code, name: own.name } : passThroughHoldingAccount(characterParent(chart, subtype), companyId, holdingName)
   }
   const built = new Map<string, PassThroughDraft[]>()
   for (const c of candidates) {
@@ -317,7 +320,10 @@ export async function postPassThroughAdjustments(
       companyName: c.name,
       status: c.status,
       amounts: c.amounts,
-      lines: (result?.lines ?? []).map(l => ({ ...l, accountCode: codeForSlot(PASS_THROUGH_SLOTS[l.slot].subtype).code, accountName: codeForSlot(PASS_THROUGH_SLOTS[l.slot].subtype).name })),
+      lines: (result?.lines ?? []).map(l => {
+        const a = accountForLine(PASS_THROUGH_SLOTS[l.slot].subtype, c.companyId, c.name)
+        return { ...l, accountCode: a.code, accountName: a.name }
+      }),
       bookRealizedGainReversed: result ? bookRealizedGain : 0,
       basisChange,
       distributions: { reported: reportedDist, recorded, difference: distDiff },
@@ -353,6 +359,19 @@ export async function postPassThroughAdjustments(
   return { taxYear, holdings: out, awaitingAmounts, entryIds, voided }
 }
 
+/** The character's fund-level parent account: the chart's own (lowest code), else the seed. */
+function characterParent(chart: ChartRow[], subtype: string): { code: string; name: string; id?: string } {
+  const existing = chart.filter(a => a.subtype === subtype && !a.company_id).sort((a, b) => a.code.localeCompare(b.code))[0]
+  if (existing) return { code: existing.code, name: existing.name, id: existing.id }
+  const seed = PASS_THROUGH_CHART.find(s => s.subtype === subtype)!
+  return { code: seed.code, name: seed.name }
+}
+
+/** A holding's own sub-account of a character, when the chart already has it. */
+function holdingCharacterAccount(chart: ChartRow[], subtype: string, companyId: string): ChartRow | undefined {
+  return chart.filter(a => a.subtype === subtype && a.company_id === companyId).sort((a, b) => a.code.localeCompare(b.code))[0]
+}
+
 function emptyHolding(companyId: string, companyName: string, status: string, amounts: ReceivedK1Amounts, skipped: string): PassThroughHolding {
   return {
     companyId, companyName, status, amounts, lines: [], bookRealizedGainReversed: 0, basisChange: 0,
@@ -365,15 +384,17 @@ function emptyHolding(companyId: string, companyName: string, status: string, am
 /**
  * Turn drafts into entries with account ids, creating the accounts they need.
  *
- * Accounts are created only here, on a post: a preview writes nothing. The character accounts are
- * found by subtype, so a chart that already has them under other codes keeps using its own.
+ * Accounts are created only here, on a post: a preview writes nothing. Each holding posts to its own
+ * sub-account of each character it reports (4610-<company> under 4610), created on first use; the
+ * fund-level parent is created with its first child. Both are found by subtype (and company), so a
+ * chart that already keeps a character under another code hangs the holdings' accounts off it.
  */
 async function resolveDrafts(
   admin: SupabaseClient,
   fundId: string,
   group: string,
   vehicleId: string,
-  chart: ChartRow[],
+  initialChart: ChartRow[],
   built: Map<string, PassThroughDraft[]>,
   holdings: Map<string, any>,
   bookGainByAccount: Map<string, Map<string, number>>,
@@ -382,6 +403,7 @@ async function resolveDrafts(
 ): Promise<Map<string, JournalEntry[]>> {
   const out = new Map<string, JournalEntry[]>()
   if (built.size === 0) return out
+  let chart = initialChart
 
   const codes = await accountIdByCode(admin, fundId, group)
   const bridgeId = codes.get(BRIDGE_CODE)
@@ -390,36 +412,66 @@ async function resolveDrafts(
     throw new Error(`The chart is missing account ${BRIDGE_CODE} Undistributed earnings — add it under the entity's Admin → Chart of accounts.`)
   }
 
-  // Character accounts, by subtype; created on first use.
-  const slotIds = new Map<string, string>()
-  for (const a of chart) if (a.subtype && !a.company_id && !slotIds.has(a.subtype)) slotIds.set(a.subtype, a.id)
+  // Which characters each holding posts to — only those accounts are ever created.
+  const usedByCompany = new Map<string, Set<string>>()
+  for (const [companyId, ds] of Array.from(built.entries())) {
+    const used = new Set<string>()
+    for (const d of ds) for (const p of d.postings) if (p.account.kind === 'slot') used.add(PASS_THROUGH_SLOTS[p.account.slot].subtype)
+    usedByCompany.set(companyId, used)
+  }
+  const usedSubtypes = new Set(Array.from(usedByCompany.values()).flatMap(u => Array.from(u)))
   const haveCodes = new Set(chart.map(a => a.code))
-  const missingSeeds = PASS_THROUGH_CHART.filter(s => !slotIds.has(s.subtype!) && !haveCodes.has(s.code))
-  const clashing = PASS_THROUGH_CHART.filter(s => !slotIds.has(s.subtype!) && haveCodes.has(s.code))
+  const insertAccounts = async (rows: Record<string, unknown>[], what: string): Promise<ChartRow[]> => {
+    if (rows.length === 0) return []
+    const { data, error } = await admin.from('chart_of_accounts' as any).insert(rows.map(r => ({
+      fund_id: fundId, portfolio_group: group, vehicle_id: vehicleId, ...r,
+    }))).select('id, code, name, type, subtype, company_id, lp_entity_id')
+    if (error) throw new Error(`Could not add ${what}: ${error.message}`)
+    const created = ((data as any[]) ?? []) as ChartRow[]
+    for (const a of created) { chart = [...chart, a]; haveCodes.add(a.code) }
+    return created
+  }
+
+  // 1. The fund-level parents (4610 …, and 1700): one line per character on the statements, and the
+  //    code each holding's sub-account hangs off. Never posted to by this run.
+  const parentSeeds = PASS_THROUGH_CHART.filter(s => s.subtype === PASS_THROUGH_BASIS_SUBTYPE || usedSubtypes.has(s.subtype!))
+  const missingParents = parentSeeds.filter(s => !chart.some(a => a.subtype === s.subtype && !a.company_id))
+  const clashing = missingParents.filter(s => haveCodes.has(s.code))
   if (clashing.length > 0) {
     throw new Error(`The chart already uses ${clashing.map(s => s.code).join(', ')} for other accounts, so the K-1 pass-through accounts cannot be created there. Add accounts with subtypes ${clashing.map(s => s.subtype).join(', ')} under other codes.`)
   }
-  if (missingSeeds.length > 0) {
-    const { data: created, error } = await admin.from('chart_of_accounts' as any).insert(missingSeeds.map(s => ({
-      fund_id: fundId, portfolio_group: group, vehicle_id: vehicleId,
-      code: s.code, name: s.name, type: s.type, subtype: s.subtype,
-    }))).select('id, subtype')
-    if (error) throw new Error(`Could not add the K-1 pass-through accounts: ${error.message}`)
-    for (const a of ((created as any[]) ?? [])) slotIds.set(a.subtype, a.id)
+  await insertAccounts(missingParents.map(s => ({ code: s.code, name: s.name, type: s.type, subtype: s.subtype })), 'the K-1 pass-through accounts')
+
+  // 2. Each holding's own account under each character it uses (4610-<company>, …).
+  const slotIds = new Map<string, string>() // `${companyId}|${subtype}` → account id
+  const missingChildren: Record<string, unknown>[] = []
+  for (const [companyId, used] of Array.from(usedByCompany.entries())) {
+    for (const subtype of Array.from(used)) {
+      const own = holdingCharacterAccount(chart, subtype, companyId)
+      if (own) { slotIds.set(`${companyId}|${subtype}`, own.id); continue }
+      const parent = characterParent(chart, subtype)
+      const seed = PASS_THROUGH_CHART.find(s => s.subtype === subtype)!
+      const child = passThroughHoldingAccount(parent, companyId, holdings.get(companyId)?.name ?? companyId)
+      if (haveCodes.has(child.code)) {
+        throw new Error(`The chart already uses ${child.code} for another account, so ${holdings.get(companyId)?.name ?? companyId}'s ${seed.name} account cannot be created there.`)
+      }
+      haveCodes.add(child.code)
+      missingChildren.push({ code: child.code, name: child.name, type: seed.type, subtype, company_id: companyId })
+    }
+  }
+  for (const a of await insertAccounts(missingChildren, "the holdings' K-1 pass-through accounts")) {
+    if (a.company_id && a.subtype) slotIds.set(`${a.company_id}|${a.subtype}`, a.id)
   }
 
   // Per-holding basis accounts (1700-<company>).
   const basisIds = new Map<string, string>()
   for (const a of chart) if (a.company_id && a.subtype === PASS_THROUGH_BASIS_SUBTYPE) basisIds.set(a.company_id, a.id)
   const missingBasis = Array.from(built.keys()).filter(id => !basisIds.has(id))
-  if (missingBasis.length > 0) {
-    const { data: created, error } = await admin.from('chart_of_accounts' as any).insert(missingBasis.map(id => ({
-      fund_id: fundId, portfolio_group: group, vehicle_id: vehicleId,
-      code: passThroughBasisCode(id), name: `Pass-through basis — ${holdings.get(id)?.name ?? id}`,
-      type: 'asset', subtype: PASS_THROUGH_BASIS_SUBTYPE, company_id: id,
-    }))).select('id, company_id')
-    if (error) throw new Error(`Could not add the holdings' pass-through basis accounts: ${error.message}`)
-    for (const a of ((created as any[]) ?? [])) basisIds.set(a.company_id, a.id)
+  for (const a of await insertAccounts(missingBasis.map(id => ({
+    code: passThroughBasisCode(id), name: `Pass-through basis — ${holdings.get(id)?.name ?? id}`,
+    type: 'asset', subtype: PASS_THROUGH_BASIS_SUBTYPE, company_id: id,
+  })), "the holdings' pass-through basis accounts")) {
+    if (a.company_id) basisIds.set(a.company_id, a.id)
   }
 
   const lpIds = new Set<string>()
@@ -442,7 +494,7 @@ async function resolveDrafts(
           continue
         }
         const accountId =
-          ref.kind === 'slot' ? slotIds.get(PASS_THROUGH_SLOTS[ref.slot].subtype)
+          ref.kind === 'slot' ? slotIds.get(`${companyId}|${PASS_THROUGH_SLOTS[ref.slot].subtype}`)
           : ref.kind === 'basis' ? basisIds.get(companyId)
           : ref.kind === 'bridge' ? bridgeId
           : ref.kind === 'owner' ? ownerCapitalId ?? undefined

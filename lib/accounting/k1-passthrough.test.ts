@@ -11,6 +11,7 @@ import {
 import {
   buildPassThroughDrafts,
   companyFromPassThroughRef,
+  passThroughCharacterFromLedger,
   passThroughLines,
   passThroughSourceRef,
   passThroughSourceRefPrefix,
@@ -23,8 +24,10 @@ import {
   type PassThroughCapitalSide,
   type PassThroughDraft,
 } from './k1-passthrough'
-import { PASS_THROUGH_CHART, PASS_THROUGH_BASIS_SUBTYPE, passThroughBasisCode, DEFAULT_CHART, GP_ENTITY_CHART, MANAGEMENT_COMPANY_CHART, INDIVIDUAL_CHART } from './chart'
+import { PASS_THROUGH_CHART, PASS_THROUGH_BASIS_SUBTYPE, PASS_THROUGH_CHARACTER_SUBTYPES, passThroughBasisCode, passThroughHoldingAccount, DEFAULT_CHART, GP_ENTITY_CHART, MANAGEMENT_COMPANY_CHART, INDIVIDUAL_CHART } from './chart'
 import { taxSourceRef } from './book-tax-run'
+import { incomeStatement, presentationLine, trialBalance } from './statements'
+import type { Account, Posting } from './types'
 import type { ReceivedK1Amounts } from '@/lib/tax/received-k1-amounts'
 
 // Invented figures throughout: Example Fund I holds Northwind Partners III, two partners on a
@@ -186,7 +189,40 @@ describe('chart accounts', () => {
     expect(PASS_THROUGH_CHART.filter(a => used.has(a.code)).map(a => a.code)).toEqual([])
     expect(passThroughBasisCode('abcdef12-3456')).toBe('1700-abcdef12')
   })
+
+  it('names a holding’s sub-account after its parent, per company like 1100-<company>', () => {
+    const parent = PASS_THROUGH_CHART.find(a => a.subtype === 'passthrough_interest')!
+    expect(passThroughHoldingAccount(parent, 'abcdef12-3456', 'Northwind Partners III')).toEqual({
+      code: '4610-abcdef12', name: 'Pass-through interest income — Northwind Partners III (tax)',
+    })
+    // A parent the chart keeps under its own code and name.
+    expect(passThroughHoldingAccount({ code: '4611', name: 'K-1 interest' }, 'abcdef12-3456', 'Acme')).toEqual({ code: '4611-abcdef12', name: 'K-1 interest — Acme (tax)' })
+    expect(PASS_THROUGH_CHARACTER_SUBTYPES.has(PASS_THROUGH_BASIS_SUBTYPE)).toBe(false)
+    expect(PASS_THROUGH_CHARACTER_SUBTYPES.size).toBe(PASS_THROUGH_SLOT_LIST.length)
+  })
 })
+
+/**
+ * Resolve drafts' slot postings to per-holding accounts the way the run does (4610-<company>, …),
+ * with the fund-level parents present and empty. Returns the accounts and the slot postings.
+ */
+function postToHoldingAccounts(byHolding: [string, PassThroughDraft[]][]) {
+  const accounts = PASS_THROUGH_CHART.filter(a => a.subtype !== PASS_THROUGH_BASIS_SUBTYPE)
+    .map(a => ({ id: `parent-${a.code}`, code: a.code, name: a.name, subtype: a.subtype!, companyId: null as string | null }))
+  const parents = [...accounts]
+  const postings: { accountId: string; amount: number }[] = []
+  for (const [companyId, drafts] of byHolding) {
+    for (const d of drafts) for (const p of d.postings) {
+      if (p.account.kind !== 'slot') continue
+      const parent = parents.find(a => a.subtype === PASS_THROUGH_SLOTS[(p.account as { slot: keyof typeof PASS_THROUGH_SLOTS }).slot].subtype)!
+      const child = passThroughHoldingAccount(parent, companyId, companyId)
+      let acct = accounts.find(a => a.code === child.code)
+      if (!acct) { acct = { id: child.code, ...child, subtype: parent.subtype, companyId }; accounts.push(acct) }
+      postings.push({ accountId: acct.id, amount: p.amount })
+    }
+  }
+  return { accounts: accounts.filter(a => postings.some(p => p.accountId === a.id)), allAccounts: accounts, postings }
+}
 
 describe('the fund’s own K-1 boxes', () => {
   it('maps every pass-through account to the box a preparer expects', () => {
@@ -228,13 +264,10 @@ describe('the fund’s own K-1 boxes', () => {
       operatingIncome: a.operatingIncome, realizedGains: a.realizedGains, expenses: Math.abs(a.managementFees) + Math.abs(a.expenses),
       carriedInterest: a.carriedInterest, endingCapital: a.ending,
     }))
-    // The character accounts' movements, as k1-load reads them.
-    const pt: Record<string, number> = {}
-    for (const d of built.drafts) for (const p of d.postings) {
-      if (p.account.kind !== 'slot') continue
-      const slot = p.account.slot
-      pt[slot] = (pt[slot] ?? 0) + (PASS_THROUGH_SLOTS[slot].bucket === 'deduction' ? p.amount : -p.amount)
-    }
+    // The character accounts' movements, as k1-load reads them: off the holding's own sub-accounts.
+    const { accounts: chartAccts, postings: slotPostings } = postToHoldingAccounts([['co-north', built.drafts]])
+    expect(chartAccts.every(a => a.companyId === 'co-north')).toBe(true)
+    const pt = passThroughCharacterFromLedger(chartAccts, slotPostings)
     const zero: FundYearCharacter = { interest: 0, ordinaryDividends: 0, qualifiedDividends: 0, shortTermGain: 0, longTermGain: 0, longTermGainWithinApiPeriod: 0, otherIncome: 0, deductions: 0 }
     const res = allocateK1({ fund: withPassThroughCharacter(zero, pt), partners })
     const a = res.partners.find(p => p.lpEntityId === 'lp-a')!
@@ -250,5 +283,66 @@ describe('the fund’s own K-1 boxes', () => {
     expect(res.unallocated).toEqual({})
     // Net income on the K-1 is the basis the holding gained, split by commitment.
     expect(incomeTotal(a.lines)).toBe(0.75 * built.basisChange)
+  })
+
+  it('per holding: each holding gets its own accounts, and every box totals the same as one fund-wide account would', () => {
+    const north = buildPassThroughDrafts({ taxYear: 2024, holdingName: 'Northwind Partners III', amounts: K1, bookRealizedGain: 0, capital: PARTNERS })
+    const west = buildPassThroughDrafts({ taxYear: 2024, holdingName: 'Westbrook Fund II', amounts: { interest: 400, longTermGain: -1_000, otherDeductions: 100 }, bookRealizedGain: 0, capital: PARTNERS })
+    const { accounts, allAccounts, postings } = postToHoldingAccounts([['co-north', north.drafts], ['co-west', west.drafts]])
+
+    // Per-holding accounts present, one per character each holding reported.
+    expect(accounts.filter(a => a.companyId === 'co-west').map(a => a.code).sort()).toEqual(['4610-co-west', '4640-co-west', '5970-co-west'])
+    expect(accounts.filter(a => a.code.startsWith('4610-')).map(a => a.companyId).sort()).toEqual(['co-north', 'co-west'])
+
+    // The same postings against the fund-level parents, as before per-holding accounts.
+    const fundWide = postings.map(p => {
+      const child = allAccounts.find(a => a.id === p.accountId)!
+      return { accountId: `parent-${child.code.split('-')[0]}`, amount: p.amount }
+    })
+    const perHolding = passThroughCharacterFromLedger(allAccounts, postings)
+    expect(perHolding).toEqual(passThroughCharacterFromLedger(allAccounts, fundWide))
+    expect(perHolding.interest).toBe(1_400)
+    expect(perHolding.longTermGain).toBe(9_000)
+    expect(perHolding.otherDeductions).toBe(800)
+
+    const zero: FundYearCharacter = { interest: 0, ordinaryDividends: 0, qualifiedDividends: 0, shortTermGain: 0, longTermGain: 0, longTermGainWithinApiPeriod: 0, otherIncome: 0, deductions: 0 }
+    const fund = withPassThroughCharacter(zero, perHolding)
+    expect(fund).toEqual(withPassThroughCharacter(zero, passThroughCharacterFromLedger(allAccounts, fundWide)))
+    expect(fund.deductions).toBe(800)
+    expect(fund.qualifiedDividends).toBe(3_000)
+  })
+})
+
+describe('statements', () => {
+  // Two holdings' interest on their own accounts, plus an ordinary per-company realized gain.
+  const accounts: Account[] = [
+    { id: 'p-4610', fundId: 'f', code: '4610', name: 'Pass-through interest income (tax)', type: 'income', subtype: 'passthrough_interest', companyId: null },
+    { id: 'n-4610', fundId: 'f', code: '4610-co-north', name: 'Pass-through interest income — Northwind Partners III (tax)', type: 'income', subtype: 'passthrough_interest', companyId: 'co-north' },
+    { id: 'w-4610', fundId: 'f', code: '4610-co-west', name: 'Pass-through interest income — Westbrook Fund II (tax)', type: 'income', subtype: 'passthrough_interest', companyId: 'co-west' },
+    { id: 'n-5970', fundId: 'f', code: '5970-co-north', name: 'Pass-through other deductions — Northwind Partners III (tax)', type: 'expense', subtype: 'passthrough_other_deductions', companyId: 'co-north' },
+    { id: 'n-1700', fundId: 'f', code: '1700-co-north', name: 'Pass-through basis — Northwind Partners III', type: 'asset', subtype: 'passthrough_basis', companyId: 'co-north' },
+  ]
+  const postings: Posting[] = [
+    { accountId: 'n-4610', amount: -1_000, currency: 'USD' },
+    { accountId: 'w-4610', amount: -400, currency: 'USD' },
+    { accountId: 'n-5970', amount: 100, currency: 'USD' },
+    { accountId: 'n-1700', amount: 1_300, currency: 'USD' },
+  ]
+
+  it('rolls each holding’s account into one line per character', () => {
+    const is = incomeStatement(accounts, postings)
+    expect(is.income.rows).toEqual([{ code: '4610', name: 'Pass-through interest income (tax)', amount: 1_400 }])
+    // No parent in the chart: the seed names the line.
+    expect(is.expenses.rows).toEqual([{ code: '5970', name: 'Pass-through other deductions (tax)', amount: 100 }])
+    expect(is.netIncome).toBe(1_300)
+  })
+
+  it('keeps the per-holding detail on the trial balance', () => {
+    expect(trialBalance(accounts, postings).rows.map(r => r.code)).toEqual(['1700-co-north', '4610-co-north', '4610-co-west', '5970-co-north'])
+  })
+
+  it('leaves every other per-company account on its own line', () => {
+    const gain = { code: '4000-co-north', name: 'Realized gain — Northwind', subtype: 'realized_gain', companyId: 'co-north' }
+    expect(presentationLine(gain, accounts)).toEqual({ code: '4000-co-north', name: 'Realized gain — Northwind' })
   })
 })

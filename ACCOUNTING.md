@@ -725,20 +725,30 @@ and distributions are positive.
 `source_ref = tax-k1:<year>:<holding>`:
 
 ```
-  Income      (tax_adj_k1_income)     Dr 1700-<holding>   Cr 4600 / 4605 / 4606 / 4608 / 4610 / 4620 / 4621 / 4625 / 4660
-  Gain        (tax_adj_k1_gain)       Dr 1700-<holding>   Cr 4630 ST / 4640 LT / 4650 §1231
-  Deductions  (tax_adj_k1_deduction)  Dr 5950 / 5960 / 5970                  Cr 1700-<holding>
+  Income      (tax_adj_k1_income)     Dr 1700-<holding>   Cr 4600 / 4605 / 4606 / 4608 / 4610 / 4620 / 4621 / 4625 / 4660 -<holding>
+  Gain        (tax_adj_k1_gain)       Dr 1700-<holding>   Cr 4630 ST / 4640 LT / 4650 §1231 -<holding>
+  Deductions  (tax_adj_k1_deduction)  Dr 5950 / 5960 / 5970 -<holding>       Cr 1700-<holding>
   each with its capital side:         Dr 3200 bridge      Cr each partner's capital, by the allocation weights
   Book gain   (tax_adj_k1_gain)       Dr 4000-<holding>   Cr 1700-<holding>   (with its capital side)
 ```
 
 The book gain reversal is there because, for tax, a distribution only reduces basis and the K-1 is
-the income; leaving the book gain in would count it twice. The accounts are created on the first post
-(`PASS_THROUGH_CHART` in `chart.ts`) and found by subtype, never by code. The holding's tax basis is
-`1100 + 1700` on a tax basis (the existing run already reverses `1200`).
+the income; leaving the book gain in would count it twice. The holding's tax basis is `1100 + 1700`
+on a tax basis (the existing run already reverses `1200`).
 
-**The payoff — this fund's own K-1s.** `k1-load.ts` reads the pass-through accounts by subtype and
-puts each on its box (`PASS_THROUGH_K1_CATEGORY`): interest → 5, both dividend accounts → 6a and the
+**Income is tracked per investment.** Each holding posts to its own sub-account of each character,
+the same parent/child shape as `1100-<holding>` under `1100` and `4000-<holding>` under `4000`:
+`4610-<holding>` "Pass-through interest income — <holding> (tax)", same type and subtype as `4610`,
+with `company_id` set to the holding. Only the characters a holding actually reports get an account,
+created on the first post (never on a preview), and the fund-level parent (`PASS_THROUGH_CHART` in
+`chart.ts`) is created with its first child and carries no postings of its own. A chart that keeps a
+character under another code hangs the holdings' accounts off that code instead. Every reader matches
+the subtype, which parent and children share, never the code. On the statements, a holding's account
+rolls up into its character's line (`presentationLine` in `statements.ts`), so the income statement
+still shows one line per character. The per-holding detail is on the trial balance and the GL detail.
+
+**The payoff — this fund's own K-1s.** `k1-load.ts` reads the pass-through accounts by subtype, every
+holding's sub-account included (`passThroughCharacterFromLedger`), and puts each on its box (`PASS_THROUGH_K1_CATEGORY`): interest → 5, both dividend accounts → 6a and the
 qualified one → 6b, short/long-term → 8/9a, §1231 → 10, other income → 11, §179 → 12, investment
 interest → 13H, other deductions → 13, ordinary business income and guaranteed payments → 1, rentals
 → 2/3, royalties → 7. A holding whose K-1 has been posted is left out of the lot-based gain split,

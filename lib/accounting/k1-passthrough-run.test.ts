@@ -1,5 +1,21 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// The entry writer is out of scope here (persist.test.ts covers it): record what would be written.
+const persisted: { entry: any; status: string; book: string }[] = []
+vi.mock('./persist', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./persist')>()
+  return {
+    ...actual,
+    persistEntry: vi.fn(async (_a: any, _f: string, _g: string, _u: string | null, entry: any, status: string, book: string) => {
+      persisted.push({ entry, status, book })
+      return { entryId: `entry-${persisted.length}` }
+    }),
+  }
+})
+
 import { postPassThroughAdjustments, voidPriorPassThrough } from './k1-passthrough-run'
+
+beforeEach(() => { persisted.length = 0 })
 
 // A minimal stand-in for the Supabase client: enough of the query builder to answer the reads the
 // run makes, recording every filter and write so the tests can say what was (and was not) touched.
@@ -31,7 +47,11 @@ function fakeAdmin(tables: Record<string, Row[]>) {
     const result = () => {
       if (op === 'select') { reads.push({ table, filters: [...filters] }); return { data: rows(), error: null } }
       writes.push({ table, op, payload, filters: [...filters] })
-      return { data: op === 'insert' ? [] : null, error: null }
+      if (op !== 'insert') return { data: null, error: null }
+      // Inserted rows come back with ids, and stay in the table for the next run to find.
+      const created = (Array.isArray(payload) ? payload : [payload]).map((r: Row) => ({ id: `new-${r.code ?? tables[table]?.length}`, ...r }))
+      tables[table] = [...(tables[table] ?? []), ...created]
+      return { data: created, error: null }
     }
     const b: any = {
       select: () => b,
@@ -119,7 +139,9 @@ describe('postPassThroughAdjustments — preview', () => {
 
     const north = res.holdings.find(h => h.companyId === 'co-north')!
     expect(north.skipped).toBeUndefined()
-    expect(north.lines.map(l => [l.box, l.accountCode, l.reported])).toEqual([['5', '4610', 1_000], ['9a', '4640', 10_000]])
+    // Each line names the HOLDING's own account under its character, though none exists yet.
+    expect(north.lines.map(l => [l.box, l.accountCode, l.reported])).toEqual([['5', '4610-co-north', 1_000], ['9a', '4640-co-north', 10_000]])
+    expect(north.lines[0].accountName).toBe('Pass-through interest income — Northwind Partners III (tax)')
     // This year's book gain only.
     expect(north.bookRealizedGainReversed).toBe(3_000)
     expect(north.basisChange).toBe(11_000 - 3_000)
@@ -147,7 +169,66 @@ describe('postPassThroughAdjustments — preview', () => {
   })
 })
 
+describe('postPassThroughAdjustments — the holding’s own accounts', () => {
+  it('names the sub-account after a parent the chart keeps under another code, and reuses an existing one', async () => {
+    const tables = world()
+    tables.chart_of_accounts.push(
+      { id: 'a-4611', code: '4611', name: 'K-1 interest (tax)', type: 'income', subtype: 'passthrough_interest', company_id: null, fund_id: 'fund-1', vehicle_id: 'veh-1' },
+      { id: 'a-4640-n', code: '4640-co-north', name: 'LT gain — Northwind', type: 'income', subtype: 'passthrough_lt_gain', company_id: 'co-north', fund_id: 'fund-1', vehicle_id: 'veh-1' },
+    )
+    const { admin } = fakeAdmin(tables)
+    const res = await postPassThroughAdjustments(admin, 'fund-1', 'Acme Holdings', 'user-1', 2024, { preview: true })
+    if ('error' in res) throw new Error(res.error)
+    const north = res.holdings.find(h => h.companyId === 'co-north')!
+    expect(north.lines.map(l => [l.accountCode, l.accountName])).toEqual([
+      ['4611-co-north', 'K-1 interest — Northwind Partners III (tax)'],
+      ['4640-co-north', 'LT gain — Northwind'],
+    ])
+  })
+})
+
 describe('postPassThroughAdjustments — posting', () => {
+  it('posts each character to the holding’s own sub-account, creating only the ones it uses', async () => {
+    const tables = world()
+    const { admin, writes } = fakeAdmin(tables)
+    const res = await postPassThroughAdjustments(admin, 'fund-1', 'Acme Holdings', 'user-1', 2024)
+    if ('error' in res) throw new Error(res.error)
+
+    const created = writes.filter(w => w.table === 'chart_of_accounts' && w.op === 'insert').flatMap(w => w.payload as Row[])
+    expect(created.map(a => [a.code, a.company_id ?? null]).sort()).toEqual([
+      ['1700', null], ['1700-co-north', 'co-north'],
+      ['4610', null], ['4610-co-north', 'co-north'],
+      ['4640', null], ['4640-co-north', 'co-north'],
+    ])
+    const child = created.find(a => a.code === '4610-co-north')!
+    expect(child).toMatchObject({ name: 'Pass-through interest income — Northwind Partners III (tax)', type: 'income', subtype: 'passthrough_interest', company_id: 'co-north', vehicle_id: 'veh-1' })
+    expect(created.find(a => a.code === '4640-co-north')).toMatchObject({ type: 'income', subtype: 'passthrough_lt_gain' })
+
+    // The lines land on the children; the parents carry nothing.
+    const all = persisted.flatMap(p => p.entry.postings as { accountId: string; amount: number }[])
+    expect(persisted.every(p => p.book === 'tax' && p.entry.sourceRef === 'tax-k1:2024:co-north')).toBe(true)
+    expect(all.filter(p => p.accountId === 'new-4610-co-north').map(p => p.amount)).toEqual([-1_000])
+    expect(all.filter(p => p.accountId === 'new-4640-co-north').map(p => p.amount)).toEqual([-10_000])
+    expect(all.some(p => p.accountId === 'new-4610' || p.accountId === 'new-4640')).toBe(false)
+    expect(res.voided).toBe(1)
+  })
+
+  it('re-runs onto the same accounts and voids only its own entries', async () => {
+    const tables = world()
+    const first = fakeAdmin(tables)
+    await postPassThroughAdjustments(first.admin, 'fund-1', 'Acme Holdings', 'user-1', 2024)
+    const firstIds = persisted.flatMap(p => p.entry.postings.map((x: any) => x.accountId)).sort()
+    persisted.length = 0
+
+    const second = fakeAdmin(tables)
+    const res = await postPassThroughAdjustments(second.admin, 'fund-1', 'Acme Holdings', 'user-1', 2024)
+    if ('error' in res) throw new Error(res.error)
+    expect(second.writes.filter(w => w.table === 'chart_of_accounts')).toEqual([])
+    expect(persisted.flatMap(p => p.entry.postings.map((x: any) => x.accountId)).sort()).toEqual(firstIds)
+    const voids = second.writes.filter(w => w.table === 'journal_entries')
+    expect(voids).toEqual([{ table: 'journal_entries', op: 'update', payload: { status: 'void' }, filters: [['in', 'id', ['e4']]] }])
+  })
+
   it('refuses a closed tax year before reading or voiding anything', async () => {
     const { admin, writes } = fakeAdmin(world({ tax_year_closes: [{ fund_id: 'fund-1', vehicle_id: 'veh-1', tax_year: 2024, status: 'closed' }] }))
     const res = await postPassThroughAdjustments(admin, 'fund-1', 'Acme Holdings', 'user-1', 2024)

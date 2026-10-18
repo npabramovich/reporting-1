@@ -8,10 +8,11 @@
 //
 // WHAT ONE HOLDING'S K-1 POSTS (all in book 'tax', dated the last day of the tax year):
 //
-//   1. Its income, by character. Dr the holding's basis account (1700-<company>), Cr one income
-//      account per character (4600…4660, chart.ts PASS_THROUGH_CHART); deductions the other way
-//      (Dr 5950…5970, Cr basis). The holding's tax basis goes up by its share of income and down by
-//      its share of loss and deduction, which is the §705 adjustment.
+//   1. Its income, by character. Dr the holding's basis account (1700-<company>), Cr the holding's
+//      own account for each character (4610-<company> under 4610, …; chart.ts PASS_THROUGH_CHART
+//      holds the parents); deductions the other way (Dr 5970-<company>, Cr basis). The holding's tax
+//      basis goes up by its share of income and down by its share of loss and deduction, which is
+//      the §705 adjustment.
 //
 //   2. The capital side of the same amounts, so each PARTNER's tax capital carries it too: Dr 3200
 //      Undistributed earnings, Cr each partner's capital by the vehicle's allocation weights — the
@@ -34,6 +35,7 @@ import { roundCents, assertBalanced } from './ledger'
 import { allocateAmount } from './allocation'
 import type { ReceivedK1Amounts } from '@/lib/tax/received-k1-amounts'
 import type { FundYearCharacter, K1Category } from './k1-allocation'
+import { PASS_THROUGH_CHARACTER_SUBTYPES } from './chart'
 
 /** One line of pass-through, by the account it posts to. */
 export type PassThroughSlot =
@@ -162,6 +164,7 @@ export function passThroughLines(a: ReceivedK1Amounts): PassThroughLine[] {
 
 /** Where a draft posting goes, resolved to an account id by the caller. */
 export type AccountRef =
+  /** The holding's own account for that character (e.g. 4610-<company>). */
   | { kind: 'slot'; slot: PassThroughSlot }
   /** The holding's pass-through basis account (1700-<company>). */
   | { kind: 'basis' }
@@ -338,6 +341,31 @@ export const PASS_THROUGH_K1_CATEGORY: Record<PassThroughSlot, K1Category> = {
   section179: 'section179',
   investmentInterest: 'investmentInterest',
   otherDeductions: 'deductions',
+}
+
+/**
+ * Each character's movement for the year, as the K-1 shows it (income signed, a deduction positive),
+ * from the year's postings. Matched by SUBTYPE over every account — the fund-level parent (4610) and
+ * every holding's own sub-account (4610-<company>) alike — so the fund's K-1 boxes total the same
+ * whichever of them a line was posted to.
+ */
+export function passThroughCharacterFromLedger(
+  accounts: { id: string; subtype?: string | null }[],
+  postings: { accountId: string; amount: number }[],
+): Record<PassThroughSlot, number> {
+  const slotBySubtype = new Map(PASS_THROUGH_SLOT_LIST.map(s => [PASS_THROUGH_SLOTS[s].subtype, s]))
+  const slotByAccount = new Map<string, PassThroughSlot>()
+  for (const a of accounts) {
+    if (a.subtype && PASS_THROUGH_CHARACTER_SUBTYPES.has(a.subtype)) slotByAccount.set(a.id, slotBySubtype.get(a.subtype)!)
+  }
+  const sums = Object.fromEntries(PASS_THROUGH_SLOT_LIST.map(s => [s, 0])) as Record<PassThroughSlot, number>
+  for (const p of postings) {
+    const slot = slotByAccount.get(p.accountId)
+    if (slot) sums[slot] += p.amount
+  }
+  // Income is a credit (negative); a deduction is a debit. Both come back as the K-1 shows them.
+  for (const s of PASS_THROUGH_SLOT_LIST) sums[s] = roundCents(PASS_THROUGH_SLOTS[s].bucket === 'deduction' ? sums[s] : -sums[s])
+  return sums
 }
 
 /**

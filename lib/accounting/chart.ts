@@ -145,6 +145,14 @@ export const DEFAULT_CHART: ChartAccountSeed[] = [
  * "K-1 income" account, the character would be gone by the time the fund prepared its own K-1s,
  * and recovering it would mean reading the PDFs again.
  *
+ * AND ONE PER HOLDING UNDER EACH. The run posts a holding's lines to its own sub-account of the
+ * character (4610-<company> "Pass-through interest income — <holding> (tax)", company_id set), the
+ * same parent/child shape as 1100-<company> under 1100 and 4000-<company> under 4000, so the books
+ * say which investment produced which income. The accounts below are the parents: created with the
+ * first child, they give the child its code and give the statements the one line per character the
+ * children roll up into (statements.ts presentationLine). Every reader matches the SUBTYPE, which
+ * parent and children share, so nothing that reads a character can miss a holding.
+ *
  * Dividends are TWO accounts — qualified and the rest — so 6b comes off the ledger like every other
  * box instead of off a side table: 6a is their sum, 6b the qualified one alone.
  *
@@ -180,6 +188,21 @@ export const PASS_THROUGH_CHART: ChartAccountSeed[] = [
 /** The per-holding pass-through basis account code, e.g. 1700-<company>. */
 export function passThroughBasisCode(companyId: string): string {
   return `${PASS_THROUGH_BASIS_CODE}-${companyId.slice(0, 8)}`
+}
+
+/** The subtypes of the income and deduction (character) accounts — everything but the basis. */
+export const PASS_THROUGH_CHARACTER_SUBTYPES: ReadonlySet<string> = new Set(
+  PASS_THROUGH_CHART.map(a => a.subtype!).filter(s => s !== PASS_THROUGH_BASIS_SUBTYPE),
+)
+
+/**
+ * A holding's sub-account of a character account: `<parent code>-<company>`, named after the
+ * parent with the holding put in, e.g. 4610-abcdef12 "Pass-through interest income — Northwind (tax)".
+ * The parent's code is the chart's own (a vehicle may keep the character under another code).
+ */
+export function passThroughHoldingAccount(parent: { code: string; name: string }, companyId: string, holdingName: string): { code: string; name: string } {
+  const base = parent.name.replace(/\s*\(tax\)\s*$/, '')
+  return { code: `${parent.code}-${companyId.slice(0, 8)}`, name: `${base} — ${holdingName} (tax)` }
 }
 
 /**

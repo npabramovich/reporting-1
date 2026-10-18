@@ -16,6 +16,7 @@ import { AnalystButton } from './company-analyst'
 import { AnalystPanel } from '@/components/analyst-panel'
 import { CompanyInvestments } from './company-investments'
 import { FundRegisterSection } from './fund-register-section'
+import { HoldingK1Income } from './holding-k1-income'
 import { holdingPanels } from './holding-panels'
 import { HoldingPriceFeed } from './holding-price-feed'
 import { HoldingWallets } from './holding-wallets'
@@ -135,6 +136,8 @@ export function CompanyPageView({
           {showInvestments && panels.register && (
             <FundRegisterSection companyId={company.id} entities={entities ?? []} initialEntityId={initialEntityId ?? null} />
           )}
+
+          {showInvestments && panels.register && <HoldingK1Income companyId={company.id} />}
 
           {showInvestments && (
             <CompanyInvestments

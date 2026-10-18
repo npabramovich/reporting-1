@@ -20,7 +20,7 @@ import { disposalBasis, isLotMethod, type LotMethod } from '@/lib/portfolio/lots
 import { splitGains, type DisposalGain, type GainSplit } from './holding-period'
 import { grossProceeds } from '@/lib/portfolio/proceeds'
 import type { FundYearCharacter, PartnerYearActivity } from './k1-allocation'
-import { companyFromPassThroughRef, PASS_THROUGH_SLOTS, withPassThroughCharacter, type PassThroughSlot } from './k1-passthrough'
+import { companyFromPassThroughRef, passThroughCharacterFromLedger, withPassThroughCharacter } from './k1-passthrough'
 import {
   summarizeQualifiedDividends,
   type DividendFact,
@@ -82,8 +82,6 @@ export async function loadK1Year(
     .eq('vehicle_id', vehicleId)
   const acctRows = (accts as any[]) ?? []
   const codeById = new Map(acctRows.map(a => [a.id as string, a.code as string]))
-  const subtypeById = new Map(acctRows.filter(a => !a.company_id).map(a => [a.id as string, a.subtype as string | null]))
-
   // BOTH BOOKS. Tax basis is the actual ledger plus the tax overlay; reading either alone gives a
   // number that is precisely wrong. See books.test.ts CROSS_BOOK_READS.
   const postingRows = await fetchAllRows<any>((from, to) =>
@@ -166,15 +164,12 @@ export async function loadK1Year(
     const companyId = companyFromPassThroughRef(r.journal_entries?.source_ref, taxYear)
     if (companyId) passThroughCompanies.add(companyId)
   }
-  const passThroughOn = (slot: PassThroughSlot) => {
-    const subtype = PASS_THROUGH_SLOTS[slot].subtype
-    const sum = posted
-      .filter(r => inYear(r) && subtypeById.get(r.account_id) === subtype)
-      .reduce((s, r) => s + Number(r.amount), 0)
-    // Income is a credit (negative); a deduction is a debit. Both come back as the K-1 shows them.
-    return roundCents(PASS_THROUGH_SLOTS[slot].bucket === 'deduction' ? sum : -sum)
-  }
-  const pt = Object.fromEntries((Object.keys(PASS_THROUGH_SLOTS) as PassThroughSlot[]).map(s => [s, passThroughOn(s)])) as Record<PassThroughSlot, number>
+  // Each character's movement, holdings' own sub-accounts (4610-<company>) included — the run posts
+  // each holding's lines there, and the fund-level parent (4610) shares the subtype.
+  const pt = passThroughCharacterFromLedger(
+    acctRows.map(a => ({ id: a.id as string, subtype: a.subtype as string | null })),
+    posted.filter(inYear).map(r => ({ accountId: r.account_id as string, amount: Number(r.amount) })),
+  )
 
   const gains = await loadRealizedGainSplit(admin, fundId, group, taxYear, passThroughCompanies)
 
