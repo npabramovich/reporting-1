@@ -7,6 +7,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { K1_EXPECTED_HOLDING_TYPE } from './received-k1s'
 import { dbFail, done, fail, type Outcome } from '@/lib/service-outcome'
+import { parseReceivedK1Amounts, receivedK1AmountProblems, rowFromAmounts, type ReceivedK1Amounts } from './received-k1-amounts'
 
 export const RECEIVED_K1_STATUSES = ['expected', 'received', 'amended', 'not_expected'] as const
 
@@ -19,6 +20,12 @@ export interface MarkReceivedK1Input {
   reportedCapitalGain?: number | null
   reportedEndingCapital?: number | null
   notes?: string | null
+  /**
+   * The K-1's boxes (received-k1-amounts.ts). Omitted leaves any amounts already recorded as they
+   * are — a status change must not wipe a K-1 someone keyed in. `null` clears them. An object
+   * replaces them all: a box left out of it is cleared, because the object IS the K-1.
+   */
+  amounts?: ReceivedK1Amounts | Record<string, unknown> | null
 }
 
 /**
@@ -47,6 +54,23 @@ export async function markReceivedK1(
     .maybeSingle()
   if (!company) return fail(400, 'Unknown holding for this fund, or not a fund holding — only a partnership files a K-1.')
 
+  // Amounts: parsed and checked before anything is written.
+  let amountColumns: Record<string, unknown> = {}
+  let parsed: ReceivedK1Amounts | null = null
+  if (body?.amounts === null) {
+    amountColumns = { ...rowFromAmounts({}), amounts_recorded_at: null, amounts_recorded_by: null }
+  } else if (body?.amounts !== undefined) {
+    if (body.status !== 'received' && body.status !== 'amended') {
+      return fail(400, 'Amounts belong to a K-1 that has arrived: record the status as received (or amended) with them.')
+    }
+    const p = parseReceivedK1Amounts(body.amounts)
+    if ('error' in p) return fail(400, p.error)
+    const problems = receivedK1AmountProblems(p.amounts)
+    if (problems.length > 0) return fail(400, problems.join(' '))
+    parsed = p.amounts
+    amountColumns = { ...rowFromAmounts(p.amounts), amounts_recorded_at: new Date().toISOString(), amounts_recorded_by: userId }
+  }
+
   const { data, error } = await admin
     .from('received_k1s' as any)
     .upsert(
@@ -57,10 +81,15 @@ export async function markReceivedK1(
         tax_year: taxYear,
         status: body.status,
         received_date: typeof body?.receivedDate === 'string' ? body.receivedDate : null,
-        reported_ordinary_income: body?.reportedOrdinaryIncome ?? null,
-        reported_capital_gain: body?.reportedCapitalGain ?? null,
-        reported_ending_capital: body?.reportedEndingCapital ?? null,
+        // The three original tie-out figures, filled from the boxes when the boxes are given and
+        // the figures are not, so older readers of these columns see the same K-1.
+        reported_ordinary_income: body?.reportedOrdinaryIncome ?? parsed?.ordinaryBusinessIncome ?? null,
+        reported_capital_gain: body?.reportedCapitalGain
+          ?? (parsed && (parsed.shortTermGain !== undefined || parsed.longTermGain !== undefined)
+            ? Math.round(((parsed.shortTermGain ?? 0) + (parsed.longTermGain ?? 0)) * 100) / 100 : null),
+        reported_ending_capital: body?.reportedEndingCapital ?? parsed?.capitalEnding ?? null,
         notes: typeof body?.notes === 'string' ? body.notes.slice(0, 2000) : null,
+        ...amountColumns,
         created_by: userId,
         updated_at: new Date().toISOString(),
       },

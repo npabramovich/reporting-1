@@ -10,6 +10,7 @@ import { apportionCents } from './allocation'
 import type { CompanyStatus } from '@/lib/types/database'
 import type { ChainBalance } from './soi'
 import { trialBalance, postingsInPeriod, postingsAsOf, type TrialBalance } from '@portfolio/fund-engine'
+import { PASS_THROUGH_CHARACTER_SUBTYPES, PASS_THROUGH_CHART } from './chart'
 
 // The trial balance and period scoping live in the open fund engine
 // (packages/fund-engine/src/trial-balance.ts); re-exported so existing imports keep working.
@@ -26,8 +27,39 @@ export interface StatementSection {
   total: number
 }
 
-function section(label: string, tb: TrialBalance, type: AccountType): StatementSection {
-  const rows = tb.rows.filter(r0 => r0.type === type).map(r0 => ({ code: r0.code, name: r0.name, amount: r0.balance }))
+/**
+ * The statement line an account presents on.
+ *
+ * A holding's own lower-tier K-1 account (4610-<company> "Pass-through interest income — Northwind
+ * (tax)") rolls up into its character's parent line (4610 "Pass-through interest income (tax)"):
+ * the statement reports interest, not interest per fund held, and a fund of funds would otherwise
+ * print a line per holding per character. The per-holding detail stays where an account's detail
+ * always is — the trial balance and the GL detail, which list every account.
+ */
+export function presentationLine(account: Pick<Account, 'code' | 'name' | 'subtype' | 'companyId'>, accounts: Pick<Account, 'code' | 'name' | 'subtype' | 'companyId'>[]): { code: string; name: string } {
+  if (account.companyId && account.subtype && PASS_THROUGH_CHARACTER_SUBTYPES.has(account.subtype)) {
+    const code = account.code.split('-')[0]
+    const parent = accounts.find(a => !a.companyId && a.subtype === account.subtype && a.code === code)
+      ?? accounts.find(a => !a.companyId && a.subtype === account.subtype)
+    const seed = PASS_THROUGH_CHART.find(a => a.subtype === account.subtype)
+    return { code: parent?.code ?? code, name: parent?.name ?? seed?.name ?? account.name }
+  }
+  return { code: account.code, name: account.name }
+}
+
+function section(label: string, tb: TrialBalance, type: AccountType, accounts: Account[] = []): StatementSection {
+  const byId = new Map(accounts.map(a => [a.id, a]))
+  const lines = new Map<string, { code: string; name: string; amount: number }>()
+  for (const r0 of tb.rows) {
+    if (r0.type !== type) continue
+    const acct = byId.get(r0.accountId)
+    const line = acct ? presentationLine(acct, accounts) : { code: r0.code, name: r0.name }
+    const key = `${line.code}|${line.name}`
+    const cur = lines.get(key)
+    if (cur) cur.amount = r(cur.amount + r0.balance)
+    else lines.set(key, { ...line, amount: r0.balance })
+  }
+  const rows = Array.from(lines.values()).sort((a, b) => a.code.localeCompare(b.code))
   const total = r(rows.reduce((a, b) => a + b.amount, 0))
   return { label, rows, total }
 }
@@ -80,13 +112,13 @@ export function balanceSheet(
   } = {},
 ): BalanceSheet {
   const tb = trialBalance(accounts, postings)
-  const assets = section('Assets', tb, 'asset')
-  const liabilities = section('Liabilities', tb, 'liability')
+  const assets = section('Assets', tb, 'asset', accounts)
+  const liabilities = section('Liabilities', tb, 'liability', accounts)
   const label = opts.equityLabel ?? "Partners' capital"
 
-  const capitalAccounts = section(label, tb, 'equity')
-  const income = section('Income', tb, 'income')
-  const expenses = section('Expenses', tb, 'expense')
+  const capitalAccounts = section(label, tb, 'equity', accounts)
+  const income = section('Income', tb, 'income', accounts)
+  const expenses = section('Expenses', tb, 'expense', accounts)
   const netIncome = r(income.total - expenses.total)
 
   // Net income already pushed into capital accounts by a period close sits as a
@@ -190,8 +222,8 @@ export interface IncomeStatement {
  */
 export function incomeStatement(accounts: Account[], postings: Posting[]): IncomeStatement {
   const tb = trialBalance(accounts, postings)
-  const income = section('Income', tb, 'income')
-  const expenses = section('Expenses', tb, 'expense')
+  const income = section('Income', tb, 'income', accounts)
+  const expenses = section('Expenses', tb, 'expense', accounts)
   return { income, expenses, netIncome: r(income.total - expenses.total) }
 }
 

@@ -27,38 +27,70 @@ import { allocateAmount } from './allocation'
  * The K-1 lines a private fund actually produces.
  *
  * Deliberately not the whole form. A line that this app cannot source is worse than an absent
- * one: it invites a preparer to trust a zero that means "never computed". Rental income,
- * guaranteed payments, §179, foreign taxes and the rest are absent for that reason.
+ * one: it invites a preparer to trust a zero that means "never computed". Guaranteed payments to
+ * partners, foreign taxes, box 20 codes and the rest are absent for that reason. Ordinary business
+ * income, rentals, royalties, §1231 and §179 are present ONLY because a lower-tier K-1 can source
+ * them (see K1_PASS_THROUGH_ONLY); the fund's own books never do.
  */
 export type K1Category =
+  | 'ordinaryBusinessIncome'
+  | 'netRentalRealEstate'
+  | 'otherNetRental'
   | 'interest'
   | 'ordinaryDividends'
   | 'qualifiedDividends'
+  | 'royalties'
   | 'shortTermGain'
   | 'longTermGain'
+  | 'section1231Gain'
   | 'section1061Recharacterized'
   | 'otherIncome'
+  | 'section179'
   | 'deductions'
+  | 'investmentInterest'
   | 'distributionsCash'
   | 'distributionsProperty'
   | 'distributionsOther'
 
 export const K1_BOX: Record<K1Category, string> = {
+  // Boxes 1–3, 7, 10, 12 and 13H reach a fund only through the funds it holds: each is a holding's
+  // share of a LOWER-TIER K-1, posted to its own tax-book account (k1-passthrough.ts) and read back
+  // by k1-load.ts. A fund that holds no funds never has them, and they are left off its forms
+  // (K1_PASS_THROUGH_ONLY).
+  ordinaryBusinessIncome: '1',
+  netRentalRealEstate: '2',
+  otherNetRental: '3',
   interest: '5',
   ordinaryDividends: '6a',
   qualifiedDividends: '6b',
+  royalties: '7',
   shortTermGain: '8',
   longTermGain: '9a',
+  section1231Gain: '10',
   // Reported to an API holder as a statement attached to the K-1 rather than in a numbered box.
   section1061Recharacterized: '20AH',
   otherIncome: '11',
+  section179: '12',
   deductions: '13',
+  investmentInterest: '13H',
   distributionsCash: '19A',
   distributionsProperty: '19B',
   distributionsOther: '19C',
 }
 
 export const K1_CATEGORIES = Object.keys(K1_BOX) as K1Category[]
+
+/**
+ * Lines that only a lower-tier K-1 can produce. A form leaves them out when they are zero for
+ * everyone, rather than printing a row of zeros that reads as "computed and found to be nil" on a
+ * fund that holds no funds at all.
+ */
+export const K1_PASS_THROUGH_ONLY: ReadonlySet<K1Category> = new Set<K1Category>([
+  'ordinaryBusinessIncome', 'netRentalRealEstate', 'otherNetRental', 'royalties', 'section1231Gain', 'section179', 'investmentInterest',
+])
+
+/** Lines that REDUCE income: the fund's own deductions, and a lower-tier K-1's §179 and investment interest. */
+export const K1_DEDUCTIONS: ReadonlySet<K1Category> = new Set<K1Category>(['deductions', 'section179', 'investmentInterest'])
 
 /**
  * Lines that are a SUBSET of another line rather than an addition to it.
@@ -99,6 +131,16 @@ export interface FundYearCharacter {
   otherIncome: number
   /** Investment expenses and management fee. Positive reduces income. */
   deductions: number
+  // A holding's share of lower-tier K-1s (k1-passthrough.ts). Optional: absent means none.
+  ordinaryBusinessIncome?: number
+  netRentalRealEstate?: number
+  otherNetRental?: number
+  royalties?: number
+  section1231Gain?: number
+  /** Positive reduces income. */
+  section179?: number
+  /** Positive reduces income. */
+  investmentInterest?: number
 }
 
 /**
@@ -164,7 +206,7 @@ export function incomeTotal(lines: K1Lines): number {
   const isDistribution = (c: K1Category) => c.startsWith('distributions')
   return roundCents(
     K1_CATEGORIES.filter(c => !isSubset(c) && !isDistribution(c)).reduce(
-      (s, c) => s + (c === 'deductions' ? -lines[c] : lines[c]),
+      (s, c) => s + (K1_DEDUCTIONS.has(c) ? -lines[c] : lines[c]),
       0,
     ),
   )
@@ -226,6 +268,15 @@ export function allocateK1(input: AllocateK1Input): AllocateK1Result {
     { category: 'shortTermGain', amount: fund.shortTermGain, bucket: byGain },
     { category: 'longTermGain', amount: fund.longTermGain, bucket: byGain },
     { category: 'deductions', amount: fund.deductions, bucket: byExpense },
+    // Lower-tier K-1 character. Each follows the bucket its tax-book entry put on the partners'
+    // capital (k1-passthrough.ts PASS_THROUGH_SOURCE_TYPE), so the tie-out holds.
+    { category: 'ordinaryBusinessIncome', amount: fund.ordinaryBusinessIncome ?? 0, bucket: byIncome },
+    { category: 'netRentalRealEstate', amount: fund.netRentalRealEstate ?? 0, bucket: byIncome },
+    { category: 'otherNetRental', amount: fund.otherNetRental ?? 0, bucket: byIncome },
+    { category: 'royalties', amount: fund.royalties ?? 0, bucket: byIncome },
+    { category: 'section1231Gain', amount: fund.section1231Gain ?? 0, bucket: byGain },
+    { category: 'section179', amount: fund.section179 ?? 0, bucket: byExpense },
+    { category: 'investmentInterest', amount: fund.investmentInterest ?? 0, bucket: byExpense },
   ]
 
   const allocatedByCategory = new Map<K1Category, Map<string, number>>()
@@ -354,7 +405,10 @@ function transferCarryCharacter(
   if (totalCarry === 0) return out
 
   // The profit pool, by character, as allocated before any transfer.
-  const PROFIT: K1Category[] = ['interest', 'ordinaryDividends', 'otherIncome', 'shortTermGain', 'longTermGain']
+  const PROFIT: K1Category[] = [
+    'interest', 'ordinaryDividends', 'otherIncome', 'shortTermGain', 'longTermGain',
+    'ordinaryBusinessIncome', 'netRentalRealEstate', 'otherNetRental', 'royalties', 'section1231Gain',
+  ]
   const poolByCategory = new Map<K1Category, number>()
   let pool = 0
   for (const c of PROFIT) {

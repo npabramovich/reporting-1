@@ -20,6 +20,7 @@ import { disposalBasis, isLotMethod, type LotMethod } from '@/lib/portfolio/lots
 import { splitGains, type DisposalGain, type GainSplit } from './holding-period'
 import { grossProceeds } from '@/lib/portfolio/proceeds'
 import type { FundYearCharacter, PartnerYearActivity } from './k1-allocation'
+import { companyFromPassThroughRef, passThroughCharacterFromLedger, withPassThroughCharacter } from './k1-passthrough'
 import {
   summarizeQualifiedDividends,
   type DividendFact,
@@ -76,18 +77,17 @@ export async function loadK1Year(
 
   const { data: accts } = await admin
     .from('chart_of_accounts' as any)
-    .select('id, code, lp_entity_id')
+    .select('id, code, lp_entity_id, subtype, company_id')
     .eq('fund_id', fundId)
     .eq('vehicle_id', vehicleId)
   const acctRows = (accts as any[]) ?? []
   const codeById = new Map(acctRows.map(a => [a.id as string, a.code as string]))
-
   // BOTH BOOKS. Tax basis is the actual ledger plus the tax overlay; reading either alone gives a
   // number that is precisely wrong. See books.test.ts CROSS_BOOK_READS.
   const postingRows = await fetchAllRows<any>((from, to) =>
     admin
       .from('journal_postings' as any)
-      .select('account_id, amount, lp_entity_id, book, journal_entries!inner(entry_date, status, source_type, book)')
+      .select('account_id, amount, lp_entity_id, book, journal_entries!inner(entry_date, status, source_type, book, source_ref)')
       .in('book', ['actual', 'tax'])
       .eq('fund_id', fundId)
       .eq('vehicle_id', vehicleId)
@@ -154,7 +154,24 @@ export async function loadK1Year(
   const taggedDividends = await loadDividendIncome(admin, fundId, group, yearStart, yearEnd)
   const qualified = await loadQualifiedDividends(admin, fundId, group, yearStart, yearEnd)
 
-  const gains = await loadRealizedGainSplit(admin, fundId, group, taxYear)
+  // LOWER-TIER K-1s. A fund holding whose K-1 the tax book has taken in (k1-passthrough.ts) is
+  // taxed on the K-1, not on its distributions: that run reversed the book gain, so its disposals
+  // leave the lot-based split here and its character arrives on the pass-through accounts below.
+  // Keyed on what is POSTED, not on what was typed in, so the two can never disagree.
+  const passThroughCompanies = new Set<string>()
+  for (const r of posted) {
+    if (r.journal_entries?.book !== 'tax') continue
+    const companyId = companyFromPassThroughRef(r.journal_entries?.source_ref, taxYear)
+    if (companyId) passThroughCompanies.add(companyId)
+  }
+  // Each character's movement, holdings' own sub-accounts (4610-<company>) included — the run posts
+  // each holding's lines there, and the fund-level parent (4610) shares the subtype.
+  const pt = passThroughCharacterFromLedger(
+    acctRows.map(a => ({ id: a.id as string, subtype: a.subtype as string | null })),
+    posted.filter(inYear).map(r => ({ accountId: r.account_id as string, amount: Number(r.amount) })),
+  )
+
+  const gains = await loadRealizedGainSplit(admin, fundId, group, taxYear, passThroughCompanies)
 
   const deductions = roundCents(
     expenseOn(EXPENSE_CODES.managementFee) +
@@ -200,8 +217,19 @@ export async function loadK1Year(
     })
   }
 
+  if (pt.longTermGain !== 0) {
+    notDerivable.push({
+      line: '§1061 on pass-through gain (20AH)',
+      reason:
+        `${pt.longTermGain.toFixed(2)} of long-term gain came through lower-tier K-1s. Their §1061 ` +
+        'three-year information (box 20, code AH) is not recorded, so none of it is recharacterized ' +
+        'for a carry recipient. Check the underlying K-1s’ statements.',
+    })
+  }
+
   return {
-    fund: {
+    // The fund's own books, then each holding's K-1 on the box it belongs to (k1-passthrough.ts).
+    fund: withPassThroughCharacter({
       interest,
       ordinaryDividends: dividends,
       qualifiedDividends: qualified.qualified,
@@ -210,7 +238,7 @@ export async function loadK1Year(
       longTermGainWithinApiPeriod: gains.longTermWithinApiPeriod,
       otherIncome: incomeOn(INCOME_CODES.portfolioIncome),
       deductions,
-    },
+    }, pt),
     partners,
     undeterminedGain: gains.undetermined,
     notDerivable,
@@ -273,6 +301,8 @@ async function loadRealizedGainSplit(
   fundId: string,
   group: string,
   taxYear: number,
+  /** Holdings taxed on their K-1 this year rather than on their disposals (see loadK1Year). */
+  excludeCompanies: Set<string> = new Set(),
 ): Promise<GainSplit> {
   const { data: settings } = await admin
     .from('fund_settings' as any)
@@ -297,7 +327,7 @@ async function loadRealizedGainSplit(
   const byCompany = new Map<string, any[]>()
   for (const t of txns) {
     const key = t.company_id as string
-    if (!key) continue
+    if (!key || excludeCompanies.has(key)) continue
     const list = byCompany.get(key) ?? []
     list.push(t)
     byCompany.set(key, list)

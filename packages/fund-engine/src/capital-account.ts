@@ -50,13 +50,20 @@ export function bucketForSourceType(sourceType: string | null | undefined): Roll
     case 'expense':
     case 'partnership_expense':
     case 'organizational_expense':
+    // A lower-tier K-1's deductions (§179, investment interest, other box 13 items).
+    case 'tax_adj_k1_deduction':
       return 'expenses'
     case 'income':
+    // A holding's share of a lower-tier K-1's ordinary income, interest, dividends and other
+    // income, in the tax book: the same line the fund's own income lands on.
+    case 'tax_adj_k1_income':
       // Interest, dividends, and other operating income — distinct from investment
       // gains, which is why this no longer shares a line with them.
       return 'operatingIncome'
     case 'realized_gain':
     case 'gain':
+    // A lower-tier K-1's capital and §1231 gain, and the reversal of the book gain it replaces.
+    case 'tax_adj_k1_gain':
       return 'realizedGains'
     case 'valuation':
     case 'unrealized':

@@ -209,6 +209,8 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   'api/accounting/tax-year': { domain: 'tax', feature: 'tax_reporting' },
   // Which underlying funds still owe us a K-1.
   'api/accounting/received-k1s': { domain: 'tax', feature: 'tax_reporting' },
+  // One holding's recorded K-1 amounts by year, for the table on its page. Read only.
+  'api/accounting/received-k1s/holding': { domain: 'tax', feature: 'tax_reporting', level: 'read' },
   'api/accounting/entities': { domain: 'lp_capital' },
   'api/accounting/lp-events': { domain: 'lp_capital' },
   'api/accounting/lp-events/import': { domain: 'lp_capital' },

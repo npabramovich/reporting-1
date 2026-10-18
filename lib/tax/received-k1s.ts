@@ -5,6 +5,8 @@
 // applying it at the right moment — before a year is closed, rather than after a partner asks
 // why their K-1 is late.
 
+import type { ReceivedK1Amounts } from './received-k1-amounts'
+
 export type ReceivedK1Status = 'expected' | 'received' | 'amended' | 'not_expected'
 
 export interface ReceivedK1 {
@@ -13,6 +15,8 @@ export interface ReceivedK1 {
   taxYear: number
   status: ReceivedK1Status
   receivedDate: string | null
+  /** The K-1's boxes as entered (received-k1-amounts.ts), or null/absent when none were. */
+  amounts?: ReceivedK1Amounts | null
 }
 
 export interface K1DependencyReport {
@@ -22,6 +26,8 @@ export interface K1DependencyReport {
   /** Holdings whose K-1 arrived and was later amended — our own K-1 needs revisiting. */
   amended: ReceivedK1[]
   received: number
+  /** Every holding expected to deliver one for the year, with its status and any amounts entered. */
+  holdings: ReceivedK1[]
   /**
    * Why the year cannot be closed yet, or null.
    *
@@ -47,7 +53,7 @@ export function reportK1Dependencies(rows: ReceivedK1[], taxYear: number): K1Dep
         '. Our own figures for this year are provisional until they arrive.'
       : null
 
-  return { taxYear, outstanding, amended, received, blocker }
+  return { taxYear, outstanding, amended, received, holdings: forYear, blocker }
 }
 
 /**

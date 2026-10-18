@@ -61,10 +61,18 @@ export async function POST(req: NextRequest) {
     inceptionDate: typeof body?.inceptionDate === 'string' ? body.inceptionDate : undefined,
   })
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 })
-  if (result.entryIds.length > 0 || result.voided > 0) {
+  const passThrough = result.passThrough
+  if (result.entryIds.length > 0 || result.voided > 0 || (passThrough?.entryIds.length ?? 0) > 0 || (passThrough?.voided ?? 0) > 0) {
     await recordAudit(admin, {
       fundId: gate.fundId, actorId: user.id, action: 'tax.adjustments', subjectType: 'tax_year', subjectId: `${group}:${taxYear}`,
-      details: { group, taxYear, proposals: result.proposals.map(p => ({ kind: p.kind, amount: p.amount })), entries: result.entryIds.length, voidedPrior: result.voided },
+      details: {
+        group, taxYear, proposals: result.proposals.map(p => ({ kind: p.kind, amount: p.amount })), entries: result.entryIds.length, voidedPrior: result.voided,
+        // The lower-tier K-1s posted in the same run: which holdings, and the basis each moved.
+        ...(passThrough ? {
+          k1PassThrough: passThrough.holdings.filter(h => !h.skipped).map(h => ({ companyId: h.companyId, basisChange: h.basisChange })),
+          k1Entries: passThrough.entryIds.length, k1VoidedPrior: passThrough.voided,
+        } : {}),
+      },
     })
   }
 

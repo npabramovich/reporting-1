@@ -11,6 +11,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { EntryModal } from '../entry-modal'
 import { TaxPackageLink } from '@/components/accounting/download-menu'
 import { TaxFormRecord } from '@/components/accounting/tax-form-record'
+import { ReceivedK1Form } from '@/components/accounting/received-k1-form'
+import type { ReceivedK1Amounts } from '@/lib/tax/received-k1-amounts'
 
 // The tax page: the year's book-to-tax work, in the order a preparer does it.
 //
@@ -27,11 +29,20 @@ interface TaxYearState {
   history?: { action: 'closed' | 'reopened'; at: string; reason: string | null }[]
 }
 interface Proposal { kind: string; amount: number; permanent: boolean; label: string; rationale: string }
-interface TaxRun { taxYear: number; proposals: Proposal[]; entryIds: string[]; skipped: { reason?: string; kind?: string }[]; voided: number; missingAccounts: string[] }
+interface PassThroughHolding {
+  companyId: string; companyName: string; status: string
+  lines: { slot: string; box: string; label: string; reported: number; basisEffect: number; accountCode: string; accountName: string }[]
+  bookRealizedGainReversed: number; basisChange: number
+  basisTieOut: { derived: number; reportedEndingCapital: number | null; difference: number | null }
+  warnings: string[]; skipped?: string
+}
+interface PassThroughRun { holdings: PassThroughHolding[]; awaitingAmounts: { companyId: string; companyName: string }[] }
+interface TaxRun { taxYear: number; proposals: Proposal[]; entryIds: string[]; skipped: { reason?: string; kind?: string }[]; voided: number; missingAccounts: string[]; passThrough?: PassThroughRun }
 interface JournalEntryRow { id: string; entry_date: string; memo: string | null; source_type: string | null; status: string; reference?: string | null; journal_postings: { id: string; account_code: string | null; account_name: string | null; amount: number }[] }
 interface K1Package { id: string; vehicle_id: string; tax_year: number; version: number; status: string; finalized_at: string | null; warnings: { kind: string; detail: string }[] | null }
 interface TaxFormsReport { asOf: string; blocked: number; nameMismatches: number; partners: { lpEntityId: string; name: string; investorId: string | null; status: { blocker: string | null; standing?: string }; nameMatch: string }[] }
-interface ReceivedReport { taxYear: number; received: number; outstanding: { companyName?: string; name?: string }[]; amended: { companyName?: string; name?: string }[]; blocker: string | null }
+interface ReceivedHolding { companyId: string; companyName: string; status: string; receivedDate: string | null; amounts?: ReceivedK1Amounts | null }
+interface ReceivedReport { taxYear: number; received: number; outstanding: { companyName?: string; name?: string }[]; amended: { companyName?: string; name?: string }[]; holdings?: ReceivedHolding[]; blocker: string | null }
 interface Worklist { summary: string[]; states: { state: string; partners: number; nonresident: boolean }[]; foreign: unknown[]; unknown: unknown[] }
 interface RealizedLot { company: string; acquired: string | null; sold: string; units: number; proceeds: number; basis: number; gain: number; term: 'short' | 'long' | 'undetermined' }
 interface VendorPaymentRow { vendorId: string; name: string; is1099Eligible: boolean; tinOnFile: boolean; paid: number; entries: number; needsW9: boolean; reportable: boolean }
@@ -66,6 +77,7 @@ export function TaxView() {
   const [gains, setGains] = useState<Fetched<RealizedGains> | null>(null)
   const [payments, setPayments] = useState<Fetched<VendorPayments> | null>(null)
   const [viewing, setViewing] = useState<{ id: string; book: 'actual' | 'tax' } | null>(null)
+  const [editingK1, setEditingK1] = useState<string | null>(null)
 
   const get = useCallback(async <T,>(url: string): Promise<Fetched<T>> => {
     try {
@@ -164,6 +176,10 @@ export function TaxView() {
     )
   }
 
+  // Lower-tier K-1s with entries to post: recorded, and not refused for a reason the page shows.
+  const passThroughPostable = (run?.data?.passThrough?.holdings ?? []).filter(h => !h.skipped && (h.lines.length > 0 || h.bookRealizedGainReversed !== 0))
+  const passThroughByCompany = new Map((run?.data?.passThrough?.holdings ?? []).map(h => [h.companyId, h]))
+
   const card = 'rounded-card border p-4 space-y-2'
   const h = 'text-sm font-semibold'
   const latestPkg = packages?.data?.find(p => p.status !== 'superseded') ?? null
@@ -215,11 +231,11 @@ export function TaxView() {
         {/* 2. Book-to-tax adjustments */}
         <section className={card}>
           <h2 className={h}>Book-to-tax adjustments</h2>
-          <p className="text-xs text-muted-foreground">Derived from the year’s books: unrealized appreciation, carry accrued on unrealized gains, organizational and syndication costs. Posted to the tax book, never to the ledger.</p>
+          <p className="text-xs text-muted-foreground">Derived from the year’s books: unrealized appreciation, carry accrued on unrealized gains, organizational and syndication costs, and each fund holding’s K-1. Posted to the tax book, never to the ledger.</p>
           {denied(run, 'The adjustments') ?? (run?.data && (
             <>
               {run.data.proposals.length === 0
-                ? <p className="text-sm text-muted-foreground">Nothing to adjust for {year}.</p>
+                ? <p className="text-sm text-muted-foreground">{passThroughPostable.length > 0 ? `No adjustments from the books for ${year}.` : `Nothing to adjust for ${year}.`}</p>
                 : (
                   <table className="w-full text-sm">
                     <tbody>
@@ -235,9 +251,26 @@ export function TaxView() {
                     </tbody>
                   </table>
                 )}
+              {passThroughPostable.length > 0 && (
+                <table className="w-full text-sm">
+                  <tbody>
+                    {passThroughPostable.map(h => (
+                      <tr key={h.companyId} className="border-t align-top">
+                        <td className="py-1.5 pr-2">
+                          <div>{h.companyName} — {year} K-1<span className="ml-2 text-[10px] uppercase tracking-wide text-muted-foreground">pass-through</span></div>
+                          <div className="text-xs text-muted-foreground">
+                            {h.lines.length} box{h.lines.length === 1 ? '' : 'es'} by character{h.bookRealizedGainReversed !== 0 ? `; reverses ${fmt(h.bookRealizedGainReversed)} of book gain on its distributions` : ''}. Moves the holding’s tax basis by the amount shown.
+                          </div>
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums whitespace-nowrap">{fmt(h.basisChange)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
               {run.data.missingAccounts.length > 0 && <p className="text-sm text-warning">The chart is missing {run.data.missingAccounts.join(', ')} — add them under Admin → Chart of accounts first.</p>}
               {run.data.skipped.length > 0 && <p className="text-sm text-warning">{run.data.skipped.length} difference{run.data.skipped.length === 1 ? '' : 's'} could not be built: {run.data.skipped.map(s => s.reason ?? s.kind).join('; ')}</p>}
-              {canWrite && run.data.proposals.length > 0 && !state?.data?.closed && (
+              {canWrite && (run.data.proposals.length > 0 || passThroughPostable.length > 0) && !state?.data?.closed && (
                 <Button size="sm" disabled={!!busy || run.data.missingAccounts.length > 0} onClick={postAdjustments}>
                   {busy === 'Post adjustments' && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Post to the tax book
                 </Button>
@@ -416,14 +449,72 @@ export function TaxView() {
           ))}
         </section>
 
-        {/* 8. Received K-1s */}
-        <section className={card}>
+        {/* 8. Received K-1s — full width: each holding's K-1 is entered and its entries shown here */}
+        <section className={`${card} lg:col-span-2`}>
           <h2 className={h}>K-1s owed to this vehicle</h2>
-          <p className="text-xs text-muted-foreground">Underlying funds this vehicle holds send their own K-1s; ours cannot be final until they arrive.</p>
+          <p className="text-xs text-muted-foreground">Underlying funds this vehicle holds send their own K-1s; ours cannot be final until they arrive. Enter what each one says and its share of income, by character, posts to the tax book with the year’s adjustments — and reaches this fund’s own K-1s on the same boxes.</p>
           {denied(received, 'Received K-1s') ?? (received?.data && (
             <>
               <p className="text-sm">{received.data.received} received{received.data.outstanding.length > 0 ? <span className="text-warning">, {received.data.outstanding.length} outstanding</span> : ''}{received.data.amended.length > 0 ? <span className="text-warning">, {received.data.amended.length} amended after arriving</span> : ''}.</p>
               {received.data.blocker && <p className="text-sm text-warning">{received.data.blocker}</p>}
+              {(received.data.holdings ?? []).filter(h => h.status !== 'not_expected').length > 0 && (
+                <ul className="divide-y rounded-md border text-sm">
+                  {(received.data.holdings ?? []).filter(h => h.status !== 'not_expected').map(h => {
+                    const derived = passThroughByCompany.get(h.companyId)
+                    const arrived = h.status === 'received' || h.status === 'amended'
+                    return (
+                      <li key={h.companyId} className="px-3 py-2 space-y-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="font-medium">{h.companyName}</span>
+                          <span className={arrived ? 'text-xs text-muted-foreground' : 'text-sm text-warning'}>
+                            {h.status === 'expected' ? 'outstanding' : h.status}{h.receivedDate ? ` ${h.receivedDate}` : ''}{arrived && !h.amounts ? ' — amounts not entered' : ''}
+                          </span>
+                          {canWrite && editingK1 !== h.companyId && !state?.data?.closed && (
+                            <Button size="sm" variant="outline" className="ml-auto h-7" onClick={() => setEditingK1(h.companyId)}>
+                              {h.amounts ? 'Edit amounts' : arrived ? 'Enter amounts' : 'Record K-1'}
+                            </Button>
+                          )}
+                        </div>
+                        {derived && derived.lines.length > 0 && editingK1 !== h.companyId && (
+                          <table className="w-full text-xs tabular-nums">
+                            <tbody>
+                              {derived.lines.map(l => (
+                                <tr key={l.slot}>
+                                  <td className="w-10 py-0.5 text-muted-foreground">{l.box}</td>
+                                  <td className="py-0.5">{l.label} <span className="text-muted-foreground">→ {l.accountCode}</span></td>
+                                  <td className="py-0.5 text-right">{fmt(l.reported)}</td>
+                                </tr>
+                              ))}
+                              {derived.bookRealizedGainReversed !== 0 && (
+                                <tr><td /><td className="py-0.5 text-muted-foreground">Book gain on distributions reversed</td><td className="py-0.5 text-right">{fmt(-derived.bookRealizedGainReversed)}</td></tr>
+                              )}
+                              <tr className="border-t">
+                                <td />
+                                <td className="py-0.5">Tax basis after this K-1{derived.basisTieOut.reportedEndingCapital !== null ? <span className="text-muted-foreground"> (Item L reports {fmt(derived.basisTieOut.reportedEndingCapital)})</span> : null}</td>
+                                <td className="py-0.5 text-right">{fmt(derived.basisTieOut.derived)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        )}
+                        {derived?.skipped && <p className="text-sm text-warning">Not posted: {derived.skipped}</p>}
+                        {(derived?.warnings ?? []).map((w, i) => <p key={i} className="text-sm text-warning">{w}</p>)}
+                        {editingK1 === h.companyId && (
+                          <ReceivedK1Form
+                            companyId={h.companyId}
+                            companyName={h.companyName}
+                            taxYear={year}
+                            status={h.status}
+                            receivedDate={h.receivedDate}
+                            amounts={h.amounts}
+                            onCancel={() => setEditingK1(null)}
+                            onSaved={message => { setEditingK1(null); setNotice(message); load() }}
+                          />
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
             </>
           ))}
         </section>
