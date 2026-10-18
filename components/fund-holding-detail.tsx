@@ -320,9 +320,7 @@ export function FundHoldingDetail({
                 </select>
                 <span className="text-xs text-muted-foreground">Each entity holds its own commitment, notices and statements.</span>
               </div>
-            ) : entity ? (
-              <p className="text-sm text-muted-foreground">Held by <span className="font-medium text-foreground">{entityName ?? 'this entity'}</span>.</p>
-            ) : (
+            ) : entity ? null : (
               <div className="space-y-1 rounded-lg border border-warning bg-warning-subtle p-3">
                 <Label htmlFor="holding-vehicle">Which entity holds this fund?</Label>
                 {entityPicker('holding-vehicle')}
@@ -353,13 +351,9 @@ export function FundHoldingDetail({
               </section>
             )}
 
-            <section className="space-y-2">
-              <h3 className="text-base font-medium">Notices received</h3>
-              {events.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No notices recorded yet.{canWrite && ' Record a capital call or distribution from Add.'}
-                </p>
-              ) : (
+            {events.length > 0 && (
+              <section className="space-y-2">
+                <h3 className="text-base font-medium">Notices received</h3>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -392,14 +386,16 @@ export function FundHoldingDetail({
                     ))}
                   </TableBody>
                 </Table>
-              )}
-            </section>
+              </section>
+            )}
 
-            <section className="space-y-2">
-              <h3 className="text-base font-medium">Manager NAV statements</h3>
-              <FundHoldingNavs navs={navs} busy={busy} readOnly={!canWrite} onEdit={editNav} onDelete={deleteNav}
-                               onRebook={entity ? rebookNav : undefined} />
-            </section>
+            {navs.length > 0 && (
+              <section className="space-y-2">
+                <h3 className="text-base font-medium">Manager NAV statements</h3>
+                <FundHoldingNavs navs={navs} busy={busy} readOnly={!canWrite} onEdit={editNav} onDelete={deleteNav}
+                                 onRebook={entity ? rebookNav : undefined} />
+              </section>
+            )}
           </div>
         )}
 
