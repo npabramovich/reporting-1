@@ -178,9 +178,11 @@ export function CompanyPageView({
             />
           )}
 
-          <DeferredPanel id="updates" label="Company updates">
-            <CompanyUpdates companyId={company.id} />
-          </DeferredPanel>
+          {panels.updates && (
+            <DeferredPanel id="updates" label="Company updates">
+              <CompanyUpdates companyId={company.id} />
+            </DeferredPanel>
+          )}
 
           <DeferredPanel id="documents" label="Documents">
             <CompanyDocuments
