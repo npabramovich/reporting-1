@@ -14,13 +14,13 @@ import { memoryAdmin } from './helpers/memory-admin'
 vi.mock('@/lib/cache/tags', () => ({ expireTag: () => {} }))
 vi.mock('@/lib/activity', () => ({ logActivity: vi.fn() }))
 const retract = vi.fn(async () => ({ retracted: 1 }))
-const derive = vi.fn(async (_a: unknown, _f: string, _u: unknown, txn: any) => ({ drafted: true, posted: true, entryId: `e-${txn.id}` }))
+const derive = vi.fn(async (...args: any[]) => ({ drafted: true, posted: true, entryId: `e-${args[3].id}` }))
 vi.mock('@/lib/accounting/from-portfolio', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/accounting/from-portfolio')>()),
   retractEntriesForTransaction: (...args: any[]) => (retract as any)(...args),
   draftEntryForTransaction: (...args: any[]) => (derive as any)(...args),
 }))
-const saveNav = vi.fn(async () => ({ ok: true, navId: 'nav-1', booking: { status: 'no_change', message: 'The ledger already carries this NAV.' } }))
+const saveNav = vi.fn(async (..._args: any[]) => ({ ok: true, navId: 'nav-1', booking: { status: 'no_change', message: 'The ledger already carries this NAV.' } }))
 vi.mock('@/lib/portfolio/fof-nav', () => ({
   saveNavStatement: (...args: any[]) => (saveNav as any)(...args),
   rebookNavsFrom: async () => [],
