@@ -839,7 +839,7 @@ To check one without trusting the app:
 1. Download it: **Periods → the closed period → Reproducibility bundle** (a ZIP), or
    `GET /api/accounting/close-bundle?periodId=…&format=zip`, or the `close_bundle` tool. Reading
    one needs LP capital and GP economics access as well as accounting.
-2. Run the engine from this repository (`packages/fund-engine`, no dependencies, Node 22.18+):
+2. Run the engine from this repository (`packages/fund-engine`, no dependencies, Node 22.23.4+ or 24.22.1+):
    `node packages/fund-engine/bin/fund-engine.mjs verify --bundle <dir> --expect-sha256 <hash>`.
    It checks every file against the manifest, recomputes the statements from the ledger and terms
    and compares them exactly, and checks that the trial balance balances and the capital roll-forward
