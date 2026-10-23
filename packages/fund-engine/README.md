@@ -32,7 +32,8 @@ the code here is the same code that runs in production, not a copy of it.
 
 ## Command line
 
-You need Node 22.18 or later, which runs the TypeScript source directly. If the package has been
+You need Node 22.23.4, 24.22.1 or 26.12.1 or later (a release with the October 2026 security
+fixes); these run the TypeScript source directly. If the package has been
 built (`npm run build`), the CLI runs the built `dist/` instead.
 
 ```sh
