@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Postmark inbound routes by domain, like Resend
+- Mail to any name on a fund's Postmark inbound domain now reaches the fund, not only the exact saved address, so `reports@` and `updates@inbound.yourfund.com` both work. An exact address still wins; a domain two funds share routes only exact addresses; Postmark's shared `inbound.postmarkapp.com` domain and the deployment's global inbound address stay exact-only. Each fund needs its own Postmark server and inbound domain. `lib/postmark/inbound.ts`.
+
 ### Distributions from fund holdings are characterised by cost recovery, and register notices can be corrected
 - **Return of capital is worked out, not typed.** A distribution received from a fund holding returns capital until the cost the holding still carries on that entity is gone; only what comes after is realized gain. Income a manager states as income stays income. This applies when a notice is confirmed with no character stated (the holding page's notices and approved review proposals no longer default a distribution to all return of capital), when `record_fund_notice` books or links one without a character (a linked transaction booked otherwise is re-booked to match), and when a notice's amount or date changes. `lib/portfolio/distribution-cost-recovery.ts`.
 - **`recalculate_fund_distributions`** (and `POST /api/portfolio/fund-holdings/[id]/distributions/recalculate`) works every distribution on one entity out again, oldest first, and re-books the ones that differ. `dry_run` lists them first.

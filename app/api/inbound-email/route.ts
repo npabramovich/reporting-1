@@ -11,6 +11,7 @@ import { isAuthorizedSender } from '@/lib/pipeline/isAuthorizedSender'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { scanFileAsync } from '@/lib/security/scan-file'
 import { emailFingerprint } from '@/lib/pipeline/emailFingerprint'
+import { matchPostmarkInbound } from '@/lib/postmark/inbound'
 
 function safeTokenCompare(a: string, b: string): boolean {
   try {
@@ -225,11 +226,16 @@ async function resolveFund(
   fromAddress: string,
   token: string
 ): Promise<{ fundId: string; isGlobal: boolean } | null> {
-  const { data: fundSettings } = await supabase
+  // By the saved address, else by its domain, so any name at a fund's inbound domain reaches it
+  const { data: candidates } = await supabase
     .from('fund_settings')
-    .select('fund_id, postmark_webhook_token, postmark_webhook_token_encrypted, encryption_key_encrypted')
-    .eq('postmark_inbound_address', toAddress)
+    .select('fund_id, postmark_inbound_address, postmark_webhook_token, postmark_webhook_token_encrypted, encryption_key_encrypted')
+    .not('postmark_inbound_address', 'is', null)
+  const { data: appSettings } = await supabase
+    .from('app_settings')
+    .select('global_inbound_address, global_inbound_token, global_inbound_token_encrypted')
     .maybeSingle()
+  const fundSettings = matchPostmarkInbound(toAddress, candidates ?? [], [appSettings?.global_inbound_address])
 
   if (fundSettings) {
     // Prefer encrypted token; fall back to plaintext for legacy
@@ -251,11 +257,6 @@ async function resolveFund(
     }
     return { fundId: fundSettings.fund_id, isGlobal: false }
   }
-
-  const { data: appSettings } = await supabase
-    .from('app_settings')
-    .select('global_inbound_address, global_inbound_token, global_inbound_token_encrypted')
-    .maybeSingle()
 
   if (!appSettings?.global_inbound_address || toAddress !== appSettings.global_inbound_address) {
     return null
