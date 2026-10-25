@@ -409,7 +409,9 @@ async function loadConstructionActuals(
         carryRate: carryTerms.carryRate,
         prefRate: carryTerms.prefRate,
         catchupRate: carryTerms.catchupRate,
+        catchupSize: carryTerms.catchupSize ?? 1,
         prefCompounds: carryTerms.prefCompounds,
+        prefBase: carryTerms.prefBase ?? 'contributed',
         // The LP side excludes the GP's stake. When the books class the GP entity separately,
         // `economics.lp` already leaves it out; otherwise take its share of commitments off.
         ...(() => {

@@ -132,6 +132,6 @@ export function planReturns(input: ReturnsInput): PlanReturns {
       const v = cap.endingCash.get(m) ?? 0
       return !low || v < low.amount ? { month: m, amount: v } : low
     }, null),
-    warnings: cap.warnings,
+    warnings: [...cap.warnings, ...wf.warnings],
   }
 }

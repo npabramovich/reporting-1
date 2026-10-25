@@ -15,8 +15,8 @@
 // Pure: the service supplies cash flows, opening cash, the uncalled amount and the waterfall state.
 
 import { roundCents } from '@/lib/accounting/ledger'
-import { runWaterfall, type WaterfallState } from '@/lib/accounting/waterfall'
-import { preferredTarget, type DatedContribution } from '@/lib/accounting/carry'
+import type { WaterfallState, WaterfallTerms } from '@/lib/accounting/waterfall'
+import { forwardWaterfall, WHOLE_FUND_FALLBACK_WARNING } from '@/lib/accounting/forward-waterfall'
 import type { ConstructionWaterfallProjection } from '@/lib/accounting/construction'
 import { isMonthKey, lastDay, type MonthKey } from './months'
 import { MAX_AMOUNT, MAX_RULE_ITEMS } from './rules'
@@ -171,39 +171,29 @@ export function runMonthlyWaterfall(
   calls: Map<MonthKey, number>,
   months: MonthKey[],
   wf: ConstructionWaterfallProjection | undefined,
-): { byMonth: Map<MonthKey, MonthlySplit>; state: WaterfallState | null; terms: { carryRate: number; catchUpRate: number } | null; lpShare: number } {
+): { byMonth: Map<MonthKey, MonthlySplit>; state: WaterfallState | null; terms: WaterfallTerms | null; lpShare: number; warnings: string[] } {
   const out = new Map<MonthKey, MonthlySplit>()
-  const carryOn = !!wf && wf.kind !== 'none' && wf.carryRate > 0
-  const share = carryOn ? Math.min(1, Math.max(0, wf!.lpCommitmentShare)) : (wf ? Math.min(1, Math.max(0, wf.lpCommitmentShare)) : 1)
-  if (!carryOn) {
+  const forward = wf ? forwardWaterfall(wf) : null
+  const share = wf ? Math.min(1, Math.max(0, wf.lpCommitmentShare)) : 1
+  if (!forward) {
     for (const [m, d] of distributions) out.set(m, { toLp: d, carry: 0, toGpStake: 0 })
-    return { byMonth: out, state: null, terms: null, lpShare: share }
+    return { byMonth: out, state: null, terms: null, lpShare: share, warnings: [] }
   }
-  const terms = { carryRate: wf!.carryRate, catchUpRate: wf!.kind === 'straight' ? 1 : wf!.catchupRate }
-  const contributions: DatedContribution[] = [...wf!.contributions]
-  const prefOn = wf!.kind !== 'straight' && wf!.prefRate > 0
-  let state: WaterfallState = {
-    contributedCapital: wf!.lpCalledCapital,
-    returnedCapital: Math.min(wf!.lpCalledCapital, wf!.lpDistributedCapital),
-    preferredPaid: 0,
-    preferredTarget: prefOn ? preferredTarget(contributions, wf!.asOf, wf!.prefRate, wf!.prefCompounds) : 0,
-    gpCarryPaid: Math.max(0, wf!.fundDistributedCapital - wf!.lpDistributedCapital),
-  }
-  state.preferredPaid = Math.min(state.preferredTarget, Math.max(0, wf!.lpDistributedCapital - wf!.lpCalledCapital))
   for (const m of months) {
     const call = calls.get(m) ?? 0
-    if (call > 0) {
-      const lpCall = roundCents(call * share)
-      contributions.push({ date: lastDay(m), amount: lpCall })
-      state = { ...state, contributedCapital: roundCents(state.contributedCapital + lpCall) }
-    }
-    if (prefOn) state = { ...state, preferredTarget: preferredTarget(contributions, lastDay(m), wf!.prefRate, wf!.prefCompounds) }
+    if (call > 0) forward.contribute(lastDay(m), roundCents(call * share))
     const d = distributions.get(m) ?? 0
     if (!d) continue
     const lpPart = roundCents(d * share)
-    const split = runWaterfall(lpPart, terms, state)
-    state = split.state
+    const split = forward.distribute(lastDay(m), lpPart)
     out.set(m, { toLp: split.toLP, carry: split.toGP, toGpStake: roundCents(d - lpPart) })
   }
-  return { byMonth: out, state, terms, lpShare: share }
+  const last = months[months.length - 1]
+  return {
+    byMonth: out,
+    state: last ? forward.stateAt(lastDay(last)) : forward.stateAt(wf!.asOf),
+    terms: forward.terms,
+    lpShare: share,
+    warnings: forward.wholeFundFallback ? [WHOLE_FUND_FALLBACK_WARNING] : [],
+  }
 }

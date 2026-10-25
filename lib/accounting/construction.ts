@@ -244,7 +244,11 @@ export interface ConstructionWaterfallProjection {
   carryRate: number
   prefRate: number
   catchupRate: number
+  /** How much of a full catch-up the GP gets, 0–1. Absent means 1. */
+  catchupSize?: number
   prefCompounds: boolean
+  /** What the hurdle accrues on. Absent means 'contributed'. */
+  prefBase?: 'contributed' | 'unreturned'
   lpCommitmentShare: number
   lpCalledCapital: number
   lpDistributedCapital: number

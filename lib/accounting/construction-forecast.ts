@@ -20,8 +20,8 @@
 
 import type { ConstructionActuals, ConstructionAssumptions, ConstructionResult, ConstructionWaterfallProjection, PacingAssumptions } from './construction'
 import { projectFeesForYear, DEFAULT_PACING } from './construction'
-import { preferredTarget } from './carry'
-import { runWaterfall, type WaterfallState } from './waterfall'
+import { runWaterfall } from './waterfall'
+import { forwardWaterfall } from './forward-waterfall'
 
 /** One forecast baseline for the page, API, and agent. No invented historical flow dates. */
 export function constructionBaseline(actuals: ConstructionActuals, model: ConstructionResult, asOf: string): ForecastBaseline {
@@ -404,8 +404,8 @@ export function forecastSchedule(
 export function applyLpWaterfall(schedule: ForecastSchedule, projection?: ConstructionWaterfallProjection): ForecastSchedule {
   if (!projection) return schedule
   const share = Math.min(1, Math.max(0, projection.lpCommitmentShare))
-  const terms = { carryRate: projection.carryRate, catchUpRate: projection.kind === 'straight' ? 1 : projection.catchupRate }
-  const contributions = [...projection.contributions]
+  // Null when there is no carry: the LPs keep their share of everything.
+  const waterfall = forwardWaterfall(projection)
   const history: TimedFlow[] = [
     ...projection.contributions.map(flow => ({ t: yearsBetween(projection.asOf, flow.date), amount: -flow.amount })),
     ...(projection.distributions ?? []).map(flow => ({ t: yearsBetween(projection.asOf, flow.date), amount: flow.amount })),
@@ -413,14 +413,6 @@ export function applyLpWaterfall(schedule: ForecastSchedule, projection?: Constr
   const forward: TimedFlow[] = []
   let called = projection.lpCalledCapital
   let distributed = projection.lpDistributedCapital
-  const initialPref = projection.kind === 'straight' ? 0 : preferredTarget(contributions, projection.asOf, projection.prefRate, projection.prefCompounds)
-  let state: WaterfallState = {
-    contributedCapital: called,
-    returnedCapital: Math.min(called, distributed),
-    preferredPaid: Math.min(initialPref, Math.max(0, distributed - called)),
-    preferredTarget: initialPref,
-    gpCarryPaid: Math.max(0, projection.fundDistributedCapital - projection.lpDistributedCapital),
-  }
   const years = schedule.years.map((year, index) => {
     if (index === 0) {
       return {
@@ -437,19 +429,15 @@ export function applyLpWaterfall(schedule: ForecastSchedule, projection?: Constr
     }
     const lpCall = year.called * share
     called += lpCall
-    if (lpCall > 0) contributions.push({ date: `${year.calendarYear}-12-31`, amount: lpCall })
-    state = {
-      ...state,
-      contributedCapital: called,
-      preferredTarget: projection.kind === 'straight' ? 0 : preferredTarget(contributions, `${year.calendarYear}-12-31`, projection.prefRate, projection.prefCompounds),
-    }
+    const yearEnd = `${year.calendarYear}-12-31`
+    waterfall?.contribute(yearEnd, lpCall)
     // Only the LPs' share runs through the waterfall. The rest belongs to the carry recipients'
     // own stake (the GP's commitment), which is returned gross — no carry on the GP's own money.
-    const split = runWaterfall(year.distributed * share, terms, state)
-    state = split.state
+    const lpDistributable = year.distributed * share
+    const split = waterfall ? waterfall.distribute(yearEnd, lpDistributable) : { toLP: lpDistributable, toGP: 0 }
     distributed += split.toLP
     // Hypothetical liquidation of remaining NAV at this year end, without mutating the state.
-    const netNav = runWaterfall(year.nav * share, terms, state).toLP
+    const netNav = waterfall ? runWaterfall(year.nav * share, waterfall.terms, waterfall.stateAt(yearEnd)).toLP : year.nav * share
     if (lpCall > 0) forward.push({ t: year.year, amount: -lpCall })
     if (split.toLP > 0) forward.push({ t: year.year, amount: split.toLP })
     const netIrr = irrOf([...history, ...forward, { t: year.year, amount: netNav }])

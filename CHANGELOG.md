@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Forecasts use the vehicle's full waterfall terms
+- **Catch-up size and the hurdle base reach the forecasts.** Both the plan's monthly forecast and construction's yearly schedule passed only the carry rate and catch-up rate to the waterfall, so a half-size catch-up forecast as a full one and a hurdle on unreturned capital accrued on contributed capital. They now run through one helper, `forwardWaterfall` in `lib/accounting/forward-waterfall.ts`, on the same terms the books use, and the unreturned hurdle reads what past distributions returned. Tested against `splitDistribution` on the same flows.
+- **Deal-by-deal terms forecast whole fund, and say so.** The forecasts project the fund's cash, not each deal, so an American waterfall still runs whole fund; the plan now carries a warning saying the total carry is the same but may be paid earlier.
+- A projection with kind `none` no longer charges carry from a stored rate.
+
 ### Postmark inbound routes by domain, like Resend
 - Mail to any name on a fund's Postmark inbound domain now reaches the fund, not only the exact saved address, so `reports@` and `updates@inbound.yourfund.com` both work. An exact address still wins; a domain two funds share routes only exact addresses; Postmark's shared `inbound.postmarkapp.com` domain and the deployment's global inbound address stay exact-only. Each fund needs its own Postmark server and inbound domain. `lib/postmark/inbound.ts`.
 
