@@ -149,6 +149,12 @@ function validateDealOverrides(value: Record<string, unknown>, where: string, ti
   if (value.simLossRate != null && (!finite(value.simLossRate) || value.simLossRate < 0 || value.simLossRate > 1)) {
     invalid(`${where}.simLossRate must be null or between 0 and 1`)
   }
+  if (value.recycleAmount != null && (!finite(value.recycleAmount) || (value.recycleAmount as number) < 0)) {
+    invalid(`${where}.recycleAmount must be null or a non-negative amount`)
+  }
+  if (value.recycleTreatment != null && value.recycleTreatment !== 'retained' && value.recycleTreatment !== 'deemed') {
+    invalid(`${where}.recycleTreatment must be null, retained or deemed`)
+  }
 }
 
 function validatePositionForecast(
@@ -226,7 +232,16 @@ export function validateConstructionAssumptions(
       }
     }
     if ('accretion' in p && p.accretion !== 'none' && p.accretion !== 'linear') invalid('pacing.accretion must be none or linear')
-    const unknownPacing = Object.keys(p).filter(f => !['deploymentYears', 'followOnLagYears', 'holdYears', 'existingHoldYears', 'horizonYears', 'accretion'].includes(f))
+    if ('recycleCapRate' in p && (!finite(p.recycleCapRate) || (p.recycleCapRate as number) < 0 || (p.recycleCapRate as number) > 1)) {
+      invalid('pacing.recycleCapRate must be a share of commitments between 0 and 1')
+    }
+    if (p.recycleUntilYears != null && (!finite(p.recycleUntilYears) || (p.recycleUntilYears as number) < 0 || (p.recycleUntilYears as number) > 50)) {
+      invalid('pacing.recycleUntilYears must be null or a number of years between 0 and 50')
+    }
+    if ('recycleTreatment' in p && p.recycleTreatment !== 'retained' && p.recycleTreatment !== 'deemed') {
+      invalid('pacing.recycleTreatment must be retained or deemed')
+    }
+    const unknownPacing = Object.keys(p).filter(f => !['deploymentYears', 'followOnLagYears', 'holdYears', 'existingHoldYears', 'horizonYears', 'accretion', 'recycleCapRate', 'recycleUntilYears', 'recycleTreatment'].includes(f))
     if (unknownPacing.length > 0) invalid(`pacing has unknown fields: ${unknownPacing.join(', ')}`)
   }
   if ('simulation' in raw) {

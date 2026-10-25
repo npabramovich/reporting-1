@@ -47,6 +47,12 @@ export interface UpdatePortfolioConstructionInput extends ScalarPatch {
     /** Spread of simulated outcomes (log-normal sigma). */
     dispersion?: number
   }
+  /** Fund-wide recycling: the cap as a share of commitments, when it ends, and the default treatment. */
+  recycling?: {
+    capRate?: number
+    untilYears?: number | null
+    treatment?: 'retained' | 'deemed'
+  }
   explanation?: string
 }
 
@@ -58,6 +64,7 @@ const ASSUMPTION_FIELDS = [
   'removeStages',
   'positionForecasts',
   'returnAssumptions',
+  'recycling',
 ] as const
 
 /** Moved to the Financials tab; named so the refusal can say where they went. */
@@ -70,6 +77,7 @@ const STAGE_FIELDS = new Set([
   'key', 'label', 'initialCheck', 'initialPostMoney', 'followOnMultiple', 'followOnCheck', 'dilutionFactor',
   'ownershipAtExit', 'additionalDilution', 'expectedExitValue', 'forecastMoic', 'forecastMoicOverride', 'returnMethod',
   'investInYears', 'exitInYears', 'followOnInYears', 'simLossRate', 'simDispersion', 'simExitSpreadYears',
+  'recycleAmount', 'recycleTreatment',
 ])
 
 function changedFields(
@@ -164,6 +172,32 @@ function applyPatch(
     next.simulation = sim
   }
 
+  if (input.recycling !== undefined) {
+    const rc = input.recycling
+    if (!rc || typeof rc !== 'object' || Array.isArray(rc)) throw new Error('recycling must be an object')
+    const bad = Object.keys(rc).filter(k => !['capRate', 'untilYears', 'treatment'].includes(k))
+    if (bad.length) throw new Error(`recycling cannot set: ${bad.join(', ')}`)
+    const pacing = { ...next.pacing }
+    if (rc.capRate != null) {
+      const n = Number(rc.capRate)
+      if (!Number.isFinite(n) || n < 0 || n > 1) throw new Error('recycling.capRate must be a share of commitments from 0 to 1')
+      pacing.recycleCapRate = n
+    }
+    if (rc.untilYears !== undefined) {
+      if (rc.untilYears === null) delete pacing.recycleUntilYears
+      else {
+        const n = Number(rc.untilYears)
+        if (!Number.isFinite(n) || n < 0 || n > 50) throw new Error('recycling.untilYears must be a number of years from 0 to 50, or null')
+        pacing.recycleUntilYears = n
+      }
+    }
+    if (rc.treatment != null) {
+      if (rc.treatment !== 'retained' && rc.treatment !== 'deemed') throw new Error('recycling.treatment must be retained or deemed')
+      pacing.recycleTreatment = rc.treatment
+    }
+    next.pacing = pacing
+  }
+
   if (input.positionForecasts !== undefined) {
     if (!input.positionForecasts || typeof input.positionForecasts !== 'object' || Array.isArray(input.positionForecasts)) {
       throw new Error('positionForecasts must be an object keyed by company UUID')
@@ -182,6 +216,7 @@ function applyPatch(
         'forecastMoic', 'forecastMoicOverride', 'returnMethod',
         // Per-company timing and simulation overrides; null returns a field to the fund-wide value.
         'exitInYears', 'followOnInYears', 'simLossRate', 'simDispersion', 'simExitSpreadYears',
+        'recycleAmount', 'recycleTreatment',
       ])
       const unknownForecastFields = Object.keys(patch).filter(field => !allowed.has(field))
       if (unknownForecastFields.length > 0) {
@@ -222,7 +257,7 @@ export async function previewUpdatePortfolioConstruction(
   )
   const fields = changedFields(input)
   // A deal added, changed or removed shows as the planned deals before and after.
-  const shown = [...new Set(fields.flatMap(f => (f === 'upsertStages' || f === 'removeStages' ? ['stages'] : f === 'returnAssumptions' ? ['pacing', 'simulation'] : [f])))] as (keyof ConstructionAssumptions)[]
+  const shown = [...new Set(fields.flatMap(f => (f === 'upsertStages' || f === 'removeStages' ? ['stages'] : f === 'returnAssumptions' ? ['pacing', 'simulation'] : f === 'recycling' ? ['pacing'] : [f])))] as (keyof ConstructionAssumptions)[]
   const changes = Object.fromEntries(shown.map(field => [field, {
     before: model.assumptions[field],
     after: after[field],

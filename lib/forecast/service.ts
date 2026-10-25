@@ -409,6 +409,7 @@ async function capitalEntries(
   const months = monthRange(window.first, window.last)
   const cashFlows = new Map<MonthKey, number>()
   const proceeds = new Map<MonthKey, number>()
+  const { recycled, recycledDeemed } = recyclingByMonth(kept)
   for (const e of kept) {
     const m = e.entryDate.slice(0, 7) as MonthKey
     const c = cashOf(e)
@@ -422,7 +423,7 @@ async function capitalEntries(
   const opensAfter = lastDay(addMonths(window.first, -1))
   const openingCash = roundCents(ledgerPostings.filter(p => cashIds.has(p.accountId) && (p.entryDate ?? '') <= opensAfter).reduce((s, p) => s + p.amount, 0))
   const result = computeCapital({
-    months, openingCash, cashFlows, proceeds, uncalled: model?.actuals.uncalledCapital ?? 0, settings,
+    months, openingCash, cashFlows, proceeds, recycled, recycledDeemed, uncalled: model?.actuals.uncalledCapital ?? 0, settings,
   })
   const split = splitDistributions(result.distributions, result.calls, months, model?.actuals.waterfall)
   // Who the carry goes to is the fund's setting (Allocation terms → Carry, "Carry accrues to"):
@@ -434,7 +435,7 @@ async function capitalEntries(
   const base = (m: MonthKey) => ({ entryDate: lastDay(m), ruleId: null, overrideId: null, source: 'construction' as const })
   for (const m of months) {
     const call = result.calls.get(m)
-    if (call) out.push({ ...base(m), kind: 'capital_call', accountId: capitalAccount.id, memo: `Capital call${settings.calls[m] != null ? ' (your amount)' : ''}`,
+    if (call) out.push({ ...base(m), kind: 'capital_call', accountId: capitalAccount.id, memo: `Capital call${settings.calls[m] != null ? ' (your amount)' : ''}${result.recontributed.get(m) ? ', with recycled proceeds recontributed' : ''}`,
       postings: [{ accountId: [...cashIds][0], amount: call, currency: c }, { accountId: capitalAccount.id, amount: -call, currency: c }] })
     const s = split.get(m)
     // The LPs' share and the GP's share on its own commitment as two entries, so the cash-flow
@@ -1599,7 +1600,7 @@ export async function getPlanReturns(
     months, asOfMonth: compiled.cutoff, openingCash, uncalled: model.actuals.uncalledCapital ?? 0,
     settings: compiled.capital ?? safeCapital(row.capital), otherFlows, waterfall: model.actuals.waterfall,
   }
-  const base = planReturns({ ...common, invested, proceeds, terminalNav: navAt(gross?.years) })
+  const base = planReturns({ ...common, invested, proceeds, ...recyclingByMonth(built.entries), terminalNav: navAt(gross?.years) })
 
   let simulation: PlanReturnsResponse['simulation'] = null
   const sim = model.assumptions.simulation
@@ -1615,12 +1616,17 @@ export async function getPlanReturns(
       const s = forecastSchedule(model.forecast, model.assumptions, pacing, baseline, override, 'none')
       const mc = monthlyConstruction(s, model.asOf.slice(0, 10))
       const runInvested = new Map<MonthKey, number>(), runProceeds = new Map<MonthKey, number>()
+      const runRecycled = new Map<MonthKey, number>(), runDeemed = new Map<MonthKey, number>()
+      const add = (into: Map<MonthKey, number>, m: MonthKey, v: number) => into.set(m, roundCents((into.get(m) ?? 0) + v))
       for (const e of mc.events) {
         if (e.month < built.first || e.month > built.last) continue
-        if (e.flow === 'invested') runInvested.set(e.month, roundCents((runInvested.get(e.month) ?? 0) - e.amount))
-        if (e.flow === 'proceeds') runProceeds.set(e.month, roundCents((runProceeds.get(e.month) ?? 0) + e.amount))
+        if (e.flow === 'invested') add(runInvested, e.month, -e.amount)
+        if (e.flow === 'proceeds') {
+          add(runProceeds, e.month, e.amount)
+          if (e.recycled) { add(runRecycled, e.month, e.recycled); add(runDeemed, e.month, e.recycledDeemed ?? 0) }
+        }
       }
-      const r = planReturns({ ...common, invested: runInvested, proceeds: runProceeds, terminalNav: navAt(s.years) })
+      const r = planReturns({ ...common, invested: runInvested, proceeds: runProceeds, recycled: runRecycled, recycledDeemed: runDeemed, terminalNav: navAt(s.years) })
       totals.push(r.totals.distributed)
       r.distributedToDate.forEach((v, i) => byMonthRuns[i].push(v))
       let running = 0
@@ -1670,4 +1676,16 @@ async function carryRecipientLabel(ctx: ForecastServiceContext, vehicleName: str
 async function gpPartnerIds(ctx: ForecastServiceContext): Promise<Set<string>> {
   const { data } = await (ctx.admin as any).from('lp_entities').select('id').eq('fund_id', ctx.fundId).eq('partner_class', 'gp')
   return new Set(((data as any[]) ?? []).map(r => r.id as string))
+}
+
+/** The recycling construction set on a plan's exit-proceeds entries, by month (lib/forecast/capital.ts). */
+function recyclingByMonth(entries: CompiledEntry[]): { recycled: Map<MonthKey, number>; recycledDeemed: Map<MonthKey, number> } {
+  const recycled = new Map<MonthKey, number>(), recycledDeemed = new Map<MonthKey, number>()
+  for (const e of entries) {
+    if (e.kind !== 'proceeds' || !e.recycled) continue
+    const m = e.entryDate.slice(0, 7) as MonthKey
+    recycled.set(m, roundCents((recycled.get(m) ?? 0) + e.recycled))
+    recycledDeemed.set(m, roundCents((recycledDeemed.get(m) ?? 0) + (e.recycledDeemed ?? 0)))
+  }
+  return { recycled, recycledDeemed }
 }

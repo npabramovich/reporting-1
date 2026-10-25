@@ -17,6 +17,7 @@
 // is asking for a forecast balance sheet here — so it is deliberately built apart from it.
 
 import type { FeeBasis } from './fees'
+import type { RecyclingTreatment } from '@portfolio/fund-engine'
 
 const r = (n: number) => Math.round(n * 100) / 100
 
@@ -61,6 +62,10 @@ export interface ConstructionStage {
   simLossRate?: number | null
   simDispersion?: number | null
   simExitSpreadYears?: number | null
+  /** Most of this exit's proceeds to recycle. 0 keeps them out; absent = automatic. */
+  recycleAmount?: number | null
+  /** How this exit's recycling is booked. Absent = the fund-wide treatment. */
+  recycleTreatment?: RecyclingTreatment | null
 }
 
 export type ReturnForecastMethod = 'ownership' | 'moic'
@@ -91,6 +96,10 @@ export interface ConstructionPositionForecast {
   simLossRate?: number | null
   simDispersion?: number | null
   simExitSpreadYears?: number | null
+  /** Most of this exit's proceeds to recycle. 0 keeps them out; absent = automatic. */
+  recycleAmount?: number | null
+  /** How this exit's recycling is booked. Absent = the fund-wide treatment. */
+  recycleTreatment?: RecyclingTreatment | null
 }
 
 /**
@@ -110,6 +119,15 @@ export interface PacingAssumptions {
   horizonYears: number
   /** How unrealized value moves toward the forecast: flat at carrying value, or straight-line. */
   accretion: 'none' | 'linear'
+  /**
+   * Recycling cap as a share of committed capital (0.2 = 20%). Absent or 0 = exit proceeds are
+   * distributed. Recycled proceeds pay for the plan's later investments instead of a call.
+   */
+  recycleCapRate?: number
+  /** Years from today after which exits are not recycled (the investment period). Null = no end. */
+  recycleUntilYears?: number | null
+  /** How recycled proceeds are booked unless a deal says otherwise. Default: never distributed. */
+  recycleTreatment?: RecyclingTreatment
 }
 
 export const DEFAULT_PACING: PacingAssumptions = {
@@ -325,10 +343,14 @@ const nullableNum = (v: unknown): number | null =>
 /** An optional per-deal number: absent or malformed reads as "not stated", never as zero. */
 const optionalNonNeg = (v: unknown, max = Infinity): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(0, v)) : undefined
+const treatmentOf = (v: unknown): RecyclingTreatment | undefined =>
+  v === 'retained' || v === 'deemed' ? v : undefined
 const dealOverrides = (o: Record<string, unknown>) => ({
   simLossRate: optionalNonNeg(o.simLossRate, 0.99),
   simDispersion: optionalNonNeg(o.simDispersion),
   simExitSpreadYears: optionalNonNeg(o.simExitSpreadYears, 50),
+  recycleAmount: optionalNonNeg(o.recycleAmount),
+  recycleTreatment: treatmentOf(o.recycleTreatment),
 })
 
 /**
@@ -413,6 +435,9 @@ export function parseAssumptions(raw: unknown, _vintageYear: number | null): Con
     existingHoldYears: Math.max(0, num(p.existingHoldYears, DEFAULT_PACING.existingHoldYears)),
     horizonYears: Math.max(0, num(p.horizonYears, DEFAULT_PACING.horizonYears)),
     accretion: p.accretion === 'none' ? 'none' : 'linear',
+    ...(optionalNonNeg(p.recycleCapRate, 1) ? { recycleCapRate: optionalNonNeg(p.recycleCapRate, 1) } : {}),
+    ...(optionalNonNeg(p.recycleUntilYears, 50) !== undefined ? { recycleUntilYears: optionalNonNeg(p.recycleUntilYears, 50) } : {}),
+    ...(treatmentOf(p.recycleTreatment) ? { recycleTreatment: treatmentOf(p.recycleTreatment) } : {}),
   }
   const m = (o.simulation ?? {}) as Record<string, unknown>
   const simulation: SimulationAssumptions = {

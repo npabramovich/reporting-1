@@ -15,7 +15,7 @@ import { Metric } from '@/components/ui/metric'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { SortTh, compareVals, nextSort, type SortState } from '@/components/sortable-th'
 import { CapitalUsageChart } from './charts'
-import { ForecastSection, InlineNumber } from './forecast-section'
+import { ForecastSection, InlineNumber, TreatmentField, TREATMENT_HINT } from './forecast-section'
 import { cn } from '@/lib/utils'
 import {
   constructionModel, parseAssumptions, DEFAULT_ASSUMPTIONS, blankStage,
@@ -439,6 +439,16 @@ function ForecastEditorDialog({
           <ForecastStat label="Forecasted MOIC" value={multiple(forecastedMoic)} emphasis />
         </div>
       </div>
+
+      {(a.pacing.recycleCapRate ?? 0) > 0 && (
+        <div className="space-y-3 rounded-md border p-4">
+          <div><h3 className="text-base font-medium">Recycling</h3><p className="mt-0.5 text-xs text-muted-foreground">How much of this exit pays for later investments instead of being distributed. Blank recycles automatically, within the fund&apos;s cap; 0 keeps it all out.</p></div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <OptionalNumberField label="Recycle up to" hint="Of this exit's proceeds" value={timing?.recycleAmount} placeholder="Automatic" step="1000" onChange={v => setDeal({ recycleAmount: v })} />
+            <TreatmentField label="Treatment" hint={TREATMENT_HINT} value={timing?.recycleTreatment ?? null} inherit={`Fund default (${(a.pacing.recycleTreatment ?? 'retained') === 'deemed' ? 'distributed and recontributed' : 'never distributed'})`} onChange={v => setDeal({ recycleTreatment: v })} />
+          </div>
+        </div>
+      )}
 
       <div className="space-y-3 rounded-md border p-4">
         <div><h3 className="text-base font-medium">Investment timing and hold period</h3><p className="mt-0.5 text-xs text-muted-foreground">Investment and reserved follow-on timing are entered per deal. Hold period can use the fund-wide assumption.</p></div>

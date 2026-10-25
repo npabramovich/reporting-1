@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import type { ConstructionActuals, ConstructionAssumptions, ConstructionResult, PacingAssumptions, SimulationAssumptions } from '@/lib/accounting/construction'
 import { constructionBaseline, applyLpWaterfall, forecastSchedule, type ForecastBaseline } from '@/lib/accounting/construction-forecast'
 import { simulateFund } from '@/lib/accounting/construction-simulation'
+import type { RecyclingTreatment } from '@portfolio/fund-engine'
 import type { FundTimeseriesPoint } from '@/lib/accounting/fund-timeseries'
 import { JCurveChart, CashFlowChart, OutcomeHistogram, ExitOutcomesChart, type ActualCashFlow, type ActualPoint } from './forecast-charts'
 
@@ -179,6 +180,17 @@ export function ForecastSection({ model, actuals, a, setA, vehicle, fmt, fmtFull
           <NumField label="Write-off rate" hint="Share of planned deals returning zero" value={a.simulation.lossRate * 100} onChange={v => setSim({ lossRate: Math.min(99, v) / 100 })} suffix="%" step="1" />
           <NumField label="Exit timing range" hint="Years either side of the expected exit" value={a.simulation.holdSpreadYears} onChange={v => setSim({ holdSpreadYears: v })} suffix="yrs" step="0.5" />
         </div>
+        <div className="space-y-3 border-t pt-3">
+          <div>
+            <p className="text-sm font-medium">Recycling</p>
+            <p className="text-xs text-muted-foreground">Exit proceeds that pay for later planned investments instead of being distributed. Each deal can recycle a set amount or none.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumField label="Recycling cap" hint="Share of committed capital. 0 = none" value={(a.pacing.recycleCapRate ?? 0) * 100} onChange={v => setPacing({ recycleCapRate: Math.min(100, v) / 100 })} suffix="%" step="1" />
+            <OptionalYearsField label="Recycle until" hint="Years from today. Blank = no end" value={a.pacing.recycleUntilYears ?? null} onChange={v => setPacing({ recycleUntilYears: v })} />
+            <TreatmentField label="Treatment" hint={TREATMENT_HINT} value={a.pacing.recycleTreatment ?? 'retained'} onChange={v => setPacing({ recycleTreatment: v ?? 'retained' })} />
+          </div>
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onAssumptionsClose?.()}>Done</Button>
         </DialogFooter>
@@ -221,4 +233,40 @@ function NumField({ label, hint, value, onChange, suffix, step = 'any' }: { labe
 
 function YearsField(props: { label: string; hint: string; value: number; onChange: (v: number) => void }) {
   return <NumField {...props} suffix="yrs" step="0.5" />
+}
+
+function OptionalYearsField({ label, hint, value, onChange }: { label: string; hint: string; value: number | null; onChange: (v: number | null) => void }) {
+  return (
+    <label className="text-xs text-muted-foreground">
+      <span className="block">{label}</span>
+      <div className="relative mt-1">
+        <Input type="number" min="0" step="0.5" value={value ?? ''} onChange={e => onChange(e.target.value === '' ? null : Math.max(0, Number(e.target.value)))} className={cn('h-9 pr-8 tabular-nums', NO_SPINNERS)} />
+        <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs">yrs</span>
+      </div>
+      <span className="mt-0.5 block text-[11px] text-muted-foreground/80">{hint}</span>
+    </label>
+  )
+}
+
+export const TREATMENT_HINT = 'Never distributed calls less. Distributed and recontributed books a distribution and a recallable call.'
+
+/** Never distributed or distributed and recontributed; with `inherit`, a blank that takes the fund's. */
+export function TreatmentField({ label, hint, value, onChange, inherit }: {
+  label: string; hint: string; value: RecyclingTreatment | null; onChange: (v: RecyclingTreatment | null) => void; inherit?: string
+}) {
+  return (
+    <label className="text-xs text-muted-foreground">
+      <span className="block">{label}</span>
+      <select
+        value={value ?? ''}
+        onChange={e => onChange(e.target.value === 'retained' || e.target.value === 'deemed' ? e.target.value : null)}
+        className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
+      >
+        {inherit && <option value="">{inherit}</option>}
+        <option value="retained">Never distributed</option>
+        <option value="deemed">Distributed and recontributed</option>
+      </select>
+      <span className="mt-0.5 block text-[11px] text-muted-foreground/80">{hint}</span>
+    </label>
+  )
 }

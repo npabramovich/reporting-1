@@ -64,4 +64,10 @@ describe('monthlyConstruction (acceptance #10)', () => {
     expect(past.events.filter(e => e.flow === 'invested')).toEqual([])
     expect(past.warnings[0]).toMatch(/dated today or earlier/)
   })
+
+  it("carries each exit's recycling onto its proceeds", () => {
+    const r = monthlyConstruction({ ...SCHEDULE, deals: [deal({ name: 'Acme', proceeds: 3_000_000, exitAt: 1.5, recycled: 500_000, recycledDeemed: 200_000 })] }, '2026-10-09')
+    expect(r.events.find(e => e.flow === 'proceeds')).toMatchObject({ month: '2028-04', recycled: 500_000, recycledDeemed: 200_000 })
+    expect(m.events.find(e => e.flow === 'proceeds')?.recycled).toBeUndefined()
+  })
 })

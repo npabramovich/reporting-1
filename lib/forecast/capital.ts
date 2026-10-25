@@ -77,6 +77,11 @@ export interface CapitalResult {
   calls: Map<MonthKey, number>
   distributions: Map<MonthKey, number>
   endingCash: Map<MonthKey, number>
+  /**
+   * Recycling booked as distributed and recontributed: in `calls` and `distributions` too, as the
+   * same amount in the same month. It leaves cash and uncalled capital where they were.
+   */
+  recontributed: Map<MonthKey, number>
   warnings: string[]
 }
 
@@ -84,12 +89,21 @@ export interface CapitalResult {
  * Calls and distributions by month. `cashFlows` is every other cash movement in the month (fees,
  * expenses, checks written, exit proceeds, hand entries); `proceeds` is the exit proceeds within it
  * (what the distribution policy pays out).
+ *
+ * `recycled` is the part of each month's proceeds the fund puts back to work (construction decides
+ * how much, lib/accounting/construction-forecast.ts): it stays in the bank, is never owed to the
+ * partners, and so funds later investments before a call does. `recycledDeemed` is the part of it
+ * booked as distributed and recontributed: a distribution and a call of the same amount in the
+ * month the proceeds arrive, which moves neither cash nor uncalled capital (the distribution is
+ * recallable). The call comes first, so the waterfall reads the distribution as a return of it.
  */
 export function computeCapital(input: {
   months: MonthKey[]
   openingCash: number
   cashFlows: Map<MonthKey, number>
   proceeds: Map<MonthKey, number>
+  recycled?: Map<MonthKey, number>
+  recycledDeemed?: Map<MonthKey, number>
   uncalled: number
   settings: CapitalSettings
 }): CapitalResult {
@@ -97,6 +111,7 @@ export function computeCapital(input: {
   const calls = new Map<MonthKey, number>()
   const distributions = new Map<MonthKey, number>()
   const endingCash = new Map<MonthKey, number>()
+  const recontributed = new Map<MonthKey, number>()
   const warnings: string[] = []
   let cash = roundCents(input.openingCash)
   let uncalled = Math.max(0, roundCents(input.uncalled))
@@ -107,7 +122,7 @@ export function computeCapital(input: {
     cash = roundCents(cash + (input.cashFlows.get(m) ?? 0))
     // Proceeds become payable `lagMonths` after they arrive.
     const dueFrom = input.months[i - policy.distributions.lagMonths]
-    if (dueFrom) owed = roundCents(owed + (input.proceeds.get(dueFrom) ?? 0))
+    if (dueFrom) owed = roundCents(owed + (input.proceeds.get(dueFrom) ?? 0) - (input.recycled?.get(dueFrom) ?? 0))
 
     // Call first, so a month's investments are funded before anything is paid out.
     let call = 0
@@ -133,13 +148,20 @@ export function computeCapital(input: {
     dist = roundCents(dist)
     cash = roundCents(cash - dist)
 
+    const deemed = roundCents(input.recycledDeemed?.get(m) ?? 0)
+    if (deemed > 0) {
+      call = roundCents(call + deemed)
+      dist = roundCents(dist + deemed)
+      recontributed.set(m, deemed)
+    }
+
     if (call) calls.set(m, call)
     if (dist) distributions.set(m, dist)
     endingCash.set(m, cash)
   })
   if (shortfall) warnings.push(`In ${shortfall} month${shortfall === 1 ? '' : 's'} cash falls below the reserve and the fund has no uncalled capital left to call`)
   if (owed > 0.005) warnings.push(`${roundCents(owed).toLocaleString('en-US')} of exit proceeds is not distributed by the end of the plan`)
-  return { calls, distributions, endingCash, warnings }
+  return { calls, distributions, endingCash, recontributed, warnings }
 }
 
 export interface MonthlySplit {

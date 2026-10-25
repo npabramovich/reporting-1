@@ -23,6 +23,8 @@ const STAGE_PROPERTIES = {
   simLossRate: { type: ['number', 'null'], minimum: 0, maximum: 1 },
   simDispersion: { type: ['number', 'null'], minimum: 0 },
   simExitSpreadYears: { type: ['number', 'null'], minimum: 0 },
+  recycleAmount: { type: ['number', 'null'], minimum: 0, description: 'Most of this exit\'s proceeds to recycle into later investments; 0 keeps them all out; null = automatic, within the fund-wide cap.' },
+  recycleTreatment: { type: ['string', 'null'], enum: ['retained', 'deemed', null], description: 'retained = never distributed (less is called); deemed = distributed and recontributed (calls and distributions both higher). null = the fund-wide treatment.' },
 } as const
 
 export const UPDATE_CONSTRUCTION_SCHEMA = {
@@ -70,6 +72,8 @@ export const UPDATE_CONSTRUCTION_SCHEMA = {
               simLossRate: { type: ['number', 'null'], minimum: 0, maximum: 1 },
               simDispersion: { type: ['number', 'null'], minimum: 0 },
               simExitSpreadYears: { type: ['number', 'null'], minimum: 0 },
+              recycleAmount: { type: ['number', 'null'], minimum: 0, description: 'Most of this exit\'s proceeds to recycle into later investments; 0 keeps them all out; null = automatic, within the fund-wide cap.' },
+              recycleTreatment: { type: ['string', 'null'], enum: ['retained', 'deemed', null], description: 'retained = never distributed (less is called); deemed = distributed and recontributed (calls and distributions both higher). null = the fund-wide treatment.' },
             },
           },
         },
@@ -83,6 +87,16 @@ export const UPDATE_CONSTRUCTION_SCHEMA = {
             lossRate: { type: 'number', minimum: 0, maximum: 0.99, description: 'Share of planned deals the simulation writes off. Held companies are written off only on their own simLossRate.' },
             exitTimingRangeYears: { type: 'number', minimum: 0, maximum: 20, description: 'Years either side of the expected exit the simulation varies timing.' },
             dispersion: { type: 'number', minimum: 0, maximum: 5, description: 'Spread of simulated exit values (log-normal sigma).' },
+          },
+        },
+        recycling: {
+          type: 'object',
+          additionalProperties: false,
+          description: 'Fund-wide recycling: exit proceeds that pay for later planned investments instead of being distributed. Per-exit choices are recycleAmount and recycleTreatment on a deal.',
+          properties: {
+            capRate: { type: 'number', minimum: 0, maximum: 1, description: 'The cap as a share of committed capital (0.2 = 20%). 0 = no recycling.' },
+            untilYears: { type: ['number', 'null'], minimum: 0, maximum: 50, description: 'Years from today after which exits are not recycled (the investment period); null = no end.' },
+            treatment: { type: 'string', enum: ['retained', 'deemed'], description: 'retained (default) = never distributed; deemed = distributed and recontributed.' },
           },
         },
         explanation: { type: 'string', description: 'Optional explanation supplied by the user.' },
