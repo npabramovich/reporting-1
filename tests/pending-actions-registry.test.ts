@@ -56,7 +56,9 @@ describe('agent tools that stage a pending action', () => {
   it('take the same input as the action they stage, and agree on its domain', async () => {
     const { AGENT_TOOLS } = await import('@/lib/accounting/agent-tools')
     const staged = AGENT_TOOLS.filter(t => t.stagesAs)
-    expect(staged.map(t => t.name).sort()).toEqual(['issue_capital_call', 'publish_call_notices', 'set_waterfall_terms'])
+    expect(staged.map(t => t.name).sort()).toEqual([
+      'issue_capital_call', 'publish_call_notices', 'record_recycling', 'remove_recycling', 'set_recycling_terms', 'set_waterfall_terms',
+    ])
     for (const tool of staged) {
       const action = getWriteAction(tool.stagesAs!)!
       expect(action, tool.name).toBeTruthy()

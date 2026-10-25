@@ -57,7 +57,7 @@ export function carryAccrualInputs(
 
   // Dated contributions, for the hurdle. The pref accrues from when cash actually arrived.
   const contributions: DatedContribution[] = capitalPostings
-    .filter(p => !recipientIds.has(p.lpEntityId ?? '') && bucketForSourceType(p.sourceType) === 'contributions')
+    .filter(p => !recipientIds.has(p.lpEntityId ?? '') && bucketForSourceType(p.sourceType, p.amount) === 'contributions')
     .map(p => ({ date: p.entryDate ?? asOf, amount: roundCents(-p.amount) }))
     .filter(c => c.amount > 0)
 
@@ -79,7 +79,7 @@ export function priorDistributions(
   let carryPaidToDate = 0
   for (const p of capitalPostings) {
     if (!p.lpEntityId || p.amount <= 0) continue
-    const isDist = bucketForSourceType(p.sourceType) === 'distributions'
+    const isDist = bucketForSourceType(p.sourceType, p.amount) === 'distributions'
     const isCarry = p.sourceType === 'carry_distribution'
     if (!isDist && !isCarry) continue
     const date = p.entryDate ?? asOf
@@ -123,7 +123,7 @@ export function distributionSplitInputs(
 
   // Dated LP contributions for the hurdle — recipients excluded, as the close excludes them.
   const contributions: DatedContribution[] = capitalPostings
-    .filter(p => p.lpEntityId && !recipientIds.has(p.lpEntityId) && bucketForSourceType(p.sourceType) === 'contributions')
+    .filter(p => p.lpEntityId && !recipientIds.has(p.lpEntityId) && bucketForSourceType(p.sourceType, p.amount) === 'contributions')
     .map(p => ({ date: p.entryDate ?? asOf, amount: roundCents(-p.amount) }))
     .filter(c => c.amount > 0)
 

@@ -53,3 +53,11 @@ describe('commitmentFigures', () => {
     expect(f.funded).toBe(333.32)
   })
 })
+
+describe('commitmentFigures with recycled proceeds recontributed', () => {
+  it('adds the recontribution back: it is called, but it was a recallable distribution coming back', () => {
+    const f = commitmentFigures(1_000_000, 450_000, 0, 50_000)
+    expect(f.called).toBe(450_000)
+    expect(f.outstanding).toBe(600_000)
+  })
+})

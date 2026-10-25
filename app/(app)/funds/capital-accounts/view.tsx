@@ -789,7 +789,7 @@ export function CapitalAccountsView() {
                   <CallActivity
                     call={c}
                     calls={calls}
-                    partners={rows.map(r => ({ lpEntityId: r.lpEntityId, name: r.name, commitment: r.commitment, called: r.called ?? null }))}
+                    partners={rows.map(r => ({ lpEntityId: r.lpEntityId, name: r.name, commitment: r.commitment, called: r.called == null ? null : r.called - (r.recontributed ?? 0) }))}
                     fmt={fmt}
                     fileName={`${(fundName ?? 'Fund').replace(/[^\w .,-]/g, '')} - Capital Call ${c.dueDate ? `Due ${c.dueDate}` : c.callDate}.xlsx`}
                   />

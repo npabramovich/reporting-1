@@ -19,6 +19,11 @@ import { previewSetEntityLink, executeSetEntityLink } from './entity-link'
 import { UPDATE_CONSTRUCTION_SCHEMA } from './construction-schema'
 import { previewSetWaterfallTerms, executeSetWaterfallTerms } from './waterfall-terms'
 import { SET_WATERFALL_TERMS_SCHEMA } from '@/lib/accounting/waterfall-terms-schema'
+import {
+  previewSetRecyclingTerms, executeSetRecyclingTerms, previewRecordRecycling, executeRecordRecycling,
+  previewRemoveRecycling, executeRemoveRecycling,
+} from './recycling'
+import { RECORD_RECYCLING_PROPERTIES, RECYCLING_TERMS_PROPERTIES } from '@/lib/agent/recycling-tools-manifest'
 
 /**
  * One write action the Analyst may DRAFT. Each maps to the access `domain` (+ optional feature)
@@ -283,6 +288,49 @@ export const WRITE_ACTIONS: Record<ActionType, WriteAction> = {
     inputSchema: SET_WATERFALL_TERMS_SCHEMA as any,
     preview: previewSetWaterfallTerms,
     execute: executeSetWaterfallTerms,
+  },
+  set_recycling_terms: {
+    entity: 'required',
+    // The LPA's recycling clause changes what the partners' capital can be used for.
+    domain: 'lp_capital',
+    stageAccess: 'write',
+    description:
+      "Propose a vehicle's recycling terms from its LPA: the cap (a share of commitments or of management fees), the date " +
+      'recycling ends, what recycled proceeds may fund, and the default treatment (retained = never distributed, deemed = ' +
+      'distributed and recontributed). Stages a before/after preview; nothing changes until approved. Rates are fractions.',
+    inputSchema: {
+      type: 'object', required: ['vehicle', 'capRate'], additionalProperties: false,
+      properties: { vehicle: { type: 'string' }, ...RECYCLING_TERMS_PROPERTIES },
+    },
+    preview: previewSetRecyclingTerms as any,
+    execute: executeSetRecyclingTerms as any,
+  },
+  record_recycling: {
+    entity: 'required',
+    domain: 'lp_capital',
+    stageAccess: 'write',
+    description:
+      "Propose recycling part of an exit's proceeds instead of distributing it, within the vehicle's cap. Retained posts " +
+      'nothing; deemed posts one netted entry with no cash or notices, so each partner shows a distribution and a ' +
+      'recontribution of their share by commitment. Stages a preview with the cap, what is left, and each partner\'s share.',
+    inputSchema: {
+      type: 'object', required: ['vehicle', 'date', 'amount'], additionalProperties: false,
+      properties: { vehicle: { type: 'string' }, ...RECORD_RECYCLING_PROPERTIES },
+    },
+    preview: previewRecordRecycling as any,
+    execute: executeRecordRecycling as any,
+  },
+  remove_recycling: {
+    entity: 'required',
+    domain: 'lp_capital',
+    stageAccess: 'write',
+    description: "Propose taking a recycled amount off a vehicle's register. A deemed amount's entry has to be voided first.",
+    inputSchema: {
+      type: 'object', required: ['vehicle', 'id'], additionalProperties: false,
+      properties: { vehicle: { type: 'string' }, id: { type: 'string' }, explanation: { type: 'string' } },
+    },
+    preview: previewRemoveRecycling as any,
+    execute: executeRemoveRecycling as any,
   },
 }
 

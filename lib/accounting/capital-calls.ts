@@ -31,7 +31,7 @@ import { loadCapitalPostings } from './capital-source'
 import { commitmentsFromPositions } from './lp-positions'
 import { loadCommitmentEvents, resolveCommitmentMap } from './terms'
 import { accountIdByCode, ensureCapitalAccounts, persistEntry } from './persist'
-import { computeCapitalAccounts, emptyAccount, type CapitalAccount, type CapitalPeriod, type CapitalPosting } from './capital-account'
+import { computeCapitalAccounts, emptyAccount, recontributedByLp, type CapitalAccount, type CapitalPeriod, type CapitalPosting } from './capital-account'
 import { buildCapitalCallIssuanceEntry } from './entries'
 import { allocateAmount } from './allocation'
 import { vehicleIdByName } from './vehicle-id'
@@ -359,8 +359,15 @@ export interface LpCapitalRow {
   called: number | null
   /** What actually arrived: called − receivable. */
   funded: number | null
-  /** Remaining to be CALLED: commitment − called. Disjoint from `receivable`. */
+  /**
+   * Remaining to be CALLED: commitment − called + recontributed. Disjoint from `receivable`.
+   */
   outstanding: number | null
+  /**
+   * Capital recontributed from recycled proceeds (lib/accounting/recycling.ts). It is in `called`,
+   * but it was a recallable distribution coming back, so it uses no commitment.
+   */
+  recontributed: number
   /** Called but not yet in the bank (acct 1300). Always 0 on an events vehicle. */
   receivable: number | null
   /**
@@ -390,6 +397,7 @@ export async function lpCapitalSummary(
     loadEntityClasses(admin, fundId, group),
   ])
   const accountByLp = computeCapitalAccounts(capitalPostings)
+  const recontributedBy = recontributedByLp(capitalPostings)
 
   const ids = new Set<string>([
     ...Array.from(names.keys()),
@@ -404,6 +412,7 @@ export async function lpCapitalSummary(
     const commitment = commitmentByLp.get(lpEntityId) ?? 0
     const called = evidence ? evidence.values.contributions : acct?.contributions ?? 0
     const receivable = evidence?.basis === 'reported' && !receivableByLp.has(lpEntityId) ? null : receivableByLp.get(lpEntityId) ?? 0
+    const recontributed = recontributedBy.get(lpEntityId) ?? 0
     return {
       lpEntityId,
       name: names.get(lpEntityId) ?? lpEntityId,
@@ -413,11 +422,13 @@ export async function lpCapitalSummary(
         // Called = capital recognized via call entries (the contributions bucket).
         acct?.contributions ?? 0,
         receivableByLp.get(lpEntityId) ?? 0,
+        recontributed,
       ),
       called,
       receivable,
       funded: called == null || receivable == null ? null : Math.max(0, roundCents(called - receivable)),
-      outstanding: called == null ? null : roundCents(commitment - called),
+      outstanding: called == null ? null : roundCents(commitment - called + recontributed),
+      recontributed,
       ending: evidence ? evidence.values.nav : roundCents(acct?.ending ?? 0),
     }
   })
@@ -439,6 +450,8 @@ export function commitmentFigures(
   commitmentRaw: number,
   calledRaw: number,
   receivableRaw: number,
+  /** Called capital that was recycled proceeds recontributed: it uses no commitment. */
+  recontributedRaw = 0,
 ): {
   commitment: number; called: number; funded: number; outstanding: number; receivable: number
   fundedUnderflow: boolean
@@ -463,7 +476,7 @@ export function commitmentFigures(
     commitment,
     called,
     funded: fundedUnderflow ? 0 : rawFunded,      // cash actually received
-    outstanding: roundCents(commitment - called), // remaining to be called
+    outstanding: roundCents(commitment - called + roundCents(recontributedRaw)), // remaining to be called
     receivable,
     fundedUnderflow,
   }

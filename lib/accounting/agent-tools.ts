@@ -90,6 +90,8 @@ import { RECEIPT_TOOL_MANIFEST } from '@/lib/agent/receipt-tools-manifest'
 import { RECEIPT_HANDLERS } from '@/lib/agent/receipt-tools'
 import { WATERFALL_TERMS_TOOL_MANIFEST } from '@/lib/agent/waterfall-terms-tools-manifest'
 import { WATERFALL_TERMS_HANDLERS } from '@/lib/agent/waterfall-terms-tools'
+import { RECYCLING_TOOL_MANIFEST } from '@/lib/agent/recycling-tools-manifest'
+import { RECYCLING_HANDLERS } from '@/lib/agent/recycling-tools'
 
 export { resolveVehicle } from './vehicle-resolver'
 
@@ -558,6 +560,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   ...bindLedger(ENTITY_OPERATIONS_TOOL_MANIFEST, OPERATIONS_HANDLERS),
   ...bindLedger(RECEIPT_TOOL_MANIFEST, RECEIPT_HANDLERS),
   ...bindLedger(WATERFALL_TERMS_TOOL_MANIFEST, WATERFALL_TERMS_HANDLERS),
+  ...bindLedger(RECYCLING_TOOL_MANIFEST, RECYCLING_HANDLERS),
   ...bind(PORTFOLIO_TOOL_MANIFEST, PORTFOLIO_HANDLERS),
   ...bind(HOLDING_TOOL_MANIFEST, HOLDING_HANDLERS),
   ...bind(DILIGENCE_TOOL_MANIFEST, DILIGENCE_HANDLERS),

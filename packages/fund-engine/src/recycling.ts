@@ -40,6 +40,22 @@ export interface RecyclingTerms {
   defaultTreatment?: RecyclingTreatment
 }
 
+/** No recycling: what a vehicle with no terms row, or no recycling columns yet, reads as. */
+export const NO_RECYCLING: RecyclingTerms = { capRate: 0, capBasis: 'commitments', until: null, uses: 'any', defaultTreatment: 'retained' }
+
+/** The terms from a `vehicle_waterfall_terms` row (its recycle_* columns). */
+export function recyclingTermsFromRow(row: Record<string, unknown> | null | undefined): RecyclingTerms {
+  if (!row) return NO_RECYCLING
+  const rate = Number(row.recycle_cap_rate)
+  return {
+    capRate: Number.isFinite(rate) && rate > 0 ? rate : 0,
+    capBasis: row.recycle_cap_basis === 'management_fees' ? 'management_fees' : 'commitments',
+    until: typeof row.recycle_until === 'string' && row.recycle_until ? row.recycle_until.slice(0, 10) : null,
+    uses: row.recycle_uses === 'new_investments' || row.recycle_uses === 'follow_ons' ? row.recycle_uses : 'any',
+    defaultTreatment: row.recycle_default_treatment === 'deemed' ? 'deemed' : 'retained',
+  }
+}
+
 /** The cap in currency: `capRate` × total commitments, or × management fees paid to date. */
 export function recyclingCap(terms: RecyclingTerms, base: { commitments: number; managementFees: number }): number {
   if (!(terms.capRate > 0)) return 0

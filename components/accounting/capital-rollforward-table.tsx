@@ -41,6 +41,8 @@ export interface Row extends Account {
   funded: number
   outstanding: number
   receivable: number
+  /** Recycled proceeds recontributed: in `called`, but no commitment used. Absent on an older response. */
+  recontributed?: number
   /** Sent before it was called, not yet applied to a call. Absent on an older response. */
   advance?: number
   /** Per-LP Net IRR (derived from the ledger, or the pasted position figure). */

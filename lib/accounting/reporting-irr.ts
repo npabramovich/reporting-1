@@ -10,7 +10,7 @@ export function reportingIrr(postings: CapitalPosting[], nav: number, evidence: 
   if (!evidence.canCalculateIrr) return evidence.reportedIrr
   if (!evidence.asOf) return null
   const flows = postings.flatMap(p => {
-    const type = bucketForSourceType(p.sourceType)
+    const type = bucketForSourceType(p.sourceType, p.amount)
     return p.entryDate && (type === 'contributions' || type === 'distributions')
       ? [{ date: new Date(p.entryDate + 'T00:00:00Z'), amount: p.amount }] : []
   })

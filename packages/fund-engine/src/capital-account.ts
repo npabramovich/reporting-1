@@ -34,9 +34,22 @@ export type RollForwardBucket =
   | 'carriedInterest'
   | 'unclassified'
 
-/** Map a journal entry source_type to a roll-forward line. */
-export function bucketForSourceType(sourceType: string | null | undefined): RollForwardBucket {
+/**
+ * Recycled proceeds booked as distributed and recontributed (lib/accounting/recycling.ts): one
+ * entry that pays each partner a distribution and takes the same amount back as a contribution,
+ * with no cash. Its debits to a partner's capital are the distribution and its credits the
+ * recontribution, so it is the one source type whose line depends on the posting's sign.
+ */
+export const RECYCLED_PROCEEDS_SOURCE = 'recycled_proceeds'
+
+/**
+ * Map a journal entry source_type to a roll-forward line. `amount` is the posting's signed,
+ * debit-positive amount to the partner's capital; only recycled proceeds need it.
+ */
+export function bucketForSourceType(sourceType: string | null | undefined, amount?: number): RollForwardBucket {
   switch (sourceType) {
+    case RECYCLED_PROCEEDS_SOURCE:
+      return (amount ?? 0) > 0 ? 'distributions' : 'contributions'
     case 'opening_balance':
       return 'beginning'
     case 'capital_call':
@@ -220,7 +233,7 @@ export function computeCapitalAccounts(
     const isCarriedIn = !!start && !!date && date < start
     const field: keyof CapitalAccount = isCarriedIn
       ? 'beginning'
-      : bucketForSourceType(p.sourceType)
+      : bucketForSourceType(p.sourceType, p.amount)
 
     acct[field] = r(acct[field] + capitalDelta)
     acct.ending = r(acct.ending + capitalDelta)
@@ -244,4 +257,19 @@ export function totalNav(accounts: Map<string, CapitalAccount>): number {
 export function rollForwardTies(a: CapitalAccount): boolean {
   const sum = ACTIVITY_FIELDS.reduce((s, f) => s + a[f], a.beginning)
   return Math.abs(r(sum) - a.ending) < 0.005
+}
+
+/**
+ * Per partner, the capital recontributed from recycled proceeds: in `contributions`, but it does
+ * not use up commitment, because the distribution it came back from was recallable. Uncalled
+ * commitment is `commitment − contributions + recontributed`.
+ */
+export function recontributedByLp(postings: CapitalPosting[], end?: string | null): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const p of postings) {
+    if (!p.lpEntityId || p.sourceType !== RECYCLED_PROCEEDS_SOURCE || !(p.amount < 0)) continue
+    if (end && p.entryDate && p.entryDate > end) continue
+    out.set(p.lpEntityId, r((out.get(p.lpEntityId) ?? 0) - p.amount))
+  }
+  return out
 }

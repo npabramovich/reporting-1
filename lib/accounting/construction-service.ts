@@ -318,7 +318,7 @@ async function loadConstructionActuals(
   // `journal_entries.entry_date` is NOT NULL, so this discards nothing in practice.
   const datedFlows = (bucket: 'contributions' | 'distributions', sign: 1 | -1) =>
     (ledger?.capitalPostings ?? [])
-      .filter(posting => !recipientIds.has(posting.lpEntityId ?? '') && bucketForSourceType(posting.sourceType) === bucket && !!posting.entryDate)
+      .filter(posting => !recipientIds.has(posting.lpEntityId ?? '') && bucketForSourceType(posting.sourceType, posting.amount) === bucket && !!posting.entryDate)
       .map(posting => ({ date: posting.entryDate as string, amount: Math.max(0, sign * posting.amount) }))
       .filter(flow => flow.amount > 0)
   const lpContributions = datedFlows('contributions', -1)

@@ -99,6 +99,7 @@ export async function GET(req: NextRequest) {
         called: s ? s.called : null,
         funded: s ? s.funded : null,
         outstanding: s ? s.outstanding : null,
+        recontributed: s?.recontributed ?? 0,
         receivable: s ? s.receivable : null,
         advance: advances.get(lpEntityId) ?? 0,
         fundedUnderflow: s?.fundedUnderflow ?? false,
