@@ -309,7 +309,7 @@ export function carryOnUnrealizedForYear(
         nav: roundCents(a.ending - a.carriedInterest - (taxBasis ? a.unrealizedGains + a.fxTranslation : 0)),
       }))
     const contributions: DatedContribution[] = upTo
-      .filter(p => !recipientIds.has(p.lpEntityId) && bucketForSourceType(p.sourceType) === 'contributions')
+      .filter(p => !recipientIds.has(p.lpEntityId) && bucketForSourceType(p.sourceType, p.amount) === 'contributions')
       .map(p => ({ date: p.entryDate ?? asOf, amount: roundCents(-p.amount) }))
       .filter(c => c.amount > 0)
     // An unreturned-capital hurdle needs what came back, and when.

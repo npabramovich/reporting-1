@@ -192,7 +192,7 @@ export function buildCapitalSeries(postings: SeriesPosting[], quarters: string[]
     const bucket = perQuarter.get(quarterFor(p.entryDate ?? quarters[0]))
     if (!bucket) continue
     const delta = -p.amount // credit increases capital
-    switch (bucketForSourceType(p.sourceType)) {
+    switch (bucketForSourceType(p.sourceType, p.amount)) {
       case 'contributions': bucket.contributions += delta; break
       case 'distributions': bucket.distributions += delta; break
       case 'operatingIncome': bucket.operatingIncome += delta; break
@@ -304,7 +304,7 @@ export async function fundTimeseries(
     for (const p of postings) {
       if (p.entryDate && p.entryDate > until) continue
       if (ids && (!p.lpEntityId || !ids.has(p.lpEntityId))) continue
-      const bucket = bucketForSourceType(p.sourceType)
+      const bucket = bucketForSourceType(p.sourceType, p.amount)
       if (bucket !== 'contributions' && bucket !== 'distributions') continue
       const delta = -p.amount // credit increases capital
       if (Math.abs(delta) < 0.005) continue

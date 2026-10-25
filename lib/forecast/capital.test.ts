@@ -44,6 +44,32 @@ describe('calls and distributions, month by month', () => {
     expect(r.warnings[0]).toMatch(/no uncalled capital left/)
   })
 
+  it('keeps recycled proceeds in the bank, so a later investment calls less', () => {
+    const flows = m({ '2027-01': 1_000_000, '2027-03': -600_000 })
+    const plain = computeCapital({ months: [...months], openingCash: 0, uncalled: 5_000_000, cashFlows: flows, proceeds: m({ '2027-01': 1_000_000 }), settings: DEFAULT_CAPITAL })
+    const r = computeCapital({
+      months: [...months], openingCash: 0, uncalled: 5_000_000, cashFlows: flows, proceeds: m({ '2027-01': 1_000_000 }),
+      recycled: m({ '2027-01': 400_000 }), settings: DEFAULT_CAPITAL,
+    })
+    expect(plain.calls.get('2027-03')).toBe(600_000)
+    expect(r.distributions.get('2027-01')).toBe(600_000)
+    expect(r.calls.get('2027-03')).toBe(200_000)
+    expect(r.recontributed.size).toBe(0)
+  })
+
+  it('books deemed recycling as a call and a distribution of the same amount, without using up commitment', () => {
+    const flows = m({ '2027-01': 1_000_000, '2027-03': -600_000 })
+    const r = computeCapital({
+      months: [...months], openingCash: 0, uncalled: 5_000_000, cashFlows: flows, proceeds: m({ '2027-01': 1_000_000 }),
+      recycled: m({ '2027-01': 400_000 }), recycledDeemed: m({ '2027-01': 400_000 }), settings: DEFAULT_CAPITAL,
+    })
+    expect(r.calls.get('2027-01')).toBe(400_000)
+    expect(r.distributions.get('2027-01')).toBe(1_000_000)
+    expect(r.recontributed.get('2027-01')).toBe(400_000)
+    expect(r.calls.get('2027-03')).toBe(200_000) // the cash is the same as never distributed
+    expect(r.endingCash.get('2027-04')).toBe(0)
+  })
+
   it('refuses a malformed edit', () => {
     expect(() => validateCapital({ calls: { 'March': 5 } })).toThrow(CapitalError)
   })

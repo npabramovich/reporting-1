@@ -91,7 +91,7 @@ export function datedCapitalFlows(
   const byDate = new Map<string, LpDatedFlow>()
   for (const p of postings) {
     if (!p.entryDate || !ids.has(p.lpEntityId)) continue
-    const bucket = bucketForSourceType(p.sourceType)
+    const bucket = bucketForSourceType(p.sourceType, p.amount)
     if (bucket !== 'contributions' && bucket !== 'distributions') continue
     // A capital account is a credit balance: a contribution posts negative, a distribution positive.
     const row = byDate.get(p.entryDate) ?? { date: p.entryDate, contributions: 0, distributions: 0 }
@@ -201,7 +201,7 @@ export async function vehicleEconomics(
     const out: CashFlow[] = []
     for (const p of postings) {
       if (ids && (!p.lpEntityId || !ids.has(p.lpEntityId))) continue
-      const bucket = bucketForSourceType(p.sourceType)
+      const bucket = bucketForSourceType(p.sourceType, p.amount)
       if (bucket !== 'contributions' && bucket !== 'distributions') continue
       const delta = -p.amount // capital delta: credit positive
       if (Math.abs(delta) < 0.005) continue

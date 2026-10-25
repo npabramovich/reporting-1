@@ -296,6 +296,46 @@ Applying a proposal is `set_waterfall_terms`, which is always staged as a pendin
 - Approval needs GP economics write.
 - Approval runs the same validation and write as the settings page.
 
+## 8a. Recycling
+
+Recycling is exit proceeds a vehicle puts back to work instead of distributing. Its terms sit on
+the same row as the carry terms (`recycle_*` columns) because they come from the same LPA clauses,
+but they are read and written on their own (`lib/accounting/recycling.ts`), so setting one never
+resets the other.
+
+| Term | Column | Meaning |
+|---|---|---|
+| Cap | `recycle_cap_rate` | A fraction of the basis. 0 means the vehicle does not recycle. |
+| Basis | `recycle_cap_basis` | `commitments` (the default) or `management_fees` paid to date. |
+| End | `recycle_until` | Proceeds received after this date are not recycled. Null means no end date. |
+| Uses | `recycle_uses` | `any`, `new_investments` or `follow_ons`. Recorded for the approver; not enforced. |
+| Default treatment | `recycle_default_treatment` | `retained` (the default) or `deemed`. |
+
+Each recycled amount is a row in `recycled_proceeds`, booked one of two ways:
+- **Retained (never distributed).** Nothing is posted. The cash is already in the bank, keeping it
+  is what makes the next call smaller, and the row counts against the cap.
+- **Deemed (distributed and recontributed).** One posted entry, `recycled_proceeds`, with no cash
+  and no notices. Each partner's share, split by commitment like a call, is debited to their
+  capital and credited to 2300, then debited to 2300 and credited back to their capital. It is
+  the one source type whose roll-forward line depends on the posting's sign (debit =
+  distribution, credit = contribution), so the partner's statement and K-1 show both. The
+  distribution is recallable, so uncalled commitment is `commitment − called + recontributed`.
+
+The two legs are dated the same day, so the waterfall reads the distribution as a return of the
+capital recontributed with it. On an `unreturned` hurdle that nets to nothing. On a `contributed`
+hurdle the recontribution is contributed capital and accrues the preferred return from its date,
+which is the economic difference between the two treatments.
+
+The cap is checked when an amount is recorded: what is left is the cap less the live rows (a
+deemed row whose entry was voided no longer counts), and nothing may be recycled after the end
+date. The tools are `recycling` (read), and `set_recycling_terms`, `record_recycling` and
+`remove_recycling`, each always staged for a person with LP capital write to approve. To undo a
+deemed amount, void its entry with a reason, then remove the row.
+
+The forecasts recycle with their own assumptions (portfolio construction's return assumptions and
+each deal's own amount and treatment), using the same allocation as the fund engine's
+`allocateRecycling`: amounts that are set go first, then the earliest exits fill what is left.
+
 ## 9. Vector index
 
 Every vector in `waterfall-vectors.json`, by section:

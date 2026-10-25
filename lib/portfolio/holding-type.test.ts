@@ -14,6 +14,7 @@ import { join } from 'path'
 
 // Call sites that legitimately do NOT filter, each with the reason it does not.
 const ALLOWLIST = new Map<string, string>([
+  ['lib/accounting/recycling.ts', 'Checks only that a recycled exit\'s company id is in the fund; a direct company and a fund holding can both exit.'],
   ['lib/onboarding/wizard-server.ts', 'a head-only count: does the fund hold any data yet (any holding kind)'],
   ['lib/onboarding/progress.ts', 'a head-only count for the setup checklist — any holding kind means investments are loaded'],
   ['lib/accounting/ownership.ts', 'names for the companies of transactions already identified by id — any holding kind'],

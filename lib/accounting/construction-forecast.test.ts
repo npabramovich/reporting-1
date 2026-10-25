@@ -288,3 +288,73 @@ describe('per-deal timing', () => {
     expect(beta.lossRate).toBeUndefined()
   })
 })
+
+describe('recycling in the forecast', () => {
+  // Alpha exits in year 1, before the plan's year-2 investments, so its proceeds can fund them.
+  const early = (over: Partial<NonNullable<ConstructionAssumptions['positionForecasts']>[number]> = {}) => assumptions({
+    positionForecasts: [
+      { ...assumptions().positionForecasts[0], followOnInYears: undefined, plannedFollowOn: 0, exitInYears: 1, ...over },
+      assumptions().positionForecasts[1],
+    ],
+  })
+  const run = (a: ConstructionAssumptions, p: Partial<PacingAssumptions>) =>
+    forecastSchedule(constructionModel(actuals(), a), a, pacing(p), baseline)
+  const total = (s: ReturnType<typeof run>, k: 'called' | 'distributed') => s.years.reduce((sum, y) => sum + y[k], 0)
+
+  it('distributes everything when the fund has no recycling cap', () => {
+    expect(run(early(), {}).years.some(y => (y.recycled ?? 0) > 0)).toBe(false)
+  })
+
+  it('never distributed: the exit pays for later investments, so less is called and distributed', () => {
+    const off = run(early(), {})
+    const on = run(early(), { recycleCapRate: 0.2 })
+    const recycled = on.years.reduce((s, y) => s + (y.recycled ?? 0), 0)
+    expect(recycled).toBeGreaterThan(0)
+    // Each exit carries its own share, so the monthly plan books it in the exit's month.
+    expect(on.deals.reduce((s, d) => s + (d.recycled ?? 0), 0)).toBeCloseTo(recycled, 2)
+    expect(recycled).toBeLessThanOrEqual(2_000_000)
+    // Cash is fungible: part of the recycled cash pays the year's fees, which the exit would
+    // otherwise have covered, so calls and distributions fall by the same amount, at most what
+    // was recycled.
+    const fewerCalls = total(off, 'called') - total(on, 'called')
+    expect(fewerCalls).toBeGreaterThan(0)
+    expect(fewerCalls).toBeLessThanOrEqual(recycled + 0.005)
+    expect(total(off, 'distributed') - total(on, 'distributed')).toBeCloseTo(fewerCalls, 2)
+  })
+
+  it('distributed and recontributed: the same cash, with calls and distributions grossed up', () => {
+    const off = run(early(), {})
+    const deemed = run(early(), { recycleCapRate: 0.2, recycleTreatment: 'deemed' })
+    const retainedYears = run(early(), { recycleCapRate: 0.2 }).years
+    for (let i = 0; i < off.years.length; i++) {
+      expect(deemed.years[i].distributed - deemed.years[i].called).toBeCloseTo(retainedYears[i].distributed - retainedYears[i].called, 2)
+    }
+    const retained = run(early(), { recycleCapRate: 0.2 })
+    const recycled = deemed.years.reduce((s, y) => s + (y.recycledDeemed ?? 0), 0)
+    expect(recycled).toBeGreaterThan(0)
+    expect(total(deemed, 'called') - total(retained, 'called')).toBeCloseTo(recycled, 2)
+    expect(deemed.years.at(-1)!.netIrr).toBeCloseTo(retained.years.at(-1)!.netIrr!, 6)
+  })
+
+  it('a deal can keep its exit out, or recycle only part of it', () => {
+    expect(run(early({ recycleAmount: 0 }), { recycleCapRate: 0.2 }).years.some(y => (y.recycled ?? 0) > 0)).toBe(false)
+    const part = run(early({ recycleAmount: 250_000 }), { recycleCapRate: 0.2 })
+    expect(part.years.reduce((s, y) => s + (y.recycled ?? 0), 0)).toBeCloseTo(250_000, 2)
+  })
+
+  it('stops at the end of the recycling period', () => {
+    expect(run(early(), { recycleCapRate: 0.2, recycleUntilYears: 0.5 }).years.some(y => (y.recycled ?? 0) > 0)).toBe(false)
+  })
+
+  it('runs the deemed distribution through the waterfall as a return of capital', () => {
+    const projection = {
+      asOf: baseline.asOf, kind: 'european' as const, carryRate: 0.2, prefRate: 0.08, catchupRate: 1, prefCompounds: true,
+      lpCommitmentShare: 1, lpCalledCapital: 3_000_000, lpDistributedCapital: 0, fundDistributedCapital: 0, lpNav: 3_100_000,
+      contributions: [{ date: '2025-09-18', amount: 3_000_000 }],
+    }
+    const off = applyLpWaterfall(run(early(), { recycleCapRate: 0.2 }), projection)
+    const deemed = applyLpWaterfall(run(early(), { recycleCapRate: 0.2, recycleTreatment: 'deemed' }), projection)
+    const carry = (s: ReturnType<typeof applyLpWaterfall>) => s.years.reduce((sum, y) => sum + (y.carriedInterest ?? 0), 0)
+    expect(carry(deemed)).toBeCloseTo(carry(off), 1)
+  })
+})

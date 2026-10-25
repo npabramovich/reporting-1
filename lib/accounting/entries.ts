@@ -134,6 +134,35 @@ export function buildDistributionDeclarationEntry(
 }
 
 /**
+ * Recycled proceeds booked as DISTRIBUTED AND RECONTRIBUTED (lib/accounting/recycling.ts): one
+ * entry, no cash. Each partner is paid a distribution through the payable and the payable is
+ * applied straight back as their recontribution, so their capital and the payable both net to
+ * zero while the roll-forward shows a distribution and a contribution of the same amount:
+ *   Dr LP capital / Cr 2300 payable     the distribution
+ *   Dr 2300 payable / Cr LP capital     the recontribution
+ * `recycled_proceeds` is the one source type bucketed by sign (bucketForSourceType).
+ */
+export function buildRecycledProceedsEntry(
+  base: Base,
+  perLp: Map<string, number>,
+  capMap: CapitalAccountMap,
+  payableAccountId: string,
+  currency = 'USD'
+): JournalEntry {
+  const postings: Posting[] = []
+  for (const [lpEntityId, raw] of Array.from(perLp.entries())) {
+    const amt = roundCents(raw)
+    if (!amt) continue
+    const capital = lpDebit(capMap, lpEntityId, amt, currency)
+    postings.push(capital)                                                                         // Dr LP capital
+    postings.push({ accountId: payableAccountId, amount: -amt, currency, lpEntityId })             // Cr payable
+    postings.push({ accountId: payableAccountId, amount: amt, currency, lpEntityId })              // Dr payable
+    postings.push({ accountId: capital.accountId, amount: -amt, currency, lpEntityId })            // Cr LP capital
+  }
+  return finalize(base, 'recycled_proceeds', postings)
+}
+
+/**
  * SETTLE a declared distribution: clear the payable with cash. No capital effect — capital
  * was reduced at declaration, exactly as `buildFundingEntry` adds none because capital was
  * recognized at the call.

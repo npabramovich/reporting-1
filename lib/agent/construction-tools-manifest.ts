@@ -34,7 +34,9 @@ export const CONSTRUCTION_TOOL_MANIFEST: AgentToolMeta[] = [
     description:
       "Change a plan's Investments tab — its portfolio construction — directly: add, change or remove planned deals one " +
       'at a time by key (check, timing, exit, simulation settings), set a held company\'s exit and follow-on, the fund-wide ' +
-      'return assumptions (hold, default exit multiple, write-off rate, exit timing range), and the portfolio targets. ' +
+      'return assumptions (hold, default exit multiple, write-off rate, exit timing range), recycling (a cap, an end, and ' +
+      'whether recycled proceeds are never distributed or distributed and recontributed, set fund-wide and per exit), ' +
+      'and the portfolio targets. ' +
       "Omit planId for the entity's primary plan. Saves immediately (the Analyst's update_portfolio_construction stages the " +
       'same change for approval instead). Fees and expenses are forecast_update_plan. ' + FORECASTING_PRINCIPLES,
     scope: 'write',

@@ -13,6 +13,9 @@ export type ActionType =
   | 'create_forecast_plan'
   | 'set_entity_link'
   | 'set_waterfall_terms'
+  | 'set_recycling_terms'
+  | 'record_recycling'
+  | 'remove_recycling'
 
 export type PendingActionStatus = 'pending' | 'approved' | 'applied' | 'rejected' | 'failed'
 

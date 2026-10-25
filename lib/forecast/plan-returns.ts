@@ -29,6 +29,9 @@ export interface ReturnsInput {
   /** Deal cash: checks written (negative) and exit proceeds (positive). */
   invested: Map<MonthKey, number>
   proceeds: Map<MonthKey, number>
+  /** The part of the proceeds recycled, and of that the part booked as distributed and recontributed. */
+  recycled?: Map<MonthKey, number>
+  recycledDeemed?: Map<MonthKey, number>
   /** The fund's NAV (gross, holdings at value) at the end of the window, plus its cash then. */
   terminalNav: number
   waterfall?: ConstructionWaterfallProjection
@@ -60,7 +63,8 @@ export function planReturns(input: ReturnsInput): PlanReturns {
     cashFlows.set(m, roundCents((input.otherFlows.get(m) ?? 0) + (input.invested.get(m) ?? 0) + (input.proceeds.get(m) ?? 0)))
   }
   const cap = computeCapital({
-    months: input.months, openingCash: input.openingCash, cashFlows, proceeds: input.proceeds, uncalled: input.uncalled, settings: input.settings,
+    months: input.months, openingCash: input.openingCash, cashFlows, proceeds: input.proceeds,
+    recycled: input.recycled, recycledDeemed: input.recycledDeemed, uncalled: input.uncalled, settings: input.settings,
   })
   const wf = runMonthlyWaterfall(cap.distributions, cap.calls, input.months, input.waterfall)
   const carryOn = !!wf.state
@@ -132,6 +136,6 @@ export function planReturns(input: ReturnsInput): PlanReturns {
       const v = cap.endingCash.get(m) ?? 0
       return !low || v < low.amount ? { month: m, amount: v } : low
     }, null),
-    warnings: cap.warnings,
+    warnings: [...cap.warnings, ...wf.warnings],
   }
 }

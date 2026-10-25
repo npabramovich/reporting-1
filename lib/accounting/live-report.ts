@@ -18,7 +18,7 @@
 // snapshots stay exactly as they are, which is what makes the two comparable.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { computeCapitalAccounts, emptyAccount, bucketForSourceType, type CapitalAccount, type CapitalPosting } from './capital-account'
+import { computeCapitalAccounts, emptyAccount, bucketForSourceType, recontributedByLp, type CapitalAccount, type CapitalPosting } from './capital-account'
 import { xirr, type CashFlow } from '@/lib/xirr'
 import { lpRatios } from '@/lib/lp-metrics'
 import { loadCapitalPostings, type CapitalSource } from './capital-source'
@@ -120,7 +120,7 @@ export function lpIrr(
 
   for (const p of postings) {
     if (!p.entryDate) continue
-    const bucket = bucketForSourceType(p.sourceType)
+    const bucket = bucketForSourceType(p.sourceType, p.amount)
     if (bucket !== 'contributions' && bucket !== 'distributions') continue
 
     // capitalDelta = -amount. A contribution raises capital (+) and is cash OUT for the LP (−).
@@ -142,7 +142,9 @@ export function deriveMetrics(
   account: CapitalAccount,
   commitment: number,
   receivable: number,
-  irr: number | null = null
+  irr: number | null = null,
+  /** Capital recontributed from recycled proceeds: called, but it uses no commitment (recontributedByLp). */
+  recontributed = 0,
 ): LiveMetrics {
   // PAID-IN IS CALLED CAPITAL. Capital is recognized when it is CALLED, not when the cash
   // lands, and an LP snapshot uses `paid_in_capital` to mean exactly that — recognized, and
@@ -170,7 +172,7 @@ export function deriveMetrics(
     distributions,
     nav,
     total_value: totalValue,
-    outstanding_balance: roundCents(commitment - paidIn),
+    outstanding_balance: roundCents(commitment - paidIn + recontributed),
     receivable: roundCents(receivable),
     // Denominator is paid-in (cash the LP actually put in), matching how every existing
     // read path computes these — see lib/lp-report-pdf.ts computeRow.
@@ -195,6 +197,7 @@ export async function liveRowsForVehicle(
   )
 
   const accountByLp = computeCapitalAccounts(postings)
+  const recontributed = recontributedByLp(postings)
 
   // Union: an LP with a commitment but no activity still belongs on the report (they show
   // as fully unfunded), and an LP with activity but no recorded commitment must not vanish.
@@ -220,7 +223,7 @@ export async function liveRowsForVehicle(
     const lpPostings = postingsByLp.get(entityId) ?? []
     const evidence = evidenceByLp.get(entityId)
     const irr = reportingIrr(lpPostings, account.ending, evidence)
-    const metrics = deriveMetrics(account, commitmentByLp.get(entityId) ?? 0, receivableByLp.get(entityId) ?? 0, irr)
+    const metrics = deriveMetrics(account, commitmentByLp.get(entityId) ?? 0, receivableByLp.get(entityId) ?? 0, irr, recontributed.get(entityId) ?? 0)
     if (evidence) {
       metrics.called_capital = metrics.paid_in_capital = evidence.values.contributions
       metrics.distributions = evidence.values.distributions

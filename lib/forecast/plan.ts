@@ -351,7 +351,8 @@ export function constructionEntries(
           reversals.push({ accountId: asset.id, amount: -held, currency: c }, { accountId: income.id, amount: held, currency: c })
           balance.set(asset.id, 0)
         }
-        entries.push({ ...base, kind: 'proceeds', accountId: gainAcct.id, memo: `Exit proceeds${label} (${e.timing})`, postings: [
+        entries.push({ ...base, kind: 'proceeds', accountId: gainAcct.id, memo: `Exit proceeds${label} (${e.timing})`,
+          ...(e.recycled ? { recycled: e.recycled, recycledDeemed: e.recycledDeemed ?? 0 } : {}), postings: [
           { accountId: cashId, amount: a, currency: c },
           { accountId: costAcct.id, amount: -cost, currency: c },
           ...reversals,

@@ -10,6 +10,8 @@ export {
   computeCapitalAccounts,
   totalNav,
   rollForwardTies,
+  recontributedByLp,
+  RECYCLED_PROCEEDS_SOURCE,
 } from '@portfolio/fund-engine'
 export type {
   RollForwardBucket,

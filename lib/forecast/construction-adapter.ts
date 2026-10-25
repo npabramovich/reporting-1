@@ -26,6 +26,9 @@ export interface ConstructionEvent {
   amount: number
   /** Cost basis released by an exit (proceeds only), so the gain can be split from the return of capital. */
   cost?: number
+  /** The part of an exit's proceeds the fund recycles (proceeds only), and of that the part booked as deemed. */
+  recycled?: number
+  recycledDeemed?: number
   deal?: string
   /** A company the fund already holds (its id), so its own cost, mark and gain accounts are used. */
   companyId?: string
@@ -90,7 +93,12 @@ export function monthlyConstruction(schedule: ForecastSchedule, asOf: string): M
       if (d.exitAt <= 0) dropped++
       else if (d.exitAt <= H + 1e-9) {
         const cost = d.investedToDate + d.initialCheck + d.followOn
-        events.push({ month: at(monthIndex(d.exitAt)), flow: 'proceeds', amount: roundCents(d.proceeds), cost: roundCents(cost), deal: d.name, ...(d.kind === 'existing' ? { companyId: d.key } : {}), timing })
+        events.push({
+          month: at(monthIndex(d.exitAt)), flow: 'proceeds', amount: roundCents(d.proceeds), cost: roundCents(cost), deal: d.name,
+          ...(d.kind === 'existing' ? { companyId: d.key } : {}),
+          ...(d.recycled ? { recycled: roundCents(d.recycled), recycledDeemed: roundCents(d.recycledDeemed ?? 0) } : {}),
+          timing,
+        })
       }
     }
   }

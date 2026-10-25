@@ -20,8 +20,9 @@
 
 import type { ConstructionActuals, ConstructionAssumptions, ConstructionResult, ConstructionWaterfallProjection, PacingAssumptions } from './construction'
 import { projectFeesForYear, DEFAULT_PACING } from './construction'
-import { preferredTarget } from './carry'
-import { runWaterfall, type WaterfallState } from './waterfall'
+import { runWaterfall } from './waterfall'
+import { forwardWaterfall } from './forward-waterfall'
+import { allocateRecycling, type RecyclingTreatment } from '@portfolio/fund-engine'
 
 /** One forecast baseline for the page, API, and agent. No invented historical flow dates. */
 export function constructionBaseline(actuals: ConstructionActuals, model: ConstructionResult, asOf: string): ForecastBaseline {
@@ -79,6 +80,12 @@ export interface DealTimeline {
   lossRate?: number
   dispersion?: number
   exitSpreadYears?: number
+  /** Most of the exit to recycle (0 = none); absent = automatic, within the fund's cap. */
+  recycleAmount?: number
+  recycleTreatment?: RecyclingTreatment
+  /** Set by forecastSchedule: how much of the exit is recycled, and the part booked as deemed. */
+  recycled?: number
+  recycledDeemed?: number
 }
 
 export interface ForecastYear {
@@ -94,6 +101,13 @@ export interface ForecastYear {
   distributed: number
   /** GP carry allocated by the waterfall in this year. */
   carriedInterest?: number
+  /** Exit proceeds put back to work this year instead of distributed. */
+  recycled?: number
+  /**
+   * The part of `recycled` booked as distributed and recontributed. It is in `called` and
+   * `distributed` too; recycling never distributed is in neither.
+   */
+  recycledDeemed?: number
   // Cumulative at the year end
   cumCalled: number
   cumInvested: number
@@ -125,10 +139,15 @@ export interface ForecastSchedule {
  */
 export function dealTimelines(model: ConstructionResult, pacing: PacingAssumptions, asOf?: string): DealTimeline[] {
   const stated = (v: number | null | undefined): v is number => typeof v === 'number' && Number.isFinite(v)
-  const overrides = (f: { simLossRate?: number | null; simDispersion?: number | null; simExitSpreadYears?: number | null }) => ({
+  const overrides = (f: {
+    simLossRate?: number | null; simDispersion?: number | null; simExitSpreadYears?: number | null
+    recycleAmount?: number | null; recycleTreatment?: RecyclingTreatment | null
+  }) => ({
     ...(stated(f.simLossRate) ? { lossRate: f.simLossRate } : {}),
     ...(stated(f.simDispersion) ? { dispersion: f.simDispersion } : {}),
     ...(stated(f.simExitSpreadYears) ? { exitSpreadYears: f.simExitSpreadYears } : {}),
+    ...(stated(f.recycleAmount) ? { recycleAmount: Math.max(0, f.recycleAmount) } : {}),
+    ...(f.recycleTreatment ? { recycleTreatment: f.recycleTreatment } : {}),
   })
   const out: DealTimeline[] = []
   for (const p of model.returns.positions) {
@@ -248,7 +267,7 @@ export function forecastSchedule(
   irr: 'all' | 'final' | 'none' = 'all',
 ): ForecastSchedule {
   const warnings: string[] = []
-  const deals = dealTimelines(model, pacing, baseline.asOf).map(d => {
+  let deals = dealTimelines(model, pacing, baseline.asOf).map(d => {
     const o = proceedsOverride?.get(d.key)
     return o && d.proceeds != null ? { ...d, proceeds: o.proceeds, exitAt: o.exitAt } : d
   })
@@ -304,6 +323,41 @@ export function forecastSchedule(
     : [{ t: 0, amount: -baseline.calledCapital + baseline.distributed }]
   const forward: TimedFlow[] = []
 
+  // Recycling: within the cap, exits fund the plan's later investments instead of being
+  // distributed. Deals that set an amount go first, then the earliest exits (fund-engine
+  // allocateRecycling). An exit after the plan's last investment has nothing left to fund, so it
+  // is not recycled, and neither is one after the recycling period.
+  const recycled = new Array<number>(horizonYears + 1).fill(0)
+  const recycledDeemed = new Array<number>(horizonYears + 1).fill(0)
+  const capRate = pacing.recycleCapRate ?? 0
+  if (capRate > 0) {
+    const lastInvestmentYear = invested.reduce((last, v, t) => (v > 0 ? t : last), 0)
+    const exits = deals.filter(d => d.proceeds != null && d.proceeds > 0 && d.exitAt <= horizonYears + 1e-9)
+    const until = Math.min(lastInvestmentYear, pacing.recycleUntilYears ?? Infinity)
+    const allocation = allocateRecycling(
+      exits.map(d => ({
+        at: yearOf(d.exitAt),
+        proceeds: d.proceeds!,
+        ...(d.recycleAmount !== undefined ? { amount: d.recycleAmount } : {}),
+        ...(d.recycleTreatment ? { treatment: d.recycleTreatment } : {}),
+      })),
+      // Up to the cap, and no more than the plan still has to invest beyond the cash in hand:
+      // recycling more than the plan can spend would only park cash.
+      Math.min(capRate * committed, Math.max(0, invested.reduce((s, v) => s + v, 0) - cash)),
+      { until, defaultTreatment: pacing.recycleTreatment ?? 'retained' },
+    )
+    const byDeal = new Map(exits.map((d, i) => [d, allocation[i]]))
+    exits.forEach((d, i) => {
+      recycled[yearOf(d.exitAt)] += allocation[i].recycled
+      recycledDeemed[yearOf(d.exitAt)] += allocation[i].deemed
+    })
+    // On the deals too, so the monthly plan forecast books each exit's recycling in its own month.
+    deals = deals.map(d => {
+      const got = byDeal.get(d)
+      return got && got.recycled > 0 ? { ...d, recycled: got.recycled, recycledDeemed: got.deemed } : d
+    })
+  }
+
   const navAt = (t: number): number => {
     // Unexited deals carry at their value today (existing) or at cost (planned), optionally
     // accreting straight-line to the forecast proceeds between now and the exit.
@@ -339,14 +393,19 @@ export function forecastSchedule(
       : fundIsOperating ? (t <= a.feeTermYears ? a.annualPartnershipExpense : 0) + (t === 1 ? a.remainingOrgCosts : 0) : 0
     const inv = t === 0 ? 0 : invested[t]
     const grossProceeds = t === 0 ? 0 : proceeds[t]
+    const recycledNow = t === 0 ? 0 : recycled[t]
+    const deemedNow = t === 0 ? 0 : recycledDeemed[t]
     let dist = grossProceeds
 
     // Call what the dated plan needs after using cash on hand. Whether the investment plan fits
     // the fund is decided once by constructionModel; this timeline only places that plan in time.
     let called = 0
     if (t > 0) {
+      // Recycled proceeds join the cash on hand, so they pay for investments before a call does.
+      cash += recycledNow
       // Spend existing cash on scheduled investments first, then operating costs. Exit proceeds
-      // are not recycled into investments, but they can cover same-year fees and wind-down costs.
+      // beyond recycling are not put into investments, but they can cover same-year fees and
+      // wind-down costs.
       const investmentFromCash = Math.min(cash, inv)
       cash -= investmentFromCash
       const investmentCall = inv - investmentFromCash
@@ -356,12 +415,14 @@ export function forecastSchedule(
       const remainingOperatingNeed = operatingNeed - operatingFromCash
       // Exit proceeds pay same-year operating and wind-down costs before cash is distributed.
       // That prevents a final capital call merely to pay expenses while proceeds leave the fund.
-      const fromProceeds = Math.min(grossProceeds, remainingOperatingNeed)
-      dist = grossProceeds - fromProceeds
+      const fromProceeds = Math.min(grossProceeds - recycledNow, remainingOperatingNeed)
+      dist = grossProceeds - recycledNow - fromProceeds
       called = investmentCall + remainingOperatingNeed - fromProceeds
+      // Recycling booked as distributed and recontributed: the same cash, shown on both sides.
+      dist += deemedNow
+      called += deemedNow
       cumCalled += called
       cumInvested += inv
-      // Proceeds go straight back out: the fund does not recycle.
       cumDistributed += dist
     }
     const nav = r(navAt(t) + cash)
@@ -378,6 +439,7 @@ export function forecastSchedule(
       expenses: r(expenses),
       called: r(called),
       distributed: r(dist),
+      ...(recycledNow > 0 ? { recycled: r(recycledNow), recycledDeemed: r(deemedNow) } : {}),
       cumCalled: r(cumCalled),
       cumInvested: r(cumInvested),
       cumDistributed: r(cumDistributed),
@@ -404,8 +466,8 @@ export function forecastSchedule(
 export function applyLpWaterfall(schedule: ForecastSchedule, projection?: ConstructionWaterfallProjection): ForecastSchedule {
   if (!projection) return schedule
   const share = Math.min(1, Math.max(0, projection.lpCommitmentShare))
-  const terms = { carryRate: projection.carryRate, catchUpRate: projection.kind === 'straight' ? 1 : projection.catchupRate }
-  const contributions = [...projection.contributions]
+  // Null when there is no carry: the LPs keep their share of everything.
+  const waterfall = forwardWaterfall(projection)
   const history: TimedFlow[] = [
     ...projection.contributions.map(flow => ({ t: yearsBetween(projection.asOf, flow.date), amount: -flow.amount })),
     ...(projection.distributions ?? []).map(flow => ({ t: yearsBetween(projection.asOf, flow.date), amount: flow.amount })),
@@ -413,14 +475,6 @@ export function applyLpWaterfall(schedule: ForecastSchedule, projection?: Constr
   const forward: TimedFlow[] = []
   let called = projection.lpCalledCapital
   let distributed = projection.lpDistributedCapital
-  const initialPref = projection.kind === 'straight' ? 0 : preferredTarget(contributions, projection.asOf, projection.prefRate, projection.prefCompounds)
-  let state: WaterfallState = {
-    contributedCapital: called,
-    returnedCapital: Math.min(called, distributed),
-    preferredPaid: Math.min(initialPref, Math.max(0, distributed - called)),
-    preferredTarget: initialPref,
-    gpCarryPaid: Math.max(0, projection.fundDistributedCapital - projection.lpDistributedCapital),
-  }
   const years = schedule.years.map((year, index) => {
     if (index === 0) {
       return {
@@ -437,19 +491,15 @@ export function applyLpWaterfall(schedule: ForecastSchedule, projection?: Constr
     }
     const lpCall = year.called * share
     called += lpCall
-    if (lpCall > 0) contributions.push({ date: `${year.calendarYear}-12-31`, amount: lpCall })
-    state = {
-      ...state,
-      contributedCapital: called,
-      preferredTarget: projection.kind === 'straight' ? 0 : preferredTarget(contributions, `${year.calendarYear}-12-31`, projection.prefRate, projection.prefCompounds),
-    }
+    const yearEnd = `${year.calendarYear}-12-31`
+    waterfall?.contribute(yearEnd, lpCall)
     // Only the LPs' share runs through the waterfall. The rest belongs to the carry recipients'
     // own stake (the GP's commitment), which is returned gross — no carry on the GP's own money.
-    const split = runWaterfall(year.distributed * share, terms, state)
-    state = split.state
+    const lpDistributable = year.distributed * share
+    const split = waterfall ? waterfall.distribute(yearEnd, lpDistributable) : { toLP: lpDistributable, toGP: 0 }
     distributed += split.toLP
     // Hypothetical liquidation of remaining NAV at this year end, without mutating the state.
-    const netNav = runWaterfall(year.nav * share, terms, state).toLP
+    const netNav = waterfall ? runWaterfall(year.nav * share, waterfall.terms, waterfall.stateAt(yearEnd)).toLP : year.nav * share
     if (lpCall > 0) forward.push({ t: year.year, amount: -lpCall })
     if (split.toLP > 0) forward.push({ t: year.year, amount: split.toLP })
     const netIrr = irrOf([...history, ...forward, { t: year.year, amount: netNav }])

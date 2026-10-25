@@ -174,6 +174,9 @@ export interface CompiledEntry {
   key?: string
   /** Cash that belongs to the investors (a refund of unused prepaid fees): distributed with the exit proceeds. Not stored. */
   distributable?: boolean
+  /** Exit proceeds the fund recycles (from construction), and the part booked as deemed. Not stored. */
+  recycled?: number
+  recycledDeemed?: number
   postings: Posting[]
 }
 
