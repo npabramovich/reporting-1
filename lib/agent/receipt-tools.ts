@@ -173,7 +173,7 @@ export const RECEIPT_HANDLERS: Record<string, AgentToolHandler> = {
     }
     if (input?.billTo) {
       const to = await otherEntity(ctx, input.billTo, 'read')
-      const preview = await previewPartnershipInvoice(ctx.admin, ctx.fundId, { fromVehicleId: vehicleId, toVehicleId: to.vehicleId, year: Number(input.year), quarter: Number(input.quarter) })
+      const preview = await previewPartnershipInvoice(ctx.admin, ctx.fundId, { fromVehicleId: vehicleId, toVehicleId: to.vehicleId, year: Number(input.year), quarter: Number(input.quarter), from: input.from ?? null, through: input.through ?? null })
       if ('error' in preview) fail(preview)
       return { preview }
     }
@@ -194,6 +194,7 @@ export const RECEIPT_HANDLERS: Record<string, AgentToolHandler> = {
     const res = await createPartnershipInvoice(ctx.admin, ctx.fundId, ctx.userId, {
       fromVehicleId: vehicleId, toVehicleId: to.vehicleId, year: Number(input?.year), quarter: Number(input?.quarter),
       invoiceDate: input?.invoiceDate ?? null, memo: input?.memo ?? null,
+      from: input?.from ?? null, through: input?.through ?? null,
       allocations: input?.allocations && typeof input.allocations === 'object' ? input.allocations : null,
       rememberPostingIds: Array.isArray(input?.rememberPostingIds) ? input.rememberPostingIds.map(String) : null,
       excludePostingIds: Array.isArray(input?.excludePostingIds) ? input.excludePostingIds.map(String) : null,

@@ -31,7 +31,7 @@ import { vehicleNameById } from './vehicle-id'
 import { ACTUAL_BOOK } from './books'
 import { INTERCOMPANY_RECEIVABLE_SUBTYPE } from './chart'
 import { postIntercompanyCharge, intercompanyChart, pickIntercompanyAccounts, type IntercompanyChartRow } from './intercompany'
-import { billablePostings, invoiceNumber, quarterBounds, type Quarter } from './receipts-core'
+import { billablePostings, invoiceNumber, isoDateOrNull, quarterBounds, type Quarter } from './receipts-core'
 import { allocationRules, saveAllocationRule, startingAllocationBasis, type AllocationSource } from './allocation-basis'
 
 export interface InvoiceLine {
@@ -59,6 +59,8 @@ export interface InvoiceDetailLine extends InvoiceLine {
 
 export interface InvoicePreview {
   quarter: Quarter
+  /** The dates the expenses were read from: `from` null means every earlier unbilled one. */
+  range: { from: string | null; through: string }
   from: { vehicleId: string; name: string }
   to: { vehicleId: string; name: string }
   lines: InvoiceLine[]
@@ -187,23 +189,37 @@ async function existingInvoice(admin: SupabaseClient, fundId: string, fromId: st
   return data ? { id: (data as any).id, invoiceNumber: (data as any).invoice_number, status: (data as any).status, amount: Number((data as any).amount) } : null
 }
 
+/** The dates an invoice reads expenses from: `from` (null for no start) through `through`. */
+export function expenseRange(q: Quarter, from?: string | null, through?: string | null): { from: string | null; through: string } | { error: string } {
+  const f = from ? isoDateOrNull(from) : null
+  const t = through ? isoDateOrNull(through) : q.end
+  if (from && !f) return { error: 'from must be a date (YYYY-MM-DD).' }
+  if (!t) return { error: 'through must be a date (YYYY-MM-DD).' }
+  if (f && f > t) return { error: 'The start date is after the end date.' }
+  return { from: f, through: t }
+}
+
 /**
  * What an invoice for this quarter would bill, without writing anything: every unbilled debit dated
- * on or before the quarter's end. Lines from before the quarter are flagged `beforePeriod`.
+ * in the range, which by default is everything up to the quarter's end. `from` / `through` narrow
+ * or move it (the person chooses which expenses this invoice picks up; the quarter still names and
+ * numbers the invoice). Lines from before the quarter are flagged `beforePeriod`.
  */
 export async function previewPartnershipInvoice(
   admin: SupabaseClient,
   fundId: string,
-  args: { fromVehicleId: string; toVehicleId: string; year: number; quarter: number },
+  args: { fromVehicleId: string; toVehicleId: string; year: number; quarter: number; from?: string | null; through?: string | null },
 ): Promise<InvoicePreview | { error: string }> {
   let q: Quarter
   try { q = quarterBounds(args.year, args.quarter) } catch (e) { return { error: (e as Error).message } }
+  const range = expenseRange(q, args.from, args.through)
+  if ('error' in range) return range
   const pair = await vehiclePair(admin, fundId, args.fromVehicleId, args.toVehicleId)
   if (!pair) return { error: 'Both entities must be in this fund.' }
   if (args.fromVehicleId === args.toVehicleId) return { error: 'An entity cannot bill itself.' }
   const receivable = await receivableAccount(admin, fundId, args.fromVehicleId, args.toVehicleId)
   const [open, rules] = await Promise.all([
-    receivable ? openLines(admin, fundId, args.fromVehicleId, receivable.id, { start: null, end: q.end }) : Promise.resolve([]),
+    receivable ? openLines(admin, fundId, args.fromVehicleId, receivable.id, { start: range.from, end: range.through }) : Promise.resolve([]),
     allocationRules(admin, fundId, args.fromVehicleId, args.toVehicleId),
   ])
   const all = open.map(l => ({
@@ -212,7 +228,7 @@ export async function previewPartnershipInvoice(
   }))
   const lines = all.filter(l => l.status === 'posted')
   return {
-    quarter: q, ...pair, lines, hasReceivableAccount: !!receivable, receivableAccount: receivable,
+    quarter: q, range, ...pair, lines, hasReceivableAccount: !!receivable, receivableAccount: receivable,
     total: roundCents(lines.reduce((s, l) => s + l.amount, 0)),
     drafts: all.filter(l => l.status === 'draft'),
     existing: await existingInvoice(admin, fundId, args.fromVehicleId, args.toVehicleId, q),
@@ -258,6 +274,8 @@ export async function createPartnershipInvoice(
   userId: string | null,
   args: {
     fromVehicleId: string; toVehicleId: string; year: number; quarter: number; invoiceDate?: string | null; memo?: string | null
+    /** The dates to read expenses from, as in the preview. */
+    from?: string | null; through?: string | null
     /** Postings to leave off this invoice; they stay open for the next one. */
     excludePostingIds?: string[] | null
     /** An allocation basis typed for a line, by posting id: it replaces the one the line started with. */
@@ -280,7 +298,7 @@ export async function createPartnershipInvoice(
   if (preview.lines.length === 0) {
     return { error: found.lines.length > 0
       ? 'Nothing to bill: every expense was left off this invoice.'
-      : `Nothing to bill: no posted debits to Due from ${preview.to.name} through the end of ${preview.quarter.label} that are not already on an invoice.`, status: 400 }
+      : `Nothing to bill: no posted debits to Due from ${preview.to.name} ${preview.range.from ? `from ${preview.range.from} ` : ''}through ${preview.range.through} that are not already on an invoice.`, status: 400 }
   }
 
   const { data: settings } = await admin.from('fund_settings' as any).select('currency').eq('fund_id', fundId).maybeSingle()

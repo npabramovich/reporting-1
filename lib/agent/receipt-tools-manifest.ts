@@ -106,6 +106,8 @@ export const RECEIPT_TOOL_MANIFEST: AgentToolMeta[] = [
       properties: {
         billTo: { type: 'string', description: 'entity name, for a preview' },
         year: { type: 'number' }, quarter: { type: 'number', description: '1-4' },
+        from: { type: 'string', description: 'YYYY-MM-DD: read expenses dated on or after this (default: no start)' },
+        through: { type: 'string', description: "YYYY-MM-DD: read expenses dated on or before this (default: the quarter's end)" },
         invoiceId: { type: 'string', description: 'one invoice with its lines' },
       },
     },
@@ -120,6 +122,8 @@ export const RECEIPT_TOOL_MANIFEST: AgentToolMeta[] = [
       properties: {
         billTo: { type: 'string', description: 'entity name' },
         year: { type: 'number' }, quarter: { type: 'number', description: '1-4' },
+        from: { type: 'string', description: 'YYYY-MM-DD: read expenses dated on or after this (default: no start)' },
+        through: { type: 'string', description: "YYYY-MM-DD: read expenses dated on or before this (default: the quarter's end)" },
         invoiceDate: { type: 'string', description: 'YYYY-MM-DD; default today' },
         memo: { type: 'string' },
         issue: { type: 'boolean', description: 'default false: leave it as a draft to review' },
