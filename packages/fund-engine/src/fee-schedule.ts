@@ -18,6 +18,10 @@
 //     smaller of its gross fee and what's available; the rest carries forward.
 //
 // Each period's gross and offset are rounded to cents, half to even.
+//
+// Partners on rates of their own are `groups`: each pays its own steps on its own partners' basis,
+// the period's gross is the sum, and the offset reduces each group's fee in proportion to its share
+// of it (Walter's LP classes, spec/11-lp-classes.md).
 
 export type FeeFrequency = 'quarterly' | 'semiannual' | 'annual'
 export type FeeScheduleBasis = 'commitments' | 'invested' | 'nav'
@@ -34,6 +38,11 @@ export interface FeeScheduleTerms {
   offsets?: Record<string, number>
   /** Organizational expenses above this offset the fee dollar for dollar. */
   organizationalExpenseCap?: number
+  /**
+   * Partners on rates of their own, each with its steps and its fee-bearing commitments. Given,
+   * these replace `steps` and `feeBearingCommitments`, and each period reports `groupNet`.
+   */
+  groups?: Array<{ steps: FeeScheduleTerms['steps']; feeBearingCommitments: number }>
 }
 
 export interface FeeScheduleFacts {
@@ -55,6 +64,8 @@ export interface FeeSchedulePeriod {
   gross: number
   offset: number
   net: number
+  /** Each group's share of `net`, unrounded, when the terms have groups. */
+  groupNet?: number[]
 }
 
 const MONTHS: Record<FeeFrequency, number> = { quarterly: 3, semiannual: 6, annual: 12 }
@@ -85,8 +96,12 @@ function cents(v: number): number {
 export function feeSchedule(terms: FeeScheduleTerms, facts: FeeScheduleFacts): FeeSchedulePeriod[] {
   const step = MONTHS[terms.frequency]
   const perYear = 12 / step
-  const steps = terms.steps.slice().sort((a, b) => a.from.localeCompare(b.from))
-  const share = facts.allCommitments > 0 ? facts.feeBearingCommitments / facts.allCommitments : 0
+  const groups = (terms.groups ?? [{ steps: terms.steps, feeBearingCommitments: facts.feeBearingCommitments }]).map((g) => ({
+    steps: g.steps.slice().sort((a, b) => a.from.localeCompare(b.from)),
+    commit: g.feeBearingCommitments,
+    share: facts.allCommitments > 0 ? g.feeBearingCommitments / facts.allCommitments : 0,
+  }))
+  const steps = groups.flatMap((g) => g.steps)
 
   /** Cost invested before the day, less cost realized before it. */
   const invested = (asOf: string): number => {
@@ -111,8 +126,8 @@ export function feeSchedule(terms: FeeScheduleTerms, facts: FeeScheduleFacts): F
     for (const n of facts.navs ?? []) if (n.date <= asOf) last = n.amount
     return last
   }
-  const basisOn = (basis: FeeScheduleBasis, day: string) =>
-    basis === 'commitments' ? facts.feeBearingCommitments : (basis === 'invested' ? invested(day) : nav(day)) * share
+  const basisOn = (g: (typeof groups)[number], basis: FeeScheduleBasis, day: string) =>
+    basis === 'commitments' ? g.commit : (basis === 'invested' ? invested(day) : nav(day)) * g.share
 
   const orgBefore = (day: string) =>
     (facts.organizationalExpenses ?? []).filter((o) => o.date < day).reduce((s, o) => s + o.amount, 0)
@@ -133,17 +148,25 @@ export function feeSchedule(terms: FeeScheduleTerms, facts: FeeScheduleFacts): F
     const stop = terms.end < next ? terms.end : next
     const days = dayNumber(next) - dayNumber(start)
     const cuts = [start, ...steps.map((s) => s.from).filter((d) => d > start && d < stop), stop]
-    let gross = 0
-    for (let i = 0; i + 1 < cuts.length; i++) {
-      const s = [...steps].reverse().find((x) => x.from <= cuts[i])
-      if (!s) continue
-      gross += (s.rate / perYear) * basisOn(s.basis, cuts[i]) * ((dayNumber(cuts[i + 1]) - dayNumber(cuts[i])) / days)
-    }
-    gross = cents(gross)
+    const groupGross = groups.map((g) => {
+      let gg = 0
+      for (let i = 0; i + 1 < cuts.length; i++) {
+        const s = [...g.steps].reverse().find((x) => x.from <= cuts[i])
+        if (!s) continue
+        gg += (s.rate / perYear) * basisOn(g, s.basis, cuts[i]) * ((dayNumber(cuts[i + 1]) - dayNumber(cuts[i])) / days)
+      }
+      return gg
+    })
+    const exact = groupGross.reduce((a, b) => a + b, 0)
+    const gross = cents(exact)
     const available = carried + offsetsIn(start, stop)
     const offset = cents(Math.min(gross, available))
     carried = available - offset
-    periods.push({ start, end: stop, gross, offset, net: cents(gross - offset) })
+    const net = cents(gross - offset)
+    periods.push({
+      start, end: stop, gross, offset, net,
+      ...(terms.groups ? { groupNet: groupGross.map((g) => (exact > 0 ? (net * g) / exact : 0)) } : {}),
+    })
   }
   return periods
 }

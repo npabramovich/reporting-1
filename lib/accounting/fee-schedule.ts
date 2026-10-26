@@ -19,11 +19,14 @@
 // so they're recorded separately (`portfolio_company_fees`, lib/accounting/portfolio-fees.ts), and
 // the schedule's `offsets` say what share of each kind credits the fee.
 //
-// Side letters still apply. The period's net fee is shared across the fee-bearing partners by
-// commitment, each weighted by its own rate over the schedule's rate in force that period.
+// Side letters charge their own rate. A partner with a rate override pays it in place of the
+// schedule's rate on every step that charges one (a step at 0 stays 0), on its own commitment's
+// basis, so a side letter lowers the fee rather than only moving it between partners. The engine
+// runs each override as a fee group (`feeSchedule` `groups`), so the period's gross is the sum and an
+// offset reduces each group's fee in proportion to its share of it.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { addMonths, allocateAmount, feeSchedule, roundCents, type FeeFrequency, type FeeScheduleBasis, type FeeSchedulePeriod } from '@portfolio/fund-engine'
+import { addMonths, allocateAmount, feeSchedule, roundCents, type FeeFrequency, type FeeScheduleBasis, type FeeScheduleFacts, type FeeSchedulePeriod } from '@portfolio/fund-engine'
 import { computeCapitalAccounts } from './capital-account'
 import { loadOwnership, loadPostedLedger } from './load'
 import { loadPartnerTerms } from './terms'
@@ -166,7 +169,6 @@ export async function scheduledFee(
       exempt: overrides[o.lpEntityId]?.exempt ?? (configured ? !configured.participates : false),
     }
   })
-  const bearing = payers.filter(p => !p.exempt)
 
   const deals = dealHistories((txns.data as any[]) ?? [], (companies.data as any[]) ?? [], group, schedule.end)
   const investments = deals.flatMap(d => d.investments.map(i => ({ date: i.date, deal: d.companyId, amount: i.amount })))
@@ -189,32 +191,77 @@ export async function scheduledFee(
     .filter(p => p.sourceType === 'organizational_expense' && p.entryDate && p.amount > 0)
     .map(p => ({ date: p.entryDate!, amount: p.amount }))
 
-  const periods = feeSchedule({
-    frequency: schedule.frequency,
-    start: schedule.start,
-    end: schedule.end,
-    steps: schedule.steps,
-    ...(schedule.organizationalExpenseCap !== undefined ? { organizationalExpenseCap: schedule.organizationalExpenseCap } : {}),
-    ...(schedule.offsets ? { offsets: schedule.offsets as Record<string, number> } : {}),
-  }, {
-    feeBearingCommitments: bearing.reduce((s, p) => s + p.commitment, 0),
-    allCommitments: payers.reduce((s, p) => s + p.commitment, 0),
+  return chargeScheduledFee(schedule, payers, date, {
     investments,
     exits,
     navs,
     organizationalExpenses,
     portfolioFees: portfolioFees.map(f => ({ date: f.date, kind: f.kind, amount: f.amount })),
   })
+}
+
+/** A partner the schedule may charge. */
+export interface SchedulePayer {
+  lpEntityId: string
+  commitment: number
+  /** A side letter's annual rate, in place of the schedule's. */
+  rateOverride: number | null
+  /** Pays no management fee. */
+  exempt: boolean
+}
+
+/**
+ * The fee the schedule charges for the period that `date` falls in, each partner on its own rate:
+ * the schedule's, or its side letter's on every step that charges one. Null when `date` is outside
+ * the schedule. Pure, so the side-letter arithmetic can be tested without the books.
+ */
+export function chargeScheduledFee(
+  schedule: StoredFeeSchedule,
+  payers: SchedulePayer[],
+  date: string,
+  facts: Omit<FeeScheduleFacts, 'feeBearingCommitments' | 'allCommitments'>,
+): ScheduledFee | null {
+  if (date < schedule.start || date >= schedule.end) return null
+  const bearing = payers.filter(p => !p.exempt)
+  // One fee group per rate: the schedule's, and each side-letter rate.
+  const rates = [null, ...new Set(bearing.map(p => p.rateOverride).filter((r): r is number => r != null))]
+  const groups = rates
+    .map(r => {
+      const members = bearing.filter(p => p.rateOverride === r)
+      return {
+        members,
+        commit: members.reduce((s, p) => s + p.commitment, 0),
+        steps: r == null ? schedule.steps : schedule.steps.map(st => ({ ...st, rate: st.rate > 0 ? r : 0 })),
+      }
+    })
+    .filter(g => g.members.length > 0)
+  const periods = feeSchedule({
+    frequency: schedule.frequency,
+    start: schedule.start,
+    end: schedule.end,
+    steps: schedule.steps,
+    groups: groups.map(g => ({ steps: g.steps, feeBearingCommitments: g.commit })),
+    ...(schedule.organizationalExpenseCap !== undefined ? { organizationalExpenseCap: schedule.organizationalExpenseCap } : {}),
+    ...(schedule.offsets ? { offsets: schedule.offsets as Record<string, number> } : {}),
+  }, {
+    ...facts,
+    feeBearingCommitments: bearing.reduce((s, p) => s + p.commitment, 0),
+    allCommitments: payers.reduce((s, p) => s + p.commitment, 0),
+  })
   const period = periods.find(p => p.start <= date && date < p.end)
   if (!period) return null
 
   const rate = [...schedule.steps].reverse().find(s => s.from <= period.start)?.rate ?? 0
-  const weight = (p: (typeof bearing)[number]) => p.commitment * (rate > 0 && p.rateOverride != null ? p.rateOverride / rate : 1)
-  const shares = allocateAmount(period.net, bearing.map(p => ({ lpEntityId: p.lpEntityId, commitment: weight(p) })))
+  // Each partner's exact share of its group's net, rounded so the lines add up to the period's net.
+  const owed = new Map<string, number>()
+  groups.forEach((g, k) => {
+    for (const p of g.members) owed.set(p.lpEntityId, g.commit > 0 ? ((period.groupNet?.[k] ?? 0) * p.commitment) / g.commit : 0)
+  })
+  const shares = allocateAmount(period.net, bearing.map(p => ({ lpEntityId: p.lpEntityId, commitment: owed.get(p.lpEntityId) ?? 0 })))
   const lines = payers.map(p => ({
     lpEntityId: p.lpEntityId,
     basisAmount: p.commitment,
-    rate: p.exempt ? 0 : (p.rateOverride ?? rate),
+    rate: p.exempt ? 0 : (p.rateOverride != null && rate > 0 ? p.rateOverride : rate),
     fee: p.exempt ? 0 : (shares.get(p.lpEntityId) ?? 0),
   }))
   return { period, rate, fee: { lines, total: roundCents(lines.reduce((s, l) => s + l.fee, 0)) } }

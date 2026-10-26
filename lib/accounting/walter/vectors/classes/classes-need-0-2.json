@@ -1,0 +1,51 @@
+{
+  "id": "classes-need-0-2",
+  "walter": "0.2",
+  "title": "Classes in 0.1 terms",
+  "description": "Classes arrived in 0.2, so 0.1 terms that list them are refused.",
+  "tags": [
+    "classes",
+    "errors"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "500"
+      }
+    ],
+    "classes": [
+      {
+        "id": "a"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [],
+  "expected": {
+    "error": "invalid-terms"
+  },
+  "tolerance": "0.01"
+}

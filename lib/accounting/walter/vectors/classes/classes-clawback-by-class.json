@@ -1,0 +1,155 @@
+{
+  "id": "classes-clawback-by-class",
+  "walter": "0.2",
+  "title": "The clawback goes back to the classes that overpaid",
+  "description": "Each class has put in 500 when 1,200 comes back on 2025-07-01: 500 of capital to each, and 100 to each class, which the fund's class splits 80/20 and the anchor class 90/10. The GP has 30. Each class then puts in another 500, and nothing more comes back. On the fund-end view each class is owed 1,000, so the 1,200 is all capital and the GP's entitlement is 0. It gives back 30: 20 to the fund's class (lp-a) and 10 to the anchor class (lp-b), what each overpaid.",
+  "tags": [
+    "classes",
+    "clawback"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.2",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "1000",
+        "class": "anchor"
+      }
+    ],
+    "classes": [
+      {
+        "id": "anchor",
+        "waterfall": {
+          "tiers": [
+            {
+              "type": "return-of-capital"
+            },
+            {
+              "type": "split",
+              "gpShare": "0.10"
+            }
+          ]
+        }
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "500"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-b",
+      "amount": "500"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-07-01",
+      "amount": "1200"
+    },
+    {
+      "type": "contribution",
+      "date": "2026-01-01",
+      "partner": "lp-a",
+      "amount": "500"
+    },
+    {
+      "type": "contribution",
+      "date": "2026-01-01",
+      "partner": "lp-b",
+      "amount": "500"
+    },
+    {
+      "type": "fund-end",
+      "date": "2027-01-01"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2025-07-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "500.00"
+      },
+      {
+        "date": "2025-07-01",
+        "tier": "return-of-capital",
+        "partner": "lp-b",
+        "amount": "500.00"
+      },
+      {
+        "date": "2025-07-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "80.00"
+      },
+      {
+        "date": "2025-07-01",
+        "tier": "split",
+        "partner": "lp-b",
+        "amount": "90.00"
+      },
+      {
+        "date": "2025-07-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "30.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "clawback",
+        "partner": "gp",
+        "amount": "-30.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "clawback",
+        "partner": "lp-a",
+        "amount": "20.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "clawback",
+        "partner": "lp-b",
+        "amount": "10.00"
+      }
+    ],
+    "clawback": {
+      "amount": "30.00",
+      "entitlement": "0.00"
+    }
+  },
+  "tolerance": "0.01"
+}

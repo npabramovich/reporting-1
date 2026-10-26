@@ -1,0 +1,140 @@
+{
+  "id": "classes-different-carry",
+  "walter": "0.2",
+  "title": "An anchor class pays 10% carry, everyone else 20%",
+  "description": "lp-a (400) and lp-c (200) are on the fund's terms; lp-b (400) is in the anchor class at 10%. Of 2,000, return of capital pays 1,000 across the classes, each what it is owed. The other 1,000 goes to the classes by capital: 600 to the fund's class, split 480 to its LPs (320 and 160, by capital) and 120 to the GP; 400 to the anchor class, split 360 to lp-b and 40 to the GP. The GP gets 160.",
+  "tags": [
+    "classes",
+    "split-only"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.2",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "400"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "400",
+        "class": "anchor"
+      },
+      {
+        "id": "lp-c",
+        "role": "lp",
+        "commitment": "200"
+      }
+    ],
+    "classes": [
+      {
+        "id": "anchor",
+        "waterfall": {
+          "tiers": [
+            {
+              "type": "return-of-capital"
+            },
+            {
+              "type": "split",
+              "gpShare": "0.10"
+            }
+          ]
+        }
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "400"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-b",
+      "amount": "400"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-c",
+      "amount": "200"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-01-01",
+      "amount": "2000"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "400.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-c",
+        "amount": "200.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-b",
+        "amount": "400.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "320.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "split",
+        "partner": "lp-c",
+        "amount": "160.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "split",
+        "partner": "lp-b",
+        "amount": "360.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "160.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

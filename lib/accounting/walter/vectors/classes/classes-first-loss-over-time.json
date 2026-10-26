@@ -1,0 +1,119 @@
+{
+  "id": "classes-first-loss-over-time",
+  "walter": "0.2",
+  "title": "A first-loss class waits for the senior class across distributions",
+  "description": "500 comes back on 2026-01-01 and 1,000 on 2026-07-01. The first all goes to the senior class, which is owed 800. The second pays the senior class its last 300, then the first-loss class its 200, and the 500 left is split by capital (400 and 100) at 80/20.",
+  "tags": [
+    "classes",
+    "first-loss",
+    "split-only"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.2",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "800"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "200",
+        "class": "first-loss"
+      }
+    ],
+    "classes": [
+      {
+        "id": "first-loss",
+        "subordinated": true
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "800"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-b",
+      "amount": "200"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-01-01",
+      "amount": "500"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-07-01",
+      "amount": "1000"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "500.00"
+      },
+      {
+        "date": "2026-07-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "300.00"
+      },
+      {
+        "date": "2026-07-01",
+        "tier": "return-of-capital",
+        "partner": "lp-b",
+        "amount": "200.00"
+      },
+      {
+        "date": "2026-07-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "320.00"
+      },
+      {
+        "date": "2026-07-01",
+        "tier": "split",
+        "partner": "lp-b",
+        "amount": "80.00"
+      },
+      {
+        "date": "2026-07-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "100.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

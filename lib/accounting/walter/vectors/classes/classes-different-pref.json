@@ -1,0 +1,142 @@
+{
+  "id": "classes-different-pref",
+  "walter": "0.2",
+  "title": "One class has an 8% pref and catch-up, the other a straight split",
+  "description": "Both classes put in 500 on 2025-01-01 and 1,400 comes back a year later. Return of capital pays each class its 500, and the other 400 goes 200 to each. The fund's class (lp-a) owes a year's pref on 500, which is 40, then a full catch-up of 0.20 \u00d7 40 \u00f7 0.80 = 10, and splits the last 150 as 120 and 30. The other class (lp-b) has no pref and splits its 200 as 160 and 40. The GP gets 10 + 30 + 40 = 80.",
+  "tags": [
+    "classes",
+    "pref-compound",
+    "pref-unreturned",
+    "catch-up-full"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.2",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "500"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "500",
+        "class": "no-pref"
+      }
+    ],
+    "classes": [
+      {
+        "id": "no-pref",
+        "waterfall": {
+          "tiers": [
+            {
+              "type": "return-of-capital"
+            },
+            {
+              "type": "split",
+              "gpShare": "0.20"
+            }
+          ]
+        }
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "unreturned",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "500"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-b",
+      "amount": "500"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-01-01",
+      "amount": "1400"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "500.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-b",
+        "amount": "500.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "40.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "10.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "120.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "split",
+        "partner": "lp-b",
+        "amount": "160.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "70.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}
