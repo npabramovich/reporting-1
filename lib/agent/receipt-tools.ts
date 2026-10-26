@@ -118,7 +118,7 @@ export const RECEIPT_HANDLERS: Record<string, AgentToolHandler> = {
       if ('error' in res) fail(res)
     }
     const patch: Record<string, unknown> = {}
-    for (const k of ['vendorName', 'receiptDate', 'amount', 'currency', 'description']) if (input && k in input) patch[k] = input[k]
+    for (const k of ['vendorName', 'receiptDate', 'amount', 'currency', 'description', 'allocationBasis']) if (input && k in input) patch[k] = input[k]
     if (input?.assignToThisEntity && !r.vehicle_id) patch.vehicleId = vehicleId
     if (Object.keys(patch).length === 0) return { receipt: await getReceipt(ctx.admin, ctx.fundId, r.id) }
     const res = await updateReceiptFields(ctx.admin, ctx.fundId, r.id, patch as any)
@@ -157,9 +157,10 @@ export const RECEIPT_HANDLERS: Record<string, AgentToolHandler> = {
     ])
     const res = await draftEntryFromReceipt(ctx.admin, ctx.fundId, ctx.portfolioGroup, vehicleId, ctx.userId, r.id, {
       debitAccountId, creditAccountId, billTo, memo: input?.memo ?? null,
+      allocationBasis: input?.allocationBasis ?? null, rememberAllocation: input?.rememberAllocation === true,
     })
     if ('error' in res) fail(res)
-    return { draftEntryId: res.entryId, receipt: res.receipt, note: 'Draft only. Post it with post_drafts (ids: [draftEntryId]) once it looks right.' }
+    return { draftEntryId: res.entryId, receipt: res.receipt, ...(res.warning ? { warning: res.warning } : {}), note: 'Draft only. Post it with post_drafts (ids: [draftEntryId]) once it looks right.' }
   },
 
   partnership_invoices: async (ctx, input) => {
@@ -193,6 +194,8 @@ export const RECEIPT_HANDLERS: Record<string, AgentToolHandler> = {
     const res = await createPartnershipInvoice(ctx.admin, ctx.fundId, ctx.userId, {
       fromVehicleId: vehicleId, toVehicleId: to.vehicleId, year: Number(input?.year), quarter: Number(input?.quarter),
       invoiceDate: input?.invoiceDate ?? null, memo: input?.memo ?? null,
+      allocations: input?.allocations && typeof input.allocations === 'object' ? input.allocations : null,
+      rememberPostingIds: Array.isArray(input?.rememberPostingIds) ? input.rememberPostingIds.map(String) : null,
       excludePostingIds: Array.isArray(input?.excludePostingIds) ? input.excludePostingIds.map(String) : null,
     })
     if ('error' in res) fail(res)

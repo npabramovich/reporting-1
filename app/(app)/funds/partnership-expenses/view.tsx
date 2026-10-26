@@ -27,7 +27,7 @@ export function PartnershipExpensesView() {
 }
 
 interface InvoiceRow { id: string; invoice_number: string; invoice_date: string; period_start: string; period_end: string; amount: number; status: string; from_vehicle_id: string; to_vehicle_id: string; from_name: string | null; to_name: string | null }
-interface Line { entryId: string; postingId: string; entryDate: string; memo: string | null; reference: string | null; vendorName: string | null; amount: number; receiptCount: number; status: string; beforePeriod?: boolean }
+interface Line { entryId: string; postingId: string; entryDate: string; memo: string | null; reference: string | null; vendorName: string | null; amount: number; receiptCount: number; status: string; beforePeriod?: boolean; allocationBasis: string | null; allocationSource?: 'receipt' | 'vendor' | null }
 interface Preview { quarter: { year: number; quarter: number; label: string; start: string; end: string }; to: { vehicleId: string; name: string }; lines: Line[]; total: number; drafts: Line[]; hasReceivableAccount: boolean; receivableAccount: { id: string; code: string; name: string } | null; existing: { id: string; invoiceNumber: string; status: string } | null }
 
 function PartnershipInvoices() {
@@ -50,6 +50,9 @@ function PartnershipInvoices() {
   const [openEntry, setOpenEntry] = useState<string | null>(null)
   // Lines left off the next invoice, by posting id. They stay open for a later one.
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
+  // Allocation bases typed over the ones the lines came with, and the lines to save for the vendor.
+  const [allocations, setAllocations] = useState<Record<string, string>>({})
+  const [remember, setRemember] = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {
     if (!group) return
@@ -76,7 +79,7 @@ function PartnershipInvoices() {
     const j = await r.json().catch(() => ({}))
     if (!r.ok) setError(j.error ?? 'Could not preview the invoice')
     setPreview(r.ok ? j.preview : null)
-    setExcluded(new Set())
+    setExcluded(new Set()); setAllocations({}); setRemember(new Set())
     setBusy(false)
   }
 
@@ -90,8 +93,11 @@ function PartnershipInvoices() {
   }
 
   async function create() {
-    const j = await post({ action: 'create', to, year, quarter, exclude: Array.from(excluded) }, 'Could not create the invoice')
-    if (j) { setNotice(`Draft invoice ${j.invoiceNumber} created for ${fmt(j.amount)}. Review the PDF, then issue it.`); setPreview(null); await load() }
+    const j = await post({ action: 'create', to, year, quarter, exclude: Array.from(excluded), allocations, remember: Array.from(remember) }, 'Could not create the invoice')
+    if (j) {
+      const unsaved = Array.isArray(j.basesNotSaved) && j.basesNotSaved.length ? ` The allocation basis for ${j.basesNotSaved.join(', ')} was not saved for next time.` : ''
+      setNotice(`Draft invoice ${j.invoiceNumber} created for ${fmt(j.amount)}. Review the PDF, then issue it.${unsaved}`); setPreview(null); await load()
+    }
   }
   async function issue(id: string) {
     if (!window.confirm('Issue this invoice? It books the expense and the payable on the fund’s books.')) return
@@ -192,7 +198,12 @@ function PartnershipInvoices() {
           <LinesTable
             lines={preview.lines} fmt={fmt} onOpen={setOpenEntry} periodLabel={preview.quarter.label}
             excluded={excluded}
-            onToggle={id => setExcluded(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })}
+            onToggle={id => setExcluded(prev => toggled(prev, id))}
+            allocations={allocations}
+            onAllocation={(id, v) => setAllocations(prev => ({ ...prev, [id]: v }))}
+            remember={remember}
+            onRemember={id => setRemember(prev => toggled(prev, id))}
+            toName={preview.to.name}
           />
         </div>
         )
@@ -234,9 +245,18 @@ function PartnershipInvoices() {
   )
 }
 
-function LinesTable({ lines, fmt, onOpen, periodLabel, excluded, onToggle }: {
+function toggled(set: Set<string>, id: string): Set<string> {
+  const next = new Set(set)
+  if (next.has(id)) next.delete(id); else next.add(id)
+  return next
+}
+
+function LinesTable({ lines, fmt, onOpen, periodLabel, excluded, onToggle, allocations, onAllocation, remember, onRemember, toName }: {
   lines: Line[]; fmt: (v: number) => string; onOpen: (id: string) => void
   periodLabel: string; excluded: Set<string>; onToggle: (postingId: string) => void
+  allocations: Record<string, string>; onAllocation: (postingId: string, value: string) => void
+  remember: Set<string>; onRemember: (postingId: string) => void
+  toName: string
 }) {
   if (lines.length === 0) return <p className="text-xs text-muted-foreground">No posted debits to the fund’s Due-from account through the end of {periodLabel} that are not already invoiced.</p>
   return (
@@ -244,7 +264,7 @@ function LinesTable({ lines, fmt, onOpen, periodLabel, excluded, onToggle }: {
       <thead><tr className="text-left text-muted-foreground">
         <th className="w-6 pb-1 font-medium"><span className="sr-only">Bill</span></th>
         <th className="pb-1 font-medium">Date</th><th className="pb-1 font-medium">Vendor</th><th className="pb-1 font-medium">Memo</th>
-        <th className="pb-1 font-medium">Receipt</th><th className="pb-1 text-right font-medium">Amount</th>
+        <th className="pb-1 font-medium">Receipt</th><th className="pb-1 font-medium">Allocation basis</th><th className="pb-1 text-right font-medium">Amount</th>
       </tr></thead>
       <tbody>
         {lines.map(l => (
@@ -257,6 +277,33 @@ function LinesTable({ lines, fmt, onOpen, periodLabel, excluded, onToggle }: {
             <td className="py-1">{l.vendorName ?? '—'}</td>
             <td className="py-1">{l.memo ?? '—'}</td>
             <td className={`py-1 ${l.receiptCount > 0 ? '' : 'text-muted-foreground'}`}>{l.receiptCount > 0 ? `${l.receiptCount}` : 'missing'}</td>
+            <td className="min-w-[200px] py-1 pr-2">
+              {(() => {
+                const typed = l.postingId in allocations
+                const value = typed ? allocations[l.postingId] : l.allocationBasis ?? ''
+                return (
+                  <>
+                    <input
+                      value={value}
+                      onChange={e => onAllocation(l.postingId, e.target.value)}
+                      placeholder="Why the fund bears it"
+                      aria-label={`Allocation basis for ${l.vendorName ?? l.memo ?? 'this expense'}`}
+                      className="block w-full rounded border border-input bg-transparent px-1.5 py-0.5 text-xs"
+                    />
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-muted-foreground">
+                      {!typed && l.allocationSource === 'receipt' && <span>from the receipt</span>}
+                      {!typed && l.allocationSource === 'vendor' && <span>saved for {l.vendorName}</span>}
+                      {l.vendorName && value.trim() && (typed || l.allocationSource !== 'vendor') && (
+                        <label className="inline-flex items-center gap-1">
+                          <input type="checkbox" checked={remember.has(l.postingId)} onChange={() => onRemember(l.postingId)} />
+                          use for future {l.vendorName} expenses for {toName}
+                        </label>
+                      )}
+                    </div>
+                  </>
+                )
+              })()}
+            </td>
             <td className="py-1 text-right tabular-nums">{fmt(l.amount)}</td>
           </tr>
         ))}

@@ -32,6 +32,7 @@ import { ACTUAL_BOOK } from './books'
 import { INTERCOMPANY_RECEIVABLE_SUBTYPE } from './chart'
 import { postIntercompanyCharge, intercompanyChart, pickIntercompanyAccounts, type IntercompanyChartRow } from './intercompany'
 import { billablePostings, invoiceNumber, quarterBounds, type Quarter } from './receipts-core'
+import { allocationRules, saveAllocationRule, startingAllocationBasis, type AllocationSource } from './allocation-basis'
 
 export interface InvoiceLine {
   entryId: string
@@ -45,6 +46,10 @@ export interface InvoiceLine {
   status: string
   /** Dated before the invoice's quarter: an earlier expense nobody billed, carried onto this one. */
   beforePeriod?: boolean
+  /** Why the fund bears it, printed on the invoice (allocation-basis.ts says where it comes from). */
+  allocationBasis: string | null
+  /** Where a preview line's basis came from; null when none was found. Frozen lines omit it. */
+  allocationSource?: AllocationSource | null
 }
 
 /** A line of an existing invoice, with what its posting says NOW (null when the posting is gone). */
@@ -134,20 +139,28 @@ async function lineDetails(admin: SupabaseClient, fundId: string, entries: Entry
   const vendorIds = Array.from(new Set(entries.map(e => e.vendor_id).filter(Boolean))) as string[]
   const [{ data: vendors }, { data: receipts }] = await Promise.all([
     vendorIds.length ? admin.from('vendors' as any).select('id, name').eq('fund_id', fundId).in('id', vendorIds) : Promise.resolve({ data: [] }),
-    ids.length ? admin.from('receipts' as any).select('journal_entry_id').eq('fund_id', fundId).neq('status', 'dismissed').in('journal_entry_id', ids) : Promise.resolve({ data: [] }),
+    ids.length ? admin.from('receipts' as any).select('journal_entry_id, vendor_name, allocation_basis').eq('fund_id', fundId).neq('status', 'dismissed').in('journal_entry_id', ids) : Promise.resolve({ data: [] }),
   ])
   const vendorName = new Map(((vendors as any[]) ?? []).map(v => [v.id as string, v.name as string]))
   const receiptCount = new Map<string, number>()
-  for (const r of ((receipts as any[]) ?? [])) receiptCount.set(r.journal_entry_id, (receiptCount.get(r.journal_entry_id) ?? 0) + 1)
+  // The first receipt that names a vendor, or carries a basis, speaks for its entry.
+  const receiptVendor = new Map<string, string>()
+  const receiptBasis = new Map<string, string>()
+  for (const r of ((receipts as any[]) ?? [])) {
+    receiptCount.set(r.journal_entry_id, (receiptCount.get(r.journal_entry_id) ?? 0) + 1)
+    if (r.vendor_name && !receiptVendor.has(r.journal_entry_id)) receiptVendor.set(r.journal_entry_id, r.vendor_name)
+    if (r.allocation_basis?.trim() && !receiptBasis.has(r.journal_entry_id)) receiptBasis.set(r.journal_entry_id, r.allocation_basis.trim())
+  }
   return (e: EntryRow, postingId: string, amount: number): InvoiceLine => ({
     entryId: e.id, postingId,
     entryDate: e.entry_date,
     memo: e.memo ?? null,
     reference: e.reference ?? null,
-    vendorName: e.vendor_id ? vendorName.get(e.vendor_id) ?? null : null,
+    vendorName: (e.vendor_id ? vendorName.get(e.vendor_id) : null) ?? receiptVendor.get(e.id) ?? null,
     amount,
     receiptCount: receiptCount.get(e.id) ?? 0,
     status: e.status,
+    allocationBasis: receiptBasis.get(e.id) ?? null,
   })
 }
 
@@ -189,8 +202,14 @@ export async function previewPartnershipInvoice(
   if (!pair) return { error: 'Both entities must be in this fund.' }
   if (args.fromVehicleId === args.toVehicleId) return { error: 'An entity cannot bill itself.' }
   const receivable = await receivableAccount(admin, fundId, args.fromVehicleId, args.toVehicleId)
-  const all = (receivable ? await openLines(admin, fundId, args.fromVehicleId, receivable.id, { start: null, end: q.end }) : [])
-    .map(l => ({ ...l, beforePeriod: l.entryDate < q.start }))
+  const [open, rules] = await Promise.all([
+    receivable ? openLines(admin, fundId, args.fromVehicleId, receivable.id, { start: null, end: q.end }) : Promise.resolve([]),
+    allocationRules(admin, fundId, args.fromVehicleId, args.toVehicleId),
+  ])
+  const all = open.map(l => ({
+    ...l, beforePeriod: l.entryDate < q.start,
+    ...startingAllocationBasis(l.allocationBasis, l.vendorName, rules),
+  }))
   const lines = all.filter(l => l.status === 'posted')
   return {
     quarter: q, ...pair, lines, hasReceivableAccount: !!receivable, receivableAccount: receivable,
@@ -241,12 +260,19 @@ export async function createPartnershipInvoice(
     fromVehicleId: string; toVehicleId: string; year: number; quarter: number; invoiceDate?: string | null; memo?: string | null
     /** Postings to leave off this invoice; they stay open for the next one. */
     excludePostingIds?: string[] | null
+    /** An allocation basis typed for a line, by posting id: it replaces the one the line started with. */
+    allocations?: Record<string, string> | null
+    /** Lines whose basis is saved for that vendor's future expenses billed to this fund. */
+    rememberPostingIds?: string[] | null
   },
-): Promise<{ id: string; invoiceNumber: string; amount: number; lines: number } | { error: string; status?: number }> {
+): Promise<{ id: string; invoiceNumber: string; amount: number; lines: number; basesNotSaved?: string[] } | { error: string; status?: number }> {
   const found = await previewPartnershipInvoice(admin, fundId, args)
   if ('error' in found) return { error: found.error, status: 400 }
   const excluded = new Set(args.excludePostingIds ?? [])
-  const kept = found.lines.filter(l => !excluded.has(l.postingId))
+  const typed = args.allocations ?? {}
+  const kept = found.lines
+    .filter(l => !excluded.has(l.postingId))
+    .map(l => (l.postingId in typed ? { ...l, allocationBasis: String(typed[l.postingId] ?? '').trim() || null } : l))
   const preview = { ...found, lines: kept, total: roundCents(kept.reduce((sum, l) => sum + l.amount, 0)) }
   if (preview.existing) {
     return { error: `${preview.quarter.label} is already billed to ${preview.to.name} on invoice ${preview.existing.invoiceNumber} (${preview.existing.status}). Void it to bill the quarter again.`, status: 409 }
@@ -289,6 +315,7 @@ export async function createPartnershipInvoice(
   // exclusive: a posting another invoice claimed a moment ago fails the whole insert.
   const { error: claimErr } = await admin.from('partnership_invoice_lines' as any).insert(preview.lines.map(l => ({
     fund_id: fundId, invoice_id: row.id, journal_entry_id: l.entryId, journal_posting_id: l.postingId, amount: l.amount,
+    allocation_basis: l.allocationBasis,
   })))
   if (claimErr) {
     await admin.from('partnership_invoices' as any).delete().eq('id', row.id).eq('fund_id', fundId)
@@ -296,7 +323,16 @@ export async function createPartnershipInvoice(
       ? 'Some of these expenses were billed on another invoice at the same moment. Refresh and try again.'
       : `The invoice lines could not be saved: ${claimErr.message}`, status: 409 }
   }
-  return { id: row.id, invoiceNumber: row.invoice_number, amount: preview.total, lines: preview.lines.length }
+
+  // Saved last: a rule is a convenience for next quarter, and failing to save one must not undo
+  // an invoice that was made.
+  const remember = new Set(args.rememberPostingIds ?? [])
+  const notSaved: string[] = []
+  for (const l of preview.lines.filter(x => remember.has(x.postingId) && x.allocationBasis)) {
+    const saved = await saveAllocationRule(admin, fundId, userId, { fromVehicleId: args.fromVehicleId, toVehicleId: args.toVehicleId, vendorName: l.vendorName, allocationBasis: l.allocationBasis })
+    if ('error' in saved) notSaved.push(l.vendorName ?? l.memo ?? l.entryDate)
+  }
+  return { id: row.id, invoiceNumber: row.invoice_number, amount: preview.total, lines: preview.lines.length, ...(notSaved.length ? { basesNotSaved: notSaved } : {}) }
 }
 
 export interface InvoiceDetail {
@@ -320,7 +356,7 @@ export interface InvoiceDetail {
 /** An invoice's frozen lines, beside what the ledger says about each now. */
 async function invoiceLines(admin: SupabaseClient, fundId: string, invoiceId: string): Promise<InvoiceDetailLine[]> {
   const { data } = await admin.from('partnership_invoice_lines' as any)
-    .select('journal_entry_id, journal_posting_id, amount').eq('fund_id', fundId).eq('invoice_id', invoiceId)
+    .select('journal_entry_id, journal_posting_id, amount, allocation_basis').eq('fund_id', fundId).eq('invoice_id', invoiceId)
   const rows = ((data as any[]) ?? [])
   if (rows.length === 0) return []
   const entryIds = Array.from(new Set(rows.map(r => r.journal_entry_id as string)))
@@ -336,7 +372,12 @@ async function invoiceLines(admin: SupabaseClient, fundId: string, invoiceId: st
   return rows
     .map(r => {
       const e = entryById.get(r.journal_entry_id) ?? { id: r.journal_entry_id, entry_date: '', memo: null, reference: null, status: 'deleted', vendor_id: null, source_type: null, journal_postings: [] }
-      return { ...line(e, r.journal_posting_id, roundCents(Number(r.amount))), currentAmount: nowAmount.get(r.journal_posting_id) ?? null }
+      return {
+        ...line(e, r.journal_posting_id, roundCents(Number(r.amount))),
+        // The line's own, frozen with the invoice; never re-read from the receipt or the rules.
+        allocationBasis: r.allocation_basis ?? null,
+        currentAmount: nowAmount.get(r.journal_posting_id) ?? null,
+      }
     })
     .sort((a, b) => a.entryDate.localeCompare(b.entryDate))
 }

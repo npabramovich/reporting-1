@@ -89,7 +89,9 @@ export async function GET(req: NextRequest) {
 /**
  * POST
  *   { group, action: 'create', to, year, quarter, invoiceDate?, memo?, exclude? }  freeze the quarter into a
- *        draft; exclude lists posting ids to leave off (they stay open for the next invoice)
+ *        draft; exclude lists posting ids to leave off (they stay open for the next invoice),
+ *        allocations { postingId: basis } replaces a line's allocation basis, and remember lists the
+ *        lines whose basis is saved for that vendor's future expenses billed to the fund
  *   { group, action: 'issue', id }   book the fund's side (Dr partnership expenses, Cr due to <group>)
  *   { group, action: 'void', id }    release its lines; an issued one needs the fund's entry voided first
  *   { group, action: 'accounts', to } add "Due from <to>" (and "Due to <to>") to group's chart
@@ -116,6 +118,10 @@ export async function POST(req: NextRequest) {
       year: Number(body?.year), quarter: Number(body?.quarter),
       invoiceDate: typeof body?.invoiceDate === 'string' ? body.invoiceDate : null,
       memo: typeof body?.memo === 'string' ? body.memo : null,
+      allocations: body?.allocations && typeof body.allocations === 'object' && !Array.isArray(body.allocations)
+        ? Object.fromEntries(Object.entries(body.allocations).filter(([, v]) => typeof v === 'string')) as Record<string, string>
+        : null,
+      rememberPostingIds: Array.isArray(body?.remember) ? body.remember.filter((x: unknown): x is string => typeof x === 'string') : null,
       excludePostingIds: Array.isArray(body?.exclude) ? body.exclude.filter((x: unknown): x is string => typeof x === 'string') : null,
     })
     if ('error' in res) return NextResponse.json({ error: res.error }, { status: res.status ?? 400 })
