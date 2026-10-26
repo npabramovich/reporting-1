@@ -108,6 +108,7 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   // the agent's allocation tool, reachable from the journal's New entry menu. POST → write.
   'api/accounting/allocation': { domain: 'accounting' },
   'api/accounting/fee-schedule': { domain: 'accounting' },
+  'api/accounting/portfolio-fees': { domain: 'accounting' },
   // The account register: the same posted ledger the statements read, one account at a time.
   'api/accounting/ledger': { domain: 'accounting' },
   'api/accounting/ledger-text': { domain: 'accounting' },

@@ -10,10 +10,13 @@ import { Loader2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
+import { FEE_KIND_LABELS, PortfolioFeesList } from './portfolio-fees'
 
 type Frequency = 'quarterly' | 'semiannual' | 'annual'
 type Basis = 'commitments' | 'invested' | 'nav'
 interface StepRow { from: string; rate: string; basis: Basis }
+type FeeKind = keyof typeof FEE_KIND_LABELS
+const FEE_KINDS = Object.keys(FEE_KIND_LABELS) as FeeKind[]
 
 const pct = (fraction: number) => String(Math.round((fraction || 0) * 10000) / 100)
 const frac = (percent: string) => {
@@ -29,6 +32,7 @@ export function FeeScheduleCard() {
   const [end, setEnd] = useState('')
   const [steps, setSteps] = useState<StepRow[]>([{ from: '', rate: '2', basis: 'commitments' }])
   const [cap, setCap] = useState('')
+  const [offsets, setOffsets] = useState<Record<FeeKind, string>>({ transaction: '', monitoring: '', directors: '', other: '' })
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -42,6 +46,7 @@ export function FeeScheduleCard() {
     setEnd(s.end)
     setSteps(s.steps.map((x: any) => ({ from: x.from, rate: pct(x.rate), basis: x.basis })))
     setCap(s.organizationalExpenseCap != null ? String(s.organizationalExpenseCap) : '')
+    setOffsets(Object.fromEntries(FEE_KINDS.map(k => [k, s.offsets?.[k] != null ? pct(s.offsets[k]) : ''])) as Record<FeeKind, string>)
   }, [])
 
   useEffect(() => {
@@ -57,6 +62,7 @@ export function FeeScheduleCard() {
       // The first rate starts with the schedule unless it says otherwise.
       steps: steps.map((s, i) => ({ from: s.from || (i === 0 ? start : ''), rate: frac(s.rate), basis: s.basis })),
       ...(cap.trim() !== '' ? { organizationalExpenseCap: Number(cap) } : {}),
+      offsets: Object.fromEntries(FEE_KINDS.filter(k => offsets[k].trim() !== '').map(k => [k, frac(offsets[k])])),
     } : null
     const res = await lf('/api/accounting/fee-schedule', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ schedule }) })
     const d = await res.json().catch(() => ({}))
@@ -126,6 +132,24 @@ export function FeeScheduleCard() {
               Add a step-down
             </Button>
           </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium">Offsets</p>
+            <p className="text-xs text-muted-foreground max-w-3xl">
+              The share of each kind of portfolio-company fee that reduces the management fee. Leave
+              a kind blank when the LPA doesn&rsquo;t offset it.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {FEE_KINDS.map(k => (
+                <label key={k} className="space-y-1 text-xs font-medium">{FEE_KIND_LABELS[k]}
+                  <div className="relative">
+                    <Input inputMode="decimal" value={offsets[k]} onChange={e => setOffsets(prev => ({ ...prev, [k]: e.target.value }))} placeholder="None" className="h-8 text-sm tabular-nums" />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -137,6 +161,8 @@ export function FeeScheduleCard() {
         </Button>
         {saved && <span className="text-xs text-success">Saved</span>}
       </div>
+
+      {on && <PortfolioFeesList />}
     </div>
   )
 }

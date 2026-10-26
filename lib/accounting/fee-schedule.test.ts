@@ -29,4 +29,14 @@ describe('parseFeeScheduleInput', () => {
     expect(parseFeeScheduleInput({ ...base, steps: [{ ...steps[0], basis: 'called' }] })).toEqual({ error: 'Each rate is charged on commitments, invested capital or NAV.' })
     expect(parseFeeScheduleInput({ ...base, steps: [{ ...steps[0], from: '2027-01-01' }] })).toEqual({ error: 'The first rate must start on or before the schedule does.' })
   })
+
+  it('keeps the offsets that apply, as shares', () => {
+    const steps = [{ from: '2026-01-01', rate: 0.02, basis: 'commitments' }]
+    expect(parseFeeScheduleInput({ ...base, steps, offsets: { transaction: 1, monitoring: '0.5', directors: '', other: 0 } })).toEqual({
+      ok: true, value: { ...base, steps, offsets: { transaction: 1, monitoring: 0.5 } },
+    })
+    expect(parseFeeScheduleInput({ ...base, steps, offsets: {} })).toEqual({ ok: true, value: { ...base, steps } })
+    expect(parseFeeScheduleInput({ ...base, steps, offsets: { transaction: 1.5 } })).toEqual({ error: 'Each offset is a share between 0 and 1 (1 = 100%).' })
+    expect(parseFeeScheduleInput({ ...base, steps, offsets: { closing: 1 } })).toEqual({ error: '"closing" is not a kind of portfolio-company fee.' })
+  })
 })

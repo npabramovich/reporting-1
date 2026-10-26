@@ -20,7 +20,7 @@ import type { ConstructionWaterfallProjection } from '@/lib/accounting/construct
 import type { ForecastSchedule } from '@/lib/accounting/construction-forecast'
 import { ensureVehicleAccounts } from '@/lib/accounting/provision-accounts'
 import { roundCents } from '@/lib/accounting/ledger'
-import { CapitalError, computeCapital, splitDistributions, validateCapital, type CapitalSettings } from './capital'
+import { CapitalError, computeCapital, splitDistributions, validateCapital, type CapitalSettings, type MonthlyCharges } from './capital'
 import { loadPlanConstruction, pickPrimaryPlan, primaryPlanRow, setPrimaryPlan } from './plan-construction'
 import { getConstructionModel, loadConstructionSeed } from '@/lib/accounting/construction-service'
 import { feeRuleFromConstruction } from './fee-rule'
@@ -435,7 +435,7 @@ async function capitalEntries(
     if (c < 0) { const m = e.entryDate.slice(0, 7) as MonthKey; costs.set(m, roundCents((costs.get(m) ?? 0) - c)) }
   }
   const deals = model ? dealsFor(model.actuals.waterfall, model.grossTimeline ?? model.timeline, model.asOf.slice(0, 10), costs) : undefined
-  const split = splitDistributions(result.distributions, result.calls, months, model?.actuals.waterfall, deals)
+  const split = splitDistributions(result.distributions, result.calls, months, model?.actuals.waterfall, deals, planCharges(kept, v.accounts, cashOf))
   // Who the carry goes to is the fund's setting (Allocation terms → Carry, "Carry accrues to"):
   // usually its GP entity, but any partner or associate vehicle, in any split.
   const carryTo = [...split.values()].some(s => s.carry > 0) ? await carryRecipientLabel(ctx, v.name) : ''
@@ -1568,6 +1568,27 @@ export interface PlanReturnsResponse {
 
 const CAPITAL_KINDS = new Set(['capital_call', 'distribution', 'carry_distribution'])
 
+/**
+ * The plan's cash paid out for fees and expenses, by month: a management fee on its fee account,
+ * anything else as an expense. Terms that return only invested capital tag the calls with these
+ * (forward-waterfall.ts `charge`).
+ */
+export function planCharges(entries: CompiledEntry[], accounts: Account[], cashOf: (e: CompiledEntry) => number): Map<MonthKey, MonthlyCharges> {
+  const fee = new Set(accounts.filter(a => a.subtype === 'management_fee').map(a => a.id))
+  const out = new Map<MonthKey, MonthlyCharges>()
+  for (const e of entries) {
+    if (CAPITAL_KINDS.has(e.kind) || e.kind === 'investment' || e.kind === 'proceeds' || e.distributable) continue
+    const c = cashOf(e)
+    if (!(c < 0)) continue
+    const m = e.entryDate.slice(0, 7) as MonthKey
+    const row = out.get(m) ?? { fees: 0, expenses: 0 }
+    if (fee.has(e.accountId)) row.fees = roundCents(row.fees - c)
+    else row.expenses = roundCents(row.expenses - c)
+    out.set(m, row)
+  }
+  return out
+}
+
 /** The projected checks and exits a deal-by-deal waterfall measures on, or none for other terms. */
 function dealsFor(wf: ConstructionWaterfallProjection | undefined, schedule: ForecastSchedule | null | undefined, asOf: string, costs: Map<MonthKey, number>) {
   return wf?.kind === 'american' && schedule ? monthlyProjectedDeals(schedule, asOf, costs) : undefined
@@ -1618,7 +1639,8 @@ export async function getPlanReturns(
   // The plan's costs by month, which a deal-by-deal base carries by cost share.
   const costs = new Map<MonthKey, number>([...otherFlows].filter(([, v]) => v < 0).map(([m, v]) => [m, -v]))
   const asOf = model.asOf.slice(0, 10)
-  const base = planReturns({ ...common, invested, proceeds, ...recyclingByMonth(built.entries), terminalNav: navAt(gross?.years), deals: dealsFor(model.actuals.waterfall, gross, asOf, costs) })
+  const charges = planCharges(built.entries, v.accounts, cashOf)
+  const base = planReturns({ ...common, invested, proceeds, ...recyclingByMonth(built.entries), terminalNav: navAt(gross?.years), deals: dealsFor(model.actuals.waterfall, gross, asOf, costs), charges })
 
   let simulation: PlanReturnsResponse['simulation'] = null
   const sim = model.assumptions.simulation
@@ -1644,7 +1666,7 @@ export async function getPlanReturns(
           if (e.recycled) { add(runRecycled, e.month, e.recycled); add(runDeemed, e.month, e.recycledDeemed ?? 0) }
         }
       }
-      const r = planReturns({ ...common, invested: runInvested, proceeds: runProceeds, recycled: runRecycled, recycledDeemed: runDeemed, terminalNav: navAt(s.years), deals: dealsFor(model.actuals.waterfall, s, asOf, costs) })
+      const r = planReturns({ ...common, invested: runInvested, proceeds: runProceeds, recycled: runRecycled, recycledDeemed: runDeemed, terminalNav: navAt(s.years), deals: dealsFor(model.actuals.waterfall, s, asOf, costs), charges })
       totals.push(r.totals.distributed)
       r.distributedToDate.forEach((v, i) => byMonthRuns[i].push(v))
       let running = 0

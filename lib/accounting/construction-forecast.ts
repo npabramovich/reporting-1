@@ -500,6 +500,10 @@ export function applyLpWaterfall(schedule: ForecastSchedule, projection?: Constr
     const lpCall = year.called * share
     called += lpCall
     const yearEnd = `${year.calendarYear}-12-31`
+    // The year's fees and expenses first, so terms that return only invested capital can tell what
+    // the call paid for, as the books do.
+    waterfall?.charge(yearEnd, year.fees * share, 'fees')
+    waterfall?.charge(yearEnd, year.expenses * share, 'expenses')
     waterfall?.contribute(yearEnd, lpCall)
     // Only the LPs' share runs through the waterfall. The rest belongs to the carry recipients'
     // own stake (the GP's commitment), which is returned gross — no carry on the GP's own money.

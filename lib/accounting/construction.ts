@@ -17,7 +17,7 @@
 // is asking for a forecast balance sheet here — so it is deliberately built apart from it.
 
 import type { FeeBasis } from './fees'
-import type { CarryStep, ContributionPurpose, DealHistory, RecyclingTreatment } from '@portfolio/fund-engine'
+import type { CarryStep, ContributionPurpose, DatedContribution, DealHistory, RecyclingTreatment } from '@portfolio/fund-engine'
 
 const r = (n: number) => Math.round(n * 100) / 100
 
@@ -282,7 +282,7 @@ export interface ConstructionWaterfallProjection {
   lpDistributedCapital: number
   fundDistributedCapital: number
   lpNav: number
-  contributions: { date: string; amount: number }[]
+  contributions: DatedContribution[]
   distributions?: { date: string; amount: number }[]
   /**
    * Carry the GP has already been paid, worked out from the LPs' distributions because the books

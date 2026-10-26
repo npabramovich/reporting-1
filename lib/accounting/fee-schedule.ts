@@ -15,7 +15,9 @@
 //   - NAV as the partners' capital accounts on each period's first day;
 //   - organizational expenses as the close has allocated them to the partners.
 //
-// The books have no line for portfolio-company fees, so the schedule's offsets don't apply here.
+// Portfolio-company fees aren't in the fund's books (the GP or the management company is paid them),
+// so they're recorded separately (`portfolio_company_fees`, lib/accounting/portfolio-fees.ts), and
+// the schedule's `offsets` say what share of each kind credits the fee.
 //
 // Side letters still apply. The period's net fee is shared across the fee-bearing partners by
 // commitment, each weighted by its own rate over the schedule's rate in force that period.
@@ -27,6 +29,7 @@ import { loadOwnership, loadPostedLedger } from './load'
 import { loadPartnerTerms } from './terms'
 import { dealHistories } from './realized-capital'
 import { vehicleIdByName } from './vehicle-id'
+import { loadPortfolioFees, PORTFOLIO_FEE_KINDS, type PortfolioFeeKind } from './portfolio-fees'
 import type { FeeResult } from './fees'
 
 export interface StoredFeeSchedule {
@@ -39,6 +42,8 @@ export interface StoredFeeSchedule {
   steps: { from: string; rate: number; basis: FeeScheduleBasis }[]
   /** Organizational expenses above this offset the fee dollar for dollar. Absent: no cap. */
   organizationalExpenseCap?: number
+  /** Share (0 to 1) of each kind of portfolio-company fee that offsets the fee. Absent: none. */
+  offsets?: Partial<Record<PortfolioFeeKind, number>>
 }
 
 const FREQUENCIES: FeeFrequency[] = ['quarterly', 'semiannual', 'annual']
@@ -67,9 +72,27 @@ export function parseFeeScheduleInput(raw: unknown): { ok: true; value: StoredFe
   if (new Set(steps.map(x => x.from)).size !== steps.length) return { error: 'Two rates start on the same date.' }
   const cap = s.organizationalExpenseCap == null || s.organizationalExpenseCap === '' ? undefined : Number(s.organizationalExpenseCap)
   if (cap !== undefined && !(cap >= 0)) return { error: 'The organizational expense cap must be zero or more.' }
+  let offsets: StoredFeeSchedule['offsets']
+  if (s.offsets != null) {
+    if (typeof s.offsets !== 'object' || Array.isArray(s.offsets)) return { error: 'The offsets are a share for each kind of portfolio-company fee.' }
+    for (const [kind, raw] of Object.entries(s.offsets as Record<string, unknown>)) {
+      if (!PORTFOLIO_FEE_KINDS.includes(kind as PortfolioFeeKind)) return { error: `"${kind}" is not a kind of portfolio-company fee.` }
+      if (raw == null || raw === '') continue
+      const share = Number(raw)
+      if (!(share >= 0 && share <= 1)) return { error: 'Each offset is a share between 0 and 1 (1 = 100%).' }
+      if (share > 0) (offsets ??= {})[kind as PortfolioFeeKind] = share
+    }
+  }
   return {
     ok: true,
-    value: { frequency: s.frequency as FeeFrequency, start: s.start, end: s.end, steps, ...(cap !== undefined ? { organizationalExpenseCap: cap } : {}) },
+    value: {
+      frequency: s.frequency as FeeFrequency,
+      start: s.start,
+      end: s.end,
+      steps,
+      ...(cap !== undefined ? { organizationalExpenseCap: cap } : {}),
+      ...(offsets ? { offsets } : {}),
+    },
   }
 }
 
@@ -120,7 +143,7 @@ export async function scheduledFee(
   if (!schedule) return { error: `${group} has no fee schedule. Set one on the Allocation terms page, or give a rate.` }
   if (date < schedule.start || date >= schedule.end) return null
 
-  const [owners, terms, ledger, txns, companies] = await Promise.all([
+  const [owners, terms, ledger, txns, companies, portfolioFees] = await Promise.all([
     loadOwnership(admin, fundId, group),
     loadPartnerTerms(admin, fundId, group),
     loadPostedLedger(admin, fundId, group),
@@ -128,8 +151,10 @@ export async function scheduledFee(
       .select('company_id, portfolio_group, transaction_type, transaction_date, investment_cost, fee_amount, cost_basis_exited')
       .eq('fund_id', fundId).eq('portfolio_group', group),
     admin.from('companies' as any).select('id, status').eq('fund_id', fundId),
+    schedule.offsets ? loadPortfolioFees(admin, fundId, group, schedule.end) : Promise.resolve([]),
   ])
   if (txns.error || companies.error) return { error: 'The deals could not be read, so the fee on invested capital cannot be worked out.' }
+  if ('error' in portfolioFees) return { error: 'The portfolio-company fees could not be read, so their offsets cannot be worked out.' }
 
   const feeTerms = new Map(terms.filter(t => t.category === 'management_fee').map(t => [t.lpEntityId, t]))
   const payers = owners.filter(o => o.commitment > 0).map(o => {
@@ -170,6 +195,7 @@ export async function scheduledFee(
     end: schedule.end,
     steps: schedule.steps,
     ...(schedule.organizationalExpenseCap !== undefined ? { organizationalExpenseCap: schedule.organizationalExpenseCap } : {}),
+    ...(schedule.offsets ? { offsets: schedule.offsets as Record<string, number> } : {}),
   }, {
     feeBearingCommitments: bearing.reduce((s, p) => s + p.commitment, 0),
     allCommitments: payers.reduce((s, p) => s + p.commitment, 0),
@@ -177,6 +203,7 @@ export async function scheduledFee(
     exits,
     navs,
     organizationalExpenses,
+    portfolioFees: portfolioFees.map(f => ({ date: f.date, kind: f.kind, amount: f.amount })),
   })
   const period = periods.find(p => p.start <= date && date < p.end)
   if (!period) return null

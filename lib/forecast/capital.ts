@@ -184,14 +184,19 @@ export function splitDistributions(
   months: MonthKey[],
   wf: ConstructionWaterfallProjection | undefined,
   deals?: ProjectedDeals,
+  charges?: Map<MonthKey, MonthlyCharges>,
 ): Map<MonthKey, MonthlySplit> {
-  return runMonthlyWaterfall(distributions, calls, months, wf, deals).byMonth
+  return runMonthlyWaterfall(distributions, calls, months, wf, deals, charges).byMonth
 }
+
+/** The fund's management fees and expenses by month, which tag what each call paid for. */
+export interface MonthlyCharges { fees: number; expenses: number }
 
 /**
  * As splitDistributions, also returning the waterfall's state at the end, as a liquidation would
  * run from it (for the value of what's left). `deals` are the projected checks and exits a
- * deal-by-deal waterfall measures its base on.
+ * deal-by-deal waterfall measures its base on. `charges` are the plan's fees and expenses, which
+ * terms that return only invested capital leave out of what the calls contributed.
  */
 export function runMonthlyWaterfall(
   distributions: Map<MonthKey, number>,
@@ -199,6 +204,7 @@ export function runMonthlyWaterfall(
   months: MonthKey[],
   wf: ConstructionWaterfallProjection | undefined,
   deals?: ProjectedDeals,
+  charges?: Map<MonthKey, MonthlyCharges>,
 ): { byMonth: Map<MonthKey, MonthlySplit>; state: WaterfallState | null; terms: WaterfallTerms | null; lpShare: number; warnings: string[] } {
   const out = new Map<MonthKey, MonthlySplit>()
   const forward = wf ? forwardWaterfall(wf, deals) : null
@@ -209,6 +215,11 @@ export function runMonthlyWaterfall(
   }
   for (const m of months) {
     const call = calls.get(m) ?? 0
+    const charged = charges?.get(m)
+    if (charged) {
+      forward.charge(lastDay(m), roundCents(charged.fees * share), 'fees')
+      forward.charge(lastDay(m), roundCents(charged.expenses * share), 'expenses')
+    }
     if (call > 0) forward.contribute(lastDay(m), roundCents(call * share))
     const d = distributions.get(m) ?? 0
     if (!d) continue

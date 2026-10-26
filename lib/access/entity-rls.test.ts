@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { TABLE_RULES } from './table-domains'
 
 /**
@@ -33,12 +33,18 @@ const EXEMPT: Record<string, string> = {
 }
 
 function rlsTables(): string[] {
-  return ['20261007100200_entity_rls.sql', '20261007100300_entity_rls_lp.sql', '20261007100400_diligence_entity.sql'].flatMap(file => {
+  const listed = ['20261007100200_entity_rls.sql', '20261007100300_entity_rls_lp.sql', '20261007100400_diligence_entity.sql'].flatMap(file => {
     const sql = readFileSync(`supabase/migrations/${file}`, 'utf8')
     const start = sql.indexOf('tables text[] := array[')
     const block = sql.slice(start, sql.indexOf('];', start))
     return Array.from(block.matchAll(/'([a-z_0-9]+)'/g)).map(m => m[1])
   })
+  // A table created later carries the same restrictive policy in its own migration.
+  const later = readdirSync('supabase/migrations').filter(f => f > '20261007100400' && f.endsWith('.sql')).flatMap(file => {
+    const sql = readFileSync(`supabase/migrations/${file}`, 'utf8')
+    return Array.from(sql.matchAll(/create policy "Only the caller's entities"\s+on public\.([a-z_0-9]+) as restrictive/g)).map(m => m[1])
+  })
+  return [...listed, ...later]
 }
 
 describe('entity RLS coverage', () => {

@@ -41,6 +41,13 @@ export interface ForwardWaterfall {
   wholeFundFallback: boolean
   /** Add an LP contribution (the LPs' share of a call). */
   contribute(date: string, amount: number): void
+  /**
+   * The LPs' share of a management fee or fund expense charged on `date`. It only matters under
+   * terms that return some purposes and not others (`capitalIncludes`): the charge then uses the
+   * LPs' oldest capital not yet used, or the next call, the way the books tag what each call paid
+   * for (`datedContributions`). Charge before the same date's call, as the books order them.
+   */
+  charge(date: string, amount: number, purpose: 'fees' | 'expenses'): void
   /** Run one LP distribution through the waterfall on `date`, and keep the result. */
   distribute(date: string, amount: number): WaterfallResult
   /** The state on `date`: capital contributed so far and the hurdle accrued to then. */
@@ -95,9 +102,10 @@ export function forwardWaterfall(p: ConstructionWaterfallProjection, projected?:
   }
   const prefOn = !straight && (p.prefRate > 0 || p.prefMultiple != null)
   const unreturned = p.prefBase === 'unreturned'
-  // Only the purposes the terms return count as capital. A projected call isn't tagged, so it counts
-  // in full: the forecast can't tell which part of a future call pays fees.
-  const contributions: DatedContribution[] = capitalContributions([...p.contributions], p.capitalIncludes)
+  // Only the purposes the terms return count as capital. The books' calls come tagged; a projected
+  // call is tagged here as the charges the forecast makes arrive (`charge`), first in, first out.
+  const tagging = callTagging(p)
+  const contributions = tagging.contributions
   const reductions: HurdleReduction[] = []
   const irr = irrHistory(p, contributions)
 
@@ -106,7 +114,7 @@ export function forwardWaterfall(p: ConstructionWaterfallProjection, projected?:
     : 0
   const calledTo = (date: string) => roundCents(contributions.filter(c => c.date <= date && c.amount > 0).reduce((s, c) => s + c.amount, 0))
 
-  if (p.kind === 'american' && p.dealByDeal && projected) return dealByDealWaterfall(p, projected, terms, contributions, calledTo, irr)
+  if (p.kind === 'american' && p.dealByDeal && projected) return dealByDealWaterfall(p, projected, terms, tagging, calledTo, irr)
 
   // On the unreturned basis the hurdle stops on capital already returned and pref already paid, so
   // the history has to say what each past distribution returned. The capital and pref tiers go
@@ -139,8 +147,12 @@ export function forwardWaterfall(p: ConstructionWaterfallProjection, projected?:
     wholeFundFallback: p.kind === 'american',
     contribute(date, amount) {
       if (!(amount > 0)) return
-      contributions.push({ date, amount })
-      called = roundCents(called + amount)
+      tagging.contribute(date, amount)
+      called = p.capitalIncludes ? calledTo('9999-12-31') : roundCents(called + amount)
+    },
+    charge(date, amount, purpose) {
+      if (!tagging.charge(date, amount, purpose)) return
+      called = calledTo('9999-12-31')
     },
     distribute(date, amount) {
       const result = runWaterfall(amount, terms, stateAt(date))
@@ -163,11 +175,12 @@ function dealByDealWaterfall(
   p: ConstructionWaterfallProjection,
   projected: ProjectedDeals,
   terms: WaterfallTerms,
-  contributions: DatedContribution[],
+  tagging: CallTagging,
   calledTo: (date: string) => number,
   irr: ReturnType<typeof irrHistory>,
 ): ForwardWaterfall {
   const basis = p.dealByDeal!
+  const contributions = tagging.contributions
   const deals = new Map<string, DealHistory>()
   for (const d of basis.deals) {
     deals.set(d.companyId, { ...d, investments: [...d.investments], realizations: [...d.realizations] })
@@ -234,7 +247,10 @@ function dealByDealWaterfall(
     wholeFundFallback: false,
     contribute(date, amount) {
       if (!(amount > 0)) return
-      contributions.push({ date, amount })
+      tagging.contribute(date, amount)
+    },
+    charge(date, amount, purpose) {
+      tagging.charge(date, amount, purpose)
     },
     distribute(date, amount) {
       const result = runWaterfall(amount, terms, stateAt(date))
@@ -246,6 +262,72 @@ function dealByDealWaterfall(
     },
     stateAt,
     liquidationStateAt: (date: string) => ({ ...state, contributedCapital: calledTo(date), preferredTarget: wholeTarget(date) }),
+  }
+}
+
+interface CallTagging {
+  /** The contributions the terms return as capital, kept current as calls and charges arrive. */
+  contributions: DatedContribution[]
+  contribute(date: string, amount: number): void
+  /** False when the terms return every purpose, so a charge changes nothing. */
+  charge(date: string, amount: number, purpose: 'fees' | 'expenses'): boolean
+}
+
+/**
+ * What each LP dollar paid for, carried forward from the books' tags (economics.ts
+ * `datedContributions`) over the forecast's own calls and charges: a charge uses the oldest capital
+ * not yet used, and a charge with none left is paid by the next call. The books tag LP by LP; the
+ * forecast's calls and charges are the LPs' totals, so it tags the totals the same way.
+ */
+function callTagging(p: ConstructionWaterfallProjection): CallTagging {
+  const includes = p.capitalIncludes
+  if (!includes) {
+    const contributions: DatedContribution[] = [...p.contributions]
+    return {
+      contributions,
+      contribute: (date, amount) => { contributions.push({ date, amount }) },
+      charge: () => false,
+    }
+  }
+  const tagged: DatedContribution[] = p.contributions.map(c => ({ ...c }))
+  const owed: { purpose: 'fees' | 'expenses'; amount: number }[] = []
+  const contributions: DatedContribution[] = []
+  const refresh = () => {
+    contributions.length = 0
+    contributions.push(...capitalContributions(tagged, includes).filter(c => c.amount > 0))
+  }
+  refresh()
+  return {
+    contributions,
+    contribute(date, amount) {
+      let left = amount
+      while (left > 0.000001 && owed.length > 0) {
+        const use = Math.min(left, owed[0].amount)
+        tagged.push({ date, amount: roundCents(use), purpose: owed[0].purpose })
+        left -= use
+        owed[0].amount -= use
+        if (owed[0].amount <= 0.000001) owed.shift()
+      }
+      if (left > 0.000001) tagged.push({ date, amount: roundCents(left), purpose: 'investments' })
+      refresh()
+    },
+    charge(date, amount, purpose) {
+      if (!(amount > 0)) return true
+      let need = amount
+      const unused = tagged
+        .filter(c => (c.purpose ?? 'investments') === 'investments' && c.amount > 0 && c.date <= date)
+        .sort((a, b) => a.date.localeCompare(b.date))
+      for (const u of unused) {
+        if (need <= 0.000001) break
+        const use = Math.min(need, u.amount)
+        u.amount = roundCents(u.amount - use)
+        tagged.push({ date: u.date, amount: roundCents(use), purpose })
+        need -= use
+      }
+      if (need > 0.000001) owed.push({ purpose, amount: need })
+      refresh()
+      return true
+    },
   }
 }
 

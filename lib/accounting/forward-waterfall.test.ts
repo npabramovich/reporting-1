@@ -210,3 +210,56 @@ describe('projectedDeals', () => {
     expect(out.exits).toEqual([])
   })
 })
+
+describe('the forecast tags its own calls when the terms return only invested capital', () => {
+  const investedOnly = (over: Partial<ConstructionWaterfallProjection> = {}) => blank({ prefRate: 0, capitalIncludes: ['investments'], ...over })
+  const carryOn = (p: ConstructionWaterfallProjection, run: (w: NonNullable<ReturnType<typeof forwardWaterfall>>) => void, dist: [string, number]) => {
+    const w = forwardWaterfall(p)!
+    run(w)
+    return w.distribute(dist[0], dist[1]).toGP
+  }
+
+  it('leaves the fees a call pays out of the capital returned', () => {
+    const tagged = carryOn(investedOnly(), w => {
+      w.charge('2026-01-31', 20_000, 'fees')
+      w.contribute('2026-01-31', 100_000)
+    }, ['2030-01-31', 150_000])
+    // As if only the 80,000 invested had been called.
+    const asIfInvested = carryOn(blank({ prefRate: 0 }), w => w.contribute('2026-01-31', 80_000), ['2030-01-31', 150_000])
+    expect(tagged).toBeCloseTo(asIfInvested, 2)
+    const untagged = carryOn(investedOnly(), w => w.contribute('2026-01-31', 100_000), ['2030-01-31', 150_000])
+    expect(tagged).toBeGreaterThan(untagged)
+  })
+
+  it('uses the oldest capital not yet used, then the next call, as the books do', () => {
+    // 100,000 on the books, unused; a 10,000 fee uses 10,000 of it.
+    const books = investedOnly({ contributions: [{ date: '2025-06-30', amount: 100_000, purpose: 'investments' }] })
+    const fromBooks = carryOn(books, w => w.charge('2026-03-31', 10_000, 'expenses'), ['2030-01-31', 150_000])
+    expect(fromBooks).toBeCloseTo(carryOn(blank({ prefRate: 0 }), w => w.contribute('2025-06-30', 90_000), ['2030-01-31', 150_000]), 2)
+    // With no capital to use, the fee is owed and the next call pays it.
+    const owed = carryOn(investedOnly(), w => {
+      w.charge('2026-01-31', 30_000, 'fees')
+      w.contribute('2026-06-30', 100_000)
+    }, ['2030-01-31', 150_000])
+    expect(owed).toBeCloseTo(carryOn(blank({ prefRate: 0 }), w => w.contribute('2026-06-30', 70_000), ['2030-01-31', 150_000]), 2)
+  })
+
+  it('changes nothing when the terms return every contribution', () => {
+    const run = (charge: boolean) => carryOn(blank({}), w => {
+      if (charge) w.charge('2026-01-31', 20_000, 'fees')
+      w.contribute('2026-01-31', 100_000)
+    }, ['2030-01-31', 150_000])
+    expect(run(true)).toBe(run(false))
+  })
+
+  it('tags the plan forecast\'s calls from its monthly fees and expenses', () => {
+    const p = investedOnly()
+    const months = ['2026-01', '2026-02'] as const
+    const calls = new Map([['2026-01', 100_000]])
+    const dists = new Map([['2026-02', 150_000]])
+    const charges = new Map([['2026-01', { fees: 15_000, expenses: 5_000 }]])
+    const withCharges = runMonthlyWaterfall(dists as any, calls as any, [...months] as any, p, undefined, charges as any).byMonth.get('2026-02' as any)!
+    const without = runMonthlyWaterfall(dists as any, calls as any, [...months] as any, p).byMonth.get('2026-02' as any)!
+    expect(withCharges.carry).toBeGreaterThan(without.carry)
+  })
+})
