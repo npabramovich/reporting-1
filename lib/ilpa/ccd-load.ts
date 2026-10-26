@@ -17,11 +17,13 @@ import { UNCHARACTERISED } from '@/lib/accounting/distribution-character'
 import { documentLetterhead } from '@/lib/vehicle-letterhead'
 import type { NoticeKind } from '@/lib/accounting/notice-types'
 import { buildCcdNotice, callTransactions, distributionTransactions, type CcdNotice, type CcdTransaction } from './ccd'
+import { ILPA_CCD_ATTRIBUTION } from './ccd-types'
 
 const FOOTNOTES = [
   'Prepared from the fund’s notice register. Field names and transaction types are those of the ILPA Capital Call & Distribution Template (v. 2.0).',
   'Unfunded commitment is commitment less capital called on notices up to and including this one. Recallable distributions and expired or released commitments are not yet recorded, so distribution lines state no impact on unfunded.',
   'Amounts distributed to limited partners are stated net of carried interest.',
+  ILPA_CCD_ATTRIBUTION,
 ]
 
 /** Is `other` an earlier notice than this one? Same-date notices count only when both are numbered. */
