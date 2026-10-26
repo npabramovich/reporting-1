@@ -6,8 +6,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { rateLimit } from '@/lib/rate-limit'
-import { loadCcdNotices } from '@/lib/ilpa/ccd-load'
-import { ccdSheetRows } from '@/lib/ilpa/ccd'
+import { loadCcdNotices } from '@/lib/lp-templates/ccd-load'
+import { ccdSheetRows } from '@/lib/lp-templates/ccd'
 
 export const runtime = 'nodejs'
 

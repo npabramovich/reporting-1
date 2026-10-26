@@ -11,7 +11,7 @@ import {
   lastQuarterEnd, periodLabel, performanceMoney, performanceMultiple, performancePct,
   type FundPerformanceReport, type PerformanceGrouping,
 } from '@/lib/accounting/fund-performance-format'
-import type { IlpaPerformance } from '@/lib/ilpa/performance'
+import type { IlpaPerformance } from '@/lib/lp-templates/performance'
 
 /** The last `n` calendar quarter ends, newest first. */
 function recentQuarterEnds(n: number): string[] {
@@ -54,7 +54,7 @@ export function FundPerformanceView() {
       .finally(() => setLoading(false))
   }, [lf, asOf, grouping])
 
-  // The ILPA Performance Template figures (lib/ilpa/performance.ts): its own request, so a slow or
+  // The ILPA Performance Template figures (lib/lp-templates/performance.ts): its own request, so a slow or
   // failed build never holds up the report above.
   useEffect(() => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) return
