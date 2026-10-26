@@ -24,6 +24,12 @@ import {
   previewRemoveRecycling, executeRemoveRecycling,
 } from './recycling'
 import { RECORD_RECYCLING_PROPERTIES, RECYCLING_TERMS_PROPERTIES } from '@/lib/agent/recycling-tools-manifest'
+import {
+  previewSetCreditFacility, executeSetCreditFacility,
+  previewRecordFacilityEvent, executeRecordFacilityEvent,
+  previewRemoveFacilityEvent, executeRemoveFacilityEvent,
+} from './credit-facility'
+import { CREDIT_FACILITY_PROPERTIES, FACILITY_EVENT_PROPERTIES } from '@/lib/agent/credit-facility-tools-manifest'
 
 /**
  * One write action the Analyst may DRAFT. Each maps to the access `domain` (+ optional feature)
@@ -331,6 +337,47 @@ export const WRITE_ACTIONS: Record<ActionType, WriteAction> = {
     },
     preview: previewRemoveRecycling as any,
     execute: executeRemoveRecycling as any,
+  },
+  set_credit_facility: {
+    entity: 'required',
+    // Which borrowing the fund has, and on what terms: part of the partners' capital picture.
+    domain: 'lp_capital',
+    stageAccess: 'write',
+    description:
+      "Propose adding a credit facility (a subscription line or other borrowing) to a vehicle, or changing one: name, kind, " +
+      'lender, size, dates and rate. Stages a preview; nothing changes until approved. Nothing is posted.',
+    inputSchema: {
+      type: 'object', required: ['vehicle', 'name'], additionalProperties: false,
+      properties: { vehicle: { type: 'string' }, ...CREDIT_FACILITY_PROPERTIES },
+    },
+    preview: previewSetCreditFacility as any,
+    execute: executeSetCreditFacility as any,
+  },
+  record_facility_event: {
+    entity: 'required',
+    domain: 'lp_capital',
+    stageAccess: 'write',
+    description:
+      'Propose recording a draw, repayment, interest payment or fee on a credit facility. Posts its entry (interest and fees ' +
+      'are allocated to the partners), or links an entry already on the books. Stages a preview with the balance before and after.',
+    inputSchema: {
+      type: 'object', required: ['vehicle', 'type', 'date', 'amount'], additionalProperties: false,
+      properties: { vehicle: { type: 'string' }, ...FACILITY_EVENT_PROPERTIES },
+    },
+    preview: previewRecordFacilityEvent as any,
+    execute: executeRecordFacilityEvent as any,
+  },
+  remove_facility_event: {
+    entity: 'required',
+    domain: 'lp_capital',
+    stageAccess: 'write',
+    description: "Propose taking a row off a vehicle's credit facility register. A row that posted its own entry needs the entry voided first.",
+    inputSchema: {
+      type: 'object', required: ['vehicle', 'id'], additionalProperties: false,
+      properties: { vehicle: { type: 'string' }, id: { type: 'string' }, explanation: { type: 'string' } },
+    },
+    preview: previewRemoveFacilityEvent as any,
+    execute: executeRemoveFacilityEvent as any,
   },
 }
 

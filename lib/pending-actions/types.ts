@@ -16,6 +16,9 @@ export type ActionType =
   | 'set_recycling_terms'
   | 'record_recycling'
   | 'remove_recycling'
+  | 'set_credit_facility'
+  | 'record_facility_event'
+  | 'remove_facility_event'
 
 export type PendingActionStatus = 'pending' | 'approved' | 'applied' | 'rejected' | 'failed'
 
