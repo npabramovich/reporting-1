@@ -16,10 +16,11 @@
 
 export const ILPA_CCD_VERSION = '2.0'
 
-/** The attribution every CC&D file carries: whose template it follows, and that ILPA does not endorse it. */
+/** The credit every CC&D file carries: ILPA created the template it follows, and does not endorse this software. */
 export const ILPA_CCD_ATTRIBUTION =
-  `This file follows the ILPA Capital Call & Distribution Template (v. ${ILPA_CCD_VERSION}). The template is the property of the ` +
-  'Institutional Limited Partners Association (ILPA); this software is not affiliated with or endorsed by ILPA.'
+  `This file follows the ILPA Capital Call & Distribution Template (v. ${ILPA_CCD_VERSION}), created by the Institutional ` +
+  'Limited Partners Association (ILPA), with thanks to ILPA for developing it as an industry standard. The template is ' +
+  "ILPA's; this software is not affiliated with or endorsed by ILPA."
 
 export const CCD_TRANSACTION_TYPES = [
   'Capital Call: Deemed GP Contribution from LPs',
