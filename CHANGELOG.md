@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Fund secrets out of members' reach, connected apps, and fewer round trips per page
-- **Members can no longer read the fund's secrets.** Any member could read the whole `fund_settings` row from the browser, including every encrypted credential, the wrapped data key, the deal-submission token hash and the legacy plaintext Postmark webhook token. `supabase/pending-deploy/fund_settings_member_column_grants.sql` grants members every other column; move it into `supabase/migrations/` once this release is deployed (the company page now reads its AI-key flags with the service role). A migration that adds a `fund_settings` column must end with `select public.grant_fund_settings_member_columns();`.
+- **Members can no longer read the fund's secrets.** Any member could read the whole `fund_settings` row from the browser, including every encrypted credential, the wrapped data key, the deal-submission token hash and the legacy plaintext Postmark webhook token. `20261026123000_fund_settings_member_column_grants.sql` grants members every other column. A migration that adds a `fund_settings` column must end with `select public.grant_fund_settings_member_columns();`.
 - **The plaintext Postmark webhook token retires itself.** The next webhook that proves the token clears the plaintext copy, encrypting it first when only the plaintext was readable.
 - **Saving the Claude key no longer breaks the fund's other secrets.** It minted a new data key each time, which left the Postmark webhook token, Drive and the other providers' keys undecryptable. Every secret in a save now uses the fund's one key.
 - **Settings → Connected apps** lists the assistants you have connected over OAuth and disconnects one, as the consent screen says you can.
