@@ -2,6 +2,7 @@ import { cache } from 'react'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { Database } from '@/lib/types/database'
+import { withSessionUser } from './session-user'
 
 /**
  * Async as of Next 16: `cookies()` returns a Promise and the synchronous shim that Next 15 kept for
@@ -12,7 +13,8 @@ import type { Database } from '@/lib/types/database'
 export async function createClient() {
   const cookieStore = await cookies()
 
-  return createServerClient<Database>(
+  // auth.getUser() on this client verifies the session token locally: see lib/supabase/session-user.ts.
+  return withSessionUser(createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -32,25 +34,19 @@ export async function createClient() {
         },
       },
     }
-  )
+  ))
 }
 
 /**
  * The signed-in user, resolved ONCE per request.
  *
- * `auth.getUser()` is a network call — it asks the Auth server to validate the token
- * rather than trusting the cookie, which is why it is the right call to make and why
- * making it twice is expensive. Every page navigation used to make it at least twice
- * on the render path alone: once in app/(app)/layout.tsx and again in the page under
- * it, each with a fresh client that carries no session in memory. Two serial round
- * trips to Supabase before the page's own queries can start.
+ * The session token is verified locally against the project's signing keys
+ * (lib/supabase/session-user.ts), not by a round trip to the Auth server, and React's
+ * `cache` dedupes it within a request so the layout and the page share one result. This is
+ * per-REQUEST memoisation, not a cache with a TTL: nothing is remembered between requests.
  *
- * React's `cache` dedupes within a single request, so the layout and the page now
- * share one. This is per-REQUEST memoisation, not a cache with a TTL: nothing is
- * remembered between requests, so a revoked session is still noticed on the next one.
- *
- * The middleware's own getUser is separate and stays — it runs in another runtime,
- * before this one exists, and it is what refreshes the session cookie.
+ * proxy.ts makes its own check first; it runs before this one exists, and it is what
+ * refreshes the session cookie.
  */
 export const getUser = cache(async () => {
   const supabase = await createClient()

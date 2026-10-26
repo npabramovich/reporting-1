@@ -1,4 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
+import { sessionUser } from '@/lib/supabase/session-user'
+import { isGpAppPath } from '@/lib/gp-app-routes'
 import { NextResponse, type NextRequest } from 'next/server'
 import { matchRoute } from '@/lib/access/match-route'
 import { ROUTE_DOMAINS, UNGATED_ROUTES, requiredLevel } from '@/lib/access/route-domains'
@@ -67,9 +69,12 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // Always call getUser() to refresh the session token.
-  // Do not add logic between createServerClient and getUser().
-  const { data: { user } } = await supabase.auth.getUser()
+  // Always resolve the user first: it refreshes the session token when it has expired.
+  // Do not add logic between createServerClient and this call.
+  //
+  // Verified locally against the project's signing keys, not by a round trip to Supabase Auth on
+  // every request (lib/supabase/session-user.ts says what that trades).
+  const { data: { user } } = await sessionUser(supabase.auth)
 
   const isAuthRoute = pathname.startsWith('/auth')
 
@@ -208,7 +213,12 @@ export async function proxy(request: NextRequest) {
   // (app/api/portal/mcp) is an LP-only user on /oauth/authorize, and must not be sent to the portal
   // midway. The page decides which consent applies, and refuses anyone it doesn't fit.
   const isOAuthConsent = pathname.startsWith('/oauth/')
-  if (user && !isApiRoute && !isAuthRoute && !isPublicTokenRoute && !isSetupRoute && !isOAuthDiscovery && !isPwaShell && !isOAuthConsent) {
+  //
+  // GP app pages are left to app/(app)/layout.tsx, which resolves the caller's membership anyway
+  // (one RPC) and sends a non-member who is an active LP to their portal. Asking here as well cost
+  // every GP navigation two more queries before the page could start.
+  const isGpApp = isGpAppPath(pathname)
+  if (user && !isApiRoute && !isAuthRoute && !isPublicTokenRoute && !isSetupRoute && !isOAuthDiscovery && !isPwaShell && !isOAuthConsent && !isGpApp) {
     const [{ data: membership }, { data: lpAccount }] = await Promise.all([
       supabase.from('fund_members').select('fund_id').eq('user_id', user.id).maybeSingle(),
       supabase.from('lp_accounts').select('status').eq('auth_user_id', user.id).maybeSingle(),

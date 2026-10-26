@@ -14,7 +14,7 @@ const from = vi.hoisted(() => vi.fn())
 
 vi.mock('@supabase/ssr', () => ({
   createServerClient: () => ({
-    auth: { getUser, mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: null }) } },
+    auth: { getUser, getClaims: async () => { const { data } = await getUser(); return { data: data?.user ? { claims: { sub: data.user.id, email: data.user.email } } : null, error: null } }, mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: null }) } },
     from,
     rpc,
   }),

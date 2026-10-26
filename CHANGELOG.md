@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Fund secrets out of members' reach, connected apps, and fewer round trips per page
+- **Members can no longer read the fund's secrets.** Any member could read the whole `fund_settings` row from the browser, including every encrypted credential, the wrapped data key, the deal-submission token hash and the legacy plaintext Postmark webhook token. `supabase/pending-deploy/fund_settings_member_column_grants.sql` grants members every other column; move it into `supabase/migrations/` once this release is deployed (the company page now reads its AI-key flags with the service role). A migration that adds a `fund_settings` column must end with `select public.grant_fund_settings_member_columns();`.
+- **The plaintext Postmark webhook token retires itself.** The next webhook that proves the token clears the plaintext copy, encrypting it first when only the plaintext was readable.
+- **Saving the Claude key no longer breaks the fund's other secrets.** It minted a new data key each time, which left the Postmark webhook token, Drive and the other providers' keys undecryptable. Every secret in a save now uses the fund's one key.
+- **Settings → Connected apps** lists the assistants you have connected over OAuth and disconnects one, as the consent screen says you can.
+- **The session is verified locally.** The proxy and every server route check the access token against the project's signing keys instead of asking Supabase Auth on each request. Projects still on the legacy shared JWT secret keep the old behaviour. A signed-out session now stays valid until its token expires (an hour by default); membership and grants are still read live. Issuing OAuth tokens and activating a portal account still ask Auth.
+- **GP pages skip a duplicate membership lookup.** The proxy no longer reads `fund_members` and `lp_accounts` for pages under `app/(app)`; the layout already resolves membership and sends an active LP to their portal.
+- **An entity's lead page streams its figures with the page** instead of fetching economics and the timeseries afterwards through `/api`.
+
 ### Forecasts use the vehicle's full waterfall terms
 - **Catch-up size and the hurdle base reach the forecasts.** Both the plan's monthly forecast and construction's yearly schedule passed only the carry rate and catch-up rate to the waterfall, so a half-size catch-up forecast as a full one and a hurdle on unreturned capital accrued on contributed capital. They now run through one helper, `forwardWaterfall` in `lib/accounting/forward-waterfall.ts`, on the same terms the books use, and the unreturned hurdle reads what past distributions returned. Tested against `splitDistribution` on the same flows.
 - **Deal-by-deal terms forecast whole fund, and say so.** The forecasts project the fund's cash, not each deal, so an American waterfall still runs whole fund; the plan now carries a warning saying the total carry is the same but may be paid earlier.

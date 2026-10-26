@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { authServerUser } from '@/lib/supabase/session-user'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getClient, redirectUriAllowed, issueAuthorizationCode, grantableScope } from '@/lib/oauth/store'
 import { canWriteAnywhere, loadAccessContext } from '@/lib/access/effective'
@@ -25,7 +26,9 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  // Asked of the Auth server, not the local token check: this issues a long-lived refresh token, so a
+  // session that was just signed out must not be able to.
+  const { data: { user } } = await authServerUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json().catch(() => ({}))

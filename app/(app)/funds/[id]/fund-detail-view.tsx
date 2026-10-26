@@ -8,6 +8,7 @@ import {
   LineChart, Line, ReferenceLine,
 } from 'recharts'
 import { Loader2, ArrowRight } from 'lucide-react'
+import type { FundDetailInitial } from '@/lib/accounting/fund-detail-initial'
 import { useCurrency, formatCurrency, formatCurrencyFull } from '@/components/currency-context'
 import { useVehicle, FundSwitcher } from '@/components/accounting-vehicle'
 import { AccountingBody, AccountingPageHeader } from '@/components/accounting-chrome'
@@ -84,7 +85,13 @@ const irrPct = (v: number | null | undefined) => {
   return `${(Object.is(p, -0) ? 0 : p).toFixed(1)}%`
 }
 
-export function FundDetailView({ vehicle, vehicleId }: { vehicle: string; vehicleId: string | null }) {
+export function FundDetailView({ vehicle, vehicleId, initial }: {
+  vehicle: string
+  vehicleId: string | null
+  /** The first economics and timeseries, streamed with the page (lib/accounting/fund-detail-initial.ts).
+   *  Used for the first load only; a reload after a change fetches as before. */
+  initial?: Promise<FundDetailInitial | null>
+}) {
   const currency = useCurrency()
   const fmt = (v: number) => formatCurrency(v, currency)
   const fmtFull = (v: number) => formatCurrencyFull(v, currency)
@@ -103,23 +110,42 @@ export function FundDetailView({ vehicle, vehicleId }: { vehicle: string; vehicl
 
   const g = `group=${encodeURIComponent(vehicle)}`
   const loadVersion = useRef(0)
+  const seed = useRef(initial)
   const load = useCallback(() => {
     const version = ++loadVersion.current
     const current = () => version === loadVersion.current
     setLoading(true)
-    fetch(`/api/accounting/fund-economics?${g}`)
-      .then(r => (r.ok ? r.json() : { vehicles: [] }))
-      .then(e => {
-        if (!current()) return
-        const found = (e.vehicles ?? []).find((v: VehicleEconomics) => v.vehicle === vehicle) ?? null
-        setEcon(found); setNotFound(!found)
-      }).catch(() => { if (current()) { setEcon(null); setNotFound(true) } })
-      .finally(() => { if (current()) setLoading(false) })
     setSoi(null); setTs(null)
+    const applyEcon = (e: { vehicles?: VehicleEconomics[] }) => {
+      if (!current()) return
+      const found = (e.vehicles ?? []).find((v: VehicleEconomics) => v.vehicle === vehicle) ?? null
+      setEcon(found); setNotFound(!found)
+    }
+    const applyTs = (t: any) => { if (current()) setTs(t && !t.error ? t : null) }
+    const fetchEcon = () => fetch(`/api/accounting/fund-economics?${g}`)
+      .then(r => (r.ok ? r.json() : { vehicles: [] }))
+      .then(applyEcon)
+      .catch(() => { if (current()) { setEcon(null); setNotFound(true) } })
+      .finally(() => { if (current()) setLoading(false) })
+    const fetchTs = () => fetch(`/api/accounting/fund-timeseries?${g}`)
+      .then(r => r.ok ? r.json() : null).then(applyTs).catch(() => applyTs(null))
+
+    // The first load takes what the page streamed, when it has it; the rest fetch.
+    const first = seed.current
+    seed.current = undefined
+    if (first) {
+      first.then(d => {
+        if (!d) { fetchEcon(); fetchTs(); return }
+        applyEcon({ vehicles: d.vehicles as VehicleEconomics[] })
+        applyTs(d.timeseries)
+        if (current()) setLoading(false)
+      }, () => { fetchEcon(); fetchTs() })
+    } else {
+      fetchEcon()
+      fetchTs()
+    }
     fetch(`/api/accounting/statements?${g}&preset=itd&section=soi`)
       .then(r => r.ok ? r.json() : null).then(s => { if (current()) setSoi(s?.scheduleOfInvestments ?? null) }).catch(() => { if (current()) setSoi(null) })
-    fetch(`/api/accounting/fund-timeseries?${g}`)
-      .then(r => r.ok ? r.json() : null).then(t => { if (current()) setTs(t && !t.error ? t : null) }).catch(() => { if (current()) setTs(null) })
   }, [g, vehicle])
   useEffect(() => { load(); return () => { loadVersion.current++ } }, [load])
 
