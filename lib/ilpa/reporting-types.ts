@@ -127,7 +127,7 @@ export const REPORTING_LINES = [
   line('unapplied_recognized', 'Plus: Total Offsets to Fees & Expenses (Recognized During Period)', 'A.1', 'subtotal'),
   line('unapplied_applied', 'Less: Total Offsets to Fees & Expenses (Applied During Period)', 'A.1', 'subtotal'),
   line('unapplied_ending', 'Unapplied Offset Balance (Roll-forward) – Ending Balance', 'A.1', 'subtotal'),
-  line('fees_net_heading', 'Total Fees & Expenses, Net of Offsets, Waivers & Rebates', 'A.1', 'heading'),
+  line('fees_expenses_net', 'Total Fees & Expenses, Net of Offsets, Waivers & Rebates', 'A.1', 'subtotal'),
   line('fees_gross', 'Total Fees & Expenses: Gross of Offsets, Waivers & Rebates', 'A.1', 'subtotal'),
   line('fees_reductions', 'Total Offsets, Waivers & Rebates (Applied During Period)', 'A.1', 'subtotal'),
   line('fees_net', 'Total Fees & Expenses: Net of Offsets, Waivers & Rebates', 'A.1', 'subtotal'),
