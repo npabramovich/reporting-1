@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Book-to-tax adjustments from chat and the API
+- **`tax_adjustments`** previews a tax year's book-to-tax adjustments for one vehicle, the same set the Tax page shows, K-1 pass-through included; **`post_tax_adjustments`** posts them, staged for a person's approval from a chat. Until now they could only be posted from the Tax page. Both gate on the tax domain and `tax_reporting`, and a post leaves the same audit record as the page (`lib/accounting/tax-run-audit.ts`).
+- **A `recalculate_fund_distributions` dry run no longer waits for approval.** It writes nothing, so it runs directly; the real run still stages.
+
 ### Fund secrets out of members' reach, connected apps, and fewer round trips per page
 - **Members can no longer read the fund's secrets.** Any member could read the whole `fund_settings` row from the browser, including every encrypted credential, the wrapped data key, the deal-submission token hash and the legacy plaintext Postmark webhook token. `20261026123000_fund_settings_member_column_grants.sql` grants members every other column. A migration that adds a `fund_settings` column must end with `select public.grant_fund_settings_member_columns();`.
 - **The plaintext Postmark webhook token retires itself.** The next webhook that proves the token clears the plaintext copy, encrypting it first when only the plaintext was readable.
