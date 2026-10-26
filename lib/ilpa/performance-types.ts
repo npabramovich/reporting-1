@@ -18,6 +18,12 @@
 export const ILPA_PERFORMANCE_VERSION = '1.1'
 export const ILPA_PERFORMANCE_METHODOLOGY = 'Granular'
 
+/** The credit every performance file carries: ILPA created the template it follows, and does not endorse this software. */
+export const ILPA_PERFORMANCE_ATTRIBUTION =
+  `This file follows the ILPA Performance Template (${ILPA_PERFORMANCE_METHODOLOGY} Methodology, v. ${ILPA_PERFORMANCE_VERSION}), ` +
+  'created by the Institutional Limited Partners Association (ILPA), with thanks to ILPA for developing it as an industry ' +
+  "standard. The template is ILPA's; this software is not affiliated with or endorsed by ILPA."
+
 export const PERFORMANCE_TYPES = [
   'Capital Call: Investments',
   'Capital Call: Management Fees/Partnership Expenses',

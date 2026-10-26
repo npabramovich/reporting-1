@@ -35,7 +35,7 @@ import { computeSummary } from '@/lib/investments'
 import type { InvestmentTransaction, CompanyStatus } from '@/lib/types/database'
 import { facilitiesWithStatus, loadFacilityRegister, type DrawPurpose, type FacilityWithStatus } from '@/lib/accounting/credit-facility'
 import { buildIlpaPerformance, portfolioPerformance, type IlpaPerformance, type PerformanceFlow, type PortfolioHolding } from './performance'
-import type { PerformanceType } from './performance-types'
+import { ILPA_PERFORMANCE_ATTRIBUTION, type PerformanceType } from './performance-types'
 
 const DRAWDOWN_TYPE: Record<DrawPurpose, PerformanceType> = {
   investment: 'Fund-level Subscription Facility Drawdown: Investments',
@@ -332,6 +332,7 @@ export async function loadIlpaPerformance(
     'Accrued management fees and partnership expenses, and accrued facility interest, are already in the net asset value; the quarter-end adjustments for them are not stated separately.',
     'Recallable distributions are typed as Permanent except recycled proceeds, which are Recallable.',
     'IRRs use the exact dates of each flow, with the quarter-end adjustments and the net asset value on the as-of date. Portfolio returns are gross of fees, expenses and carry, from the investment tracker.',
+    ILPA_PERFORMANCE_ATTRIBUTION,
   )
 
   return buildIlpaPerformance({
