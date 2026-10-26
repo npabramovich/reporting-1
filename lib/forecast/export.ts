@@ -34,6 +34,18 @@ export function seriesCsv(s: SeriesResult): string {
   rows.push(['', 'Net cash movement', ...s.cash.map(c => c?.movement ?? null)])
   rows.push(['', 'Ending cash', ...s.cash.map(c => c?.ending ?? null)])
   if (s.cashAccounts.length > 1) for (const a of s.cashAccounts) rows.push([a.code, `${a.name} (ending)`, ...a.ending])
+  const bs = s.balanceSheet
+  if (bs) {
+    rows.push([])
+    rows.push(['', 'Balance sheet'])
+    const part = (label: string, sec: { rows: { code: string | null; name: string; values: (number | null)[] }[]; total: (number | null)[] }) => {
+      for (const l of sec.rows) rows.push([l.code ?? '', l.name, ...l.values])
+      rows.push(['', `Total ${label}`, ...sec.total])
+    }
+    part('assets', bs.assets)
+    part('liabilities', bs.liabilities)
+    part(bs.equity.label.toLowerCase(), bs.equity)
+  }
   if (s.warnings.length) {
     rows.push([])
     for (const w of s.warnings) rows.push(['Note', w])

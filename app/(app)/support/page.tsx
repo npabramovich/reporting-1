@@ -812,7 +812,7 @@ export default function SupportPage() {
             planned deals, each with its hold period and forecast multiple), <strong>Capital planning</strong> (calls,
             fees and expenses, and investment, actual and forecast, over the selected dates) and
             <strong> Financials</strong> (income statement and statement of cash flows on an accrual or cash basis,
-            and journal entries). The date range and month/quarter/year apply on every tab.
+            the balance sheet at the end of each period, and journal entries). The date range and month/quarter/year apply on every tab.
             A management company has no portfolio, so it gets Charts, Financials and Capital planning, which there
             shows its cash: income received, expenses paid, money to and from its funds and owners, ending cash and
             the lowest point in the range.

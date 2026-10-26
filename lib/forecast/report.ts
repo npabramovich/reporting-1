@@ -12,6 +12,7 @@ import type { Account, Posting } from '@/lib/accounting/types'
 import { roundCents } from '@/lib/accounting/ledger'
 import { aggregateFlow, firstDay, lastDay, monthRange, periods, type Interval, type MonthKey } from './months'
 import { monthlyStatement, type MonthStatus } from './statement'
+import { forecastBalanceSheet, type ForecastBalanceSheet } from './balance-sheet'
 
 export type ReportView = 'actual' | 'plan' | 'combined'
 
@@ -78,6 +79,9 @@ export interface ReportInput {
   /** Entry-grouped streams for the cash timeline; omitted = no timeline. */
   actualEntries?: FlowEntry[]
   planEntries?: FlowEntry[]
+  /** How the balance sheet names and lays out equity (lib/accounting/vocab.ts, lib/vehicle-kinds.ts). */
+  equityLabel?: string
+  itemizeEquity?: boolean
 }
 
 export type PeriodStatus = MonthStatus | 'mixed'
@@ -132,6 +136,8 @@ export interface Report {
   indirect: { netIncome: number[]; investmentGains: number[]; workingCapital: number[]; operating: number[] } | null
   /** Ending balance of each cash account, per period (operating, reserve, …). */
   cashAccounts: { accountId: string; code: string; name: string; ending: number[] }[]
+  /** Every asset, liability and equity balance at the end of each period (./balance-sheet.ts). */
+  balanceSheet?: ForecastBalanceSheet
 }
 
 const FORECAST_KIND: Record<string, FlowCategory> = {
@@ -417,6 +423,11 @@ export function buildReport(input: ReportInput): Report {
     cashBasis,
     indirect,
     cashAccounts,
+    balanceSheet: forecastBalanceSheet({
+      accounts: input.accounts, postings: reportPostings(input), periods: ps,
+      hasData: m => statusOf.has(m) && statusOf.get(m) !== 'none',
+      equityLabel: input.equityLabel, itemizeEquity: input.itemizeEquity,
+    }),
   }
 }
 

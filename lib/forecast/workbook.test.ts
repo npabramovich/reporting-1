@@ -157,3 +157,49 @@ describe('buildVarianceWorkbook', () => {
     expect(ws[`D${net}`].f).toMatch(/^D\d+-D\d+$/)
   })
 })
+
+describe('the balance sheet in the workbook', () => {
+  const withBalanceSheet = (): SeriesResult => {
+    const s = fixture()
+    const ending = s.cash.map(c => c!.ending)
+    const capital = [10_000, 15_000, 15_000, 15_000, 15_000, 13_000]
+    const net = ending.map((v, i) => v - capital[i])
+    return {
+      ...s,
+      balanceSheet: {
+        assets: { rows: [{ key: 'cash', code: '1000', name: 'Cash', values: ending }], total: ending },
+        liabilities: { rows: [], total: ending.map(() => 0) },
+        equity: {
+          label: "Partners' capital",
+          rows: [{ key: 'capital', code: null, name: "Partners' capital", values: capital }, { key: 'net_income', code: null, name: 'Net income not yet closed', values: net }],
+          total: ending,
+        },
+        check: ending.map(() => 0),
+      },
+    }
+  }
+  const book = (interval: 'month' | 'quarter') => buildForecastWorkbook({
+    monthly: withBalanceSheet(), rules, interval,
+    accounts: lines.map(l => ({ id: l.accountId, code: l.code, name: l.name })),
+    meta: { fundName: 'Test Fund', generatedAt: '2026-10-11T00:00:00Z' },
+  })
+
+  it('totals the balances with formulas and checks that the sheet balances', () => {
+    const ws = book('month').Sheets.Monthly
+    const assets = rowOf(ws, 'Total assets')
+    const both = rowOf(ws, "Total liabilities and partners' capital")
+    const check = rowOf(ws, 'Out of balance (should be zero)')
+    expect(ws[`D${assets}`].f).toBe(`SUM(D${rowOf(ws, 'Cash')})`)
+    expect(ws[`D${both}`].f).toBe(`SUM(D${rowOf(ws, 'Total liabilities')},D${rowOf(ws, "Total partners' capital")})`)
+    expect(ws[`D${check}`]).toMatchObject({ f: `D${assets}-D${both}`, v: 0 })
+    // The range's column is the last period's balance, not a sum of balances.
+    expect(ws[`I${rowOf(ws, 'Cash')}`].f).toBe(`H${rowOf(ws, 'Cash')}`)
+  })
+
+  it('takes each quarter at its last month', () => {
+    const wb = book('quarter')
+    const q = wb.Sheets.Quarterly
+    const cash = rowOf(q, 'Cash')
+    expect(q[`C${cash}`].f).toBe(`Monthly!E${rowOf(wb.Sheets.Monthly, 'Cash')}`)
+  })
+})

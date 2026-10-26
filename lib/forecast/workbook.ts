@@ -9,6 +9,7 @@
 //   rule alone doesn't explain — an override, a hand edit, a linked fee, an investment's entries —
 //   stays the app's value, so the workbook opens on exactly what the page shows.
 // - Quarterly and annual sheets are SUMs of the monthly one, not a second copy of the numbers.
+// - The balance sheet's balances are the app's; its totals and the out-of-balance check are formulas.
 //
 // Pure: takes what lib/forecast/service.ts returns. Text from the app (account names, notes) is only
 // ever a string cell — nothing user-entered reaches a formula.
@@ -342,6 +343,23 @@ function layout(s: SeriesResult, firstRow: number): { rows: LayoutRow[]; unrecon
     push({ label: 'Ending balance by cash account', row: { kind: 'heading' } })
     for (const a of s.cashAccounts) push({ label: a.name, code: a.code, row: { kind: 'balance', values: a.ending } })
   }
+  // The balance sheet at each period's end: balances are the app's, the totals and the check are
+  // formulas, so a balance typed over shows straight away as out of balance.
+  const bs = s.balanceSheet
+  if (bs) {
+    push({ label: '', row: { kind: 'blank' } })
+    push({ label: 'Balance sheet', row: { kind: 'heading' } })
+    const section = (label: string, lines: { code: string | null; name: string; values: (number | null)[] }[], totalLabel: string) => {
+      push({ label, row: { kind: 'heading' } })
+      const of = lines.map(l => push({ label: l.name, code: l.code ?? undefined, row: { kind: 'balance', values: l.values } }))
+      return push({ label: totalLabel, row: { kind: 'sum', of } })
+    }
+    const assets = section('Assets', bs.assets.rows, 'Total assets')
+    const liabilities = section('Liabilities', bs.liabilities.rows, 'Total liabilities')
+    const equity = section(bs.equity.label, bs.equity.rows, `Total ${bs.equity.label.toLowerCase()}`)
+    const both = push({ label: `Total liabilities and ${bs.equity.label.toLowerCase()}`, row: { kind: 'sum', of: [liabilities, equity] } })
+    push({ label: 'Out of balance (should be zero)', row: { kind: 'diff', plus: assets, minus: both } })
+  }
   return { rows, unreconciled }
 }
 
@@ -574,6 +592,7 @@ function summarySheet(
   g.set(r++, 0, 'How this workbook works')
   for (const line of [
     `${MONTHLY}: every month, actual and forecast. Totals, net income and the cash roll-forward are formulas.`,
+    ...(s.balanceSheet ? ['The balance sheet below the cash flow is each period’s closing balances, with its totals and the out-of-balance check as formulas.'] : []),
     `Forecast months a rule produced are formulas over its row on ${ASSUMPTIONS} (${formulaCells} cell${formulaCells === 1 ? '' : 's'}): change a driver there and everything downstream recalculates.`,
     'Actual months, overrides, hand edits and linked amounts (fees, investments, capital calls) carry the app’s values — type over them to try a different number.',
     ...(input.interval !== 'month' ? [`${sheetName}: each period adds up its months on ${MONTHLY}.`] : []),
