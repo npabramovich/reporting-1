@@ -113,6 +113,19 @@ describe('entry builders', () => {
     expect(e.postings.filter(p => p.lpEntityId)).toHaveLength(0)
   })
 
+  it('books a fee with offsets gross, the offsets on their contra account and the net due to the GP', () => {
+    const fee = computeManagementFee({ annualRate: 0.02, basis: 'committed', periodFraction: 1 },
+      [{ lpEntityId: 'a', basisAmount: 5_000_000 }])
+    const e = buildManagementFeeEntry(base, fee, feeAccts, 'USD', { amount: 25_000, accountId: 'mgmt-fee-offsets' })
+    expect(isBalanced(e)).toBe(true)
+    const balances = accountBalances(e.postings)
+    expect(balances.get('mgmt-fee-exp')).toBe(125_000)
+    expect(balances.get('mgmt-fee-offsets')).toBe(-25_000)
+    expect(balances.get('due-to-gp')).toBe(-100_000)
+    // No offset books the fee as before: two lines.
+    expect(buildManagementFeeEntry(base, fee, feeAccts, 'USD', { amount: 0, accountId: 'mgmt-fee-offsets' }).postings).toHaveLength(2)
+  })
+
   it('expense entry books P&L only', () => {
     const e = buildExpenseEntry(base, 100_000, { pnlAccountId: 'exp', offsetAccountId: 'cash' })
     expect(isBalanced(e)).toBe(true)

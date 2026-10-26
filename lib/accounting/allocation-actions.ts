@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadOwnership } from './load'
 import { accountIdByCode, ensureCapitalAccounts } from './persist'
+import { ensureVehicleAccounts } from './provision-accounts'
 import { computeManagementFee } from './fees'
 import { scheduledFee } from './fee-schedule'
 import { loadPartnerTerms } from './terms'
@@ -34,6 +35,7 @@ export const CODE = {
   realizedGains: '4000',
   unrealizedIncome: '4200',
   mgmtFeeExpense: '5000',
+  mgmtFeeOffsets: '5010',
   partnershipExpense: '5100',
 }
 
@@ -59,7 +61,7 @@ export async function buildAllocationEntry(
   const { action, entryDate } = body
   if (!action || !entryDate) return { error: 'action and entryDate are required' }
 
-  const codes = await accountIdByCode(admin, fundId, group)
+  let codes = await accountIdByCode(admin, fundId, group)
   const need = (code: string): string => {
     const id = codes.get(code)
     if (!id) throw new Error(`The chart is missing account ${code} — add it under the entity's Admin → Chart of accounts.`)
@@ -93,8 +95,15 @@ export async function buildAllocationEntry(
       if ('error' in scheduled) return { error: scheduled.error }
       const accts: PnlAccounts = { pnlAccountId: need(CODE.mgmtFeeExpense), offsetAccountId: need(CODE.dueToGp) }
       const p = scheduled.period
+      // The offset is booked to its own contra account, so a chart set up before that account
+      // existed gets it now (creating standard accounts is idempotent and never edits one).
+      if (p.offset > 0 && !codes.has(CODE.mgmtFeeOffsets)) {
+        await ensureVehicleAccounts(admin, fundId, group)
+        codes = await accountIdByCode(admin, fundId, group)
+      }
       const memo = body.memo ?? `Management fee ${p.start} to ${p.end}` + (p.offset > 0 ? ` (${p.gross.toFixed(2)} less ${p.offset.toFixed(2)} of offsets)` : '')
-      return { entry: buildManagementFeeEntry({ ...base, memo }, scheduled.fee, accts) }
+      const offset = p.offset > 0 ? { amount: p.offset, accountId: need(CODE.mgmtFeeOffsets) } : undefined
+      return { entry: buildManagementFeeEntry({ ...base, memo }, scheduled.fee, accts, 'USD', offset) }
     }
     if (action === 'management_fee') {
       const [owners, terms] = await Promise.all([

@@ -46,6 +46,9 @@ export const QUARTERLY_DUE: Record<string, [number, number][]> = {
   // Investor capital account statements: 45 days after quarter end. Like 13F, the Q1 slot (Feb 14)
   // is the prior year's Q4 statements; Q1's statements are the May 15 occurrence.
   'lp-capital-statements': [[2, 14], [5, 15], [8, 14], [11, 14]],
+  // ILPA Reporting Template: 60 days after Q1 to Q3, 120 after Q4. The Q1 slot (April 30) is the
+  // prior year's Q4 file.
+  'ilpa-reporting-template': [[4, 30], [5, 30], [8, 29], [11, 29]],
 }
 
 const DEFAULT_QUARTERLY_DUE: [number, number][] = [[1, 31], [4, 30], [7, 31], [10, 31]]

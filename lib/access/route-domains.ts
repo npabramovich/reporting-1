@@ -171,6 +171,8 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   'api/accounting/deal-carry': { domain: 'gp_economics' },
   'api/accounting/gp-economics': { domain: 'gp_economics' },
   'api/accounting/waterfall-terms': { domain: 'gp_economics' },
+  // Carried interest held in a third-party escrow (lib/accounting/carry-escrow.ts).
+  'api/accounting/carry-escrow': { domain: 'gp_economics' },
 
   // ── LP capital: identities, commitments, capital accounts ──────────────────
   'api/accounting/capital-accounts': { domain: 'lp_capital' },
@@ -254,6 +256,8 @@ export const ROUTE_DOMAINS: Record<string, RouteAccess> = {
   // A notice in the ILPA Capital Call & Distribution Template layout, as a download. A read of the
   // register that sends nothing, so it sits with the capital data rather than with sharing.
   'api/accounting/notices/ilpa': { domain: 'lp_capital' },
+  // One partner's quarterly ILPA Reporting Template: its capital statement, in ILPA's categories.
+  'api/accounting/ilpa/reporting': { domain: 'lp_capital' },
   'api/lps/live-report/share': { domain: 'lp_relations', feature: 'lp_portal' },
   'api/lps/snapshots/[id]/share': { domain: 'lp_relations', feature: 'lp_portal' },
   'api/lps/authorized-users': { domain: 'lp_relations', feature: 'lp_portal' },

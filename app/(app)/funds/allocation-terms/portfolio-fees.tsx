@@ -10,14 +10,22 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
 
-type Kind = 'transaction' | 'monitoring' | 'directors' | 'other'
-interface Fee { id: string; date: string; kind: Kind; amount: number; companyId: string | null; memo: string | null }
+import type { PortfolioFeeKind as Kind } from '@/lib/accounting/portfolio-fees'
 
+interface Fee { id: string; date: string; kind: Kind; amount: number; affiliatedAmount: number | null; companyId: string | null; memo: string | null }
+
+// ILPA's list, in its order (Reporting Template B.1).
 export const FEE_KIND_LABELS: Record<Kind, string> = {
-  transaction: 'Transaction',
-  monitoring: 'Monitoring',
+  advisory: 'Advisory & consulting',
+  broken_deal: 'Broken deal',
+  transaction: 'Transaction & deal',
   directors: 'Directors’',
+  monitoring: 'Monitoring',
+  capital_markets: 'Capital markets',
+  arrangement: 'Arrangement',
+  origination: 'Origination',
   other: 'Other',
+  reimbursement: 'Travel & admin reimbursement',
 }
 
 const money = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -29,6 +37,7 @@ export function PortfolioFeesList() {
   const [date, setDate] = useState('')
   const [kind, setKind] = useState<Kind>('transaction')
   const [amount, setAmount] = useState('')
+  const [affiliated, setAffiliated] = useState('')
   const [companyId, setCompanyId] = useState('')
   const [memo, setMemo] = useState('')
   const [busy, setBusy] = useState(false)
@@ -47,13 +56,13 @@ export function PortfolioFeesList() {
     const res = await lf('/api/accounting/portfolio-fees', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, kind, amount: Number(amount), companyId: companyId || null, memo }),
+      body: JSON.stringify({ date, kind, amount: Number(amount), affiliatedAmount: affiliated.trim() ? Number(affiliated) : null, companyId: companyId || null, memo }),
     })
     const d = await res.json().catch(() => ({}))
     setBusy(false)
     if (!res.ok) { setError(d.error ?? 'Could not save the fee'); return }
     setFees(prev => [...(prev ?? []), d.fee].sort((a, b) => a.date.localeCompare(b.date)))
-    setAmount(''); setMemo('')
+    setAmount(''); setAffiliated(''); setMemo('')
   }
 
   const remove = async (id: string) => {
@@ -72,6 +81,8 @@ export function PortfolioFeesList() {
         Fees the GP or the management company was paid by portfolio companies. Each one offsets the
         period it&rsquo;s dated in, at the share set above, and an offset larger than the period&rsquo;s
         fee carries into the next. Recording one here doesn&rsquo;t post anything to the fund&rsquo;s books.
+        They also fill section B.1 of each partner&rsquo;s ILPA report; give the part of a fee that
+        belongs to affiliated positions (co-investors the adviser manages) separately.
       </p>
       {fees === null ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>
@@ -84,6 +95,7 @@ export function PortfolioFeesList() {
                 <th className="px-4 py-2 font-normal">Kind</th>
                 <th className="px-4 py-2 font-normal">Company</th>
                 <th className="px-4 py-2 font-normal text-right">Amount</th>
+                <th className="px-4 py-2 font-normal text-right">Affiliated</th>
                 <th className="px-4 py-2 font-normal">Memo</th>
                 <th className="px-4 py-2" />
               </tr>
@@ -95,6 +107,7 @@ export function PortfolioFeesList() {
                   <td className="px-4 py-2">{FEE_KIND_LABELS[f.kind]}</td>
                   <td className="px-4 py-2">{companyName(f.companyId)}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{money(f.amount)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{f.affiliatedAmount ? money(f.affiliatedAmount) : ''}</td>
                   <td className="px-4 py-2 text-muted-foreground">{f.memo ?? ''}</td>
                   <td className="px-4 py-2 text-right">
                     <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => remove(f.id)}>Delete</Button>
@@ -117,6 +130,7 @@ export function PortfolioFeesList() {
           </select>
         )}
         <Input inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount" className="w-32 h-8 text-sm tabular-nums" aria-label="Amount" />
+        <Input inputMode="decimal" value={affiliated} onChange={e => setAffiliated(e.target.value)} placeholder="Affiliated share" className="w-36 h-8 text-sm tabular-nums" aria-label="Affiliated positions' share" />
         <Input value={memo} onChange={e => setMemo(e.target.value)} placeholder="Memo" className="w-48 h-8 text-sm" aria-label="Memo" />
         <Button size="sm" variant="outline" className="text-muted-foreground" onClick={add} disabled={busy || !date || !amount}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}

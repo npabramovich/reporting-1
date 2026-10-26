@@ -10,6 +10,7 @@ import { dbError } from '@/lib/api-error'
 import { chartForVehicleKind } from '@/lib/accounting/chart'
 import { ensureVehicleAccounts } from '@/lib/accounting/provision-accounts'
 import { addChartAccount } from '@/lib/accounting/chart-add'
+import { categoriesForType, isAccountCategory, accountCategoryName } from '@/lib/ilpa/taxonomy'
 
 
 // GET — list the vehicle's chart of accounts.
@@ -91,7 +92,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ seeded: (data as any[])?.length ?? 0, accounts: data ?? [] })
 }
 
-// PATCH — rename an account, or hide/show it. Body: { id, name?, isActive? }
+// PATCH — rename an account, hide/show it, or file it under an ILPA category. Body:
+// { id, name?, isActive?, ilpaCategory? } (ilpaCategory null returns it to its subtype's line).
 //
 // The CODE is never editable. Code is how the rest of the system finds an account —
 // `codes.get('1000')`, RECEIVABLE_CODE '1300', BRIDGE_CODE '3200', DISTRIBUTION_PAYABLE_CODE
@@ -119,7 +121,7 @@ export async function PATCH(req: NextRequest) {
 
   const { data: acct } = await admin
     .from('chart_of_accounts' as any)
-    .select('id, lp_entity_id')
+    .select('id, lp_entity_id, type')
     .eq('id', id).eq('fund_id', gate.fundId).eq('vehicle_id', vehicleId)
     .maybeSingle()
   if (!acct) return NextResponse.json({ error: 'Account not found on this vehicle' }, { status: 404 })
@@ -137,6 +139,19 @@ export async function PATCH(req: NextRequest) {
     patch.name = name
   }
   if (typeof body?.isActive === 'boolean') patch.is_active = body.isActive
+  // The ILPA Reporting Template line the account's postings land on (lib/ilpa/taxonomy.ts).
+  if (body && 'ilpaCategory' in body) {
+    const category = body.ilpaCategory
+    if (category === null || category === '') patch.ilpa_category = null
+    else if (!isAccountCategory(category) || !categoriesForType((acct as any).type).includes(category)) {
+      const allowed = categoriesForType((acct as any).type)
+      return NextResponse.json({
+        error: allowed.length
+          ? `A ${(acct as any).type} account files under one of: ${allowed.map(accountCategoryName).join(', ')}.`
+          : 'Only income and expense accounts have an ILPA category.',
+      }, { status: 400 })
+    } else patch.ilpa_category = category
+  }
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
 
   const { data, error } = await admin.from('chart_of_accounts' as any)

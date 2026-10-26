@@ -23,13 +23,15 @@ const BRIDGE_CODE = '3200'
 
 const SUBTYPE_TO_SOURCE: Record<string, AllocationCategory> = {
   management_fee: 'management_fee', partnership_expense: 'partnership_expense',
+  // Offsets, waivers and rebates reduce the fee, so the partners bear them as they bear the fee.
+  management_fee_offset: 'management_fee', management_fee_waiver: 'management_fee', management_fee_rebate: 'management_fee',
   organizational_expense: 'organizational_expense', interest_expense: 'partnership_expense',
   operating_expense: 'partnership_expense', realized_gain: 'realized_gain',
   unrealized: 'valuation', fx_translation: 'fx_revaluation', interest_income: 'income', portfolio_income: 'income',
   equity_method: 'income',
 }
 
-function categoryFor(account: Account): AllocationCategory {
+export function categoryFor(account: Account): AllocationCategory {
   return (account.subtype && SUBTYPE_TO_SOURCE[account.subtype])
     || (account.type === 'expense' ? 'partnership_expense' : 'income')
 }

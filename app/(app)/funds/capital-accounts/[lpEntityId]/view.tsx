@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, FileText, Pencil } from 'lucide-react'
+import { Loader2, FileText, Pencil, Download } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch, useVehicle } from '@/components/accounting-vehicle'
@@ -95,6 +95,13 @@ export function LpStatementView({ lpEntityId, vehicleId }: { lpEntityId: string;
   const years = Array.from({ length: THIS_YEAR - firstYear + 1 }, (_, i) => THIS_YEAR - i)
   const quarters = scope === `${THIS_YEAR}` ? [1, 2, 3, 4].filter(q => q <= THIS_QUARTER) : [1, 2, 3, 4]
   const statementPdfUrl = `/api/accounting/lp-statement/pdf?${pdfQs}`
+  // The ILPA Reporting Template is quarterly: the quarter picked, a past year's Q4, or else the last
+  // quarter ended (the route's default).
+  const QUARTER_ENDS = ['03-31', '06-30', '09-30', '12-31']
+  const ilpaQuarterEnd = scope === 'itd' || scope === 'custom' ? null
+    : part !== 'year' ? `${scope}-${QUARTER_ENDS[Number(part) - 1]}`
+    : scope !== `${THIS_YEAR}` ? `${scope}-12-31` : null
+  const ilpaQs = new URLSearchParams({ lpEntityId, format: 'xlsx', ...(ilpaQuarterEnd ? { quarterEnd: ilpaQuarterEnd } : {}), ...(group ? { group } : {}) })
 
   const lh = data.letterhead
   const vehicleName = group ?? 'This vehicle'
@@ -155,6 +162,13 @@ export function LpStatementView({ lpEntityId, vehicleId }: { lpEntityId: string;
             className="inline-flex h-8 items-center gap-1.5 rounded border border-input px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <FileText className="h-3.5 w-3.5" />Generate PDF
+          </a>
+          <a
+            href={`/api/accounting/ilpa/reporting?${ilpaQs}`}
+            title="The quarter as the ILPA Reporting Template (v. 2.0) states it: fees, expenses, offsets and carried interest in ILPA's categories, the commitment reconciliation and portfolio-company fees"
+            className="inline-flex h-8 items-center gap-1.5 rounded border border-input px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <Download className="h-3.5 w-3.5" />ILPA report (.xlsx)
           </a>
         </div>
       </div>
