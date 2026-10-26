@@ -9,7 +9,7 @@
 //   ilpa_reporting_template   → one partner's quarter as the ILPA Reporting Template (v. 2.0);
 //                               writes nothing
 //
-// The mechanics are in lib/ilpa/ccd-load.ts and lib/ilpa/reporting-load.ts, the same data the .xlsx
+// The mechanics are in lib/lp-templates/ccd-load.ts and lib/lp-templates/reporting-load.ts, the same data the .xlsx
 // downloads carry.
 
 import type { AgentToolMeta } from '@/lib/accounting/agent-tools-manifest'

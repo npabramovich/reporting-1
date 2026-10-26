@@ -160,7 +160,7 @@ describe('registers', () => {
 })
 
 describe('the migration', () => {
-  const sql = readFileSync(join(process.cwd(), 'supabase/migrations/20261026160000_ilpa_reporting_template.sql'), 'utf8')
+  const sql = readFileSync(join(process.cwd(), 'supabase/migrations/20261026160000_lp_reporting_template.sql'), 'utf8')
   const listIn = (marker: string) => {
     const start = sql.indexOf(marker)
     const body = sql.slice(start, sql.indexOf('));', start))

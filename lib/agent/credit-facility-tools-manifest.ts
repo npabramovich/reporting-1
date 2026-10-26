@@ -11,7 +11,7 @@
 //   record_facility_event    → a draw, repayment, interest payment or fee, always staged
 //   remove_facility_event    → take a row off the register, always staged
 //
-// The mechanics are in lib/accounting/credit-facility.ts and lib/ilpa/performance-load.ts.
+// The mechanics are in lib/accounting/credit-facility.ts and lib/lp-templates/performance-load.ts.
 
 import type { AgentToolMeta } from '@/lib/accounting/agent-tools-manifest'
 

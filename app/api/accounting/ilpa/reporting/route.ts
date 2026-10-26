@@ -8,8 +8,8 @@ import { assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { lastQuarterEnd } from '@/lib/accounting/fund-performance'
 import { rateLimit } from '@/lib/rate-limit'
-import { loadIlpaReporting } from '@/lib/ilpa/reporting-load'
-import { reportingSheetRows } from '@/lib/ilpa/reporting'
+import { loadIlpaReporting } from '@/lib/lp-templates/reporting-load'
+import { reportingSheetRows } from '@/lib/lp-templates/reporting'
 
 export const runtime = 'nodejs'
 

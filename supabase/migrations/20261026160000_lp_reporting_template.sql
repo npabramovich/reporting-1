@@ -1,8 +1,8 @@
--- What the quarterly ILPA Reporting Template (lib/ilpa/reporting.ts) needs that the books don't say.
+-- What the quarterly ILPA Reporting Template (lib/lp-templates/reporting.ts) needs that the books don't say.
 --
 --   1. chart_of_accounts.ilpa_category — the Reporting Template line an income or expense account's
---      postings land on (lib/ilpa/reporting-types.ts ACCOUNT_CATEGORIES). Null means "by the
---      account's subtype" (lib/ilpa/taxonomy.ts defaultAccountCategory), so every existing account
+--      postings land on (lib/lp-templates/reporting-types.ts ACCOUNT_CATEGORIES). Null means "by the
+--      account's subtype" (lib/lp-templates/taxonomy.ts defaultAccountCategory), so every existing account
 --      keeps reporting where it does until someone gives it a category.
 --   2. portfolio_company_fees: ILPA's full list of fees the adviser receives from portfolio
 --      companies (B.1), not just the four the fee schedule offset first, plus the part of a fee

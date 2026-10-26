@@ -5,7 +5,7 @@ import { Loader2, Plus, Eye, EyeOff, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
-import { accountCategoryName, categoriesForType, defaultAccountCategory, suggestAccountCategory } from '@/lib/ilpa/taxonomy'
+import { accountCategoryName, categoriesForType, defaultAccountCategory, suggestAccountCategory } from '@/lib/lp-templates/taxonomy'
 
 interface Acct {
   id: string
@@ -26,7 +26,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 /**
  * Add, rename and hide accounts on this vehicle's chart, and file income and expense accounts under
- * the ILPA Reporting Template's categories (lib/ilpa/taxonomy.ts). An account with no category
+ * the ILPA Reporting Template's categories (lib/lp-templates/taxonomy.ts). An account with no category
  * reports where its subtype puts it, and a generic expense lands on "Other", which ILPA asks to be
  * footnoted, so the picker offers the category its name suggests. It never applies one by itself.
  *

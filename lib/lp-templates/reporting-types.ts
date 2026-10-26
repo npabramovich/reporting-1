@@ -15,7 +15,7 @@
 // they reduce a negative. Carried interest is shown from the paying partners' side, negative.
 //
 // The labels are the vocabulary, not ILPA's workbook: the file this app produces is its own layout
-// carrying the template's lines (lib/ilpa/reporting.ts).
+// carrying the template's lines (lib/lp-templates/reporting.ts).
 
 export const ILPA_REPORTING_VERSION = '2.0'
 

@@ -1,8 +1,8 @@
 // Handlers for the ILPA tools (ilpa-tools-manifest.ts).
 
 import type { AgentToolContext, AgentToolHandler } from '@/lib/accounting/agent-tools'
-import { loadCcdNotices } from '@/lib/ilpa/ccd-load'
-import { loadIlpaReporting } from '@/lib/ilpa/reporting-load'
+import { loadCcdNotices } from '@/lib/lp-templates/ccd-load'
+import { loadIlpaReporting } from '@/lib/lp-templates/reporting-load'
 import { lastQuarterEnd } from '@/lib/accounting/fund-performance'
 
 export const ILPA_HANDLERS: Record<string, AgentToolHandler> = {

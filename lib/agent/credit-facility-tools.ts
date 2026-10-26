@@ -3,7 +3,7 @@
 import type { AgentToolContext, AgentToolHandler } from '@/lib/accounting/agent-tools'
 import { DRAW_PURPOSE_LABEL, EVENT_TYPE_LABEL, FACILITY_KIND_LABEL, facilityStatus } from '@/lib/accounting/credit-facility'
 import { lastQuarterEnd } from '@/lib/accounting/fund-performance-format'
-import { loadIlpaPerformance } from '@/lib/ilpa/performance-load'
+import { loadIlpaPerformance } from '@/lib/lp-templates/performance-load'
 
 const staged = (name: string): AgentToolHandler => async () => {
   throw new Error(`${name} is always staged for approval; it cannot run directly.`)

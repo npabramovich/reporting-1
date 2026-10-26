@@ -10,7 +10,7 @@ import { dbError } from '@/lib/api-error'
 import { chartForVehicleKind } from '@/lib/accounting/chart'
 import { ensureVehicleAccounts } from '@/lib/accounting/provision-accounts'
 import { addChartAccount } from '@/lib/accounting/chart-add'
-import { categoriesForType, isAccountCategory, accountCategoryName } from '@/lib/ilpa/taxonomy'
+import { categoriesForType, isAccountCategory, accountCategoryName } from '@/lib/lp-templates/taxonomy'
 
 
 // GET — list the vehicle's chart of accounts.
@@ -139,7 +139,7 @@ export async function PATCH(req: NextRequest) {
     patch.name = name
   }
   if (typeof body?.isActive === 'boolean') patch.is_active = body.isActive
-  // The ILPA Reporting Template line the account's postings land on (lib/ilpa/taxonomy.ts).
+  // The ILPA Reporting Template line the account's postings land on (lib/lp-templates/taxonomy.ts).
   if (body && 'ilpaCategory' in body) {
     const category = body.ilpaCategory
     if (category === null || category === '') patch.ilpa_category = null
