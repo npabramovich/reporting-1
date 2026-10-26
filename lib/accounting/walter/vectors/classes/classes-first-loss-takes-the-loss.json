@@ -1,0 +1,90 @@
+{
+  "id": "classes-first-loss-takes-the-loss",
+  "walter": "0.2",
+  "title": "A first-loss class absorbs a loss",
+  "description": "lp-a (800) is senior and lp-b (200) is in a subordinated first-loss class. Only 900 comes back: the senior class is owed 800 and is paid first, so lp-b gets the remaining 100 and bears the whole 100 loss.",
+  "tags": [
+    "classes",
+    "first-loss",
+    "split-only"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.2",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "800"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "200",
+        "class": "first-loss"
+      }
+    ],
+    "classes": [
+      {
+        "id": "first-loss",
+        "subordinated": true
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "800"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-b",
+      "amount": "200"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-01-01",
+      "amount": "900"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "800.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-b",
+        "amount": "100.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

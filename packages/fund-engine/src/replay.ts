@@ -27,6 +27,11 @@ import type { VehicleCarryTerms } from './carry.ts'
 export interface PriorDistribution {
   date: string
   amount: number
+  /**
+   * Part of it paid straight back to these LPs, outside the tiers' division: recycling deemed
+   * recontributed. Only the grouped waterfall reads it (lp-groups.ts); one group runs it as capital.
+   */
+  byLp?: Record<string, number>
 }
 
 /**

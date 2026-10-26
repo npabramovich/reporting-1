@@ -1,0 +1,57 @@
+{
+  "id": "classes-unknown-class",
+  "walter": "0.2",
+  "title": "A partner in a class the terms don't define",
+  "description": "lp-b names a class that isn't in classes, so the terms are refused.",
+  "tags": [
+    "classes",
+    "errors"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.2",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "500"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "500",
+        "class": "anchor"
+      }
+    ],
+    "classes": [
+      {
+        "id": "founders"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [],
+  "expected": {
+    "error": "unknown-class"
+  },
+  "tolerance": "0.01"
+}

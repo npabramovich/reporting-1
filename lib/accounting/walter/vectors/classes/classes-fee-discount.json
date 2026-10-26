@@ -1,0 +1,90 @@
+{
+  "id": "classes-fee-discount",
+  "walter": "0.2",
+  "title": "A class with a side-letter fee rate",
+  "description": "lp-a (600) pays the fund's 2% and lp-b (400) is in a class at 1%. One annual period: 12 from lp-a and 4 from lp-b, 16 in all.",
+  "tags": [
+    "classes",
+    "fees",
+    "fees-committed"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.2",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "600"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "400",
+        "class": "anchor"
+      }
+    ],
+    "classes": [
+      {
+        "id": "anchor",
+        "managementFee": {
+          "schedule": [
+            {
+              "from": "2025-01-01",
+              "rate": "0.01",
+              "basis": "commitments"
+            }
+          ]
+        }
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "managementFee": {
+      "frequency": "annual",
+      "start": "2025-01-01",
+      "end": "2026-01-01",
+      "schedule": [
+        {
+          "from": "2025-01-01",
+          "rate": "0.02",
+          "basis": "commitments"
+        }
+      ]
+    }
+  },
+  "flows": [],
+  "expected": {
+    "fees": [
+      {
+        "start": "2025-01-01",
+        "gross": "16.00",
+        "offset": "0.00",
+        "net": "16.00"
+      }
+    ],
+    "feesByPartner": {
+      "lp-a": "12.00",
+      "lp-b": "4.00"
+    }
+  },
+  "tolerance": "0.01"
+}

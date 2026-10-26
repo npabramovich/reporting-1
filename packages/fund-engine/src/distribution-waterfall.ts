@@ -37,6 +37,7 @@ import {
   type RealizedCapital,
 } from './replay.ts'
 import { allocateAmount } from './allocation.ts'
+import { splitAcrossGroups, type LpGroup } from './lp-groups.ts'
 import { roundCents } from './ledger.ts'
 
 /** One partner's economics as at the distribution date, from the capital account. */
@@ -92,6 +93,8 @@ export interface DistributionSplit {
    */
   carryFreeLines?: { lpEntityId: string; capital: number; profit: number }[]
   tiers: WaterfallTiers
+  /** With LPs on terms of their own: each group's share and tiers. `tiers` is their sum. */
+  groups?: { groupId: string; lpEntityIds: string[]; amount: number; tiers: WaterfallTiers }[]
   stateBefore: WaterfallState
   stateAfter: WaterfallState
   warnings: string[]
@@ -125,7 +128,36 @@ export interface SplitInput {
   carryPaidToDate?: number
   /** American only: LP capital in deals realized to date, which is the capital tier. */
   realizedCapital?: RealizedCapital[]
+  /**
+   * LPs on terms of their own, grouped by `groupLpsByTerms` (lp-groups.ts). Given, each group
+   * runs its own tiers on its share, and `contributions` and `realizedCapital` are read from the
+   * groups instead. Omitted, every LP is on `terms`.
+   */
+  groups?: LpGroup[]
 }
+
+function tiersOf(result: ReturnType<typeof runWaterfall>): WaterfallTiers {
+  return {
+    returnOfCapital: result.toReturnOfCapital,
+    preferred: result.toPreferred,
+    catchUp: result.toCatchUp,
+    catchUpToLP: result.toCatchUpLP,
+    carry: result.toCarryGP,
+    profitToLP: result.toCarryLP,
+    toLP: result.toLP,
+    toGP: result.toGP,
+    ...(result.bands ? { bands: result.bands } : {}),
+  }
+}
+
+const addStates = (a: WaterfallState, b: WaterfallState): WaterfallState => ({
+  contributedCapital: roundCents(a.contributedCapital + b.contributedCapital),
+  returnedCapital: roundCents(a.returnedCapital + b.returnedCapital),
+  preferredPaid: roundCents(a.preferredPaid + b.preferredPaid),
+  preferredTarget: roundCents(a.preferredTarget + b.preferredTarget),
+  gpCarryPaid: roundCents(a.gpCarryPaid + b.gpCarryPaid),
+  gpCatchUpPaid: roundCents((a.gpCatchUpPaid ?? a.gpCarryPaid) + (b.gpCatchUpPaid ?? b.gpCarryPaid)),
+})
 
 /**
  * Split a distribution total into LP lines and carry lines.
@@ -185,31 +217,53 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
   } else if (terms.kind === 'american' && !input.realizedCapital!.some(c => c.realizedOn <= input.asOf && c.amount > 0)) {
     warnings.push('No deal has been realized yet, so under the deal-by-deal waterfall none of this distribution is a return of capital. If it returns capital that was never invested, split it pro-rata instead.')
   }
-  const stateBefore = replayWaterfallState(input.priors, input.contributions, terms, input.asOf, opts)
-  const result = runWaterfall(pool, waterfallTermsOf(terms), stateBefore)
-
-  const tiers: WaterfallTiers = {
-    returnOfCapital: result.toReturnOfCapital,
-    preferred: result.toPreferred,
-    catchUp: result.toCatchUp,
-    catchUpToLP: result.toCatchUpLP,
-    carry: result.toCarryGP,
-    profitToLP: result.toCarryLP,
-    toLP: result.toLP,
-    toGP: result.toGP,
-    ...(result.bands ? { bands: result.bands } : {}),
-    ...(sliced > 0 ? { carryFree: sliced, carryFreeCapital: roundCents([...slices.values()].reduce((s, v) => s + v.capital, 0)) } : {}),
-  }
-
   // LP tiers: capital comes back in proportion to what each partner put in; the preferred return
   // and the profit share follow the same basis, because both are earned on contributed capital.
   // A partner with no contributions (a transferee whose capital arrived as a transfer) falls back
   // to capital balance so they are not skipped.
-  const basisContributed = lps.map(p => ({ lpEntityId: p.lpEntityId, weight: Math.max(0, p.contributed) }))
-  const basis = basisContributed.some(b => b.weight > 0)
-    ? basisContributed
-    : lps.map(p => ({ lpEntityId: p.lpEntityId, weight: Math.max(0, p.ending) }))
-  const lines = share(tiers.toLP, basis)
+  const basisOf = (members: PartnerEconomics[]) => {
+    const contributed = members.map(p => ({ lpEntityId: p.lpEntityId, weight: Math.max(0, p.contributed) }))
+    return contributed.some(b => b.weight > 0) ? contributed : members.map(p => ({ lpEntityId: p.lpEntityId, weight: Math.max(0, p.ending) }))
+  }
+  const carryFreeTiers = sliced > 0 ? { carryFree: sliced, carryFreeCapital: roundCents([...slices.values()].reduce((s, v) => s + v.capital, 0)) } : {}
+
+  let tiers: WaterfallTiers
+  let stateBefore: WaterfallState
+  let stateAfter: WaterfallState
+  let lines: { lpEntityId: string; amount: number }[]
+  let groups: DistributionSplit['groups']
+  if (input.groups && input.groups.length > 0) {
+    // Each group runs its own tiers on its share (lp-groups.ts).
+    const splits = splitAcrossGroups(pool, input.priors, input.groups, input.asOf)
+    groups = splits.map(s => ({ groupId: s.group.id, lpEntityIds: s.group.lpEntityIds, amount: s.amount, tiers: tiersOf(s.result) }))
+    const sumOf = (k: 'returnOfCapital' | 'preferred' | 'catchUp' | 'carry' | 'profitToLP' | 'toLP' | 'toGP') =>
+      roundCents(groups!.reduce((s, g) => s + g.tiers[k], 0))
+    tiers = {
+      returnOfCapital: sumOf('returnOfCapital'),
+      preferred: sumOf('preferred'),
+      catchUp: sumOf('catchUp'),
+      catchUpToLP: roundCents(groups.reduce((s, g) => s + (g.tiers.catchUpToLP ?? 0), 0)),
+      carry: sumOf('carry'),
+      profitToLP: sumOf('profitToLP'),
+      toLP: sumOf('toLP'),
+      toGP: sumOf('toGP'),
+      ...(groups.length === 1 && groups[0].tiers.bands ? { bands: groups[0].tiers.bands } : {}),
+      ...carryFreeTiers,
+    }
+    const zero: WaterfallState = { contributedCapital: 0, returnedCapital: 0, preferredPaid: 0, preferredTarget: 0, gpCarryPaid: 0, gpCatchUpPaid: 0 }
+    stateBefore = splits.reduce((s, g) => addStates(s, g.stateBefore), zero)
+    stateAfter = splits.reduce((s, g) => addStates(s, g.result.state), zero)
+    lines = splits.flatMap((s, k) => {
+      const members = new Set(s.group.lpEntityIds)
+      return share(groups![k].tiers.toLP, basisOf(lps.filter(p => members.has(p.lpEntityId))))
+    })
+  } else {
+    stateBefore = replayWaterfallState(input.priors, input.contributions, terms, input.asOf, opts)
+    const result = runWaterfall(pool, waterfallTermsOf(terms), stateBefore)
+    tiers = { ...tiersOf(result), ...carryFreeTiers }
+    stateAfter = result.state
+    lines = share(tiers.toLP, basisOf(lps))
+  }
   for (const [lpEntityId, v] of slices) {
     const amount = roundCents(v.capital + v.profit)
     if (amount > 0) lines.push({ lpEntityId, amount })
@@ -242,8 +296,9 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
     carryLines,
     ...(sliced > 0 ? { carryFreeLines: [...slices].map(([lpEntityId, v]) => ({ lpEntityId, ...v })).filter(l => l.capital + l.profit > 0) } : {}),
     tiers,
+    ...(groups ? { groups } : {}),
     stateBefore,
-    stateAfter: result.state,
+    stateAfter,
     warnings,
   }
 }

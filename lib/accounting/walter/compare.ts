@@ -20,6 +20,7 @@ export interface Expected {
   clawback?: { amount: string; entitlement?: string } | null
   accruedCarry?: { date: string; entitlement: string }[]
   fees?: { start: string; gross: string; offset: string; net: string }[]
+  feesByPartner?: Record<string, string>
   recontributions?: { date: string; partner: string; amount: string }[]
   error?: string
 }
@@ -88,6 +89,7 @@ export function compare(v: Vector, run: () => any): Outcome {
       for (const k of ['gross', 'offset', 'net'] as const) near(`fee ${k} from ${f.start}`, f[k], g?.[k])
     }
   }
+  for (const [p, a] of Object.entries(e.feesByPartner ?? {})) near(`fee paid by ${p}`, a, res.feesByPartner?.[p])
   if (e.recontributions) {
     const want = aggregate(e.recontributions.map((r) => ({ ...r, tier: 'recontribution' })))
     const got = aggregate((res.recontributions ?? []).map((r: any) => ({ ...r, tier: 'recontribution' })))
