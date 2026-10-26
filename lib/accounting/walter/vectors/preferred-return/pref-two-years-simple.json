@@ -1,0 +1,78 @@
+{
+  "id": "pref-two-years-simple",
+  "walter": "0.1",
+  "title": "Two years, simple",
+  "description": "1000 × 0.08 × 2 = 160.00.",
+  "tags": [
+    "pref-simple",
+    "day-count-act-365"
+  ],
+  "provenance": "ported: Portfolio spec v2, two-years-simple",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "none",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2027-01-01",
+      "amount": "1160"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2027-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "160.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

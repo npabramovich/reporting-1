@@ -17,7 +17,7 @@ import {
 import { carryAccrual } from './carry.ts'
 import { carryAccrualInputs, distributionSplitInputs } from './economics.ts'
 import { splitDistribution, suggestedCharacter } from './distribution-waterfall.ts'
-import { runWaterfall, type WaterfallState } from './waterfall.ts'
+import { runWaterfall, type CarryStep, type WaterfallState } from './waterfall.ts'
 import { waterfallTermsOf } from './replay.ts'
 import { allocateAmount } from './allocation.ts'
 import { roundCents } from './ledger.ts'
@@ -71,6 +71,11 @@ export interface StatementsReport {
     catchupSize: number
     prefCompounds: boolean
     prefBase: string
+    prefMultiple?: number
+    prefDayCount?: string
+    catchupMeasure?: string
+    carrySteps?: CarryStep[]
+    capitalIncludes?: string[]
     target: number
     alreadyAccrued: number
     delta: number
@@ -163,6 +168,11 @@ export function statementsFromEntries(
         catchupSize: t.catchupSize ?? 1,
         prefCompounds: t.prefCompounds,
         prefBase: t.prefBase ?? 'contributed',
+        ...(t.prefMultiple != null ? { prefMultiple: t.prefMultiple } : {}),
+        ...(t.prefDayCount === '30/360' ? { prefDayCount: t.prefDayCount } : {}),
+        ...(t.catchupMeasure === 'profit' ? { catchupMeasure: t.catchupMeasure } : {}),
+        ...(t.carrySteps?.length ? { carrySteps: t.carrySteps } : {}),
+        ...(t.capitalIncludes ? { capitalIncludes: t.capitalIncludes } : {}),
         target: accrual.target,
         alreadyAccrued: accrual.alreadyAccrued,
         delta: accrual.delta,

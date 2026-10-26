@@ -1,0 +1,133 @@
+{
+  "id": "recycling-deemed-unreturned",
+  "walter": "0.1",
+  "title": "Deemed distributed and recontributed, unreturned pref",
+  "description": "The same 100 deemed paid out and called back the same day. Capital owed and returned both rise by 100, which nets to nothing on an unreturned pref: the split matches the never-distributed vector exactly.",
+  "tags": [
+    "recycling",
+    "recycling-deemed",
+    "pref-unreturned"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "unreturned",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "recycling": {
+      "cap": "0.20",
+      "capBasis": "commitments"
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-01-01",
+      "amount": "600",
+      "recycle": {
+        "amount": "100",
+        "treatment": "deemed"
+      }
+    },
+    {
+      "type": "distributable",
+      "date": "2027-01-01",
+      "amount": "2000"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2026-01-01",
+        "tier": "recycled",
+        "partner": "lp-a",
+        "amount": "100.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "500.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "500.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "126.40"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "31.60"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "1073.60"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "268.40"
+      }
+    ],
+    "recontributions": [
+      {
+        "date": "2026-01-01",
+        "partner": "lp-a",
+        "amount": "100.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

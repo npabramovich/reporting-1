@@ -146,7 +146,7 @@ describe('economics', () => {
     // Measured gross of carry: the 65 balance plus the 5 charged.
     expect(i.lps).toEqual([{ lpEntityId: 'lp', contributed: 100, distributed: 30, nav: 70, charged: 5 }])
     expect(i.distributions).toEqual([{ date: '2025-01-15', amount: 34 }])
-    expect(i.contributions).toEqual([{ date: '2024-01-01', amount: 100 }])
+    expect(i.contributions).toEqual([{ date: '2024-01-01', amount: 100, purpose: 'investments' }])
   })
 
   it('distributionSplitInputs totals every prior distribution, carry included, by date', () => {

@@ -1,0 +1,87 @@
+{
+  "id": "fees-nav-semiannual",
+  "walter": "0.1",
+  "title": "2% of NAV, semiannual",
+  "description": "The fee is on the last NAV at or before each half's first day, the fee-bearing share of it: 0.01 × 80,000,000 × 100/102 = 784,313.73, then 0.01 × 90,000,000 × 100/102 = 882,352.94.",
+  "tags": [
+    "fees",
+    "fees-nav"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "2000000"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "60000000"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "40000000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "managementFee": {
+      "frequency": "semiannual",
+      "start": "2026-01-01",
+      "end": "2027-01-01",
+      "schedule": [
+        {
+          "from": "2026-01-01",
+          "rate": "0.02",
+          "basis": "nav"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "nav",
+      "date": "2025-12-31",
+      "amount": "80000000"
+    },
+    {
+      "type": "nav",
+      "date": "2026-06-30",
+      "amount": "90000000"
+    }
+  ],
+  "expected": {
+    "fees": [
+      {
+        "start": "2026-01-01",
+        "gross": "784313.73",
+        "offset": "0.00",
+        "net": "784313.73"
+      },
+      {
+        "start": "2026-07-01",
+        "gross": "882352.94",
+        "offset": "0.00",
+        "net": "882352.94"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

@@ -1,0 +1,152 @@
+{
+  "id": "partners-replay-then-split",
+  "walter": "0.1",
+  "title": "An earlier distribution is part of the state",
+  "description": "A first 500 is all capital. A year later 1,000 finishes capital, pays two years of pref on the 1,000 contributed (166.40), catches up 41.60 and splits.",
+  "tags": [
+    "pref-compound",
+    "pref-contributed",
+    "catch-up-full"
+  ],
+  "provenance": "ported: Portfolio spec v2, replay-then-split",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "600"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "400"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "600"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-b",
+      "amount": "400"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-01-01",
+      "amount": "500"
+    },
+    {
+      "type": "distributable",
+      "date": "2027-01-01",
+      "amount": "1000"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "300.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-b",
+        "amount": "200.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "300.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-b",
+        "amount": "200.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "99.84"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-b",
+        "amount": "66.56"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "41.60"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "140.16"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "split",
+        "partner": "lp-b",
+        "amount": "93.44"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "58.40"
+      }
+    ],
+    "totals": {
+      "lp-a": "840.00",
+      "lp-b": "560.00",
+      "gp": "100.00"
+    }
+  },
+  "tolerance": "0.01"
+}

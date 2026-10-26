@@ -56,13 +56,73 @@ export function carryAccrualInputs(
   }))
 
   // Dated contributions, for the hurdle. The pref accrues from when cash actually arrived.
-  const contributions: DatedContribution[] = capitalPostings
-    .filter(p => !recipientIds.has(p.lpEntityId ?? '') && bucketForSourceType(p.sourceType, p.amount) === 'contributions')
-    .map(p => ({ date: p.entryDate ?? asOf, amount: roundCents(-p.amount) }))
-    .filter(c => c.amount > 0)
+  const contributions = datedContributions(capitalPostings, recipientIds, asOf)
 
   const { priors: distributions } = priorDistributions(capitalPostings, recipientIds, asOf)
   return { lps, contributions, alreadyAccrued, distributions }
+}
+
+/**
+ * The LPs' dated contributions, recipients left out, each tagged with what it paid for.
+ *
+ * The books don't say which call paid which fee, so the tagging is first in, first out per LP: a
+ * management fee or partnership expense charged to an LP's account uses that LP's oldest capital
+ * not yet used, and a charge with no capital left to use is paid by the next contribution. What is
+ * never used by a charge is invested capital. Terms that return every contribution
+ * (`capitalIncludes` absent) read the same totals on the same dates either way; terms that return
+ * only invested capital leave the fee and expense slices out (hurdle.ts `capitalContributions`).
+ */
+export function datedContributions(capitalPostings: CapitalPosting[], recipientIds: Set<string>, asOf: string): DatedContribution[] {
+  type Ev = { date: string; order: number; kind: 'in' | 'fees' | 'expenses'; amount: number }
+  const byLp = new Map<string, Ev[]>()
+  for (const p of capitalPostings) {
+    if (!p.lpEntityId || recipientIds.has(p.lpEntityId)) continue
+    const bucket = bucketForSourceType(p.sourceType, p.amount)
+    const date = p.entryDate ?? asOf
+    const ev: Ev | null = bucket === 'contributions' && -p.amount > 0 ? { date, order: 1, kind: 'in', amount: roundCents(-p.amount) }
+      : bucket === 'managementFees' && p.amount > 0 ? { date, order: 0, kind: 'fees', amount: p.amount }
+      : bucket === 'expenses' && p.amount > 0 ? { date, order: 0, kind: 'expenses', amount: p.amount }
+      : null
+    if (!ev) continue
+    const list = byLp.get(p.lpEntityId) ?? []
+    list.push(ev)
+    byLp.set(p.lpEntityId, list)
+  }
+
+  const out: DatedContribution[] = []
+  for (const events of byLp.values()) {
+    events.sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order)
+    const unused: { date: string; amount: number }[] = []
+    const owed: { purpose: 'fees' | 'expenses'; amount: number }[] = []
+    const tag = (date: string, amount: number, purpose: 'fees' | 'expenses') => {
+      if (amount > 0.000001) out.push({ date, amount: roundCents(amount), purpose })
+    }
+    for (const e of events) {
+      if (e.kind === 'in') {
+        let left = e.amount
+        while (left > 0.000001 && owed.length > 0) {
+          const use = Math.min(left, owed[0].amount)
+          tag(e.date, use, owed[0].purpose)
+          left -= use
+          owed[0].amount -= use
+          if (owed[0].amount <= 0.000001) owed.shift()
+        }
+        if (left > 0.000001) unused.push({ date: e.date, amount: left })
+      } else {
+        let need = e.amount
+        while (need > 0.000001 && unused.length > 0) {
+          const use = Math.min(need, unused[0].amount)
+          tag(unused[0].date, use, e.kind)
+          need -= use
+          unused[0].amount -= use
+          if (unused[0].amount <= 0.000001) unused.shift()
+        }
+        if (need > 0.000001) owed.push({ purpose: e.kind, amount: need })
+      }
+    }
+    for (const u of unused) if (u.amount > 0.000001) out.push({ date: u.date, amount: roundCents(u.amount), purpose: 'investments' })
+  }
+  return out.filter(c => c.amount > 0).sort((a, b) => a.date.localeCompare(b.date))
 }
 
 /**
@@ -82,6 +142,9 @@ export function priorDistributions(
     const isDist = bucketForSourceType(p.sourceType, p.amount) === 'distributions'
     const isCarry = p.sourceType === 'carry_distribution'
     if (!isDist && !isCarry) continue
+    // A recipient's own distributions are its carry-free share, taken outside the tiers, so only
+    // its carry is in what the waterfall has paid out (distribution-waterfall.ts).
+    if (!isCarry && recipientIds.has(p.lpEntityId)) continue
     const date = p.entryDate ?? asOf
     if (date > asOf) continue
     priorByDate.set(date, roundCents((priorByDate.get(date) ?? 0) + p.amount))
@@ -122,10 +185,7 @@ export function distributionSplitInputs(
   }))
 
   // Dated LP contributions for the hurdle — recipients excluded, as the close excludes them.
-  const contributions: DatedContribution[] = capitalPostings
-    .filter(p => p.lpEntityId && !recipientIds.has(p.lpEntityId) && bucketForSourceType(p.sourceType, p.amount) === 'contributions')
-    .map(p => ({ date: p.entryDate ?? asOf, amount: roundCents(-p.amount) }))
-    .filter(c => c.amount > 0)
+  const contributions = datedContributions(capitalPostings, recipientIds, asOf)
 
   const { priors, carryPaidToDate } = priorDistributions(capitalPostings, recipientIds, asOf)
 

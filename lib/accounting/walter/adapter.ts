@@ -1,0 +1,504 @@
+// Portfolio's accounting engine, run on the Walter conformance vectors.
+//
+// Walter (github.com/tdavidson/walter) is an open spec for fund terms: the terms and dated flows
+// go in, and every allocation the terms imply comes out. This adapter only translates. Walter's
+// terms become `VehicleCarryTerms`, its flows become the capital accounts, distributions and deals
+// the books would hold, and each distribution is split by `splitDistribution`, the same call a
+// declared distribution makes (distributions.ts). Nothing here does waterfall math of its own.
+//
+// A term the engine has no way to express is refused as `unsupported`, so the conformance table
+// says the engine can't do it rather than that it does it wrongly. Everything it can express is
+// passed through as is, and a wrong answer is a failure the table shows.
+
+import {
+  allocateAmount,
+  carryTarget,
+  realizedCapitalFromDeals,
+  recyclingCap,
+  roundCents,
+  splitDistribution,
+  clawbackAtFundEnd,
+  feeSchedule,
+  type CarryStep,
+  type DayCount,
+  type FeeFrequency,
+  type FeeScheduleBasis,
+  type DealHistory,
+  type RealizedCapital,
+  type RecyclingTerms,
+  type VehicleCarryTerms,
+} from '@portfolio/fund-engine'
+
+export const ENGINE = { name: 'Hemrock Portfolio accounting', version: '@portfolio/fund-engine 0.2.0' }
+
+class AdapterError extends Error {
+  readonly code: string
+  constructor(code: string, message: string) {
+    super(message)
+    this.code = code
+  }
+}
+const unsupported = (message: string): never => { throw new AdapterError('unsupported', message) }
+const refuse = (code: string, message: string): never => { throw new AdapterError(code, message) }
+
+type Purpose = 'investments' | 'fees' | 'expenses' | 'other'
+const PURPOSES: Purpose[] = ['investments', 'fees', 'expenses', 'other']
+
+interface WPartner { id: string; role: 'lp' | 'gp'; commitment: string; carryBearing?: boolean; feeBearing?: boolean }
+interface WFee {
+  frequency: FeeFrequency
+  start: string
+  end?: string
+  schedule: { from: string | { event: string }; rate: string; basis: FeeScheduleBasis }[]
+  offsets?: Record<string, string>
+  organizationalExpenseCap?: string
+}
+interface WTier {
+  type: 'return-of-capital' | 'preferred-return' | 'catch-up' | 'split'
+  id?: string
+  rate?: string
+  multiple?: string
+  compounding?: 'annual' | 'none'
+  base?: 'contributed' | 'unreturned'
+  dayCount?: string
+  target?: string
+  gpShare?: string
+  measure?: 'profit' | 'preferred'
+  until?: unknown
+}
+interface WTerms {
+  fund?: { investmentPeriodEnd?: string }
+  partners: WPartner[]
+  waterfall: {
+    basis?: 'whole-fund' | 'deal-by-deal'
+    returnOfCapital?: { includes?: Purpose[] }
+    preset?: string
+    presetTerms?: { carry?: string; pref?: string }
+    tiers?: WTier[]
+    carryRecipients?: { partner: string; share: string }[]
+  }
+  clawback?: { enabled?: boolean }
+  recycling?: { cap: string; capBasis?: 'commitments' | 'management-fees'; until?: string; defaultTreatment?: 'never-distributed' | 'deemed' }
+  managementFee?: WFee
+}
+type WFlow = { type: string; date: string; [k: string]: any }
+
+interface Allocation { date: string; tier: string; partner: string; amount: string }
+
+const num = (v: unknown, what: string): number => {
+  const n = Number(v)
+  if (typeof v !== 'string' || !Number.isFinite(n)) refuse('invalid-terms', `${what} must be a decimal string`)
+  return n
+}
+const money = (n: number) => roundCents(n).toFixed(2)
+
+// Walter's processing order on one date (spec/03-flows.md).
+const ORDER: Record<string, number> = {
+  contribution: 0, investment: 0, 'write-off': 1, event: 1, 'portfolio-fee': 1, 'organizational-expense': 1,
+  distributable: 2, nav: 3, 'fund-end': 4,
+}
+
+/** Walter's presets (spec/02-terms.md), as tier lists. */
+function expandTiers(w: WTerms['waterfall']): { tiers: WTier[]; basis: 'whole-fund' | 'deal-by-deal' } {
+  if (w.preset) {
+    if (w.tiers) refuse('invalid-terms', 'give a preset or tiers, not both')
+    const carry = w.presetTerms?.carry ?? '0.20'
+    const pref = w.presetTerms?.pref ?? '0.08'
+    const tiers: WTier[] = [
+      { type: 'return-of-capital' },
+      { type: 'preferred-return', rate: pref, compounding: 'annual', base: 'unreturned', dayCount: 'act/365' },
+      { type: 'catch-up', target: carry, gpShare: '1' },
+      { type: 'split', gpShare: carry },
+    ]
+    if (w.preset === 'european-standard') return { tiers, basis: 'whole-fund' }
+    if (w.preset === 'american-standard') return { tiers, basis: 'deal-by-deal' }
+    return refuse('invalid-terms', `unknown preset ${w.preset}`)
+  }
+  if (!Array.isArray(w.tiers) || w.tiers.length === 0) return refuse('invalid-terms', 'give a preset or tiers')
+  return { tiers: w.tiers, basis: w.basis ?? 'whole-fund' }
+}
+
+/** The tier list as the four tiers the engine runs, or a refusal saying which term it can't. */
+function carryTermsOf(terms: WTerms, recipients: { lpEntityId: string; pct: number }[]) {
+  const { tiers, basis } = expandTiers(terms.waterfall)
+  const last = tiers[tiers.length - 1]
+  if (tiers[0]?.type !== 'return-of-capital') refuse('invalid-terms', 'return-of-capital must be the first tier')
+  if (last.type !== 'split' || last.until) refuse('invalid-terms', 'the last tier must be a split with no until')
+  const pref = tiers.find(t => t.type === 'preferred-return')
+  // The shape the engine runs: capital, pref, catch-up, then splits, each after the first with an
+  // optional catch-up before it (the carry stepping up).
+  let at = 1
+  if (tiers[at]?.type === 'preferred-return') at++
+  const catchUp = tiers[at]?.type === 'catch-up' ? tiers[at++] : undefined
+  const bands: { catchUp?: WTier; split: WTier }[] = []
+  while (at < tiers.length) {
+    const cu = tiers[at]?.type === 'catch-up' && bands.length > 0 ? tiers[at++] : undefined
+    const split = tiers[at++]
+    if (split?.type !== 'split') unsupported('tiers in an order other than capital, pref, catch-up, then splits')
+    bands.push({ ...(cu ? { catchUp: cu } : {}), split })
+  }
+  for (const b of bands.slice(0, -1)) {
+    const u = b.split.until as { lpMultiple?: string; lpIrr?: string } | undefined
+    if (!u || (u.lpMultiple === undefined) === (u.lpIrr === undefined)) refuse('invalid-terms', 'every split but the last needs an until: lpMultiple or lpIrr')
+  }
+  for (const b of bands.slice(1)) {
+    if (b.catchUp && (b.catchUp.measure ?? 'preferred') !== 'profit') unsupported('a catch-up at a step measured on the pref (the engine measures it on all profit)')
+  }
+  const carrySteps: CarryStep[] = bands.slice(1).map((b, i) => {
+    const u = bands[i].split.until as { lpMultiple?: string; lpIrr?: string }
+    return {
+      carryRate: num(b.split.gpShare, 'split.gpShare'),
+      ...(u.lpMultiple !== undefined ? { lpMultiple: num(u.lpMultiple, 'until.lpMultiple') } : { lpIrr: num(u.lpIrr, 'until.lpIrr') }),
+      ...(b.catchUp ? {
+        catchUpRate: b.catchUp.gpShare === undefined ? 1 : num(b.catchUp.gpShare, 'catch-up.gpShare'),
+        catchUpTarget: num(b.catchUp.target, 'catch-up.target'),
+      } : {}),
+    }
+  })
+
+  const carryRate = num(bands[0].split.gpShare, 'split.gpShare')
+  let prefRate = 0
+  let prefCompounds = true
+  let prefBase: 'contributed' | 'unreturned' = 'contributed'
+  let prefMultiple: number | undefined
+  let prefDayCount: DayCount = 'act/365'
+  if (pref) {
+    if (pref.multiple !== undefined) {
+      prefMultiple = num(pref.multiple, 'preferred-return.multiple')
+      if (prefMultiple < 1) refuse('invalid-terms', 'preferred-return.multiple must be at least 1')
+    } else {
+      prefRate = num(pref.rate, 'preferred-return.rate')
+      prefCompounds = (pref.compounding ?? 'annual') === 'annual'
+      prefBase = pref.base ?? 'contributed'
+      const dc = pref.dayCount ?? 'act/365'
+      if (dc !== 'act/365' && dc !== '30/360') refuse('invalid-terms', `unknown day count ${dc}`)
+      prefDayCount = dc as DayCount
+    }
+  }
+  let catchupRate = 1
+  let catchupSize = 0
+  let measure: 'preferred' | 'profit' = 'preferred'
+  if (catchUp) {
+    const target = num(catchUp.target, 'catch-up.target')
+    catchupRate = catchUp.gpShare === undefined ? 1 : num(catchUp.gpShare, 'catch-up.gpShare')
+    measure = catchUp.measure ?? 'preferred'
+    if (measure === 'profit' && catchupRate <= target) {
+      refuse('invalid-terms', 'with measure "profit" the GP never catches up unless gpShare is above the target')
+    }
+    if (carryRate > 0 && carryRate < 1) {
+      // The engine's catch-up gives the GP catchUpSize × c ÷ (1 − c) of the pref; Walter's gives it
+      // t ÷ (1 − t). The same thing whenever the target is at or below the carry rate.
+      catchupSize = (target / (1 - target)) / (carryRate / (1 - carryRate))
+      if (catchupSize > 1 + 1e-12) unsupported('a catch-up to more than the carry rate')
+      catchupSize = Math.min(1, catchupSize)
+    }
+  }
+  // 'straight' is whole fund with no hurdle; deal by deal with no hurdle is American at a 0 pref.
+  const kind: VehicleCarryTerms['kind'] = basis === 'deal-by-deal' ? 'american'
+    : !pref ? 'straight' : 'european'
+  const carry: VehicleCarryTerms = {
+    kind, carryRate, prefRate, catchupRate, catchupSize, prefCompounds, prefBase,
+    ...(prefMultiple !== undefined ? { prefMultiple } : {}),
+    ...(prefDayCount !== 'act/365' ? { prefDayCount } : {}),
+    ...(measure === 'profit' ? { catchupMeasure: 'profit' as const } : {}),
+    ...(carrySteps.length > 0 ? { carrySteps } : {}),
+    gpEntityId: recipients[0]?.lpEntityId ?? null,
+    recipients,
+  }
+  const ids = {
+    roc: tiers[0].id ?? 'return-of-capital',
+    pref: pref?.id ?? 'preferred-return',
+    catchUp: catchUp?.id ?? 'catch-up',
+    split: bands[0].split.id ?? 'split',
+    bands: bands.map((b, i) => ({
+      catchUp: b.catchUp?.id ?? `catch-up-${i + 1}`,
+      split: b.split.id ?? (i === 0 ? 'split' : `split-${i + 1}`),
+    })),
+  }
+  return { carry, ids, hasPref: !!pref }
+}
+
+export function run(termsIn: unknown, flowsIn: unknown) {
+  const terms = termsIn as WTerms
+  const partners = terms.partners ?? []
+  const partnerIds = new Set(partners.map(p => p.id))
+  const commitment = new Map(partners.map(p => [p.id, num(p.commitment, `partner ${p.id} commitment`)]))
+
+  // Who receives the carry: the named recipients, or the one GP.
+  const named = terms.waterfall.carryRecipients
+  const gps = partners.filter(p => p.role === 'gp')
+  const recipients = named
+    ? named.map(r => ({ lpEntityId: r.partner, pct: num(r.share, 'carryRecipients.share') * 100 }))
+    : gps.length === 1 ? [{ lpEntityId: gps[0].id, pct: 100 }] : []
+  const { carry, ids } = carryTermsOf(terms, recipients)
+  if (carry.carryRate > 0 && recipients.length === 0) refuse('no-carry-recipient', 'the tiers pay the GP and nobody receives it')
+
+  // The engine's LPs are every partner outside the carry recipients, and all of them bear carry.
+  const recipientIds = new Set(recipients.map(r => r.lpEntityId))
+  // A recipient's own capital is carry-free (distribution-waterfall.ts).
+  for (const p of partners) {
+    const bearing = p.carryBearing ?? p.role === 'lp'
+    if (!bearing && !recipientIds.has(p.id)) unsupported(`a carry-free partner that isn't a carry recipient (${p.id})`)
+    if (bearing && recipientIds.has(p.id)) unsupported(`a carry recipient that also bears carry (${p.id})`)
+  }
+
+  const includes = terms.waterfall.returnOfCapital?.includes ?? PURPOSES
+  if (PURPOSES.some(p => !includes.includes(p))) carry.capitalIncludes = PURPOSES.filter(p => includes.includes(p))
+  const flows = (Array.isArray(flowsIn) ? flowsIn : refuse('invalid-flow', 'flows must be an array')) as WFlow[]
+  flows.forEach((f, i) => {
+    if (!(f?.type in ORDER)) refuse('invalid-flow', `flow ${i}: unknown type ${f?.type}`)
+    if ('amount' in f && !(typeof f.amount === 'string' && Number(f.amount) >= 0)) refuse('invalid-flow', `flow ${i}: amount must be a non-negative decimal string`)
+    if (f.type === 'contribution' && !partnerIds.has(f.partner)) refuse('unknown-partner', `flow ${i}: unknown partner ${f.partner}`)
+  })
+  const ordered = flows.map((f, i) => ({ f, i }))
+    .sort((a, b) => a.f.date.localeCompare(b.f.date) || ORDER[a.f.type] - ORDER[b.f.type] || a.i - b.i)
+    .map(x => x.f)
+  const clawbackOn = terms.clawback?.enabled ?? true
+
+  const recycling: RecyclingTerms | null = terms.recycling ? {
+    capRate: num(terms.recycling.cap, 'recycling.cap'),
+    capBasis: terms.recycling.capBasis === 'management-fees' ? 'management_fees' : 'commitments',
+    until: terms.recycling.until ?? null,
+    defaultTreatment: terms.recycling.defaultTreatment === 'deemed' ? 'deemed' : 'retained',
+  } : null
+
+  const contributions: { partner: string; date: string; amount: number; purpose: Purpose }[] = []
+  const deals = new Map<string, DealHistory>()
+  const invested: { date: string; amount: number }[] = []
+  const priors: { date: string; amount: number }[] = []
+  const received = new Map<string, number>()
+  /** Distributions of each partner's own capital and profit, carry left out (the books' distributions line). */
+  const ownReceived = new Map<string, number>()
+  const allocations: Allocation[] = []
+  const recontributions: { date: string; partner: string; amount: string }[] = []
+  const recycledOut: { date: string; amount: string; treatment: 'never-distributed' | 'deemed' }[] = []
+  const accruedCarry: { date: string; nav: string; entitlement: string; paid: string; accrued: string }[] = []
+  let clawback: { date: string; paid: string; entitlement: string; amount: string } | undefined
+  const warnings: string[] = []
+  let recycledToDate = 0
+  let gpPaid = 0
+
+  const dealOf = (key: string) => deals.get(key) ?? (deals.set(key, { companyId: key, investments: [], realizations: [] }), deals.get(key)!)
+  const add = (date: string, tier: string, partner: string, amount: number, isCarry = false) => {
+    if (amount === 0) return
+    allocations.push({ date, tier, partner, amount: money(amount) })
+    received.set(partner, roundCents((received.get(partner) ?? 0) + amount))
+    if (isCarry) gpPaid = roundCents(gpPaid + amount)
+    else ownReceived.set(partner, roundCents((ownReceived.get(partner) ?? 0) + amount))
+  }
+  const contributedTo = (date: string, id?: string) =>
+    roundCents(contributions.filter(c => c.date <= date && (id === undefined || c.partner === id)).reduce((s, c) => s + c.amount, 0))
+  const lpIds = partners.filter(p => !recipientIds.has(p.id)).map(p => p.id)
+  /** Pro-rata across the LPs by what they've put in, falling back to commitments (spec 04 §1). */
+  const lpWeights = (date: string) => {
+    const byCapital = lpIds.map(id => ({ lpEntityId: id, commitment: contributedTo(date, id) }))
+    return byCapital.some(w => w.commitment > 0) ? byCapital : lpIds.map(id => ({ lpEntityId: id, commitment: commitment.get(id) ?? 0 }))
+  }
+
+  /** The American base on `date`: the deals' realized cost, as the books measure it (realized-capital.ts). */
+  const realizedOn = (date: string): RealizedCapital[] | undefined => {
+    if (carry.kind !== 'american') return undefined
+    if (invested.length === 0) {
+      warnings.push('deal-by-deal terms with no investment flows run whole fund')
+      return undefined
+    }
+    const all = contributedTo(date)
+    const lp = lpIds.reduce((s, id) => s + contributedTo(date, id), 0)
+    const spent = contributions.filter(c => c.date <= date && (c.purpose === 'fees' || c.purpose === 'expenses')).reduce((s, c) => s + c.amount, 0)
+    const cost = invested.filter(i => i.date <= date).reduce((s, i) => s + i.amount, 0)
+    const factor = all > 0 && cost > 0 ? (lp / all) * (1 + spent / cost) : 0
+    return realizedCapitalFromDeals([...deals.values()], { factor })
+  }
+
+  for (const f of ordered) {
+    switch (f.type) {
+      case 'contribution':
+        contributions.push({ partner: f.partner, date: f.date, amount: Number(f.amount), purpose: f.purpose ?? 'investments' })
+        break
+      case 'investment':
+        dealOf(f.deal).investments.push({ date: f.date, amount: Number(f.amount) })
+        invested.push({ date: f.date, amount: Number(f.amount) })
+        break
+      case 'write-off':
+        dealOf(f.deal).realizations.push({ date: f.date, costExited: f.costExited === undefined ? null : Number(f.costExited) })
+        break
+      case 'distributable': {
+        let total = Number(f.amount)
+        if (f.deal) dealOf(f.deal).realizations.push({ date: f.date, costExited: f.costExited === undefined ? null : Number(f.costExited) })
+
+        if (f.recycle) {
+          const amount = Number(f.recycle.amount)
+          if (!recycling) refuse('recycling-not-permitted', 'the terms have no recycling')
+          if (amount > total) refuse('recycle-exceeds-proceeds', 'the recycle is larger than the proceeds')
+          if (recycling!.until && f.date > recycling!.until) refuse('recycle-after-end', 'the recycle is after recycling ends')
+          const fees = contributions.filter(c => c.date <= f.date && c.purpose === 'fees').reduce((s, c) => s + c.amount, 0)
+          const cap = recyclingCap(recycling!, { commitments: [...commitment.values()].reduce((s, c) => s + c, 0), managementFees: fees })
+          if (roundCents(recycledToDate + amount) > cap + 0.005) refuse('recycle-over-cap', 'the recycle passes the cap')
+          recycledToDate = roundCents(recycledToDate + amount)
+          const treatment = f.recycle.treatment === 'deemed' ? 'deemed'
+            : f.recycle.treatment === 'never-distributed' ? 'retained'
+            : recycling!.defaultTreatment
+          recycledOut.push({ date: f.date, amount: money(amount), treatment: treatment === 'deemed' ? 'deemed' : 'never-distributed' })
+          if (treatment === 'deemed' && amount > 0) {
+            // The books' one netted entry (lib/accounting/recycling.ts): each partner's share, by
+            // commitment, is distributed and recontributed the same day, and the distribution is
+            // a prior the waterfall replays as a return of the capital recontributed with it.
+            const shares = allocateAmount(amount, partners.map(p => ({ lpEntityId: p.id, commitment: commitment.get(p.id) ?? 0 })))
+            for (const [id, a] of shares) {
+              if (a <= 0) continue
+              add(f.date, 'recycled', id, a)
+              recontributions.push({ date: f.date, partner: id, amount: money(a) })
+              contributions.push({ partner: id, date: f.date, amount: a, purpose: 'investments' })
+            }
+            const lpShare = lpIds.reduce((s, id) => s + (shares.get(id) ?? 0), 0)
+            if (lpShare > 0) priors.push({ date: f.date, amount: roundCents(lpShare) })
+          }
+          total = roundCents(total - amount)
+        }
+        if (total <= 0) break
+
+        const split = splitDistribution({
+          total,
+          terms: carry,
+          partners: partners.map(p => ({
+            lpEntityId: p.id,
+            contributed: contributedTo(f.date, p.id),
+            distributed: ownReceived.get(p.id) ?? 0,
+            ending: roundCents(contributedTo(f.date, p.id) - (ownReceived.get(p.id) ?? 0)),
+          })),
+          contributions: contributions.filter(c => !recipientIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount, purpose: c.purpose })),
+          priors: [...priors],
+          asOf: f.date,
+          realizedCapital: realizedOn(f.date),
+        })
+        // What the tiers divided, for the next replay: the carry-free slices sat outside them.
+        priors.push({ date: f.date, amount: roundCents(total - (split.tiers.carryFree ?? 0)) })
+
+        if (split.method === 'pro_rata') {
+          for (const l of split.lines) add(f.date, ids.roc, l.lpEntityId, l.amount)
+          break
+        }
+        // The engine gives each tier's total; spread each across the partners as its lines are.
+        const weights = lpWeights(f.date)
+        const lpTier = (tier: string, amount: number) => {
+          if (amount > 0) for (const [id, a] of allocateAmount(amount, weights)) add(f.date, tier, id, a)
+        }
+        const gpTier = (tier: string, amount: number) => {
+          if (amount > 0) for (const [id, a] of allocateAmount(amount, recipients.map(r => ({ lpEntityId: r.lpEntityId, commitment: r.pct })))) add(f.date, tier, id, a, true)
+        }
+        for (const l of split.carryFreeLines ?? []) {
+          add(f.date, ids.roc, l.lpEntityId, l.capital)
+          add(f.date, 'carry-free', l.lpEntityId, l.profit)
+        }
+        lpTier(ids.roc, split.tiers.returnOfCapital)
+        lpTier(ids.pref, split.tiers.preferred)
+        lpTier(ids.catchUp, split.tiers.catchUpToLP ?? 0)
+        gpTier(ids.catchUp, split.tiers.catchUp)
+        if (split.tiers.bands) {
+          split.tiers.bands.forEach((b, i) => {
+            lpTier(ids.bands[i].catchUp, b.catchUpToLP)
+            gpTier(ids.bands[i].catchUp, b.catchUp)
+            lpTier(ids.bands[i].split, b.toLP)
+            gpTier(ids.bands[i].split, b.toGP)
+          })
+        } else {
+          lpTier(ids.split, split.tiers.profitToLP)
+          gpTier(ids.split, split.tiers.carry)
+        }
+        break
+      }
+      case 'nav': {
+        // The close's accrual: the GP's whole-fund entitlement if the fund sold at this NAV.
+        const nav = Number(f.amount)
+        const lpCapital = lpIds.reduce((s, id) => s + contributedTo(f.date, id), 0)
+        const allCapital = contributedTo(f.date)
+        const lpNav = allCapital > 0 ? nav * (lpCapital / allCapital) : nav
+        const lpReceived = lpIds.reduce((s, id) => s + (received.get(id) ?? 0), 0)
+        const target = carryTarget({
+          lps: [{ lpEntityId: 'lps', contributed: roundCents(lpCapital), distributed: roundCents(lpReceived), nav: roundCents(lpNav) }],
+          contributions: contributions.filter(c => !recipientIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount, purpose: c.purpose })),
+          asOf: f.date,
+          distributions: priors,
+        }, carry)
+        accruedCarry.push({ date: f.date, nav: money(nav), entitlement: money(target), paid: money(gpPaid), accrued: money(Math.max(0, target - gpPaid)) })
+        break
+      }
+      case 'fund-end': {
+        if (!clawbackOn || carry.carryRate <= 0) break
+        const lpContributions = contributions.filter(c => !recipientIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount, purpose: c.purpose }))
+        const c = clawbackAtFundEnd(priors, lpContributions, carry, f.date, gpPaid)
+        clawback = { date: f.date, paid: money(c.paid), entitlement: money(c.entitlement), amount: money(c.amount) }
+        if (c.amount > 0) {
+          // The recipients give it back by share, and the LPs receive it by capital.
+          for (const [id, a] of allocateAmount(c.amount, recipients.map(r => ({ lpEntityId: r.lpEntityId, commitment: r.pct })))) {
+            if (a > 0) add(f.date, 'clawback', id, -a, true)
+          }
+          for (const [id, a] of allocateAmount(c.amount, lpWeights(f.date))) {
+            if (a > 0) add(f.date, 'clawback', id, a)
+          }
+        }
+        break
+      }
+      default:
+        break
+    }
+  }
+
+  // The fee schedule (spec/07-management-fees.md), run by the engine's dated schedule.
+  const fees: { start: string; end: string; gross: string; offset: string; net: string }[] = []
+  const feesByPartner: Record<string, string> = {}
+  const fee = terms.managementFee
+  if (fee) {
+    if (!(fee.frequency in { quarterly: 1, semiannual: 1, annual: 1 })) refuse('invalid-terms', `managementFee.frequency: ${fee.frequency}`)
+    if (!fee.end) unsupported('a management fee with no end')
+    const when = (from: string | { event: string }) =>
+      typeof from === 'string' ? from
+        : from.event === 'investment-period-end' ? terms.fund?.investmentPeriodEnd
+        : flows.find(f => f.type === 'event' && f.name === from.event)?.date
+    const steps = (fee.schedule ?? [])
+      .map(s => ({ from: when(s.from), rate: num(s.rate, 'managementFee rate'), basis: s.basis }))
+      .filter((s): s is { from: string; rate: number; basis: FeeScheduleBasis } => s.from !== undefined)
+    if (steps.length === 0) refuse('invalid-terms', 'managementFee.schedule needs a step that applies')
+    const feeBearing = partners.filter(p => p.feeBearing ?? p.role === 'lp')
+    const periods = feeSchedule({
+      frequency: fee.frequency,
+      start: fee.start,
+      end: fee.end!,
+      steps,
+      ...(fee.offsets ? { offsets: Object.fromEntries(Object.entries(fee.offsets).map(([k, v]) => [k, num(v, `offsets.${k}`)])) } : {}),
+      ...(fee.organizationalExpenseCap !== undefined ? { organizationalExpenseCap: num(fee.organizationalExpenseCap, 'organizationalExpenseCap') } : {}),
+    }, {
+      feeBearingCommitments: feeBearing.reduce((s, p) => s + (commitment.get(p.id) ?? 0), 0),
+      allCommitments: [...commitment.values()].reduce((s, c) => s + c, 0),
+      investments: flows.filter(f => f.type === 'investment').map(f => ({ date: f.date, deal: f.deal, amount: Number(f.amount) })),
+      exits: flows.filter(f => (f.type === 'write-off' || f.type === 'distributable') && f.deal)
+        .map(f => ({ date: f.date, deal: f.deal, ...(f.costExited !== undefined ? { cost: Number(f.costExited) } : {}) })),
+      navs: ordered.filter(f => f.type === 'nav').map(f => ({ date: f.date, amount: Number(f.amount) })),
+      portfolioFees: flows.filter(f => f.type === 'portfolio-fee').map(f => ({ date: f.date, kind: f.kind, amount: Number(f.amount) })),
+      organizationalExpenses: flows.filter(f => f.type === 'organizational-expense').map(f => ({ date: f.date, amount: Number(f.amount) })),
+    })
+    for (const p of periods) fees.push({ start: p.start, end: p.end, gross: money(p.gross), offset: money(p.offset), net: money(p.net) })
+    const net = periods.reduce((s, p) => s + p.net, 0)
+    const shares = allocateAmount(net, feeBearing.map(p => ({ lpEntityId: p.id, commitment: commitment.get(p.id) ?? 0 })))
+    for (const [id, a] of shares) feesByPartner[id] = money(a)
+  }
+
+  const totals: Record<string, { contributed: string; distributed: string; net: string }> = {}
+  for (const p of partners) {
+    const c = contributedTo('9999-12-31', p.id)
+    const d = received.get(p.id) ?? 0
+    totals[p.id] = { contributed: money(c), distributed: money(d), net: money(d - c) }
+  }
+  return {
+    walter: '0.1',
+    allocations,
+    recontributions,
+    recycled: recycledOut,
+    ...(clawback ? { clawback } : {}),
+    accruedCarry,
+    fees,
+    feesByPartner,
+    totals,
+    warnings: [...new Set(warnings)],
+  }
+}

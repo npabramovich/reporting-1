@@ -16,6 +16,28 @@ export const SET_WATERFALL_TERMS_SCHEMA = {
     catchupSize: RATE('How much of a full catch-up the GP gets, 0 to 1 (default 1). A full catch-up is the carry the GP would have earned on the profit that paid the preferred return; 0.5 is half of it. Ignored by straight'),
     prefCompounds: { type: 'boolean', description: 'Whether the preferred return compounds annually (default true) or is simple.' },
     prefBase: { type: 'string', enum: ['contributed', 'unreturned'], description: 'What the preferred return accrues on: contributed (every contribution, even once returned; the default) or unreturned (only capital not yet returned, plus unpaid pref when it compounds). Omitting it sets contributed.' },
+    prefMultiple: { type: 'number', description: 'A hurdle set as a multiple of capital instead of a rate: the LPs get this multiple of their capital back before the catch-up, however long it takes (1.08 = an 8% hurdle that never accrues). Omit for the rate.' },
+    prefDayCount: { type: 'string', enum: ['act/365', '30/360'], description: 'How the preferred return counts years: act/365 (actual days, the default) or 30/360 (US bond basis).' },
+    catchupMeasure: { type: 'string', enum: ['preferred', 'profit'], description: 'What the catch-up is measured on. preferred (the default): the GP gets carryRate / (1 − carryRate) of the pref paid, whatever the LPs got of the catch-up flow ("an amount equal to 25% of the preferred return"). profit: the GP catches up until it holds its share of all profit distributed ("until the GP has received 20% of the amounts distributed under (ii) and (iii)"). They differ only when catchupRate is below 1.' },
+    carrySteps: {
+      type: 'array',
+      description: 'Where the carry steps up, in order ("20% until the LPs have received 2.5x their capital, then 25%"). The split before each step runs until the LPs have the step\'s multiple of their capital (lpMultiple) or reach its IRR (lpIrr), then the carry is carryRate. Each step raises the rate. Omit for one carry rate.',
+      items: {
+        type: 'object',
+        required: ['carryRate'],
+        properties: {
+          lpMultiple: { type: 'number', description: 'The LPs\' total received ÷ their capital at which the step starts, e.g. 2.5. Give this or lpIrr.' },
+          lpIrr: RATE('The LPs\' IRR at which the step starts (ACT/365, annual compounding). Give this or lpMultiple'),
+          carryRate: RATE('The carry rate after the step, above the one before it'),
+          catchUpRate: RATE('A catch-up at the step: the GP\'s share of each dollar until it holds the new rate of all profit (1 = all of it). Omit for none'),
+        },
+      },
+    },
+    capitalIncludes: {
+      type: 'array',
+      items: { type: 'string', enum: ['investments', 'fees', 'expenses', 'other'] },
+      description: 'What the first tier returns as capital, and the preferred return accrues on. Omit for all contributions, the usual reading. ["investments"] is an LPA that returns only capital used for investments before carry, so fees and expenses are not returned first. The books tag what each contribution paid for first in, first out.',
+    },
     carryRecipients: {
       type: 'array',
       description: 'Who receives the carry, with percentages that total 100. Required when carry is on, unless gpEntityId is given.',

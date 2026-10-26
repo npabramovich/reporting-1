@@ -1,0 +1,154 @@
+{
+  "id": "deal-by-deal-realized",
+  "walter": "0.1",
+  "title": "Deal by deal returns realized capital",
+  "description": "A 200 deal is written off, then a 400 deal sells for 1,000. The first tier owes the 600 in realized deals, not the 1,000 contributed, so the GP is paid carry now: 80, 20% of the 400 of realized profit. The pref is computed exactly (68.9644…) and only the lines are rounded, so the LP lines differ by a cent from rounding each tier first.",
+  "tags": [
+    "deal-by-deal",
+    "pref-compound",
+    "catch-up-full"
+  ],
+  "provenance": "ported: Portfolio spec v2, american-realized-deals",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "600"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "400"
+      }
+    ],
+    "waterfall": {
+      "basis": "deal-by-deal",
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "600"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-b",
+      "amount": "400"
+    },
+    {
+      "type": "investment",
+      "date": "2025-01-01",
+      "deal": "deal-a",
+      "amount": "400"
+    },
+    {
+      "type": "investment",
+      "date": "2025-01-01",
+      "deal": "deal-b",
+      "amount": "200"
+    },
+    {
+      "type": "write-off",
+      "date": "2026-03-01",
+      "deal": "deal-b"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-06-01",
+      "amount": "1000",
+      "deal": "deal-a"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2026-06-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "360.00"
+      },
+      {
+        "date": "2026-06-01",
+        "tier": "return-of-capital",
+        "partner": "lp-b",
+        "amount": "240.00"
+      },
+      {
+        "date": "2026-06-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "41.38"
+      },
+      {
+        "date": "2026-06-01",
+        "tier": "preferred-return",
+        "partner": "lp-b",
+        "amount": "27.59"
+      },
+      {
+        "date": "2026-06-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "17.24"
+      },
+      {
+        "date": "2026-06-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "150.62"
+      },
+      {
+        "date": "2026-06-01",
+        "tier": "split",
+        "partner": "lp-b",
+        "amount": "100.41"
+      },
+      {
+        "date": "2026-06-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "62.76"
+      }
+    ],
+    "totals": {
+      "lp-a": "552.00",
+      "lp-b": "368.00",
+      "gp": "80.00"
+    }
+  },
+  "tolerance": "0.01"
+}

@@ -1,0 +1,95 @@
+{
+  "id": "fees-step-mid-period",
+  "walter": "0.1",
+  "title": "A step-down in the middle of a quarter",
+  "description": "A successor fund starts on 16 May and the rate drops to 1.5%. The quarter from 1 April (91 days) pays 45 days at 2% and 46 at 1.5%: 247,252.75 + 189,560.44 = 436,813.19.",
+  "tags": [
+    "fees",
+    "fees-step-down"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "2000000"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "60000000"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "40000000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "managementFee": {
+      "frequency": "quarterly",
+      "start": "2025-01-01",
+      "end": "2025-10-01",
+      "schedule": [
+        {
+          "from": "2025-01-01",
+          "rate": "0.02",
+          "basis": "commitments"
+        },
+        {
+          "from": {
+            "event": "successor-fund"
+          },
+          "rate": "0.015",
+          "basis": "commitments"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "event",
+      "date": "2025-05-16",
+      "name": "successor-fund"
+    }
+  ],
+  "expected": {
+    "fees": [
+      {
+        "start": "2025-01-01",
+        "gross": "500000.00",
+        "offset": "0.00",
+        "net": "500000.00"
+      },
+      {
+        "start": "2025-04-01",
+        "gross": "436813.19",
+        "offset": "0.00",
+        "net": "436813.19"
+      },
+      {
+        "start": "2025-07-01",
+        "gross": "375000.00",
+        "offset": "0.00",
+        "net": "375000.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

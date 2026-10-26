@@ -200,6 +200,7 @@ export const AGENT_TOOL_MANIFEST: AgentToolMeta[] = [
         memo: { type: 'string' },
         annualRate: { type: 'number', description: 'management_fee: decimal, e.g. 0.02' },
         periodFraction: { type: 'number', description: 'management_fee: e.g. 0.25 for a quarter' },
+        fromSchedule: { type: 'boolean', description: "management_fee: charge what the vehicle's dated fee schedule sets for the period entryDate falls in (rate, basis, step-downs, organizational expense cap), instead of annualRate × periodFraction on commitments." },
         amount: { type: 'number', description: 'expense / gain total' },
         overrides: { type: 'object', description: 'management_fee: per-LP { rateOverride, exempt }' },
         perLp: { type: 'object', description: 'distribution / carry: { lpEntityId: amount }' },

@@ -60,15 +60,14 @@ export function dealHistories(
 }
 
 /**
- * What a dollar of deal cost is in LP capital: the LPs' share of contributions, grossed up by the
- * fund's fees and expenses spread over the deals by cost. Pure.
+ * The two things the realized base is measured from, besides the deals: the LPs' share of
+ * contributions, and the fund's fees and expenses to spread over the deals by cost. Pure.
  */
-export function realizedCapitalFactor(
+export function dealByDealBasis(
   capitalPostings: CapitalPosting[],
   recipientIds: Set<string>,
-  deals: DealHistory[],
   asOf: string,
-): number {
+): { lpShare: number; expenses: number } {
   const accounts = computeCapitalAccounts(capitalPostings, { end: asOf })
   let all = 0
   let lp = 0
@@ -78,9 +77,27 @@ export function realizedCapitalFactor(
     if (!recipientIds.has(id)) lp += a.contributions
     expenses += -(a.managementFees + a.expenses) // stored negative on the account
   }
-  const cost = deals.reduce((s, d) => s + d.investments.reduce((t, i) => t + i.amount, 0), 0)
-  if (all <= 0 || cost <= 0) return 0
-  return (lp / all) * (1 + Math.max(0, expenses) / cost)
+  return { lpShare: all > 0 ? lp / all : 0, expenses: Math.max(0, expenses) }
+}
+
+/**
+ * What a dollar of deal cost is in LP capital: the LPs' share of contributions, grossed up by the
+ * fund's fees and expenses spread over the deals by cost. Pure.
+ */
+export function realizedCapitalFactor(
+  capitalPostings: CapitalPosting[],
+  recipientIds: Set<string>,
+  deals: DealHistory[],
+  asOf: string,
+): number {
+  const { lpShare, expenses } = dealByDealBasis(capitalPostings, recipientIds, asOf)
+  return factorOf(lpShare, expenses, deals.reduce((s, d) => s + d.investments.reduce((t, i) => t + i.amount, 0), 0))
+}
+
+/** The factor itself, from the LPs' share, the fees and expenses, and the deals' total cost. */
+export function factorOf(lpShare: number, expenses: number, cost: number): number {
+  if (lpShare <= 0 || cost <= 0) return 0
+  return lpShare * (1 + Math.max(0, expenses) / cost)
 }
 
 /** The American capital base for a vehicle as at `asOf`. */

@@ -1,0 +1,96 @@
+{
+  "id": "split-tiered-multiple",
+  "walter": "0.1",
+  "title": "Carry steps up at a 2× multiple",
+  "description": "20% until the LPs have 2× their capital, then 30%. On 1,000 and 4,000 back: 1,250 of flow at 20% takes the LPs to 2,000, and the last 1,750 splits 1,225/525.",
+  "tags": [
+    "split-tiered",
+    "split-until-multiple"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20",
+          "until": {
+            "lpMultiple": "2.0"
+          }
+        },
+        {
+          "type": "split",
+          "gpShare": "0.30"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2030-01-01",
+      "amount": "4000"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2030-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "250.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split-2",
+        "partner": "lp-a",
+        "amount": "1225.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split-2",
+        "partner": "gp",
+        "amount": "525.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

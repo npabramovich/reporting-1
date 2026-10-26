@@ -1,0 +1,141 @@
+{
+  "id": "clawback-unreturned",
+  "walter": "0.1",
+  "title": "The same flows on an unreturned pref",
+  "description": "On the unreturned base the hurdle stops growing on capital once it comes back, so the LPs clear it and the GP is entitled to 7.00 in the end, 1.68 of it paid in year two.",
+  "tags": [
+    "clawback",
+    "pref-unreturned",
+    "catch-up-full"
+  ],
+  "provenance": "reference-engine, checked against the engine comparison",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "unreturned",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "50"
+    },
+    {
+      "type": "distributable",
+      "date": "2027-01-01",
+      "amount": "60"
+    },
+    {
+      "type": "contribution",
+      "date": "2028-01-01",
+      "partner": "lp-a",
+      "amount": "50"
+    },
+    {
+      "type": "distributable",
+      "date": "2031-01-01",
+      "amount": "75"
+    },
+    {
+      "type": "fund-end",
+      "date": "2031-01-01"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2027-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "50.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "8.32"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "1.68"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "50.00"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "13.00"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "3.65"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "6.68"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "1.67"
+      }
+    ],
+    "totals": {
+      "gp": "7.00"
+    },
+    "clawback": {
+      "amount": "0.00",
+      "entitlement": "7.00"
+    }
+  },
+  "tolerance": "0.01"
+}

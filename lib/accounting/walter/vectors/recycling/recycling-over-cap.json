@@ -1,0 +1,73 @@
+{
+  "id": "recycling-over-cap",
+  "walter": "0.1",
+  "title": "A recycle over the cap is refused",
+  "description": "A 20% cap on 1,000 of commitments allows 200. Recycling 150 and then 100 would reach 250.",
+  "tags": [
+    "recycling",
+    "errors"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "recycling": {
+      "cap": "0.20",
+      "capBasis": "commitments"
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-01-01",
+      "amount": "600",
+      "recycle": {
+        "amount": "150"
+      }
+    },
+    {
+      "type": "distributable",
+      "date": "2027-01-01",
+      "amount": "600",
+      "recycle": {
+        "amount": "100"
+      }
+    }
+  ],
+  "expected": {
+    "error": "recycle-over-cap"
+  },
+  "tolerance": "0.01"
+}

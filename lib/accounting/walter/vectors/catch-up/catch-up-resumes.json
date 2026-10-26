@@ -1,0 +1,107 @@
+{
+  "id": "catch-up-resumes",
+  "walter": "0.1",
+  "title": "A catch-up finishes in the next distribution",
+  "description": "The first distribution leaves the GP 10 into a 20 catch-up; the second finishes it and splits the rest 72/18.",
+  "tags": [
+    "catch-up-full"
+  ],
+  "provenance": "ported: Portfolio spec v2, resume-mid-catch-up",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "multiple": "1.08"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-06-30",
+      "amount": "1090"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-12-31",
+      "amount": "100"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2025-06-30",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "80.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "10.00"
+      },
+      {
+        "date": "2025-12-31",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "10.00"
+      },
+      {
+        "date": "2025-12-31",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "72.00"
+      },
+      {
+        "date": "2025-12-31",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "18.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

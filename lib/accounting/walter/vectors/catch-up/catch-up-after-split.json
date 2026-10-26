@@ -1,0 +1,130 @@
+{
+  "id": "catch-up-after-split",
+  "walter": "0.1",
+  "title": "The hurdle grows after the split",
+  "description": "Simple 8% on 30/360: 80 of pref at one year and 120 at eighteen months. The first distribution reaches the split; the second pays the extra 40 of pref, catches the GP up 10 (back to 20% of profit) and splits the rest.",
+  "tags": [
+    "catch-up-full",
+    "pref-simple",
+    "day-count-30-360"
+  ],
+  "provenance": "ported: Portfolio spec v2, catch-up-after-split",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "none",
+          "base": "contributed",
+          "dayCount": "30/360"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-01-01",
+      "amount": "1500"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-07-01",
+      "amount": "100"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "80.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "20.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "320.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "80.00"
+      },
+      {
+        "date": "2026-07-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "40.00"
+      },
+      {
+        "date": "2026-07-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "10.00"
+      },
+      {
+        "date": "2026-07-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "40.00"
+      },
+      {
+        "date": "2026-07-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "10.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

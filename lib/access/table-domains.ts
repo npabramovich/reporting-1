@@ -155,6 +155,7 @@ export const TABLE_RULES: Record<string, TableRule> = {
   allocation_runs: { scope: 'fund', domain: 'accounting' },
   allocation_results: { scope: 'fund', domain: 'accounting' },
   vehicle_accounting_settings: { scope: 'fund', domain: 'accounting' },
+  portfolio_company_fees: { scope: 'fund', domain: 'accounting' },
   qb_account_mappings: { scope: 'fund', domain: 'accounting' },
   qb_import_runs: { scope: 'fund', domain: 'accounting' },
   fund_construction_models: { scope: 'fund', domain: 'accounting' },

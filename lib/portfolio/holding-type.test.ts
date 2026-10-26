@@ -14,6 +14,7 @@ import { join } from 'path'
 
 // Call sites that legitimately do NOT filter, each with the reason it does not.
 const ALLOWLIST = new Map<string, string>([
+  ['lib/accounting/portfolio-fees.ts', 'by-id check that a fee\'s company is one of the fund\'s; any holding can pay a fee'],
   ['lib/accounting/recycling.ts', 'Checks only that a recycled exit\'s company id is in the fund; a direct company and a fund holding can both exit.'],
   ['lib/onboarding/wizard-server.ts', 'a head-only count: does the fund hold any data yet (any holding kind)'],
   ['lib/onboarding/progress.ts', 'a head-only count for the setup checklist — any holding kind means investments are loaded'],
@@ -54,6 +55,7 @@ const ALLOWLIST = new Map<string, string>([
   ['app/api/accounting/investments/route.ts', 'ledger-vs-tracker tie-out covers every position, funds included'],
   ['app/api/accounting/deal-carry/route.ts', 'deal-by-deal carry is computed over every position, funds included'],
   ['lib/accounting/realized-capital.ts', 'the deal-by-deal capital base is every position the vehicle realized, funds included'],
+  ['lib/accounting/fee-schedule.ts', 'a fee on invested capital is charged on every position the vehicle holds, funds included, as the deal-by-deal base reads them'],
   ['lib/accounting/fund-timeseries.ts', 'cost and value over time cover every position, funds included'],
   ['lib/ilpa/performance-load.ts', "the ILPA portfolio table's gross returns cover every position the vehicle holds, funds included"],
   ['lib/accounting/import-review.ts', 'compares imported books to every investment position, including fund holdings'],

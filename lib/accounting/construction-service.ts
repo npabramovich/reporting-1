@@ -8,6 +8,7 @@ import { loadPostedLedger } from './load'
 import { loadReportingCapital } from './reporting-capital'
 import { accountBalances, normalBalance } from './ledger'
 import { bucketForSourceType } from './capital-account'
+import { datedContributions } from '@portfolio/fund-engine'
 import { loadCarryTerms } from './carry'
 import { planCostsByYear } from '@/lib/forecast/plan-costs'
 import { copyConstructionToPlansWithout, loadPlanConstruction, primaryPlanRow, writePlanConstruction, type PlanConstructionRef } from '@/lib/forecast/plan-construction'
@@ -25,6 +26,7 @@ import {
 } from './construction'
 import { applyLpWaterfall, constructionBaseline, dealTimelines, forecastSchedule, type ForecastSchedule, type ForecastBaseline } from './construction-forecast'
 import { simulateFund, type SimulationResult } from './construction-simulation'
+import { dealByDealBasis, dealHistories } from './realized-capital'
 import type { Account } from './types'
 import type { InvestmentTransaction } from '@/lib/types/database'
 import type { AccessContext } from '@/lib/access/effective'
@@ -407,6 +409,7 @@ async function loadConstructionActuals(
     return excess > 0 ? Math.round((excess * carryTerms.carryRate / (1 - carryTerms.carryRate)) * 100) / 100 : 0
   }
   const carryPaidToDate = () => carryPaidOnBooks + carryInferred()
+  const today = new Date().toISOString().slice(0, 10)
 
   return {
     vintageYear: economics?.vintageYear ?? null,
@@ -419,7 +422,7 @@ async function loadConstructionActuals(
       uncalledCapital: Math.max(0, Math.round(((economics?.fund.uncalled ?? 0) - unfundedCalls) * 100) / 100),
       distributedCapital: economics?.fund.distributions ?? 0,
       waterfall: economics && economics.fund.paidIn != null && economics.fund.distributions != null && economics.fund.nav != null ? {
-        asOf: new Date().toISOString().slice(0, 10),
+        asOf: today,
         kind: carryTerms.kind,
         carryRate: carryTerms.carryRate,
         prefRate: carryTerms.prefRate,
@@ -427,6 +430,11 @@ async function loadConstructionActuals(
         catchupSize: carryTerms.catchupSize ?? 1,
         prefCompounds: carryTerms.prefCompounds,
         prefBase: carryTerms.prefBase ?? 'contributed',
+        ...(carryTerms.prefMultiple != null ? { prefMultiple: carryTerms.prefMultiple } : {}),
+        ...(carryTerms.prefDayCount === '30/360' ? { prefDayCount: '30/360' as const } : {}),
+        ...(carryTerms.catchupMeasure === 'profit' ? { catchupMeasure: 'profit' as const } : {}),
+        ...(carryTerms.carrySteps?.length ? { carrySteps: carryTerms.carrySteps } : {}),
+        ...(carryTerms.capitalIncludes ? { capitalIncludes: carryTerms.capitalIncludes } : {}),
         // The LP side excludes the GP's stake. When the books class the GP entity separately,
         // `economics.lp` already leaves it out; otherwise take its share of commitments off.
         ...(() => {
@@ -447,7 +455,17 @@ async function loadConstructionActuals(
           ? economics.fund.distributions
           : (economics.fund.distributions as number) * (1 - gpStakeShare) + carryPaidToDate(),
         ...(carryInferred() > 0 ? { carryPaidInferred: carryInferred() } : {}),
-        contributions: lpContributions,
+        // Deal by deal, the forecast measures the same realized base a booked distribution would.
+        ...(carryTerms.kind === 'american' ? {
+          dealByDeal: {
+            deals: dealHistories(allTransactions as any[], (companyResult.data ?? []) as { id: string; status: string | null }[], vehicle, today),
+            ...dealByDealBasis(ledger?.capitalPostings ?? [], recipientIds, today),
+          },
+        } : {}),
+        // Tagged by what each paid for when the terms return only some of it (economics.ts).
+        contributions: carryTerms.capitalIncludes
+          ? datedContributions((ledger?.capitalPostings ?? []).filter(posting => !!posting.entryDate), recipientIds, today)
+          : lpContributions,
         distributions: lpDistributions,
       } : undefined,
       managementFeesIncurred,

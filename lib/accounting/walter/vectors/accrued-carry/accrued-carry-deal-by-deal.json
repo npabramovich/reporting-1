@@ -1,0 +1,81 @@
+{
+  "id": "accrued-carry-deal-by-deal",
+  "walter": "0.1",
+  "title": "Deal-by-deal terms accrue the whole-fund figure",
+  "description": "A liquidation realizes every deal, so on the fund-end view deal-by-deal accrues exactly what whole-fund does: 100.",
+  "tags": [
+    "accrued-carry",
+    "deal-by-deal"
+  ],
+  "provenance": "ported: Portfolio spec v2, carryTarget american-equals-european",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "basis": "deal-by-deal",
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "investment",
+      "date": "2025-01-01",
+      "deal": "deal-a",
+      "amount": "1000"
+    },
+    {
+      "type": "nav",
+      "date": "2026-01-01",
+      "amount": "1500"
+    }
+  ],
+  "expected": {
+    "accruedCarry": [
+      {
+        "date": "2026-01-01",
+        "entitlement": "100.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

@@ -1,0 +1,73 @@
+{
+  "id": "accrued-carry-whole-fund",
+  "walter": "0.1",
+  "title": "Carry accrued at NAV",
+  "description": "1,000 called, NAV 1,500 a year later, 8% pref, full catch-up: liquidating at NAV would pay the GP 100.",
+  "tags": [
+    "accrued-carry"
+  ],
+  "provenance": "ported: Portfolio spec v2, carryTarget european",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "nav",
+      "date": "2026-01-01",
+      "amount": "1500"
+    }
+  ],
+  "expected": {
+    "accruedCarry": [
+      {
+        "date": "2026-01-01",
+        "entitlement": "100.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

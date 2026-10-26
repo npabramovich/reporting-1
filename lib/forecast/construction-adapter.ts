@@ -16,7 +16,8 @@
 
 import { roundCents } from '@/lib/accounting/ledger'
 import type { ForecastSchedule } from '@/lib/accounting/construction-forecast'
-import { addMonths, monthOf, type MonthKey } from './months'
+import { projectedDeals, type ProjectedDeals } from '@/lib/accounting/forward-waterfall'
+import { addMonths, lastDay, monthOf, type MonthKey } from './months'
 
 export type ConstructionFlow = 'invested' | 'proceeds' | 'fees' | 'expenses' | 'called' | 'distributed'
 
@@ -63,6 +64,20 @@ function apportion(total: number, weights: number[]): number[] {
     parts[i] = roundCents(parts[i] + drift)
   }
   return parts
+}
+
+/**
+ * The deals' projected checks and exits by month, for a deal-by-deal waterfall, placed where
+ * monthlyConstruction places their cash. `expenses` are the plan's fees and expenses by month.
+ */
+export function monthlyProjectedDeals(schedule: ForecastSchedule, asOf: string, expenses: Map<MonthKey, number>): ProjectedDeals {
+  const asOfMonth = monthOf(asOf)
+  return projectedDeals(
+    schedule.deals,
+    schedule.horizonYears,
+    t => lastDay(addMonths(asOfMonth, monthIndex(t))),
+    [...expenses].map(([m, amount]) => ({ date: lastDay(m), amount })),
+  )
 }
 
 export function monthlyConstruction(schedule: ForecastSchedule, asOf: string): MonthlyConstruction {

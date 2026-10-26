@@ -1,0 +1,79 @@
+{
+  "id": "accrued-carry-straight",
+  "walter": "0.1",
+  "title": "Straight carry accrued at NAV",
+  "description": "1,000 called, 100 back, NAV 1,400: 500 of profit at 20% is 100.",
+  "tags": [
+    "accrued-carry",
+    "split-only"
+  ],
+  "provenance": "ported: Portfolio spec v2, carryTarget straight",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "600"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "400"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "600"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-b",
+      "amount": "400"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-06-01",
+      "amount": "100"
+    },
+    {
+      "type": "nav",
+      "date": "2026-01-01",
+      "amount": "1400"
+    }
+  ],
+  "expected": {
+    "accruedCarry": [
+      {
+        "date": "2026-01-01",
+        "entitlement": "100.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

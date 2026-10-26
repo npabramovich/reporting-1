@@ -1,0 +1,78 @@
+{
+  "id": "pref-one-year-compound",
+  "walter": "0.1",
+  "title": "One year, compounding",
+  "description": "One contribution, 365 days, 8% compounding: 80.00 of pref.",
+  "tags": [
+    "pref-compound",
+    "day-count-act-365"
+  ],
+  "provenance": "ported: Portfolio spec v2, one-year-compound",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-01-01",
+      "amount": "1080"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2026-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2026-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "80.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

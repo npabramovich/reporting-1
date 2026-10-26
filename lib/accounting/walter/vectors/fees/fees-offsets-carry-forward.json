@@ -1,0 +1,93 @@
+{
+  "id": "fees-offsets-carry-forward",
+  "walter": "0.1",
+  "title": "Fee offsets, with the excess carried forward",
+  "description": "A 700,000 transaction fee at a 100% offset wipes out the first quarter's 500,000 and carries 200,000 forward; a 100,000 monitoring fee at 80% adds 80,000 in the second quarter, so it pays 220,000.",
+  "tags": [
+    "fees",
+    "fees-offsets"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "2000000"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "60000000"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "40000000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "managementFee": {
+      "frequency": "quarterly",
+      "start": "2025-01-01",
+      "end": "2025-07-01",
+      "schedule": [
+        {
+          "from": "2025-01-01",
+          "rate": "0.02",
+          "basis": "commitments"
+        }
+      ],
+      "offsets": {
+        "transaction": "1",
+        "monitoring": "0.8"
+      }
+    }
+  },
+  "flows": [
+    {
+      "type": "portfolio-fee",
+      "date": "2025-02-01",
+      "kind": "transaction",
+      "amount": "700000"
+    },
+    {
+      "type": "portfolio-fee",
+      "date": "2025-05-01",
+      "kind": "monitoring",
+      "amount": "100000"
+    }
+  ],
+  "expected": {
+    "fees": [
+      {
+        "start": "2025-01-01",
+        "gross": "500000.00",
+        "offset": "500000.00",
+        "net": "0.00"
+      },
+      {
+        "start": "2025-04-01",
+        "gross": "500000.00",
+        "offset": "280000.00",
+        "net": "220000.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

@@ -1,0 +1,105 @@
+{
+  "id": "pref-30-360-simple-full-catch-up",
+  "walter": "0.1",
+  "title": "30/360, simple pref, full catch-up",
+  "description": "100 called, 200 back five years later, 8% simple on 30/360 (exactly 5.0 years): 100 of capital, 40 of pref, a 10 catch-up, then 40/10. The GP ends with 20 of the 100 of profit.",
+  "tags": [
+    "pref-simple",
+    "day-count-30-360",
+    "catch-up-full"
+  ],
+  "provenance": "hand-computed (the proposal's worked example)",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "100"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "none",
+          "base": "contributed",
+          "dayCount": "30/360"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2026-01-01",
+      "partner": "lp-a",
+      "amount": "100"
+    },
+    {
+      "type": "distributable",
+      "date": "2031-01-01",
+      "amount": "200"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2031-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "100.00"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "40.00"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "10.00"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "40.00"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "10.00"
+      }
+    ],
+    "totals": {
+      "gp": "20.00",
+      "lp-a": "180.00"
+    }
+  },
+  "tolerance": "0.01"
+}

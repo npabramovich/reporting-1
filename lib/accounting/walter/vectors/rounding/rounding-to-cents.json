@@ -1,0 +1,96 @@
+{
+  "id": "rounding-to-cents",
+  "walter": "0.1",
+  "title": "Partner totals tie to the cent",
+  "description": "133.33 on 100 of capital with a 1.1 hurdle: the GP's exact share is 6.666 and the LP's 126.664. Rounding partner totals first gives 6.67 and 126.66, and the GP's lines round to that total.",
+  "tags": [
+    "rounding"
+  ],
+  "provenance": "ported: Portfolio spec v2, rounding-to-cents",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "100"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "multiple": "1.1"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "100"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-06-30",
+      "amount": "133.33"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2025-06-30",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "100.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "10.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "2.50"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "16.66"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "4.17"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

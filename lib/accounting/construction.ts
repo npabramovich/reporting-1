@@ -17,7 +17,7 @@
 // is asking for a forecast balance sheet here — so it is deliberately built apart from it.
 
 import type { FeeBasis } from './fees'
-import type { RecyclingTreatment } from '@portfolio/fund-engine'
+import type { CarryStep, ContributionPurpose, DatedContribution, DealHistory, RecyclingTreatment } from '@portfolio/fund-engine'
 
 const r = (n: number) => Math.round(n * 100) / 100
 
@@ -267,12 +267,22 @@ export interface ConstructionWaterfallProjection {
   prefCompounds: boolean
   /** What the hurdle accrues on. Absent means 'contributed'. */
   prefBase?: 'contributed' | 'unreturned'
+  /** A hurdle set as a multiple of capital instead of the rate. Absent: the rate. */
+  prefMultiple?: number
+  /** How the rate's years are counted. Absent means ACT/365. */
+  prefDayCount?: '30/360' | 'act/365'
+  /** What the catch-up is measured on. Absent means the preferred return. */
+  catchupMeasure?: 'preferred' | 'profit'
+  /** Where the carry steps up at an LP multiple or IRR. Absent: one carry rate. */
+  carrySteps?: CarryStep[]
+  /** What the first tier returns as capital. Absent: every contribution. */
+  capitalIncludes?: ContributionPurpose[]
   lpCommitmentShare: number
   lpCalledCapital: number
   lpDistributedCapital: number
   fundDistributedCapital: number
   lpNav: number
-  contributions: { date: string; amount: number }[]
+  contributions: DatedContribution[]
   distributions?: { date: string; amount: number }[]
   /**
    * Carry the GP has already been paid, worked out from the LPs' distributions because the books
@@ -280,6 +290,12 @@ export interface ConstructionWaterfallProjection {
    * fundDistributedCapital − lpDistributedCapital.
    */
   carryPaidInferred?: number
+  /**
+   * American terms: the deals as the books show them (cost, dates, realizations), the LPs' share of
+   * contributions and the fees and expenses to date, which together give the realized base the
+   * accounting splits a distribution on (realized-capital.ts). Absent for other kinds.
+   */
+  dealByDeal?: { deals: DealHistory[]; lpShare: number; expenses: number }
 }
 
 /**

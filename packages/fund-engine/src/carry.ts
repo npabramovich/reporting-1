@@ -14,13 +14,14 @@
 // AFTER every other category has landed: carry is computed on the NAV that those allocations
 // produce.
 
-import { runWaterfall } from './waterfall.ts'
+import { runWaterfall, type CarryStep } from './waterfall.ts'
 import { roundCents } from './ledger.ts'
-import { preferredTarget, type DatedContribution, type PrefBase } from './hurdle.ts'
+import { capitalContributions, hurdleTarget, type ContributionPurpose, type DatedContribution, type DayCount, type PrefBase } from './hurdle.ts'
 import { replayWaterfallState, waterfallTermsOf, type PriorDistribution } from './replay.ts'
 
 export { preferredTarget } from './hurdle.ts'
-export type { DatedContribution, HurdleReduction, PrefBase } from './hurdle.ts'
+export { capitalContributions, hurdleTarget, yearFraction } from './hurdle.ts'
+export type { ContributionPurpose, DatedContribution, DayCount, HurdleReduction, HurdleTerms, PrefBase } from './hurdle.ts'
 
 export type CarryKind = 'none' | 'straight' | 'american' | 'european'
 
@@ -37,9 +38,22 @@ export interface VehicleCarryTerms {
   catchupRate: number
   /** How much of a full catch-up the GP gets, 0–1 (waterfall.ts). Absent means 1. */
   catchupSize?: number
+  /** What the catch-up is measured on (waterfall.ts). Absent means 'preferred'. */
+  catchupMeasure?: 'preferred' | 'profit'
   prefCompounds: boolean
   /** What the hurdle accrues on (hurdle.ts). Absent means 'contributed', the original reading. */
   prefBase?: PrefBase
+  /** A hurdle set as a multiple of capital instead of a rate (hurdle.ts). Absent or null: the rate. */
+  prefMultiple?: number | null
+  /** How the rate's years are counted (hurdle.ts). Absent means ACT/365. */
+  prefDayCount?: DayCount
+  /** Where the carry steps up at an LP multiple or IRR (waterfall.ts). Absent: one carry rate. */
+  carrySteps?: CarryStep[]
+  /**
+   * The contribution purposes returned as capital and accrued on (hurdle.ts). Absent: all of them.
+   * ['investments'] is an LPA that returns only invested capital before carry.
+   */
+  capitalIncludes?: ContributionPurpose[]
   /** Single-recipient legacy field; kept for back-compat and as the fallback source. */
   gpEntityId: string | null
   /** Who receives the carry and in what split. Resolved from `carry_recipients`, or
@@ -113,14 +127,17 @@ export interface CarryTargetInput {
 export function carryTarget(input: CarryTargetInput, terms: VehicleCarryTerms): number {
   if (terms.kind === 'none' || terms.carryRate <= 0) return 0
 
-  const contributed = roundCents(input.lps.reduce((s, l) => s + l.contributed, 0))
+  // The capital the first tier owes: every contribution, or only the purposes the terms return.
+  const contributed = terms.capitalIncludes && input.contributions
+    ? roundCents(capitalContributions(input.contributions, terms.capitalIncludes).reduce((s, c) => s + c.amount, 0))
+    : roundCents(input.lps.reduce((s, l) => s + l.contributed, 0))
   const distributed = roundCents(input.lps.reduce((s, l) => s + l.distributed, 0))
   const nav = roundCents(input.lps.reduce((s, l) => s + l.nav, 0))
 
   // What the LPs would hold in total if we sold everything today.
   const liquidation = roundCents(nav + distributed)
 
-  if (terms.kind === 'straight') {
+  if (terms.kind === 'straight' && !terms.carrySteps?.length) {
     // Profit over contributed capital, GP takes its rate. No pref, no catch-up.
     const profit = roundCents(liquidation - contributed)
     if (profit <= 0) return 0
@@ -140,12 +157,12 @@ export function carryTarget(input: CarryTargetInput, terms: VehicleCarryTerms): 
   // American distribution (replay.ts). A liquidation realizes every deal, so here the deal-by-deal
   // capital base IS the whole fund. Run the real waterfall on the hypothetical liquidation.
   const asOf = input.asOf ?? new Date(0).toISOString().slice(0, 10)
-  const contributions = input.contributions ?? []
+  const contributions = capitalContributions(input.contributions ?? [], terms.capitalIncludes)
   // On an unreturned base the hurdle depends on what the actual distributions returned and paid,
   // so replay them (whole-fund: the liquidation realizes every deal) and read its hurdle.
-  const pref = terms.prefBase === 'unreturned'
+  const pref = terms.prefBase === 'unreturned' && terms.prefMultiple == null
     ? replayWaterfallState(input.distributions ?? [], contributions, { ...terms, kind: 'european' }, asOf).preferredTarget
-    : preferredTarget(contributions, asOf, terms.prefRate, terms.prefCompounds)
+    : hurdleTarget(terms, contributions, contributed, asOf)
 
   const result = runWaterfall(liquidation, waterfallTermsOf(terms), {
     contributedCapital: contributed,
@@ -153,6 +170,9 @@ export function carryTarget(input: CarryTargetInput, terms: VehicleCarryTerms): 
     preferredPaid: 0,
     preferredTarget: pref,
     gpCarryPaid: 0,
+    // An IRR step measures the liquidation as if every dollar came back today, which can only
+    // understate the LPs' IRR, so a step is never reached early in the accrual.
+    ...(terms.carrySteps?.some(s => s.lpIrr != null) ? { irr: { asOf, contributions, lpDistributions: [] } } : {}),
   })
 
   // Everything the GP takes across the catch-up and carry tiers.
@@ -170,8 +190,13 @@ export function carryTermsFromRow(row: {
   pref_rate?: unknown
   catchup_rate?: unknown
   catchup_size?: unknown
+  catchup_measure?: unknown
   pref_compounds?: unknown
   pref_base?: unknown
+  pref_multiple?: unknown
+  pref_day_count?: unknown
+  carry_steps?: unknown
+  capital_includes?: unknown
   gp_entity_id?: unknown
   carry_recipients?: unknown
 } | null | undefined): VehicleCarryTerms {
@@ -186,11 +211,50 @@ export function carryTermsFromRow(row: {
     prefRate: Number(row.pref_rate ?? 0),
     catchupRate: Number(row.catchup_rate ?? 1),
     catchupSize: row.catchup_size == null ? 1 : Number(row.catchup_size),
+    ...(row.catchup_measure === 'profit' ? { catchupMeasure: 'profit' as const } : {}),
     prefCompounds: row.pref_compounds !== false,
     prefBase: row.pref_base === 'unreturned' ? 'unreturned' : 'contributed',
+    ...(row.pref_multiple != null && Number(row.pref_multiple) >= 1 ? { prefMultiple: Number(row.pref_multiple) } : {}),
+    ...(row.pref_day_count === '30/360' ? { prefDayCount: '30/360' as DayCount } : {}),
+    ...(carryStepsFromRow(row.carry_steps)),
+    ...(capitalIncludesFromRow(row.capital_includes)),
     gpEntityId,
     recipients: resolveCarryRecipients(row.carry_recipients, gpEntityId),
   }
+}
+
+const PURPOSES: ContributionPurpose[] = ['investments', 'fees', 'expenses', 'other']
+
+/** The stored steps (`carry_steps`, jsonb), keeping only well-formed ones. */
+function carryStepsFromRow(v: unknown): { carrySteps?: CarryStep[] } {
+  if (!Array.isArray(v)) return {}
+  const num = (x: unknown) => (x == null || x === '' ? undefined : Number(x))
+  const steps: CarryStep[] = []
+  for (const raw of v) {
+    if (!raw || typeof raw !== 'object') continue
+    const o = raw as Record<string, unknown>
+    const carryRate = num(o.carryRate)
+    const lpMultiple = num(o.lpMultiple)
+    const lpIrr = num(o.lpIrr)
+    if (carryRate == null || !Number.isFinite(carryRate)) continue
+    if ((lpMultiple == null) === (lpIrr == null)) continue
+    const catchUpRate = num(o.catchUpRate)
+    const catchUpTarget = num(o.catchUpTarget)
+    steps.push({
+      carryRate,
+      ...(lpMultiple != null ? { lpMultiple } : { lpIrr: lpIrr! }),
+      ...(catchUpRate != null && catchUpRate > 0 ? { catchUpRate } : {}),
+      ...(catchUpTarget != null ? { catchUpTarget } : {}),
+    })
+  }
+  return steps.length > 0 ? { carrySteps: steps } : {}
+}
+
+/** The stored purposes (`capital_includes`, text[]). All four, or none stored, is the default. */
+function capitalIncludesFromRow(v: unknown): { capitalIncludes?: ContributionPurpose[] } {
+  if (!Array.isArray(v)) return {}
+  const list = PURPOSES.filter(p => v.includes(p))
+  return list.length > 0 && list.length < PURPOSES.length ? { capitalIncludes: list } : {}
 }
 
 export interface CarryAccrual {

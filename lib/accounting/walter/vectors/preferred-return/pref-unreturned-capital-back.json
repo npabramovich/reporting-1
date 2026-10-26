@@ -1,0 +1,83 @@
+{
+  "id": "pref-unreturned-capital-back",
+  "walter": "0.1",
+  "title": "Unreturned base: only the unpaid pref keeps compounding",
+  "description": "All capital comes back after a year, leaving 80 of unpaid pref, which compounds a second year: 86.40.",
+  "tags": [
+    "pref-compound",
+    "pref-unreturned"
+  ],
+  "provenance": "ported: Portfolio spec v2, unreturned-capital-back",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "unreturned",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2021-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2022-01-01",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2023-01-01",
+      "amount": "86.40"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2022-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2023-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "86.40"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

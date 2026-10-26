@@ -134,7 +134,7 @@ describe('splitDistribution', () => {
     expect(split.carryLines.map(l => l.lpEntityId)).toEqual(['gp1', 'gp2'])
   })
 
-  it('excludes the carry recipient from the LP tiers and warns when it has contributed capital', () => {
+  it('gives a carry recipient\'s own capital its pro-rata share outside the tiers', () => {
     const split = splitDistribution({
       total: 100,
       terms: straight(0.2),
@@ -143,8 +143,26 @@ describe('splitDistribution', () => {
       priors: [],
       asOf: '2026-01-01',
     })
-    expect(split.lines).toEqual([{ lpEntityId: 'a', amount: 100 }])
-    expect(split.warnings.some(w => w.includes(GP))).toBe(true)
+    // 1% of the capital is the GP's, so 1 of the 100 is its own capital back and bears no carry.
+    expect(split.lines).toEqual([{ lpEntityId: 'a', amount: 99 }, { lpEntityId: GP, amount: 1 }])
+    expect(split.carryFreeLines).toEqual([{ lpEntityId: GP, capital: 1, profit: 0 }])
+    expect(split.tiers.returnOfCapital).toBe(99)
+    expect(split.warnings.some(w => w.includes(GP))).toBe(false)
+  })
+
+  it('pays the carry-free share as profit once the recipient\'s capital is back', () => {
+    const split = splitDistribution({
+      total: 1000,
+      terms: straight(0.2),
+      partners: [partner('a', 900, 0, 900), partner(GP, 100, 0, 100)],
+      contributions: [{ date: '2025-01-01', amount: 900 }],
+      priors: [{ date: '2025-06-01', amount: 900 }],
+      asOf: '2026-01-01',
+    })
+    // The GP's tenth is 100, all profit: its 100 of capital already came back.
+    expect(split.carryFreeLines).toEqual([{ lpEntityId: GP, capital: 0, profit: 100 }])
+    // The other 900 is all profit for the tiers: 720 to the LP, 180 carry.
+    expect(split.tiers.carry).toBe(180)
   })
 
   it('warns when the books disagree with the replayed carry', () => {
