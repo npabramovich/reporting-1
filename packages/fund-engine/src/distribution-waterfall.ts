@@ -49,6 +49,12 @@ export interface PartnerEconomics {
   distributed: number
   /** Capital account balance today. */
   ending: number
+  /**
+   * A carry recipient whose own capital bears carry, as an LP's does: it runs through the LP tiers
+   * instead of taking a carry-free slice, and its contributions belong in `contributions`. Rare;
+   * ignored for anyone who isn't a recipient, since they bear carry already.
+   */
+  carryBearing?: boolean
 }
 
 export { replayWaterfallState } from './replay.ts'
@@ -83,7 +89,7 @@ export interface WaterfallTiers {
 
 export interface DistributionSplit {
   method: SplitMethod
-  /** LP lines — every partner outside the carry recipients, pro-rata within the LP tiers. */
+  /** LP lines — every partner outside the carry recipients (and any recipient that bears carry), pro-rata within the LP tiers. */
   lines: { lpEntityId: string; amount: number }[]
   /** Carry lines — the GP's take, split across the recipients by their percentages. */
   carryLines: { lpEntityId: string; amount: number }[]
@@ -191,12 +197,13 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
     }
   }
 
-  const lps = input.partners.filter(p => !recipientIds.has(p.lpEntityId))
+  const lps = input.partners.filter(p => !recipientIds.has(p.lpEntityId) || p.carryBearing)
 
   // THE GP'S OWN CAPITAL. A carry recipient that has contributed (the GP's commitment) bears no
   // carry, as the close assumes, so it takes its pro-rata share of the distribution by capital
   // outside the tiers: its capital back first, then its profit. The tiers divide the rest.
-  const carryFree = input.partners.filter(p => recipientIds.has(p.lpEntityId) && p.contributed > 0)
+  // A recipient marked carryBearing is an LP here instead.
+  const carryFree = input.partners.filter(p => recipientIds.has(p.lpEntityId) && !p.carryBearing && p.contributed > 0)
   const slices = new Map<string, { capital: number; profit: number }>()
   if (carryFree.length > 0) {
     const byCapital = allocateAmount(total, input.partners.map(p => ({ lpEntityId: p.lpEntityId, commitment: Math.max(0, p.contributed) })))

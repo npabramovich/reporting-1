@@ -283,13 +283,15 @@ export function run(termsIn: unknown, flowsIn: unknown) {
   })
   const grouped = defined.length > 0
 
-  // The engine's LPs are every partner outside the carry recipients, and all of them bear carry.
+  // The engine's LPs are the partners whose capital bears carry: everyone outside the carry
+  // recipients, and a recipient whose own commit bears carry. Other recipients' capital is
+  // carry-free (distribution-waterfall.ts).
   const recipientIds = new Set(recipients.map(r => r.lpEntityId))
-  // A recipient's own capital is carry-free (distribution-waterfall.ts).
+  const bearingIds = new Set<string>()
   for (const p of partners) {
     const bearing = p.carryBearing ?? p.role === 'lp'
     if (!bearing && !recipientIds.has(p.id)) unsupported(`a carry-free partner that isn't a carry recipient (${p.id})`)
-    if (bearing && recipientIds.has(p.id)) unsupported(`a carry recipient that also bears carry (${p.id})`)
+    if (bearing) bearingIds.add(p.id)
   }
 
   const includes = terms.waterfall.returnOfCapital?.includes ?? PURPOSES
@@ -341,7 +343,7 @@ export function run(termsIn: unknown, flowsIn: unknown) {
   }
   const contributedTo = (date: string, id?: string) =>
     roundCents(contributions.filter(c => c.date <= date && (id === undefined || c.partner === id)).reduce((s, c) => s + c.amount, 0))
-  const lpIds = partners.filter(p => !recipientIds.has(p.id)).map(p => p.id)
+  const lpIds = partners.filter(p => bearingIds.has(p.id)).map(p => p.id)
   /** Pro-rata across the LPs by what they've put in, falling back to commitments (spec 04 §1). */
   const lpWeights = (date: string) => {
     const byCapital = lpIds.map(id => ({ lpEntityId: id, commitment: contributedTo(date, id) }))
@@ -367,7 +369,7 @@ export function run(termsIn: unknown, flowsIn: unknown) {
     fundTerms: carry,
     lpEntityIds: lpIds,
     lpTerms,
-    contributions: contributions.filter(c => !recipientIds.has(c.partner) && c.date <= date)
+    contributions: contributions.filter(c => bearingIds.has(c.partner) && c.date <= date)
       .map(c => ({ lpEntityId: c.partner, date: c.date, amount: c.amount, purpose: c.purpose })),
     realizedCapitalFor: members => realizedOn(date, members),
   })
@@ -428,8 +430,9 @@ export function run(termsIn: unknown, flowsIn: unknown) {
             contributed: contributedTo(f.date, p.id),
             distributed: ownReceived.get(p.id) ?? 0,
             ending: roundCents(contributedTo(f.date, p.id) - (ownReceived.get(p.id) ?? 0)),
+            ...(recipientIds.has(p.id) && bearingIds.has(p.id) ? { carryBearing: true } : {}),
           })),
-          contributions: contributions.filter(c => !recipientIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount, purpose: c.purpose })),
+          contributions: contributions.filter(c => bearingIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount, purpose: c.purpose })),
           priors: [...priors],
           asOf: f.date,
           realizedCapital: realizedOn(f.date),
@@ -520,12 +523,12 @@ export function run(termsIn: unknown, flowsIn: unknown) {
         const lpCapital = lpIds.reduce((s, id) => s + contributedTo(f.date, id), 0)
         const allCapital = contributedTo(f.date)
         const lpNav = allCapital > 0 ? nav * (lpCapital / allCapital) : nav
-        const lpReceived = lpIds.reduce((s, id) => s + (received.get(id) ?? 0), 0)
+        const lpReceived = lpIds.reduce((s, id) => s + (ownReceived.get(id) ?? 0), 0)
         const target = grouped
           ? groupedFundEndEntitlement([...priors, { date: f.date, amount: roundCents(lpNav) }], groupsOn(f.date), f.date).total
           : carryTarget({
           lps: [{ lpEntityId: 'lps', contributed: roundCents(lpCapital), distributed: roundCents(lpReceived), nav: roundCents(lpNav) }],
-          contributions: contributions.filter(c => !recipientIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount, purpose: c.purpose })),
+          contributions: contributions.filter(c => bearingIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount, purpose: c.purpose })),
           asOf: f.date,
           distributions: priors,
         }, carry)
@@ -555,7 +558,7 @@ export function run(termsIn: unknown, flowsIn: unknown) {
           }
           break
         }
-        const lpContributions = contributions.filter(c => !recipientIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount, purpose: c.purpose }))
+        const lpContributions = contributions.filter(c => bearingIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount, purpose: c.purpose }))
         const c = clawbackAtFundEnd(priors, lpContributions, carry, f.date, gpPaid)
         clawback = { date: f.date, paid: money(c.paid), entitlement: money(c.entitlement), amount: money(c.amount) }
         if (c.amount > 0) {

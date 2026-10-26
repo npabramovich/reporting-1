@@ -165,6 +165,24 @@ describe('splitDistribution', () => {
     expect(split.tiers.carry).toBe(180)
   })
 
+  it('runs a carry-bearing recipient\'s capital through the LP tiers', () => {
+    const split = splitDistribution({
+      total: 200,
+      terms: straight(0.2),
+      partners: [partner('a', 90, 90), { ...partner(GP, 10, 10), carryBearing: true }],
+      contributions: [{ date: '2025-01-01', amount: 90 }, { date: '2025-01-01', amount: 10 }],
+      priors: [],
+      asOf: '2026-01-01',
+    })
+    // All 100 of capital comes back through the tiers, then the 100 of profit splits 80/20, the
+    // GP's own tenth of the 80 included: no carry-free slice.
+    expect(split.carryFreeLines).toBeUndefined()
+    expect(split.tiers.returnOfCapital).toBe(100)
+    expect(split.tiers.carry).toBe(20)
+    expect(split.lines).toEqual([{ lpEntityId: 'a', amount: 162 }, { lpEntityId: GP, amount: 18 }])
+    expect(split.carryLines).toEqual([{ lpEntityId: GP, amount: 20 }])
+  })
+
   it('warns when the books disagree with the replayed carry', () => {
     const split = splitDistribution({
       total: 100,
