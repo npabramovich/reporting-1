@@ -2,7 +2,7 @@
 // state for running a distribution without a ledger. Schema documented in the README.
 
 import { NO_CARRY, resolveCarryRecipients, type CarryKind, type VehicleCarryTerms } from './carry.ts'
-import type { WaterfallState } from './waterfall.ts'
+import type { CarryStep, WaterfallState } from './waterfall.ts'
 import type { RealizedCapital } from './replay.ts'
 import type { PartnerMapping } from './books.ts'
 
@@ -58,7 +58,31 @@ export function parseVehicleTerms(raw: unknown): VehicleTerms {
   if (dayCountRaw !== 'act/365' && dayCountRaw !== '30/360') throw new Error('terms: carry.prefDayCount must be act/365 or 30/360')
   const measureRaw = c.catchupMeasure ?? c.catchup_measure ?? 'preferred'
   if (measureRaw !== 'preferred' && measureRaw !== 'profit') throw new Error('terms: carry.catchupMeasure must be preferred or profit')
+  const stepsRaw = c.carrySteps ?? c.carry_steps
+  if (stepsRaw != null && !Array.isArray(stepsRaw)) throw new Error('terms: carry.carrySteps must be a list')
+  const carrySteps: CarryStep[] = ((stepsRaw ?? []) as any[]).map((st, i) => {
+    const field = `carry.carrySteps[${i}]`
+    const rate = num(st?.carryRate, `${field}.carryRate`, NaN)
+    if (!(rate > 0 && rate < 1)) throw new Error(`terms: ${field}.carryRate is a fraction (0.25 for 25%), got ${rate}`)
+    const hasM = st?.lpMultiple != null
+    const hasI = st?.lpIrr != null
+    if (hasM === hasI) throw new Error(`terms: ${field} needs lpMultiple or lpIrr, not both`)
+    const cu = st?.catchUpRate == null ? undefined : num(st.catchUpRate, `${field}.catchUpRate`, 0)
+    return {
+      carryRate: rate,
+      ...(hasM ? { lpMultiple: num(st.lpMultiple, `${field}.lpMultiple`, 0) } : { lpIrr: num(st.lpIrr, `${field}.lpIrr`, 0) }),
+      ...(cu ? { catchUpRate: cu } : {}),
+    }
+  })
+  const includesRaw = c.capitalIncludes ?? c.capital_includes
+  const PURPOSES = ['investments', 'fees', 'expenses', 'other'] as const
+  if (includesRaw != null && (!Array.isArray(includesRaw) || includesRaw.some((p: unknown) => !(PURPOSES as readonly unknown[]).includes(p)))) {
+    throw new Error('terms: carry.capitalIncludes lists investments, fees, expenses or other')
+  }
+  const capitalIncludes = includesRaw ? PURPOSES.filter(p => includesRaw.includes(p)) : undefined
   const extra = {
+    ...(carrySteps.length > 0 ? { carrySteps } : {}),
+    ...(capitalIncludes && capitalIncludes.length < PURPOSES.length ? { capitalIncludes } : {}),
     ...(prefMultiple !== undefined ? { prefMultiple } : {}),
     ...(dayCountRaw === '30/360' ? { prefDayCount: '30/360' as const } : {}),
     ...(measureRaw === 'profit' ? { catchupMeasure: 'profit' as const } : {}),

@@ -19,6 +19,8 @@ export {
 } from '@portfolio/fund-engine'
 export type {
   CarryKind,
+  CarryStep,
+  ContributionPurpose,
   DayCount,
   PrefBase,
   HurdleReduction,

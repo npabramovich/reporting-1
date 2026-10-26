@@ -13,10 +13,25 @@
 
 import { roundCents } from './ledger.ts'
 
+/** What a contribution paid for. Untagged contributions count as capital under any terms. */
+export type ContributionPurpose = 'investments' | 'fees' | 'expenses' | 'other'
+
 /** A dated contribution, for accruing the preferred return. */
 export interface DatedContribution {
   date: string
   amount: number
+  /** What it paid for, when the terms leave some purposes out of capital (`capitalIncludes`). */
+  purpose?: ContributionPurpose
+}
+
+/**
+ * The contributions that count as capital: to be returned, and to accrue the pref on. An LPA that
+ * returns only invested capital before carry leaves fees and expenses out (`capitalIncludes`
+ * ['investments']); absent, every contribution counts.
+ */
+export function capitalContributions(contributions: DatedContribution[], includes?: ContributionPurpose[] | null): DatedContribution[] {
+  if (!includes) return contributions
+  return contributions.filter(c => c.purpose === undefined || includes.includes(c.purpose))
 }
 
 /** What one distribution returned and paid, which shrinks an 'unreturned' hurdle base. */

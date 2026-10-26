@@ -14,9 +14,6 @@ import { compare, type Vector } from './compare'
 import { ENGINE, run } from './adapter'
 
 const GAPS: Record<string, string> = {
-  'roc-excludes-fees': 'contributions are not tagged by purpose, so every one is returned as capital',
-  'split-tiered-irr-catch-up': 'one carry rate: no split that steps up at an LP IRR',
-  'split-tiered-multiple': 'one carry rate: no split that steps up at an LP multiple',
 }
 
 const root = join(__dirname, 'vectors')

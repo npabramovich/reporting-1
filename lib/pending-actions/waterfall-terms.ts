@@ -34,21 +34,26 @@ export function describeTerms(t: Pick<ValidWaterfallTerms, 'kind' | 'carryRate' 
   prefMultiple?: number | null
   prefDayCount?: ValidWaterfallTerms['prefDayCount']
   catchupMeasure?: ValidWaterfallTerms['catchupMeasure']
+  carrySteps?: ValidWaterfallTerms['carrySteps']
+  capitalIncludes?: ValidWaterfallTerms['capitalIncludes']
 }): string {
   if (t.kind === 'none' || t.carryRate <= 0) return 'no carry'
   const label = { straight: 'straight', american: 'American (deal-by-deal)', european: 'European (whole-fund)', none: 'no' }[t.kind]
-  if (t.kind === 'straight') return `${label} ${pct(t.carryRate)} carry, no hurdle`
+  const steps = (t.carrySteps ?? []).map(s =>
+    `, ${pct(s.carryRate)} once the LPs reach ${s.lpMultiple != null ? `${s.lpMultiple}×` : `a ${pct(s.lpIrr!)} IRR`}${s.catchUpRate ? ` (${pct(s.catchUpRate)} catch-up)` : ''}`).join('')
+  const capital = t.capitalIncludes && t.capitalIncludes.length < 4 ? `, returning only ${t.capitalIncludes.join(' and ')} as capital` : ''
+  if (t.kind === 'straight') return `${label} ${pct(t.carryRate)} carry, no hurdle${steps}${capital}`
   const base = t.prefBase === 'unreturned' ? ' on unreturned capital' : ''
   const days = t.prefDayCount === '30/360' ? ' (30/360)' : ''
   const hurdle = t.prefMultiple != null ? `a ${t.prefMultiple}× hurdle`
     : t.prefRate > 0 ? `${pct(t.prefRate)} ${t.prefCompounds ? 'compounding' : 'simple'} preferred return${base}${days}` : 'no preferred return'
   const size = t.catchupSize != null && t.catchupSize < 1 && t.catchupRate > 0 ? `, up to ${pct(t.catchupSize)} of a full catch-up` : ''
   const measure = t.catchupMeasure === 'profit' && t.catchupRate > 0 && t.catchupRate < 1 ? ' measured on all profit' : ''
-  return `${label} ${pct(t.carryRate)} carry, ${hurdle}, ${pct(t.catchupRate)} GP catch-up${size}${measure}`
+  return `${label} ${pct(t.carryRate)} carry, ${hurdle}, ${pct(t.catchupRate)} GP catch-up${size}${measure}${steps}${capital}`
 }
 
 function currentAsValid(c: VehicleCarryTerms): ValidWaterfallTerms {
-  return { kind: c.kind, carryRate: c.carryRate, prefRate: c.prefRate, catchupRate: c.catchupRate, catchupSize: c.catchupSize ?? 1, prefCompounds: c.prefCompounds, prefBase: c.prefBase ?? 'contributed', prefMultiple: c.prefMultiple ?? null, prefDayCount: c.prefDayCount ?? 'act/365', catchupMeasure: c.catchupMeasure ?? 'preferred', gpEntityId: c.gpEntityId, recipients: c.recipients }
+  return { kind: c.kind, carryRate: c.carryRate, prefRate: c.prefRate, catchupRate: c.catchupRate, catchupSize: c.catchupSize ?? 1, prefCompounds: c.prefCompounds, prefBase: c.prefBase ?? 'contributed', prefMultiple: c.prefMultiple ?? null, prefDayCount: c.prefDayCount ?? 'act/365', catchupMeasure: c.catchupMeasure ?? 'preferred', carrySteps: c.carrySteps ?? [], capitalIncludes: c.capitalIncludes ?? ['investments', 'fees', 'expenses', 'other'], gpEntityId: c.gpEntityId, recipients: c.recipients }
 }
 
 async function resolve(deps: ActionDeps, input: SetWaterfallTermsInput) {
@@ -77,7 +82,10 @@ export async function previewSetWaterfallTerms(deps: ActionDeps, input: SetWater
 
   const changes = (['kind', 'carryRate', 'prefRate', 'catchupRate', 'catchupSize', 'prefCompounds', 'prefBase', 'prefMultiple', 'prefDayCount', 'catchupMeasure'] as const)
     .filter(k => before[k] !== terms[k])
-    .map(k => ({ field: k, before: before[k], after: terms[k] }))
+    .map(k => ({ field: k as string, before: before[k] as unknown, after: terms[k] as unknown }))
+  for (const k of ['carrySteps', 'capitalIncludes'] as const) {
+    if (JSON.stringify(before[k]) !== JSON.stringify(terms[k])) changes.push({ field: k, before: before[k], after: terms[k] })
+  }
 
   // Each quote is checked against the document here, on the server: the approver should not have
   // to take the stager's word that the LPA says what it quotes.

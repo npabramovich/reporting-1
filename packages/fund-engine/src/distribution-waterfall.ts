@@ -26,7 +26,7 @@
 // therefore outside the waterfall here exactly as it is there — a warning says so, and the GP can
 // edit the lines.
 
-import { runWaterfall, type WaterfallState } from './waterfall.ts'
+import { runWaterfall, type CarryBand, type WaterfallState } from './waterfall.ts'
 import type { DatedContribution } from './hurdle.ts'
 import type { VehicleCarryTerms } from './carry.ts'
 import {
@@ -76,6 +76,8 @@ export interface WaterfallTiers {
    */
   carryFree?: number
   carryFreeCapital?: number
+  /** Each split, and the catch-up at each step, when the carry steps up. `carry` and `profitToLP` are their totals. */
+  bands?: CarryBand[]
 }
 
 export interface DistributionSplit {
@@ -195,6 +197,7 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
     profitToLP: result.toCarryLP,
     toLP: result.toLP,
     toGP: result.toGP,
+    ...(result.bands ? { bands: result.bands } : {}),
     ...(sliced > 0 ? { carryFree: sliced, carryFreeCapital: roundCents([...slices.values()].reduce((s, v) => s + v.capital, 0)) } : {}),
   }
 

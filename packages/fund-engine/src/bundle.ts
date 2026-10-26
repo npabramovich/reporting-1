@@ -91,6 +91,8 @@ export function termsFileFrom(input: {
       ...(c.prefMultiple != null ? { prefMultiple: c.prefMultiple } : {}),
       ...(c.prefDayCount === '30/360' ? { prefDayCount: c.prefDayCount } : {}),
       ...(c.catchupMeasure === 'profit' ? { catchupMeasure: c.catchupMeasure } : {}),
+      ...(c.carrySteps?.length ? { carrySteps: c.carrySteps } : {}),
+      ...(c.capitalIncludes ? { capitalIncludes: c.capitalIncludes } : {}),
       gpEntityId: c.gpEntityId,
       recipients: c.recipients.map(r => ({ partner: r.lpEntityId, pct: r.pct })),
     },

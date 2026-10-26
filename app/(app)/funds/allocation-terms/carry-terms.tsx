@@ -15,6 +15,9 @@ type Kind = 'none' | 'straight' | 'american' | 'european'
 
 interface Candidate { lpEntityId: string; name: string; partnerClass: string }
 interface Recipient { lpEntityId: string; pct: number }
+interface Step { lpMultiple?: number; lpIrr?: number; carryRate: number; catchUpRate?: number }
+/** A step as typed: the threshold and rates are strings until saved. */
+interface StepRow { at: 'multiple' | 'irr'; threshold: string; carry: string; catchUp: string }
 
 interface Terms {
   kind: Kind
@@ -27,6 +30,8 @@ interface Terms {
   prefMultiple?: number | null
   prefDayCount?: 'act/365' | '30/360'
   catchupMeasure?: 'preferred' | 'profit'
+  carrySteps?: Step[]
+  capitalIncludes?: string[]
   recipients: Recipient[]
 }
 
@@ -56,6 +61,8 @@ export function CarryTerms() {
   const [multiple, setMultiple] = useState('')
   const [dayCount, setDayCount] = useState<'act/365' | '30/360'>('act/365')
   const [catchupMeasure, setCatchupMeasure] = useState<'preferred' | 'profit'>('preferred')
+  const [steps, setSteps] = useState<StepRow[]>([])
+  const [investedOnly, setInvestedOnly] = useState(false)
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [vehicleName, setVehicleName] = useState('')
@@ -78,6 +85,13 @@ export function CarryTerms() {
     setMultiple(t.prefMultiple != null ? String(t.prefMultiple) : '')
     setDayCount(t.prefDayCount === '30/360' ? '30/360' : 'act/365')
     setCatchupMeasure(t.catchupMeasure === 'profit' ? 'profit' : 'preferred')
+    setSteps((t.carrySteps ?? []).map(st => ({
+      at: st.lpIrr != null ? 'irr' : 'multiple',
+      threshold: st.lpIrr != null ? pct(st.lpIrr) : String(st.lpMultiple ?? ''),
+      carry: pct(st.carryRate),
+      catchUp: st.catchUpRate ? pct(st.catchUpRate) : '',
+    })))
+    setInvestedOnly(Array.isArray(t.capitalIncludes) && t.capitalIncludes.length === 1 && t.capitalIncludes[0] === 'investments')
     setRecipients(t.recipients ?? [])
     setCandidates(d.candidates ?? [])
     setVehicleName(d.group ?? '')
@@ -115,6 +129,12 @@ export function CarryTerms() {
         prefMultiple: hurdleAs === 'multiple' && multiple.trim() !== '' ? Number(multiple) : null,
         prefDayCount: dayCount,
         catchupMeasure,
+        carrySteps: steps.map(st => ({
+          ...(st.at === 'irr' ? { lpIrr: frac(st.threshold) } : { lpMultiple: st.threshold.trim() === '' ? null : Number(st.threshold) }),
+          carryRate: frac(st.carry),
+          ...(st.catchUp.trim() !== '' && frac(st.catchUp) > 0 ? { catchUpRate: frac(st.catchUp) } : {}),
+        })),
+        capitalIncludes: investedOnly ? ['investments'] : ['investments', 'fees', 'expenses', 'other'],
         carryRecipients: recipients,
       }),
     })
@@ -337,6 +357,54 @@ export function CarryTerms() {
               </div>
             </Field>
           )}
+
+          <Field label="Capital returned before carry" hint="Most LPAs return fees and expenses too">
+            <Choice
+              value={investedOnly ? 'invested' : 'all'}
+              onChange={v => setInvestedOnly(v === 'invested')}
+              options={[['all', 'All contributions'], ['invested', 'Invested capital only']]}
+            />
+          </Field>
+          {investedOnly && (
+            <p className="text-xs text-muted-foreground max-w-3xl">
+              The capital that paid management fees and partnership expenses is not returned before
+              the split, and the preferred return doesn&rsquo;t accrue on it. The books don&rsquo;t say
+              which call paid which fee, so each fee uses the partner&rsquo;s oldest capital first.
+            </p>
+          )}
+
+          <Field label="Carry steps up" hint="A higher rate once the LPs reach a multiple or an IRR">
+            <div className="space-y-2">
+              {steps.map((st, i) => {
+                const set = (patch: Partial<StepRow>) => setSteps(prev => prev.map((x, j) => j === i ? { ...x, ...patch } : x))
+                return (
+                  <div key={i} className="flex flex-wrap items-end gap-2">
+                    <Choice value={st.at} onChange={at => set({ at })} options={[['multiple', 'LP multiple'], ['irr', 'LP IRR']]} />
+                    <div className="w-24">
+                      <Suffix suffix={st.at === 'irr' ? '%' : '×'}>
+                        <Input value={st.threshold} onChange={e => set({ threshold: e.target.value })} placeholder={st.at === 'irr' ? 'e.g. 15' : 'e.g. 2.5'} className="h-8 text-sm" />
+                      </Suffix>
+                    </div>
+                    <span className="text-xs text-muted-foreground pb-2">then</span>
+                    <div className="w-24">
+                      <Suffix suffix="%">
+                        <Input value={st.carry} onChange={e => set({ carry: e.target.value })} placeholder="carry" className="h-8 text-sm" />
+                      </Suffix>
+                    </div>
+                    <div className="w-32">
+                      <Suffix suffix="%">
+                        <Input value={st.catchUp} onChange={e => set({ catchUp: e.target.value })} placeholder="catch-up (opt.)" className="h-8 text-sm" />
+                      </Suffix>
+                    </div>
+                    <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => setSteps(prev => prev.filter((_, j) => j !== i))}>Remove</Button>
+                  </div>
+                )
+              })}
+              <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => setSteps(prev => [...prev, { at: 'multiple', threshold: '', carry: '', catchUp: '' }])}>
+                Add a step
+              </Button>
+            </div>
+          </Field>
 
           {/* Carry of 0% accrues nothing — the single most common reason "carry isn't showing up".
               Warn in place rather than silently saving a term that does nothing. */}

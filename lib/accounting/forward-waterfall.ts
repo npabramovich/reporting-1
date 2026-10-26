@@ -19,6 +19,7 @@
 // is measured whole fund under either kind, as the close accrues it (carry.ts).
 
 import {
+  capitalContributions,
   hurdleTarget,
   realizedCapitalFromDeals,
   runWaterfall,
@@ -90,18 +91,22 @@ export function forwardWaterfall(p: ConstructionWaterfallProjection, projected?:
     catchUpRate: straight ? 1 : p.catchupRate,
     catchUpSize: p.catchupSize ?? 1,
     ...(p.catchupMeasure === 'profit' ? { catchUpMeasure: 'profit' as const } : {}),
+    ...(p.carrySteps?.length ? { steps: p.carrySteps } : {}),
   }
   const prefOn = !straight && (p.prefRate > 0 || p.prefMultiple != null)
   const unreturned = p.prefBase === 'unreturned'
-  const contributions: DatedContribution[] = [...p.contributions]
+  // Only the purposes the terms return count as capital. A projected call isn't tagged, so it counts
+  // in full: the forecast can't tell which part of a future call pays fees.
+  const contributions: DatedContribution[] = capitalContributions([...p.contributions], p.capitalIncludes)
   const reductions: HurdleReduction[] = []
+  const irr = irrHistory(p, contributions)
 
   const target = (date: string) => prefOn
     ? hurdleTarget(p, contributions, calledTo(date), date, unreturned ? reductions : undefined)
     : 0
   const calledTo = (date: string) => roundCents(contributions.filter(c => c.date <= date && c.amount > 0).reduce((s, c) => s + c.amount, 0))
 
-  if (p.kind === 'american' && p.dealByDeal && projected) return dealByDealWaterfall(p, projected, terms, contributions, calledTo)
+  if (p.kind === 'american' && p.dealByDeal && projected) return dealByDealWaterfall(p, projected, terms, contributions, calledTo, irr)
 
   // On the unreturned basis the hurdle stops on capital already returned and pref already paid, so
   // the history has to say what each past distribution returned. The capital and pref tiers go
@@ -117,7 +122,7 @@ export function forwardWaterfall(p: ConstructionWaterfallProjection, projected?:
     }
   }
 
-  let called = p.lpCalledCapital
+  let called = p.capitalIncludes ? calledTo(p.asOf) : p.lpCalledCapital
   const initialPref = target(p.asOf)
   let state: WaterfallState = {
     contributedCapital: called,
@@ -127,7 +132,7 @@ export function forwardWaterfall(p: ConstructionWaterfallProjection, projected?:
     gpCarryPaid: Math.max(0, p.fundDistributedCapital - p.lpDistributedCapital),
   }
 
-  const stateAt = (date: string): WaterfallState => ({ ...state, contributedCapital: called, preferredTarget: target(date) })
+  const stateAt = (date: string): WaterfallState => ({ ...state, contributedCapital: called, preferredTarget: target(date), ...irr(date, state) })
 
   return {
     terms,
@@ -160,6 +165,7 @@ function dealByDealWaterfall(
   terms: WaterfallTerms,
   contributions: DatedContribution[],
   calledTo: (date: string) => number,
+  irr: ReturnType<typeof irrHistory>,
 ): ForwardWaterfall {
   const basis = p.dealByDeal!
   const deals = new Map<string, DealHistory>()
@@ -221,7 +227,7 @@ function dealByDealWaterfall(
     gpCarryPaid: Math.max(0, p.fundDistributedCapital - p.lpDistributedCapital),
   }
 
-  const stateAt = (date: string): WaterfallState => ({ ...state, contributedCapital: capitalTo(date), preferredTarget: target(date) })
+  const stateAt = (date: string): WaterfallState => ({ ...state, contributedCapital: capitalTo(date), preferredTarget: target(date), ...irr(date, state) })
 
   return {
     terms,
@@ -241,6 +247,19 @@ function dealByDealWaterfall(
     stateAt,
     liquidationStateAt: (date: string) => ({ ...state, contributedCapital: calledTo(date), preferredTarget: wholeTarget(date) }),
   }
+}
+
+/**
+ * The LPs' dated cash for a carry step measured on their IRR: the contributions and their
+ * distributions so far, and what each distribution the forecast runs adds (the state carries it).
+ * Nothing when no step measures an IRR.
+ */
+function irrHistory(p: ConstructionWaterfallProjection, contributions: DatedContribution[]) {
+  const on = !!p.carrySteps?.some(s => s.lpIrr != null)
+  const booked = (p.distributions ?? []).filter(d => d.amount > 0 && d.date <= p.asOf)
+  return (date: string, state: WaterfallState): Partial<WaterfallState> => on
+    ? { irr: { asOf: date, contributions: contributions.filter(c => c.date <= date), lpDistributions: state.irr?.lpDistributions ?? booked } }
+    : {}
 }
 
 /** The warning a forecast shows when deal-by-deal terms run whole fund, for want of the deals. */

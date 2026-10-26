@@ -17,7 +17,7 @@
 // is asking for a forecast balance sheet here — so it is deliberately built apart from it.
 
 import type { FeeBasis } from './fees'
-import type { DealHistory, RecyclingTreatment } from '@portfolio/fund-engine'
+import type { CarryStep, ContributionPurpose, DealHistory, RecyclingTreatment } from '@portfolio/fund-engine'
 
 const r = (n: number) => Math.round(n * 100) / 100
 
@@ -273,6 +273,10 @@ export interface ConstructionWaterfallProjection {
   prefDayCount?: '30/360' | 'act/365'
   /** What the catch-up is measured on. Absent means the preferred return. */
   catchupMeasure?: 'preferred' | 'profit'
+  /** Where the carry steps up at an LP multiple or IRR. Absent: one carry rate. */
+  carrySteps?: CarryStep[]
+  /** What the first tier returns as capital. Absent: every contribution. */
+  capitalIncludes?: ContributionPurpose[]
   lpCommitmentShare: number
   lpCalledCapital: number
   lpDistributedCapital: number

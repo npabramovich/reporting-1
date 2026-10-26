@@ -48,6 +48,8 @@ agreed to is worse than accruing none.
 | `catchupMeasure` | `catchup_measure` | `preferred` \| `profit` | `preferred` | What the catch-up is measured on (§3.2). They differ only when the catch-up rate is below 1. |
 | `prefMultiple` | `pref_multiple` | 1 ≤ m ≤ 10, or null | null | A hurdle set as a multiple of the capital owed, instead of `prefRate` (§5). |
 | `prefDayCount` | `pref_day_count` | `act/365` \| `30/360` | `act/365` | How the rate's years are counted (§5). |
+| `carrySteps` | `carry_steps` (jsonb `[{lpMultiple \| lpIrr, carryRate, catchUpRate?}]`) | rates rise; thresholds rise | null | Where the carry steps up (§3.3). Null: one carry rate. |
+| `capitalIncludes` | `capital_includes` (text[]) | any of `investments`, `fees`, `expenses`, `other`; must include `investments` | null (all four) | What the first tier returns as capital and the hurdle accrues on (§5.1). |
 | `recipients` | `carry_recipients` (jsonb `[{lpEntityId, pct}]`) | pct > 0, total 100 ± 0.01 | `[]` | Who receives the carry, and in what split. |
 | `gpEntityId` | `gp_entity_id` | partner id or null | null | Legacy single recipient. Used as `[{gpEntityId, 100}]` when `carry_recipients` is empty. |
 
@@ -60,6 +62,10 @@ Validation (`parseWaterfallTermsInput`, shared by the settings page and `set_wat
 - `prefMultiple`, when given, is between 1 and 10. `prefDayCount` is `act/365` or `30/360`.
 - `catchupMeasure` is `preferred` or `profit`. Measured on profit, the catch-up rate must be above
   the share of profit the GP catches up to, or the catch-up would never finish.
+- Each carry step starts at an LP multiple or an LP IRR, not both. Each one raises the carry rate,
+  and the multiples or IRRs rise from one step to the next. A catch-up at a step gives the GP more
+  of each dollar than the new rate.
+- `capitalIncludes` must include `investments`. Omitted, every contribution is capital.
 - When carry is on (`kind ≠ none` and `carryRate > 0`), there must be at least one recipient.
 - Recipient percentages must total 100.
 - Every recipient must be a partner (`lp_entities`) of the same fund.
@@ -149,6 +155,28 @@ The tiers always add up to the rounded distributable. The vector test checks tha
 distribution, more pref accrued), the new pref is caught up in turn: the GP is owed `s` of a full
 catch-up on the larger `P'`, less the catch-up it already has (vector `catch-up-after-split`).
 
+### 3.3 Carry that steps up (`steps`)
+
+Some LPAs raise the carry once the LPs are well ahead: 20% until the LPs have received 2.5x their
+capital, then 25%. Each step in `carrySteps` ends the split before it and starts a new one at its
+own `carryRate`. With `L` everything the LPs have received (return of capital included) and `Π`, `G`
+as in §3.2, the split at rate `g` before a step takes:
+
+- at an **LP multiple** `m`: `want = (m·C − L) ÷ (1 − g)`, which leaves the LPs at exactly `m·C`;
+- at an **LP IRR** `r`: `want = S ÷ (1 − g)`, where `S` is what the LPs still need, in today's
+  dollars, for their IRR to reach `r` on the distribution date: their contributions compounded at
+  `r` (ACT/365) to today, less what they have received compounded the same way. The state carries
+  the LPs' dated cash (`irr`) for it, and the replay fills it in.
+
+An optional catch-up at a step (`catchUpRate` `k`) runs first, measured on all profit:
+`want = (t·Π − G) ÷ (k − t)` with `t` the new rate, so the GP holds the new rate of everything when
+it finishes. The last split runs on whatever is left. `toCarryGP` and `toCarryLP` are the totals of
+every split and step catch-up, and `bands` lists each one.
+
+The close's accrual runs the steps on its hypothetical liquidation. An IRR step there treats every
+dollar as coming back on the accrual date, which can only understate the LPs' IRR, so the accrual
+never reaches a step early. Vectors `split-tiered-multiple` and `split-tiered-irr-catch-up`.
+
 ## 4. Kinds
 
 ### 4.1 `none`
@@ -234,6 +262,21 @@ Both bases:
   (vector `leap-year`).
 - The result is rounded to cents. `rate ≤ 0`, or an unparseable `asOf`, gives 0.
 
+### 5.1 What counts as capital (`capitalIncludes`)
+
+Most LPAs return every contribution before carry: what paid for investments, and what paid the
+management fee and partnership expenses. Some return only invested capital. `capitalIncludes`
+lists the purposes that count, and the first tier returns, and the hurdle accrues on, only those
+(`capitalContributions` in hurdle.ts).
+
+The books don't record which call paid which fee, so `datedContributions` (economics.ts) tags each
+LP's contributions first in, first out: a management fee or partnership expense charged to the
+LP's account uses the LP's oldest capital not yet used, and a charge with no capital left to use is
+paid by the next contribution. What no charge uses is invested capital. With every purpose included
+the tags change nothing. Vector `roc-excludes-fees`.
+
+A forecast can't tag a projected call, so the forecasts count future calls in full.
+
 ## 6. Splitting a distribution (`splitDistribution`)
 
 1. **Replay.** Nothing stores the waterfall state, so it is replayed:
@@ -302,8 +345,7 @@ one it finds under `unsupported`.
 | GP clawback / give-back | Computed (`clawbackAtFundEnd`, §6) but not posted. The close's accrual marks the whole-fund entitlement, so carry paid early under `american` beyond it shows as accrued vs paid on the GP panel. |
 | Carry escrow / holdback | Not modelled. |
 | Management fee offsets (transaction, monitoring or director fees) | Not modelled. The fee is a separate allocation (§2). |
-| Multiple hurdles, or carry rates that step up by IRR or multiple | One hurdle and one carry rate per vehicle. |
-| Return of capital that leaves fee contributions out | Every contribution is capital to return. |
+| Multiple hurdles (a second pref) | One hurdle per vehicle. Carry that steps up at an LP multiple or IRR is supported (§3.3). |
 | Hurdle compounding other than annual (quarterly, daily) | Annual compounding or simple only. |
 | Deal-by-deal on a different capital base (all invested capital, or unrealized write-downs) | Realized deals only, with fees and expenses by cost share (§4.3). |
 | Per-partner carry rates (side letters on carry) | Carry is fund-level. Side-letter *fee* rates are supported (`rate_override`). |
@@ -313,8 +355,8 @@ one it finds under `unsupported`.
 ## 7a. The open spec
 
 [Walter](https://github.com/tdavidson/walter) is an open spec for the same terms with its own
-conformance vectors. `lib/accounting/walter/` runs this engine on them in `npm test`; the
-provisions above are the vectors it can't pass yet.
+conformance vectors. `lib/accounting/walter/` runs this engine on them in `npm test`, and it passes
+all of them.
 
 ## 8. Reading terms from an LPA
 

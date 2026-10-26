@@ -19,6 +19,7 @@ import {
   splitDistribution,
   clawbackAtFundEnd,
   feeSchedule,
+  type CarryStep,
   type DayCount,
   type FeeFrequency,
   type FeeScheduleBasis,
@@ -123,14 +124,39 @@ function carryTermsOf(terms: WTerms, recipients: { lpEntityId: string; pct: numb
   const last = tiers[tiers.length - 1]
   if (tiers[0]?.type !== 'return-of-capital') refuse('invalid-terms', 'return-of-capital must be the first tier')
   if (last.type !== 'split' || last.until) refuse('invalid-terms', 'the last tier must be a split with no until')
-  if (tiers.filter(t => t.type === 'split').length > 1) unsupported('a split that steps up at a hurdle (the engine has one carry rate)')
-  if (tiers.filter(t => t.type === 'catch-up').length > 1) unsupported('more than one catch-up')
   const pref = tiers.find(t => t.type === 'preferred-return')
-  const catchUp = tiers.find(t => t.type === 'catch-up')
-  const expected = ['return-of-capital', ...(pref ? ['preferred-return'] : []), ...(catchUp ? ['catch-up'] : []), 'split']
-  if (tiers.map(t => t.type).join() !== expected.join()) unsupported('tiers in an order other than capital, pref, catch-up, split')
+  // The shape the engine runs: capital, pref, catch-up, then splits, each after the first with an
+  // optional catch-up before it (the carry stepping up).
+  let at = 1
+  if (tiers[at]?.type === 'preferred-return') at++
+  const catchUp = tiers[at]?.type === 'catch-up' ? tiers[at++] : undefined
+  const bands: { catchUp?: WTier; split: WTier }[] = []
+  while (at < tiers.length) {
+    const cu = tiers[at]?.type === 'catch-up' && bands.length > 0 ? tiers[at++] : undefined
+    const split = tiers[at++]
+    if (split?.type !== 'split') unsupported('tiers in an order other than capital, pref, catch-up, then splits')
+    bands.push({ ...(cu ? { catchUp: cu } : {}), split })
+  }
+  for (const b of bands.slice(0, -1)) {
+    const u = b.split.until as { lpMultiple?: string; lpIrr?: string } | undefined
+    if (!u || (u.lpMultiple === undefined) === (u.lpIrr === undefined)) refuse('invalid-terms', 'every split but the last needs an until: lpMultiple or lpIrr')
+  }
+  for (const b of bands.slice(1)) {
+    if (b.catchUp && (b.catchUp.measure ?? 'preferred') !== 'profit') unsupported('a catch-up at a step measured on the pref (the engine measures it on all profit)')
+  }
+  const carrySteps: CarryStep[] = bands.slice(1).map((b, i) => {
+    const u = bands[i].split.until as { lpMultiple?: string; lpIrr?: string }
+    return {
+      carryRate: num(b.split.gpShare, 'split.gpShare'),
+      ...(u.lpMultiple !== undefined ? { lpMultiple: num(u.lpMultiple, 'until.lpMultiple') } : { lpIrr: num(u.lpIrr, 'until.lpIrr') }),
+      ...(b.catchUp ? {
+        catchUpRate: b.catchUp.gpShare === undefined ? 1 : num(b.catchUp.gpShare, 'catch-up.gpShare'),
+        catchUpTarget: num(b.catchUp.target, 'catch-up.target'),
+      } : {}),
+    }
+  })
 
-  const carryRate = num(last.gpShare, 'split.gpShare')
+  const carryRate = num(bands[0].split.gpShare, 'split.gpShare')
   let prefRate = 0
   let prefCompounds = true
   let prefBase: 'contributed' | 'unreturned' = 'contributed'
@@ -175,6 +201,7 @@ function carryTermsOf(terms: WTerms, recipients: { lpEntityId: string; pct: numb
     ...(prefMultiple !== undefined ? { prefMultiple } : {}),
     ...(prefDayCount !== 'act/365' ? { prefDayCount } : {}),
     ...(measure === 'profit' ? { catchupMeasure: 'profit' as const } : {}),
+    ...(carrySteps.length > 0 ? { carrySteps } : {}),
     gpEntityId: recipients[0]?.lpEntityId ?? null,
     recipients,
   }
@@ -182,7 +209,11 @@ function carryTermsOf(terms: WTerms, recipients: { lpEntityId: string; pct: numb
     roc: tiers[0].id ?? 'return-of-capital',
     pref: pref?.id ?? 'preferred-return',
     catchUp: catchUp?.id ?? 'catch-up',
-    split: last.id ?? 'split',
+    split: bands[0].split.id ?? 'split',
+    bands: bands.map((b, i) => ({
+      catchUp: b.catchUp?.id ?? `catch-up-${i + 1}`,
+      split: b.split.id ?? (i === 0 ? 'split' : `split-${i + 1}`),
+    })),
   }
   return { carry, ids, hasPref: !!pref }
 }
@@ -212,14 +243,12 @@ export function run(termsIn: unknown, flowsIn: unknown) {
   }
 
   const includes = terms.waterfall.returnOfCapital?.includes ?? PURPOSES
+  if (PURPOSES.some(p => !includes.includes(p))) carry.capitalIncludes = PURPOSES.filter(p => includes.includes(p))
   const flows = (Array.isArray(flowsIn) ? flowsIn : refuse('invalid-flow', 'flows must be an array')) as WFlow[]
   flows.forEach((f, i) => {
     if (!(f?.type in ORDER)) refuse('invalid-flow', `flow ${i}: unknown type ${f?.type}`)
     if ('amount' in f && !(typeof f.amount === 'string' && Number(f.amount) >= 0)) refuse('invalid-flow', `flow ${i}: amount must be a non-negative decimal string`)
     if (f.type === 'contribution' && !partnerIds.has(f.partner)) refuse('unknown-partner', `flow ${i}: unknown partner ${f.partner}`)
-    if (f.type === 'contribution' && !includes.includes(f.purpose ?? 'investments')) {
-      unsupported('capital that leaves some contributions out of return of capital (the engine returns every contribution)')
-    }
   })
   const ordered = flows.map((f, i) => ({ f, i }))
     .sort((a, b) => a.f.date.localeCompare(b.f.date) || ORDER[a.f.type] - ORDER[b.f.type] || a.i - b.i)
@@ -337,7 +366,7 @@ export function run(termsIn: unknown, flowsIn: unknown) {
             distributed: ownReceived.get(p.id) ?? 0,
             ending: roundCents(contributedTo(f.date, p.id) - (ownReceived.get(p.id) ?? 0)),
           })),
-          contributions: contributions.filter(c => !recipientIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount })),
+          contributions: contributions.filter(c => !recipientIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount, purpose: c.purpose })),
           priors: [...priors],
           asOf: f.date,
           realizedCapital: realizedOn(f.date),
@@ -365,8 +394,17 @@ export function run(termsIn: unknown, flowsIn: unknown) {
         lpTier(ids.pref, split.tiers.preferred)
         lpTier(ids.catchUp, split.tiers.catchUpToLP ?? 0)
         gpTier(ids.catchUp, split.tiers.catchUp)
-        lpTier(ids.split, split.tiers.profitToLP)
-        gpTier(ids.split, split.tiers.carry)
+        if (split.tiers.bands) {
+          split.tiers.bands.forEach((b, i) => {
+            lpTier(ids.bands[i].catchUp, b.catchUpToLP)
+            gpTier(ids.bands[i].catchUp, b.catchUp)
+            lpTier(ids.bands[i].split, b.toLP)
+            gpTier(ids.bands[i].split, b.toGP)
+          })
+        } else {
+          lpTier(ids.split, split.tiers.profitToLP)
+          gpTier(ids.split, split.tiers.carry)
+        }
         break
       }
       case 'nav': {
@@ -378,7 +416,7 @@ export function run(termsIn: unknown, flowsIn: unknown) {
         const lpReceived = lpIds.reduce((s, id) => s + (received.get(id) ?? 0), 0)
         const target = carryTarget({
           lps: [{ lpEntityId: 'lps', contributed: roundCents(lpCapital), distributed: roundCents(lpReceived), nav: roundCents(lpNav) }],
-          contributions: contributions.filter(c => !recipientIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount })),
+          contributions: contributions.filter(c => !recipientIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount, purpose: c.purpose })),
           asOf: f.date,
           distributions: priors,
         }, carry)
@@ -387,7 +425,7 @@ export function run(termsIn: unknown, flowsIn: unknown) {
       }
       case 'fund-end': {
         if (!clawbackOn || carry.carryRate <= 0) break
-        const lpContributions = contributions.filter(c => !recipientIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount }))
+        const lpContributions = contributions.filter(c => !recipientIds.has(c.partner) && c.date <= f.date).map(c => ({ date: c.date, amount: c.amount, purpose: c.purpose }))
         const c = clawbackAtFundEnd(priors, lpContributions, carry, f.date, gpPaid)
         clawback = { date: f.date, paid: money(c.paid), entitlement: money(c.entitlement), amount: money(c.amount) }
         if (c.amount > 0) {

@@ -5,13 +5,14 @@
 // The spec for what these terms mean is docs/spec/waterfall-terms.md.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { CarryKind, CarryRecipient, DayCount, PrefBase } from './carry'
+import type { CarryKind, CarryRecipient, CarryStep, ContributionPurpose, DayCount, PrefBase } from './carry'
 import { vehicleIdByName } from './vehicle-id'
 
 export const CARRY_KINDS: CarryKind[] = ['none', 'straight', 'american', 'european']
 export const PREF_BASES: PrefBase[] = ['contributed', 'unreturned']
 export const DAY_COUNTS: DayCount[] = ['act/365', '30/360']
 export const CATCHUP_MEASURES = ['preferred', 'profit'] as const
+export const CONTRIBUTION_PURPOSES: ContributionPurpose[] = ['investments', 'fees', 'expenses', 'other']
 
 /** The terms as a caller supplies them (the route's PUT body, the pending action's input). */
 export interface WaterfallTermsInput {
@@ -25,6 +26,8 @@ export interface WaterfallTermsInput {
   prefMultiple?: unknown
   prefDayCount?: unknown
   catchupMeasure?: unknown
+  carrySteps?: unknown
+  capitalIncludes?: unknown
   gpEntityId?: unknown
   carryRecipients?: unknown
 }
@@ -46,6 +49,10 @@ export interface ValidWaterfallTerms {
   prefDayCount: DayCount
   /** What the catch-up is measured on: the pref paid, or all the profit distributed. */
   catchupMeasure: 'preferred' | 'profit'
+  /** Where the carry steps up at an LP multiple or IRR, in order. Empty: one carry rate. */
+  carrySteps: CarryStep[]
+  /** What contributions are returned as capital and accrued on. All four is the default. */
+  capitalIncludes: ContributionPurpose[]
   gpEntityId: string | null
   recipients: CarryRecipient[]
 }
@@ -89,6 +96,39 @@ export function parseWaterfallTermsInput(body: WaterfallTermsInput): { ok: true;
     if (catchupRate <= x / (1 + x)) return { error: 'Measured on profit, the catch-up rate must be above the share of profit the GP catches up to.' }
   }
 
+  // Carry that steps up: each step ends the split before it at an LP multiple or IRR, and the rate
+  // only goes up, because a step down would hand the LPs back carry the GP already holds.
+  const carrySteps: CarryStep[] = []
+  if (body?.carrySteps != null && !Array.isArray(body.carrySteps)) return { error: 'Carry steps must be a list.' }
+  let lastRate = carryRate
+  let lastMultiple = 1
+  let lastIrr = 0
+  for (const raw of (body?.carrySteps as any[] | undefined) ?? []) {
+    const blank = (v: unknown) => v == null || v === ''
+    const rate = num(raw?.carryRate, NaN)
+    const lpMultiple = blank(raw?.lpMultiple) ? null : num(raw.lpMultiple, NaN)
+    const lpIrr = blank(raw?.lpIrr) ? null : num(raw.lpIrr, NaN)
+    if (!(rate > 0 && rate < 1)) return { error: 'Each carry step needs a carry rate between 0 and 1.' }
+    if (rate <= lastRate) return { error: 'Each carry step must raise the carry rate.' }
+    if ((lpMultiple === null) === (lpIrr === null)) return { error: 'Each carry step starts at an LP multiple or an LP IRR, not both.' }
+    if (lpMultiple !== null && !(lpMultiple > lastMultiple && lpMultiple <= 20)) return { error: 'Carry step multiples must rise, from above 1 up to 20.' }
+    if (lpIrr !== null && !(lpIrr > lastIrr && lpIrr < 1)) return { error: 'Carry step IRRs must rise, from above 0 up to 1 (0.15 = 15%).' }
+    const catchUpRate = blank(raw?.catchUpRate) ? null : num(raw.catchUpRate, NaN)
+    if (catchUpRate !== null && !(catchUpRate > rate && catchUpRate <= 1)) return { error: 'A catch-up at a carry step must give the GP more of each dollar than the new rate, up to 1.' }
+    carrySteps.push({ carryRate: rate, ...(lpMultiple !== null ? { lpMultiple } : { lpIrr: lpIrr! }), ...(catchUpRate !== null ? { catchUpRate } : {}) })
+    lastRate = rate
+    if (lpMultiple !== null) lastMultiple = lpMultiple
+    if (lpIrr !== null) lastIrr = lpIrr
+  }
+  if (carrySteps.length > 0 && (kind === 'none' || carryRate <= 0)) return { error: 'Carry steps need a carry rate to step up from.' }
+
+  const includesRaw = body?.capitalIncludes ?? CONTRIBUTION_PURPOSES
+  if (!Array.isArray(includesRaw) || includesRaw.some(p => !(CONTRIBUTION_PURPOSES as unknown[]).includes(p))) {
+    return { error: 'Capital returned must list investments, fees, expenses or other.' }
+  }
+  if (!includesRaw.includes('investments')) return { error: 'Capital returned must include invested capital.' }
+  const capitalIncludes = CONTRIBUTION_PURPOSES.filter(p => includesRaw.includes(p))
+
   // Carry has to accrue TO somebody. A vehicle may have ONE recipient (legacy gpEntityId) or a
   // split across several (carryRecipients: [{lpEntityId, pct}] summing to 100). Without any the
   // close would compute an accrual it cannot post — refuse here rather than fail mid-close.
@@ -119,6 +159,8 @@ export function parseWaterfallTermsInput(body: WaterfallTermsInput): { ok: true;
       prefMultiple,
       prefDayCount: prefDayCount as DayCount,
       catchupMeasure: catchupMeasure as 'preferred' | 'profit',
+      carrySteps,
+      capitalIncludes,
       gpEntityId,
       recipients,
     },
@@ -176,6 +218,8 @@ export async function saveWaterfallTerms(
         pref_multiple: terms.prefMultiple,
         pref_day_count: terms.prefDayCount,
         catchup_measure: terms.catchupMeasure,
+        carry_steps: terms.carrySteps.length > 0 ? terms.carrySteps : null,
+        capital_includes: terms.capitalIncludes.length < CONTRIBUTION_PURPOSES.length ? terms.capitalIncludes : null,
         gp_entity_id: singleGp,
         carry_recipients: recipients.length > 0 ? recipients : null,
         updated_at: new Date().toISOString(),
