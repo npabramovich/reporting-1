@@ -84,6 +84,15 @@ denies by default if a grant ever creeps back. `tests/tax-data-api-grants.test.t
 
 **Functions:** Postgres functions have a separate default-privileges model from tables and are not affected by the 2026 Data API grants rollout. SECURITY DEFINER functions still need `revoke execute from anon, authenticated, public` if you don't want unauthenticated callers (see `20260509000002_memo_agent_jobs_lockdown.sql` for the pattern).
 
+### `fund_settings` is readable by members column by column
+
+Members read `fund_settings` through column grants that leave out the secrets (every `*_encrypted`
+column, `postmark_webhook_token`, `deal_submission_token`). Column grants do not follow new columns,
+so a migration that adds a column to `fund_settings` must end with
+`select public.grant_fund_settings_member_columns();`, or members' own reads of it are refused.
+Name a new secret column `*_encrypted` and it stays hidden. `tests/fund-settings-column-grants.test.ts`
+enforces the call. Read secrets with the service-role client only.
+
 ### Don't edit historical migrations
 
 Migration files that have already shipped to production must not be edited. The Supabase CLI tracks applied migrations by filename hash; modifying an applied migration causes integrity failures on re-deploy. Always add a new migration.

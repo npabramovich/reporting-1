@@ -35,7 +35,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: (t: s
 
 import { GET, DELETE } from '@/app/api/settings/connected-apps/route'
 
-const del = (q: string) => DELETE({ nextUrl: new URL(`http://x/api/settings/connected-apps${q}`) } as any)
+const del = async (q: string) => (await DELETE({ nextUrl: new URL(`http://x/api/settings/connected-apps${q}`) } as any))!
 
 beforeEach(() => {
   m.user = { id: 'u1' }
@@ -52,14 +52,14 @@ beforeEach(() => {
 describe('GET /api/settings/connected-apps', () => {
   it('requires a signed-in fund member', async () => {
     m.user = null
-    expect((await GET()).status).toBe(401)
+    expect((await GET())!.status).toBe(401)
     m.user = { id: 'u1' }
     m.member = null
-    expect((await GET()).status).toBe(403)
+    expect((await GET())!.status).toBe(403)
   })
 
   it('lists one row per assistant, scoped to the caller and their fund, without investor-connector tokens', async () => {
-    const res = await GET()
+    const res = (await GET())!
     expect(res.status).toBe(200)
     const { connections } = await res.json()
     expect(connections).toEqual([{

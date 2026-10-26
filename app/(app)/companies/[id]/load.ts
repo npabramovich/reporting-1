@@ -52,7 +52,7 @@ export async function loadCompanyPage({ supabase, admin, user, page }: PageConte
     needsEntities(holdingType) ? holdingEntities(admin, company.fund_id, company.id, page.access) : Promise.resolve([]),
     // The service-role client: members cannot read the credential columns (only whether a key
     // exists leaves this function, as hasClaudeKey / hasOpenAIKey).
-    (admin as any).from('fund_settings')
+    admin.from('fund_settings')
       .select('claude_api_key_encrypted, openai_api_key_encrypted, default_ai_provider, currency, file_storage_provider, google_drive_folder_id, feature_visibility')
       .eq('fund_id', company.fund_id).returns<CompanySettings[]>().maybeSingle(),
     supabase.from('metrics').select('*').eq('company_id', params.id).eq('is_active', true)

@@ -16,7 +16,7 @@ const getAuthenticatorAssuranceLevel = vi.hoisted(() => vi.fn(async () => ({ dat
 
 vi.mock('@supabase/ssr', () => ({
   createServerClient: () => ({
-    auth: { getUser, mfa: { getAuthenticatorAssuranceLevel } },
+    auth: { getUser, getClaims: async () => { const { data } = await getUser(); return { data: data?.user ? { claims: { sub: data.user.id, email: data.user.email } } : null, error: null } }, mfa: { getAuthenticatorAssuranceLevel } },
     from,
     rpc,
   }),

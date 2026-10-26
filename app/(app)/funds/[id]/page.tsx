@@ -16,6 +16,10 @@ import { FirmCloseView } from '@/components/accounting/firm-close'
 import { FirmDraftsView } from '@/components/accounting/firm-drafts'
 import { FirmHoldingsView } from '@/components/accounting/firm-holdings'
 import { MancoDetailView } from './manco-detail-view'
+import { getUser } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { resolvePageAccess } from '@/lib/access/page-gate'
+import { loadFundDetailInitial } from '@/lib/accounting/fund-detail-initial'
 
 export async function generateMetadata(props: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await props.params
@@ -60,16 +64,23 @@ export default async function EntityPage(props: { params: Promise<{ id: string }
     return <FirmSectionPage slug={params.id} action={action} />
   }
 
-  const { vehicle, vehicleId, kind, active } = await requireVehicleAccess(params.id)
+  const { vehicle, vehicleId, kind, active, fundId } = await requireVehicleAccess(params.id)
+  const isManco = isManagementCompany(kind) && !!vehicleId
+  // Started, not awaited: the header renders now and the figures stream in the same response.
+  const initial = isManco ? undefined : (async () => {
+    const user = await getUser()
+    const page = user ? await resolvePageAccess(user.id) : null
+    return page ? loadFundDetailInitial(createAdminClient() as any, fundId, page.access, vehicle) : null
+  })()
 
   return (
     <div className="pt-4 md:pt-8 pb-8 w-full">
       <Link href="/funds" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-4">
         <ArrowLeft className="h-3.5 w-3.5" />All entities
       </Link>
-      {isManagementCompany(kind) && vehicleId
-        ? <MancoDetailView vehicle={vehicle} vehicleId={vehicleId} active={active} />
-        : <FundDetailView vehicle={vehicle} vehicleId={vehicleId} />}
+      {isManco
+        ? <MancoDetailView vehicle={vehicle} vehicleId={vehicleId!} active={active} />
+        : <FundDetailView vehicle={vehicle} vehicleId={vehicleId} initial={initial} />}
     </div>
   )
 }

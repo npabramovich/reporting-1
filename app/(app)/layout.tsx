@@ -6,7 +6,7 @@ import { hasCredential } from '@/lib/credentials/env'
 import Script from 'next/script'
 import { headers } from 'next/headers'
 import { NONCE_HEADER } from '@/lib/security/csp'
-import { getUser } from '@/lib/supabase/server'
+import { createClient, getUser } from '@/lib/supabase/server'
 import { AppShell } from '@/components/app-shell'
 import {
   getFundData,
@@ -26,7 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Share the page's live, request-memoized access context. Membership and entity scope arrive
   // in this same RPC, without separate fund, membership or grant queries in the layout.
   const page = await resolvePageAccess(user.id)
-  if (!page) redirect('/onboarding')
+  if (!page) redirect(await nonMemberDestination(user.id))
   const [fundData, fundSettings, fofActive] = await Promise.all([
     getFundData(page.fundId),
     getFundSettings(page.fundId),
@@ -105,4 +105,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       )}
     </div>
   )
+}
+
+/**
+ * Where a signed-in person who is not a member of a fund goes. proxy.ts no longer reads
+ * memberships for GP app pages (lib/gp-app-routes.ts), so the LP half of its LP/GP split is
+ * here: an active LP goes to their portal, anyone else to onboarding. Only runs on that rare path.
+ */
+async function nonMemberDestination(userId: string): Promise<string> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('lp_accounts').select('status').eq('auth_user_id', userId).maybeSingle()
+  return (data as { status?: string } | null)?.status === 'active' ? '/portal/overview' : '/onboarding'
 }

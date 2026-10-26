@@ -22,7 +22,7 @@ const getAuthenticatorAssuranceLevel = vi.hoisted(() =>
 
 vi.mock('@supabase/ssr', () => ({
   createServerClient: () => ({
-    auth: { getUser, mfa: { getAuthenticatorAssuranceLevel } },
+    auth: { getUser, getClaims: async () => { const { data } = await getUser(); return { data: data?.user ? { claims: { sub: data.user.id, email: data.user.email } } : null, error: null } }, mfa: { getAuthenticatorAssuranceLevel } },
     from,
     rpc,
   }),
@@ -124,9 +124,20 @@ describe('middleware — the PWA shell answers without a session', () => {
       const res = await middleware(req(path))
       expect(res.status, path).not.toBe(307)
     }
-    // The same user on a GP route still gets sent to their portal.
-    const res = await middleware(req('/dashboard'))
+    // The same user outside the GP app still gets sent to their portal by the proxy.
+    const res = await middleware(req('/onboarding'))
     expect(new URL(res.headers.get('location')!).pathname).toBe('/portal/overview')
+  })
+
+  it('leaves GP app pages to app/(app)/layout.tsx, without reading memberships here', async () => {
+    // The layout resolves membership anyway and sends an active LP to their portal
+    // (nonMemberDestination); asking here too cost every GP navigation two queries.
+    getUser.mockResolvedValue({ data: { user: { id: 'lp1' } } })
+    from.mockClear()
+    const res = await middleware(req('/dashboard'))
+    expect(res.status).not.toBe(307)
+    expect(from).not.toHaveBeenCalledWith('fund_members')
+    expect(from).not.toHaveBeenCalledWith('lp_accounts')
   })
 
   it('does not exempt the rest of /portal', async () => {
