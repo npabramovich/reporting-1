@@ -92,6 +92,8 @@ import { WATERFALL_TERMS_TOOL_MANIFEST } from '@/lib/agent/waterfall-terms-tools
 import { WATERFALL_TERMS_HANDLERS } from '@/lib/agent/waterfall-terms-tools'
 import { RECYCLING_TOOL_MANIFEST } from '@/lib/agent/recycling-tools-manifest'
 import { RECYCLING_HANDLERS } from '@/lib/agent/recycling-tools'
+import { ILPA_TOOL_MANIFEST } from '@/lib/agent/ilpa-tools-manifest'
+import { ILPA_HANDLERS } from '@/lib/agent/ilpa-tools'
 
 export { resolveVehicle } from './vehicle-resolver'
 
@@ -561,6 +563,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   ...bindLedger(RECEIPT_TOOL_MANIFEST, RECEIPT_HANDLERS),
   ...bindLedger(WATERFALL_TERMS_TOOL_MANIFEST, WATERFALL_TERMS_HANDLERS),
   ...bindLedger(RECYCLING_TOOL_MANIFEST, RECYCLING_HANDLERS),
+  ...bindLedger(ILPA_TOOL_MANIFEST, ILPA_HANDLERS),
   ...bind(PORTFOLIO_TOOL_MANIFEST, PORTFOLIO_HANDLERS),
   ...bind(HOLDING_TOOL_MANIFEST, HOLDING_HANDLERS),
   ...bind(DILIGENCE_TOOL_MANIFEST, DILIGENCE_HANDLERS),
