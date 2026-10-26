@@ -1,0 +1,88 @@
+{
+  "id": "fees-committed-quarterly",
+  "walter": "0.1",
+  "title": "2% of commitments, quarterly",
+  "description": "The LPs' 100,000,000 of commitments at 2% a year is 500,000 a quarter. The GP's commitment pays no fee.",
+  "tags": [
+    "fees",
+    "fees-committed"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "2000000"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "60000000"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "40000000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "managementFee": {
+      "frequency": "quarterly",
+      "start": "2025-01-01",
+      "end": "2026-01-01",
+      "schedule": [
+        {
+          "from": "2025-01-01",
+          "rate": "0.02",
+          "basis": "commitments"
+        }
+      ]
+    }
+  },
+  "flows": [],
+  "expected": {
+    "fees": [
+      {
+        "start": "2025-01-01",
+        "gross": "500000.00",
+        "offset": "0.00",
+        "net": "500000.00"
+      },
+      {
+        "start": "2025-04-01",
+        "gross": "500000.00",
+        "offset": "0.00",
+        "net": "500000.00"
+      },
+      {
+        "start": "2025-07-01",
+        "gross": "500000.00",
+        "offset": "0.00",
+        "net": "500000.00"
+      },
+      {
+        "start": "2025-10-01",
+        "gross": "500000.00",
+        "offset": "0.00",
+        "net": "500000.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

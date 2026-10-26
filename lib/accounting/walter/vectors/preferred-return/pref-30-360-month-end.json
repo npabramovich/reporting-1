@@ -1,0 +1,78 @@
+{
+  "id": "pref-30-360-month-end",
+  "walter": "0.1",
+  "title": "30/360 treats the 31st as the 30th",
+  "description": "31 January to 31 July is 180 days under 30/360 (both ends become the 30th), half a year: 1000 × 0.08 × 0.5 = 40.00 simple. ACT/365 would give 181 days.",
+  "tags": [
+    "pref-simple",
+    "day-count-30-360"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "none",
+          "base": "contributed",
+          "dayCount": "30/360"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-31",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-07-31",
+      "amount": "1040"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2025-07-31",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2025-07-31",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "40.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

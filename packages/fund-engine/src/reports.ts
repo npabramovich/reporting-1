@@ -71,6 +71,9 @@ export interface StatementsReport {
     catchupSize: number
     prefCompounds: boolean
     prefBase: string
+    prefMultiple?: number
+    prefDayCount?: string
+    catchupMeasure?: string
     target: number
     alreadyAccrued: number
     delta: number
@@ -163,6 +166,9 @@ export function statementsFromEntries(
         catchupSize: t.catchupSize ?? 1,
         prefCompounds: t.prefCompounds,
         prefBase: t.prefBase ?? 'contributed',
+        ...(t.prefMultiple != null ? { prefMultiple: t.prefMultiple } : {}),
+        ...(t.prefDayCount === '30/360' ? { prefDayCount: t.prefDayCount } : {}),
+        ...(t.catchupMeasure === 'profit' ? { catchupMeasure: t.catchupMeasure } : {}),
         target: accrual.target,
         alreadyAccrued: accrual.alreadyAccrued,
         delta: accrual.delta,

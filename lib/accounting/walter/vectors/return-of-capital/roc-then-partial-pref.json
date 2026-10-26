@@ -1,0 +1,79 @@
+{
+  "id": "roc-then-partial-pref",
+  "walter": "0.1",
+  "title": "Capital first, then part of the pref",
+  "description": "Capital comes back first, then the preferred return; nothing is left for the catch-up. The 1.08 multiple makes the pref exactly 80.",
+  "tags": [
+    "return-of-capital",
+    "pref-multiple"
+  ],
+  "provenance": "ported: Portfolio spec v2, roc-and-partial-pref",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "multiple": "1.08"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-06-30",
+      "amount": "1050"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2025-06-30",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "50.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

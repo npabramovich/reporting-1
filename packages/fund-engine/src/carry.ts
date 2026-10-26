@@ -16,11 +16,12 @@
 
 import { runWaterfall } from './waterfall.ts'
 import { roundCents } from './ledger.ts'
-import { preferredTarget, type DatedContribution, type PrefBase } from './hurdle.ts'
+import { hurdleTarget, type DatedContribution, type DayCount, type PrefBase } from './hurdle.ts'
 import { replayWaterfallState, waterfallTermsOf, type PriorDistribution } from './replay.ts'
 
 export { preferredTarget } from './hurdle.ts'
-export type { DatedContribution, HurdleReduction, PrefBase } from './hurdle.ts'
+export { hurdleTarget, yearFraction } from './hurdle.ts'
+export type { DatedContribution, DayCount, HurdleReduction, HurdleTerms, PrefBase } from './hurdle.ts'
 
 export type CarryKind = 'none' | 'straight' | 'american' | 'european'
 
@@ -37,9 +38,15 @@ export interface VehicleCarryTerms {
   catchupRate: number
   /** How much of a full catch-up the GP gets, 0–1 (waterfall.ts). Absent means 1. */
   catchupSize?: number
+  /** What the catch-up is measured on (waterfall.ts). Absent means 'preferred'. */
+  catchupMeasure?: 'preferred' | 'profit'
   prefCompounds: boolean
   /** What the hurdle accrues on (hurdle.ts). Absent means 'contributed', the original reading. */
   prefBase?: PrefBase
+  /** A hurdle set as a multiple of capital instead of a rate (hurdle.ts). Absent or null: the rate. */
+  prefMultiple?: number | null
+  /** How the rate's years are counted (hurdle.ts). Absent means ACT/365. */
+  prefDayCount?: DayCount
   /** Single-recipient legacy field; kept for back-compat and as the fallback source. */
   gpEntityId: string | null
   /** Who receives the carry and in what split. Resolved from `carry_recipients`, or
@@ -143,9 +150,9 @@ export function carryTarget(input: CarryTargetInput, terms: VehicleCarryTerms): 
   const contributions = input.contributions ?? []
   // On an unreturned base the hurdle depends on what the actual distributions returned and paid,
   // so replay them (whole-fund: the liquidation realizes every deal) and read its hurdle.
-  const pref = terms.prefBase === 'unreturned'
+  const pref = terms.prefBase === 'unreturned' && terms.prefMultiple == null
     ? replayWaterfallState(input.distributions ?? [], contributions, { ...terms, kind: 'european' }, asOf).preferredTarget
-    : preferredTarget(contributions, asOf, terms.prefRate, terms.prefCompounds)
+    : hurdleTarget(terms, contributions, contributed, asOf)
 
   const result = runWaterfall(liquidation, waterfallTermsOf(terms), {
     contributedCapital: contributed,
@@ -170,8 +177,11 @@ export function carryTermsFromRow(row: {
   pref_rate?: unknown
   catchup_rate?: unknown
   catchup_size?: unknown
+  catchup_measure?: unknown
   pref_compounds?: unknown
   pref_base?: unknown
+  pref_multiple?: unknown
+  pref_day_count?: unknown
   gp_entity_id?: unknown
   carry_recipients?: unknown
 } | null | undefined): VehicleCarryTerms {
@@ -186,8 +196,11 @@ export function carryTermsFromRow(row: {
     prefRate: Number(row.pref_rate ?? 0),
     catchupRate: Number(row.catchup_rate ?? 1),
     catchupSize: row.catchup_size == null ? 1 : Number(row.catchup_size),
+    ...(row.catchup_measure === 'profit' ? { catchupMeasure: 'profit' as const } : {}),
     prefCompounds: row.pref_compounds !== false,
     prefBase: row.pref_base === 'unreturned' ? 'unreturned' : 'contributed',
+    ...(row.pref_multiple != null && Number(row.pref_multiple) >= 1 ? { prefMultiple: Number(row.pref_multiple) } : {}),
+    ...(row.pref_day_count === '30/360' ? { prefDayCount: '30/360' as DayCount } : {}),
     gpEntityId,
     recipients: resolveCarryRecipients(row.carry_recipients, gpEntityId),
   }

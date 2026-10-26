@@ -51,6 +51,18 @@ export function parseVehicleTerms(raw: unknown): VehicleTerms {
   const prefBaseRaw = c.prefBase ?? c.pref_base ?? 'contributed'
   if (prefBaseRaw !== 'contributed' && prefBaseRaw !== 'unreturned') throw new Error('terms: carry.prefBase must be contributed or unreturned')
   const prefBase = prefBaseRaw as 'contributed' | 'unreturned'
+  const multipleRaw = c.prefMultiple ?? c.pref_multiple
+  const prefMultiple = multipleRaw == null ? undefined : num(multipleRaw, 'carry.prefMultiple', 1)
+  if (prefMultiple !== undefined && prefMultiple < 1) throw new Error(`terms: carry.prefMultiple is a multiple of capital (1.08 for an 8% hurdle), got ${prefMultiple}`)
+  const dayCountRaw = c.prefDayCount ?? c.pref_day_count ?? 'act/365'
+  if (dayCountRaw !== 'act/365' && dayCountRaw !== '30/360') throw new Error('terms: carry.prefDayCount must be act/365 or 30/360')
+  const measureRaw = c.catchupMeasure ?? c.catchup_measure ?? 'preferred'
+  if (measureRaw !== 'preferred' && measureRaw !== 'profit') throw new Error('terms: carry.catchupMeasure must be preferred or profit')
+  const extra = {
+    ...(prefMultiple !== undefined ? { prefMultiple } : {}),
+    ...(dayCountRaw === '30/360' ? { prefDayCount: '30/360' as const } : {}),
+    ...(measureRaw === 'profit' ? { catchupMeasure: 'profit' as const } : {}),
+  }
   const gpEntityId = typeof (c.gpEntityId ?? c.gp_entity_id) === 'string' ? (c.gpEntityId ?? c.gp_entity_id) : null
   const recipientsRaw = Array.isArray(c.recipients)
     ? c.recipients.map((r: any) => ({ lpEntityId: r?.partner ?? r?.lpEntityId, pct: r?.pct }))
@@ -62,7 +74,7 @@ export function parseVehicleTerms(raw: unknown): VehicleTerms {
   }
   const carry: VehicleCarryTerms = kind === 'none'
     ? { ...NO_CARRY, recipients }
-    : { kind, carryRate, prefRate, catchupRate, catchupSize, prefCompounds, prefBase, gpEntityId, recipients }
+    : { kind, carryRate, prefRate, catchupRate, catchupSize, prefCompounds, prefBase, ...extra, gpEntityId, recipients }
 
   const partners: TermsPartner[] = []
   for (const [i, p] of (Array.isArray(t.partners) ? t.partners : []).entries()) {

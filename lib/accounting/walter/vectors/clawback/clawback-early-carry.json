@@ -1,0 +1,136 @@
+{
+  "id": "clawback-early-carry",
+  "walter": "0.1",
+  "title": "Carry paid early is given back",
+  "description": "Called 50, 60 back, called 50, 75 back, on an 8% compounding pref on contributed capital. The first distribution returns the 50 called, pays 8.32 of pref and leaves 1.68 for the GP's catch-up. Over the fund's life the LPs never clear the hurdle (42.34 of pref against 35 of profit), so the GP returns the 1.68 at fund end.",
+  "tags": [
+    "clawback",
+    "pref-contributed",
+    "catch-up-full"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "50"
+    },
+    {
+      "type": "distributable",
+      "date": "2027-01-01",
+      "amount": "60"
+    },
+    {
+      "type": "contribution",
+      "date": "2028-01-01",
+      "partner": "lp-a",
+      "amount": "50"
+    },
+    {
+      "type": "distributable",
+      "date": "2031-01-01",
+      "amount": "75"
+    },
+    {
+      "type": "fund-end",
+      "date": "2031-01-01"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2027-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "50.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "8.32"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "1.68"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "50.00"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "25.00"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "clawback",
+        "partner": "gp",
+        "amount": "-1.68"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "clawback",
+        "partner": "lp-a",
+        "amount": "1.68"
+      }
+    ],
+    "totals": {
+      "gp": "0.00",
+      "lp-a": "135.00"
+    },
+    "clawback": {
+      "amount": "1.68",
+      "entitlement": "0.00"
+    }
+  },
+  "tolerance": "0.01"
+}

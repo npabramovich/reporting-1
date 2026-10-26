@@ -28,18 +28,27 @@ function pct(n: number): string {
 }
 
 /** The terms in words, the way the summary line and the approver read them. */
-export function describeTerms(t: Pick<ValidWaterfallTerms, 'kind' | 'carryRate' | 'prefRate' | 'catchupRate' | 'prefCompounds'> & { prefBase?: ValidWaterfallTerms['prefBase']; catchupSize?: number }): string {
+export function describeTerms(t: Pick<ValidWaterfallTerms, 'kind' | 'carryRate' | 'prefRate' | 'catchupRate' | 'prefCompounds'> & {
+  prefBase?: ValidWaterfallTerms['prefBase']
+  catchupSize?: number
+  prefMultiple?: number | null
+  prefDayCount?: ValidWaterfallTerms['prefDayCount']
+  catchupMeasure?: ValidWaterfallTerms['catchupMeasure']
+}): string {
   if (t.kind === 'none' || t.carryRate <= 0) return 'no carry'
   const label = { straight: 'straight', american: 'American (deal-by-deal)', european: 'European (whole-fund)', none: 'no' }[t.kind]
   if (t.kind === 'straight') return `${label} ${pct(t.carryRate)} carry, no hurdle`
   const base = t.prefBase === 'unreturned' ? ' on unreturned capital' : ''
-  const hurdle = t.prefRate > 0 ? `${pct(t.prefRate)} ${t.prefCompounds ? 'compounding' : 'simple'} preferred return${base}` : 'no preferred return'
+  const days = t.prefDayCount === '30/360' ? ' (30/360)' : ''
+  const hurdle = t.prefMultiple != null ? `a ${t.prefMultiple}× hurdle`
+    : t.prefRate > 0 ? `${pct(t.prefRate)} ${t.prefCompounds ? 'compounding' : 'simple'} preferred return${base}${days}` : 'no preferred return'
   const size = t.catchupSize != null && t.catchupSize < 1 && t.catchupRate > 0 ? `, up to ${pct(t.catchupSize)} of a full catch-up` : ''
-  return `${label} ${pct(t.carryRate)} carry, ${hurdle}, ${pct(t.catchupRate)} GP catch-up${size}`
+  const measure = t.catchupMeasure === 'profit' && t.catchupRate > 0 && t.catchupRate < 1 ? ' measured on all profit' : ''
+  return `${label} ${pct(t.carryRate)} carry, ${hurdle}, ${pct(t.catchupRate)} GP catch-up${size}${measure}`
 }
 
 function currentAsValid(c: VehicleCarryTerms): ValidWaterfallTerms {
-  return { kind: c.kind, carryRate: c.carryRate, prefRate: c.prefRate, catchupRate: c.catchupRate, catchupSize: c.catchupSize ?? 1, prefCompounds: c.prefCompounds, prefBase: c.prefBase ?? 'contributed', gpEntityId: c.gpEntityId, recipients: c.recipients }
+  return { kind: c.kind, carryRate: c.carryRate, prefRate: c.prefRate, catchupRate: c.catchupRate, catchupSize: c.catchupSize ?? 1, prefCompounds: c.prefCompounds, prefBase: c.prefBase ?? 'contributed', prefMultiple: c.prefMultiple ?? null, prefDayCount: c.prefDayCount ?? 'act/365', catchupMeasure: c.catchupMeasure ?? 'preferred', gpEntityId: c.gpEntityId, recipients: c.recipients }
 }
 
 async function resolve(deps: ActionDeps, input: SetWaterfallTermsInput) {
@@ -66,7 +75,7 @@ export async function previewSetWaterfallTerms(deps: ActionDeps, input: SetWater
     (t.recipients.length ? t.recipients : t.gpEntityId ? [{ lpEntityId: t.gpEntityId, pct: 100 }] : [])
       .map(r => ({ lpEntityId: r.lpEntityId, name: names.get(r.lpEntityId) ?? r.lpEntityId, pct: r.pct }))
 
-  const changes = (['kind', 'carryRate', 'prefRate', 'catchupRate', 'catchupSize', 'prefCompounds', 'prefBase'] as const)
+  const changes = (['kind', 'carryRate', 'prefRate', 'catchupRate', 'catchupSize', 'prefCompounds', 'prefBase', 'prefMultiple', 'prefDayCount', 'catchupMeasure'] as const)
     .filter(k => before[k] !== terms[k])
     .map(k => ({ field: k, before: before[k], after: terms[k] }))
 

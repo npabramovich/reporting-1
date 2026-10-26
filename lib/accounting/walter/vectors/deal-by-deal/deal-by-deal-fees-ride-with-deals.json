@@ -1,0 +1,99 @@
+{
+  "id": "deal-by-deal-fees-ride-with-deals",
+  "walter": "0.1",
+  "title": "Fees and expenses ride with the deals by cost",
+  "description": "The LP contributes 900 for two 450 deals and 100 for fees. Selling one deal for 900 realizes 450 of cost plus its 50 share of the fees: 500 of capital comes back before carry, and the 400 above it splits 320/80.",
+  "tags": [
+    "deal-by-deal",
+    "fees-in-capital",
+    "split-only"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "basis": "deal-by-deal",
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "900"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "100",
+      "purpose": "fees"
+    },
+    {
+      "type": "investment",
+      "date": "2025-01-01",
+      "deal": "deal-a",
+      "amount": "450"
+    },
+    {
+      "type": "investment",
+      "date": "2025-01-01",
+      "deal": "deal-b",
+      "amount": "450"
+    },
+    {
+      "type": "distributable",
+      "date": "2027-01-01",
+      "amount": "900",
+      "deal": "deal-a"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2027-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "500.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "320.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "80.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

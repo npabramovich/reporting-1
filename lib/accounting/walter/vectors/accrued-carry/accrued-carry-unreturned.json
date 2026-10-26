@@ -1,0 +1,79 @@
+{
+  "id": "accrued-carry-unreturned",
+  "walter": "0.1",
+  "title": "Accrued carry on the unreturned base",
+  "description": "All 1,000 came back after a year, so the hurdle at two years is 86.40, not 166.40, and the GP catches up on the 13.60 of NAV left above it.",
+  "tags": [
+    "accrued-carry",
+    "pref-unreturned"
+  ],
+  "provenance": "ported: Portfolio spec v2, carryTarget european-unreturned",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "unreturned",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-01-01",
+      "amount": "1000"
+    },
+    {
+      "type": "nav",
+      "date": "2027-01-01",
+      "amount": "100"
+    }
+  ],
+  "expected": {
+    "accruedCarry": [
+      {
+        "date": "2027-01-01",
+        "entitlement": "13.60"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

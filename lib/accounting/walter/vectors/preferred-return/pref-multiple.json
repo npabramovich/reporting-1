@@ -1,0 +1,97 @@
+{
+  "id": "pref-multiple",
+  "walter": "0.1",
+  "title": "A flat multiple hurdle",
+  "description": "A 1.5× hurdle: the LPs get 1,500 on 1,000 before carry. Then a 125 catch-up and 375 split 300/75, so the GP holds 200 of the 1,000 of profit.",
+  "tags": [
+    "pref-multiple",
+    "catch-up-full"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "multiple": "1.5"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2030-01-01",
+      "amount": "2000"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2030-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "500.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "125.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "300.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "75.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

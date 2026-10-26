@@ -1,0 +1,61 @@
+{
+  "id": "recycling-not-permitted",
+  "walter": "0.1",
+  "title": "No recycling term, no recycling",
+  "description": "The terms have no recycling clause, so a recycle on a distribution is refused.",
+  "tags": [
+    "recycling",
+    "errors"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2027-01-01",
+      "amount": "600",
+      "recycle": {
+        "amount": "50"
+      }
+    }
+  ],
+  "expected": {
+    "error": "recycling-not-permitted"
+  },
+  "tolerance": "0.01"
+}

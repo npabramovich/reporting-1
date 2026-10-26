@@ -1,0 +1,79 @@
+{
+  "id": "accrued-carry-contributed",
+  "walter": "0.1",
+  "title": "The same books on the contributed base",
+  "description": "On the contributed base the hurdle is 166.40 and the 100 of profit does not clear it: nothing accrues.",
+  "tags": [
+    "accrued-carry",
+    "pref-contributed"
+  ],
+  "provenance": "ported: Portfolio spec v2, carryTarget european-contributed-same-books",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2026-01-01",
+      "amount": "1000"
+    },
+    {
+      "type": "nav",
+      "date": "2027-01-01",
+      "amount": "100"
+    }
+  ],
+  "expected": {
+    "accruedCarry": [
+      {
+        "date": "2027-01-01",
+        "entitlement": "0.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

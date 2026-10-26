@@ -1,0 +1,82 @@
+{
+  "id": "fees-stub-period",
+  "walter": "0.1",
+  "title": "A last quarter cut short",
+  "description": "The fee ends on 15 August, 45 days into a 92-day quarter: 500,000 × 45/92 = 244,565.22.",
+  "tags": [
+    "fees",
+    "fees-committed"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "2000000"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "60000000"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "40000000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "managementFee": {
+      "frequency": "quarterly",
+      "start": "2025-01-01",
+      "end": "2025-08-15",
+      "schedule": [
+        {
+          "from": "2025-01-01",
+          "rate": "0.02",
+          "basis": "commitments"
+        }
+      ]
+    }
+  },
+  "flows": [],
+  "expected": {
+    "fees": [
+      {
+        "start": "2025-01-01",
+        "gross": "500000.00",
+        "offset": "0.00",
+        "net": "500000.00"
+      },
+      {
+        "start": "2025-04-01",
+        "gross": "500000.00",
+        "offset": "0.00",
+        "net": "500000.00"
+      },
+      {
+        "start": "2025-07-01",
+        "gross": "244565.22",
+        "offset": "0.00",
+        "net": "244565.22"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

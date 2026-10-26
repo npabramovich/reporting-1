@@ -19,7 +19,7 @@
 // is measured whole fund under either kind, as the close accrues it (carry.ts).
 
 import {
-  preferredTarget,
+  hurdleTarget,
   realizedCapitalFromDeals,
   runWaterfall,
   type DatedContribution,
@@ -89,14 +89,15 @@ export function forwardWaterfall(p: ConstructionWaterfallProjection, projected?:
     carryRate: p.carryRate,
     catchUpRate: straight ? 1 : p.catchupRate,
     catchUpSize: p.catchupSize ?? 1,
+    ...(p.catchupMeasure === 'profit' ? { catchUpMeasure: 'profit' as const } : {}),
   }
-  const prefOn = !straight && p.prefRate > 0
+  const prefOn = !straight && (p.prefRate > 0 || p.prefMultiple != null)
   const unreturned = p.prefBase === 'unreturned'
   const contributions: DatedContribution[] = [...p.contributions]
   const reductions: HurdleReduction[] = []
 
   const target = (date: string) => prefOn
-    ? preferredTarget(contributions, date, p.prefRate, p.prefCompounds, unreturned ? reductions : undefined)
+    ? hurdleTarget(p, contributions, calledTo(date), date, unreturned ? reductions : undefined)
     : 0
   const calledTo = (date: string) => roundCents(contributions.filter(c => c.date <= date && c.amount > 0).reduce((s, c) => s + c.amount, 0))
 
@@ -170,7 +171,7 @@ function dealByDealWaterfall(
   for (const x of projected.exits) dealOf(x.deal).realizations.push({ date: x.date, costExited: null })
   const expenses = projected.expenses.filter(e => e.amount > 0)
 
-  const prefOn = p.prefRate > 0
+  const prefOn = p.prefRate > 0 || p.prefMultiple != null
   const unreturned = p.prefBase === 'unreturned'
   const reductions: HurdleReduction[] = []
 
@@ -196,10 +197,10 @@ function dealByDealWaterfall(
   // Never more capital owed back than the LPs have put in (replay.ts).
   const capitalTo = (date: string) => Math.min(roundCents(realizedTo(date).reduce((s, c) => s + c.amount, 0)), calledTo(date))
   const target = (date: string) => prefOn
-    ? preferredTarget(realizedTo(date), date, p.prefRate, p.prefCompounds, unreturned ? reductions : undefined)
+    ? hurdleTarget(p, realizedTo(date), capitalTo(date), date, unreturned ? reductions : undefined)
     : 0
   const wholeTarget = (date: string) => prefOn
-    ? preferredTarget(contributions, date, p.prefRate, p.prefCompounds, unreturned ? reductions : undefined)
+    ? hurdleTarget(p, contributions, calledTo(date), date, unreturned ? reductions : undefined)
     : 0
 
   // Where the tiers stand today: the books' distributions replayed on the base as it stood at each.

@@ -1,0 +1,90 @@
+{
+  "id": "clawback-disabled",
+  "walter": "0.1",
+  "title": "No clawback when the terms turn it off",
+  "description": "The same flows with clawback disabled: the GP keeps the 1.68.",
+  "tags": [
+    "clawback"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "clawback": {
+      "enabled": false
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "50"
+    },
+    {
+      "type": "distributable",
+      "date": "2027-01-01",
+      "amount": "60"
+    },
+    {
+      "type": "contribution",
+      "date": "2028-01-01",
+      "partner": "lp-a",
+      "amount": "50"
+    },
+    {
+      "type": "distributable",
+      "date": "2031-01-01",
+      "amount": "75"
+    },
+    {
+      "type": "fund-end",
+      "date": "2031-01-01"
+    }
+  ],
+  "expected": {
+    "totals": {
+      "gp": "1.68",
+      "lp-a": "133.32"
+    },
+    "clawback": null
+  },
+  "tolerance": "0.01"
+}

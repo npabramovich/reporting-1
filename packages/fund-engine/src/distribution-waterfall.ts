@@ -69,6 +69,13 @@ export interface WaterfallTiers {
   profitToLP: number
   toLP: number
   toGP: number
+  /**
+   * What the carry recipients' own capital took, pro-rata by capital and outside the tiers (the
+   * GP's commitment bears no carry): `carryFreeCapital` of it returns their capital, the rest is
+   * their profit. Absent on older stored tiers.
+   */
+  carryFree?: number
+  carryFreeCapital?: number
 }
 
 export interface DistributionSplit {
@@ -77,6 +84,11 @@ export interface DistributionSplit {
   lines: { lpEntityId: string; amount: number }[]
   /** Carry lines — the GP's take, split across the recipients by their percentages. */
   carryLines: { lpEntityId: string; amount: number }[]
+  /**
+   * The recipients' carry-free shares, which are also in `lines`: what returned their capital and
+   * what is their profit. Empty when no recipient has contributed.
+   */
+  carryFreeLines?: { lpEntityId: string; capital: number; profit: number }[]
   tiers: WaterfallTiers
   stateBefore: WaterfallState
   stateAfter: WaterfallState
@@ -125,7 +137,8 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
   const warnings: string[] = []
 
   const recipientIds = new Set(terms.recipients.map(r => r.lpEntityId))
-  const noCarry = terms.kind === 'none' || terms.carryRate <= 0 || terms.recipients.length === 0
+  // A zero carry rate still runs the tiers, so the split says what came back as capital.
+  const noCarry = terms.kind === 'none' || (terms.carryRate > 0 && terms.recipients.length === 0)
 
   if (noCarry) {
     if (terms.kind !== 'none' && terms.carryRate > 0 && terms.recipients.length === 0) {
@@ -145,11 +158,24 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
   }
 
   const lps = input.partners.filter(p => !recipientIds.has(p.lpEntityId))
-  for (const p of input.partners) {
-    if (recipientIds.has(p.lpEntityId) && p.contributed > 0) {
-      warnings.push(`${p.lpEntityId} receives the carry and has also contributed capital; the waterfall treats it as a carry recipient only, as the close does. Edit its line if it should share pro-rata.`)
+
+  // THE GP'S OWN CAPITAL. A carry recipient that has contributed (the GP's commitment) bears no
+  // carry, as the close assumes, so it takes its pro-rata share of the distribution by capital
+  // outside the tiers: its capital back first, then its profit. The tiers divide the rest.
+  const carryFree = input.partners.filter(p => recipientIds.has(p.lpEntityId) && p.contributed > 0)
+  const slices = new Map<string, { capital: number; profit: number }>()
+  if (carryFree.length > 0) {
+    const byCapital = allocateAmount(total, input.partners.map(p => ({ lpEntityId: p.lpEntityId, commitment: Math.max(0, p.contributed) })))
+    for (const p of carryFree) {
+      const slice = byCapital.get(p.lpEntityId) ?? 0
+      // Carry is not in `distributed` (it's on the carried-interest line), so this is its own capital.
+      const returned = Math.max(0, Math.min(p.contributed, p.distributed))
+      const capital = roundCents(Math.min(slice, Math.max(0, p.contributed - returned)))
+      slices.set(p.lpEntityId, { capital, profit: roundCents(slice - capital) })
     }
   }
+  const sliced = roundCents([...slices.values()].reduce((s, v) => s + v.capital + v.profit, 0))
+  const pool = roundCents(total - sliced)
 
   const opts = { realizedCapital: input.realizedCapital }
   if (terms.kind === 'american' && !usesRealizedBase(terms, opts)) {
@@ -158,7 +184,7 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
     warnings.push('No deal has been realized yet, so under the deal-by-deal waterfall none of this distribution is a return of capital. If it returns capital that was never invested, split it pro-rata instead.')
   }
   const stateBefore = replayWaterfallState(input.priors, input.contributions, terms, input.asOf, opts)
-  const result = runWaterfall(total, waterfallTermsOf(terms), stateBefore)
+  const result = runWaterfall(pool, waterfallTermsOf(terms), stateBefore)
 
   const tiers: WaterfallTiers = {
     returnOfCapital: result.toReturnOfCapital,
@@ -169,6 +195,7 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
     profitToLP: result.toCarryLP,
     toLP: result.toLP,
     toGP: result.toGP,
+    ...(sliced > 0 ? { carryFree: sliced, carryFreeCapital: roundCents([...slices.values()].reduce((s, v) => s + v.capital, 0)) } : {}),
   }
 
   // LP tiers: capital comes back in proportion to what each partner put in; the preferred return
@@ -180,6 +207,10 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
     ? basisContributed
     : lps.map(p => ({ lpEntityId: p.lpEntityId, weight: Math.max(0, p.ending) }))
   const lines = share(tiers.toLP, basis)
+  for (const [lpEntityId, v] of slices) {
+    const amount = roundCents(v.capital + v.profit)
+    if (amount > 0) lines.push({ lpEntityId, amount })
+  }
 
   // The GP's take, split across the recipients by percentage; the last absorbs the rounding
   // cent so the carry lines always tie to `toGP`.
@@ -206,6 +237,7 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
     method: 'waterfall',
     lines,
     carryLines,
+    ...(sliced > 0 ? { carryFreeLines: [...slices].map(([lpEntityId, v]) => ({ lpEntityId, ...v })).filter(l => l.capital + l.profit > 0) } : {}),
     tiers,
     stateBefore,
     stateAfter: result.state,
@@ -219,6 +251,6 @@ export function splitDistribution(input: SplitInput): DistributionSplit {
  * earned, a distribution only knows what it paid — so it is left for the GP to move.
  */
 export function suggestedCharacter(tiers: WaterfallTiers, total: number): { returnOfCapital: number; realizedGain: number; income: number } {
-  const roc = roundCents(Math.min(tiers.returnOfCapital, total))
+  const roc = roundCents(Math.min(tiers.returnOfCapital + (tiers.carryFreeCapital ?? 0), total))
   return { returnOfCapital: roc, realizedGain: roundCents(total - roc), income: 0 }
 }

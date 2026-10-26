@@ -429,6 +429,9 @@ async function loadConstructionActuals(
         catchupSize: carryTerms.catchupSize ?? 1,
         prefCompounds: carryTerms.prefCompounds,
         prefBase: carryTerms.prefBase ?? 'contributed',
+        ...(carryTerms.prefMultiple != null ? { prefMultiple: carryTerms.prefMultiple } : {}),
+        ...(carryTerms.prefDayCount === '30/360' ? { prefDayCount: '30/360' as const } : {}),
+        ...(carryTerms.catchupMeasure === 'profit' ? { catchupMeasure: 'profit' as const } : {}),
         // The LP side excludes the GP's stake. When the books class the GP entity separately,
         // `economics.lp` already leaves it out; otherwise take its share of commitments off.
         ...(() => {

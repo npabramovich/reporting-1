@@ -1,0 +1,83 @@
+{
+  "id": "pref-contributed-ignores-returns",
+  "walter": "0.1",
+  "title": "Contributed base keeps accruing after capital returns",
+  "description": "All 1,000 comes back after a year, but on the contributed base the hurdle accrues on gross contributions: five years (1,827 days) gives 469.95.",
+  "tags": [
+    "pref-compound",
+    "pref-contributed"
+  ],
+  "provenance": "ported: Portfolio spec v2, no-reduction-for-returns",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2020-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2021-01-01",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-01-01",
+      "amount": "469.95"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2021-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2025-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "469.95"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

@@ -1,0 +1,115 @@
+{
+  "id": "partners-gp-commit-carry-free",
+  "walter": "0.1",
+  "title": "The GP commit pays no carry",
+  "description": "The GP commits 20 of 1,000 and bears no carry. It takes its 2% slice of 1,500 (20 back, 10 of profit) outside the waterfall; the other 1,470 runs the tiers on the LP's 980.",
+  "tags": [
+    "gp-commit",
+    "catch-up-full"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "20"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "980"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "multiple": "1.08"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "gp",
+      "amount": "20"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "980"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-06-30",
+      "amount": "1500"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2025-06-30",
+        "tier": "return-of-capital",
+        "partner": "gp",
+        "amount": "20.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "carry-free",
+        "partner": "gp",
+        "amount": "10.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "980.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "78.40"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "19.60"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "313.60"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "78.40"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

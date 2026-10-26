@@ -1,0 +1,112 @@
+{
+  "id": "catch-up-50-profit-five-years",
+  "walter": "0.1",
+  "title": "50% catch-up over five years, measured on profit",
+  "description": "100 called, 200 back five years later, 8% compounding: a 50/50 catch-up measured on profit ends with the GP at 20.00 of the 100 of profit.",
+  "tags": [
+    "catch-up-partial",
+    "catch-up-measure-profit",
+    "pref-compound"
+  ],
+  "provenance": "reference-engine, checked against the engine comparison",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "100"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20",
+          "gpShare": "0.5",
+          "measure": "profit"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2026-01-01",
+      "partner": "lp-a",
+      "amount": "100"
+    },
+    {
+      "type": "distributable",
+      "date": "2031-01-01",
+      "amount": "200"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2031-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "100.00"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "46.96"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "catch-up",
+        "partner": "lp-a",
+        "amount": "15.66"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "15.65"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "17.38"
+      },
+      {
+        "date": "2031-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "4.35"
+      }
+    ],
+    "totals": {
+      "gp": "20.00"
+    }
+  },
+  "tolerance": "0.01"
+}

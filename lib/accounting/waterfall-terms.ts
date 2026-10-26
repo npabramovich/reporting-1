@@ -5,11 +5,13 @@
 // The spec for what these terms mean is docs/spec/waterfall-terms.md.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { CarryKind, CarryRecipient, PrefBase } from './carry'
+import type { CarryKind, CarryRecipient, DayCount, PrefBase } from './carry'
 import { vehicleIdByName } from './vehicle-id'
 
 export const CARRY_KINDS: CarryKind[] = ['none', 'straight', 'american', 'european']
 export const PREF_BASES: PrefBase[] = ['contributed', 'unreturned']
+export const DAY_COUNTS: DayCount[] = ['act/365', '30/360']
+export const CATCHUP_MEASURES = ['preferred', 'profit'] as const
 
 /** The terms as a caller supplies them (the route's PUT body, the pending action's input). */
 export interface WaterfallTermsInput {
@@ -20,6 +22,9 @@ export interface WaterfallTermsInput {
   catchupSize?: unknown
   prefCompounds?: unknown
   prefBase?: unknown
+  prefMultiple?: unknown
+  prefDayCount?: unknown
+  catchupMeasure?: unknown
   gpEntityId?: unknown
   carryRecipients?: unknown
 }
@@ -35,6 +40,12 @@ export interface ValidWaterfallTerms {
   prefCompounds: boolean
   /** What the hurdle accrues on: all contributions, or only capital not yet returned. */
   prefBase: PrefBase
+  /** A hurdle set as a multiple of capital (1.08 = 8%, never accruing) instead of the rate. Null: the rate. */
+  prefMultiple: number | null
+  /** How the rate's years are counted. */
+  prefDayCount: DayCount
+  /** What the catch-up is measured on: the pref paid, or all the profit distributed. */
+  catchupMeasure: 'preferred' | 'profit'
   gpEntityId: string | null
   recipients: CarryRecipient[]
 }
@@ -66,6 +77,17 @@ export function parseWaterfallTermsInput(body: WaterfallTermsInput): { ok: true;
   if (catchupSize < 0 || catchupSize > 1) return { error: 'Catch-up size must be between 0 and 1 (1 = a full catch-up).' }
   const prefBase = body?.prefBase ?? 'contributed'
   if (!(PREF_BASES as unknown[]).includes(prefBase)) return { error: 'The preferred return must accrue on contributed or unreturned capital.' }
+  const prefMultiple = body?.prefMultiple == null || body.prefMultiple === '' ? null : num(body.prefMultiple, NaN)
+  if (prefMultiple !== null && !(prefMultiple >= 1 && prefMultiple <= 10)) return { error: 'A hurdle multiple must be between 1 and 10 (1.08 = 8%).' }
+  const prefDayCount = body?.prefDayCount ?? 'act/365'
+  if (!(DAY_COUNTS as unknown[]).includes(prefDayCount)) return { error: 'The day count must be act/365 or 30/360.' }
+  const catchupMeasure = body?.catchupMeasure ?? 'preferred'
+  if (!(CATCHUP_MEASURES as readonly unknown[]).includes(catchupMeasure)) return { error: 'The catch-up must be measured on the preferred return or on profit.' }
+  if (catchupMeasure === 'profit' && kind !== 'straight' && carryRate > 0 && catchupRate > 0) {
+    // Measured on profit, the GP only gains ground while its share of each dollar is above its target.
+    const x = (catchupSize * carryRate) / (1 - carryRate)
+    if (catchupRate <= x / (1 + x)) return { error: 'Measured on profit, the catch-up rate must be above the share of profit the GP catches up to.' }
+  }
 
   // Carry has to accrue TO somebody. A vehicle may have ONE recipient (legacy gpEntityId) or a
   // split across several (carryRecipients: [{lpEntityId, pct}] summing to 100). Without any the
@@ -94,6 +116,9 @@ export function parseWaterfallTermsInput(body: WaterfallTermsInput): { ok: true;
       catchupSize,
       prefCompounds: body?.prefCompounds !== false,
       prefBase: prefBase as PrefBase,
+      prefMultiple,
+      prefDayCount: prefDayCount as DayCount,
+      catchupMeasure: catchupMeasure as 'preferred' | 'profit',
       gpEntityId,
       recipients,
     },
@@ -148,6 +173,9 @@ export async function saveWaterfallTerms(
         catchup_size: terms.catchupSize,
         pref_compounds: terms.prefCompounds,
         pref_base: terms.prefBase,
+        pref_multiple: terms.prefMultiple,
+        pref_day_count: terms.prefDayCount,
+        catchup_measure: terms.catchupMeasure,
         gp_entity_id: singleGp,
         carry_recipients: recipients.length > 0 ? recipients : null,
         updated_at: new Date().toISOString(),

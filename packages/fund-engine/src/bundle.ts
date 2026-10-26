@@ -87,6 +87,10 @@ export function termsFileFrom(input: {
       catchupSize: c.catchupSize ?? 1,
       prefCompounds: c.prefCompounds,
       prefBase: c.prefBase ?? 'contributed',
+      // Only when set, so a bundle made before these terms existed hashes the same.
+      ...(c.prefMultiple != null ? { prefMultiple: c.prefMultiple } : {}),
+      ...(c.prefDayCount === '30/360' ? { prefDayCount: c.prefDayCount } : {}),
+      ...(c.catchupMeasure === 'profit' ? { catchupMeasure: c.catchupMeasure } : {}),
       gpEntityId: c.gpEntityId,
       recipients: c.recipients.map(r => ({ partner: r.lpEntityId, pct: r.pct })),
     },

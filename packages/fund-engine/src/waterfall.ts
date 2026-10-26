@@ -13,6 +13,13 @@
 // share of each dollar that goes to the GP while it catches up; the LPs get the rest. Any rate
 // works: at 10% on 20% carry the GP takes 10% of the flow until it has its catch-up.
 //
+// LPAs measure a catch-up in one of two ways, and they part when the LPs share the catch-up flow.
+// 'preferred' (the default, and the reading above) gives the GP carryRate / (1 − carryRate) of the
+// pref paid however much of the flow went to the LPs. 'profit' runs the catch-up until the GP holds
+// its target share of all the profit distributed so far ("until the GP has received 20% of the
+// amounts distributed under (ii) and (iii)"), so the LPs' part of the flow counts too, and the GP
+// reaches its full share.
+//
 // This is a pure function of a distributable amount and the cumulative state, so
 // it's fully testable and can be replayed. Hurdle ACCRUAL (how preferredTarget
 // grows over time) is supplied by the caller, keeping timing out of the waterfall.
@@ -24,6 +31,8 @@ export interface WaterfallTerms {
   catchUpRate?: number
   /** How much of a full catch-up the GP gets, 0–1. Absent means 1, a full catch-up. */
   catchUpSize?: number
+  /** What the catch-up is measured on (see above). Absent means 'preferred'. */
+  catchUpMeasure?: 'preferred' | 'profit'
 }
 
 export interface WaterfallState {
@@ -42,6 +51,11 @@ export interface WaterfallState {
    * that has never reached the split.
    */
   gpCatchUpPaid?: number
+  /**
+   * The LPs' profit paid so far: everything after return of capital. Absent means `preferredPaid`,
+   * exact for a state that has never reached the catch-up. A 'profit' catch-up measures on it.
+   */
+  lpProfitPaid?: number
 }
 
 export interface WaterfallResult {
@@ -92,7 +106,19 @@ export function runWaterfall(
   const size = Math.min(1, Math.max(0, terms.catchUpSize ?? 1))
   let toCatchUp = 0
   let toCatchUpLP = 0
-  if (carry > 0 && carry < 1 && catchUpRate > 0 && size > 0) {
+  if (terms.catchUpMeasure === 'profit' && carry > 0 && carry < 1 && catchUpRate > 0 && size > 0) {
+    // The target share t that the size stands for: t / (1 − t) = size × c / (1 − c).
+    const x = (size * carry) / (1 - carry)
+    const target = x / (1 + x)
+    if (catchUpRate > target) {
+      const profit = r((state.lpProfitPaid ?? state.preferredPaid) + toPreferred + state.gpCarryPaid)
+      const want = r(Math.max(0, (target * profit - state.gpCarryPaid) / (catchUpRate - target)))
+      const gross = take(want)
+      // A completed catch-up lands the GP on its share to the cent, as the preferred measure does.
+      toCatchUp = gross === want ? r(Math.max(0, target * (profit + gross) - state.gpCarryPaid)) : r(gross * catchUpRate)
+      toCatchUpLP = r(gross - toCatchUp)
+    }
+  } else if (carry > 0 && carry < 1 && catchUpRate > 0 && size > 0) {
     const gpNeeded = r(Math.max(0, (size * carry * prefAfter) / (1 - carry) - gpCatchUpBefore))
     if (gpNeeded > 0) {
       // Round the GP's catch-up, not the gross flow, so a completed catch-up lands to the cent;
@@ -119,6 +145,10 @@ export function runWaterfall(
     preferredTarget: state.preferredTarget,
     gpCarryPaid: r(state.gpCarryPaid + toGP),
     gpCatchUpPaid: r(gpCatchUpBefore + toCatchUp),
+    // Kept only where a profit catch-up reads it, so a state for the usual terms is unchanged.
+    ...(terms.catchUpMeasure === 'profit' || state.lpProfitPaid != null
+      ? { lpProfitPaid: r((state.lpProfitPaid ?? state.preferredPaid) + toPreferred + toCatchUpLP + toCarryLP) }
+      : {}),
   }
 
   return { toReturnOfCapital, toPreferred, toCatchUp, toCatchUpLP, toCarryLP, toCarryGP, toLP, toGP, state: newState }

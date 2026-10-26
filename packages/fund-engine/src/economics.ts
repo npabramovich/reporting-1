@@ -82,6 +82,9 @@ export function priorDistributions(
     const isDist = bucketForSourceType(p.sourceType, p.amount) === 'distributions'
     const isCarry = p.sourceType === 'carry_distribution'
     if (!isDist && !isCarry) continue
+    // A recipient's own distributions are its carry-free share, taken outside the tiers, so only
+    // its carry is in what the waterfall has paid out (distribution-waterfall.ts).
+    if (!isCarry && recipientIds.has(p.lpEntityId)) continue
     const date = p.entryDate ?? asOf
     if (date > asOf) continue
     priorByDate.set(date, roundCents((priorByDate.get(date) ?? 0) + p.amount))

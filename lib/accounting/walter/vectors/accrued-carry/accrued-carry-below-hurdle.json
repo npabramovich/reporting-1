@@ -1,0 +1,73 @@
+{
+  "id": "accrued-carry-below-hurdle",
+  "walter": "0.1",
+  "title": "No carry accrued inside the hurdle",
+  "description": "NAV 1,070 does not clear the 80 of pref, so nothing accrues.",
+  "tags": [
+    "accrued-carry"
+  ],
+  "provenance": "ported: Portfolio spec v2, carryTarget european-below-hurdle",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "nav",
+      "date": "2026-01-01",
+      "amount": "1070"
+    }
+  ],
+  "expected": {
+    "accruedCarry": [
+      {
+        "date": "2026-01-01",
+        "entitlement": "0.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

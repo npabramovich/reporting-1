@@ -24,6 +24,9 @@ interface Terms {
   catchupSize?: number
   prefCompounds: boolean
   prefBase?: 'contributed' | 'unreturned'
+  prefMultiple?: number | null
+  prefDayCount?: 'act/365' | '30/360'
+  catchupMeasure?: 'preferred' | 'profit'
   recipients: Recipient[]
 }
 
@@ -48,6 +51,11 @@ export function CarryTerms() {
   const [compounds, setCompounds] = useState(false)
   const [prefBase, setPrefBase] = useState<'contributed' | 'unreturned'>('contributed')
   const [catchupSize, setCatchupSize] = useState('100')
+  // A hurdle is a rate (accruing) or a multiple of capital (flat). Most LPAs say a rate.
+  const [hurdleAs, setHurdleAs] = useState<'rate' | 'multiple'>('rate')
+  const [multiple, setMultiple] = useState('')
+  const [dayCount, setDayCount] = useState<'act/365' | '30/360'>('act/365')
+  const [catchupMeasure, setCatchupMeasure] = useState<'preferred' | 'profit'>('preferred')
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [vehicleName, setVehicleName] = useState('')
@@ -66,6 +74,10 @@ export function CarryTerms() {
     setCompounds(t.prefCompounds)
     setPrefBase(t.prefBase === 'unreturned' ? 'unreturned' : 'contributed')
     setCatchupSize(pct(t.catchupSize ?? 1))
+    setHurdleAs(t.prefMultiple != null ? 'multiple' : 'rate')
+    setMultiple(t.prefMultiple != null ? String(t.prefMultiple) : '')
+    setDayCount(t.prefDayCount === '30/360' ? '30/360' : 'act/365')
+    setCatchupMeasure(t.catchupMeasure === 'profit' ? 'profit' : 'preferred')
     setRecipients(t.recipients ?? [])
     setCandidates(d.candidates ?? [])
     setVehicleName(d.group ?? '')
@@ -100,6 +112,9 @@ export function CarryTerms() {
         catchupSize: catchupSize.trim() === '' ? 1 : frac(catchupSize),
         prefCompounds: compounds,
         prefBase,
+        prefMultiple: hurdleAs === 'multiple' && multiple.trim() !== '' ? Number(multiple) : null,
+        prefDayCount: dayCount,
+        catchupMeasure,
         carryRecipients: recipients,
       }),
     })
@@ -202,11 +217,19 @@ export function CarryTerms() {
 
             {hasHurdle && (
               <>
-                <Field label="Preferred return" hint="Annual hurdle (0 = none)">
-                  <Suffix suffix="%">
-                    <Input value={pref} onChange={e => setPref(e.target.value)} />
-                  </Suffix>
-                </Field>
+                {hurdleAs === 'rate' ? (
+                  <Field label="Preferred return" hint="Annual hurdle (0 = none)">
+                    <Suffix suffix="%">
+                      <Input value={pref} onChange={e => setPref(e.target.value)} />
+                    </Suffix>
+                  </Field>
+                ) : (
+                  <Field label="Hurdle multiple" hint="Capital back times this before the catch-up">
+                    <Suffix suffix="×">
+                      <Input value={multiple} onChange={e => setMultiple(e.target.value)} placeholder="e.g. 1.08" />
+                    </Suffix>
+                  </Field>
+                )}
                 <Field label="Catch-up rate" hint="GP's share of each dollar while it catches up (0 = none)">
                   <Suffix suffix="%">
                     <Input value={catchup} onChange={e => setCatchup(e.target.value)} />
@@ -260,13 +283,43 @@ export function CarryTerms() {
           </Field>
 
           {hasHurdle && (
+            <Field label="The hurdle is" hint="Most LPAs set a rate that accrues">
+              <Choice
+                value={hurdleAs}
+                onChange={setHurdleAs}
+                options={[['rate', 'A rate'], ['multiple', 'A multiple of capital']]}
+              />
+            </Field>
+          )}
+
+          {hasHurdle && hurdleAs === 'rate' && (
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <input type="checkbox" checked={compounds} onChange={e => setCompounds(e.target.checked)} />
               The preferred return compounds annually
             </label>
           )}
 
-          {hasHurdle && (
+          {hasHurdle && hurdleAs === 'rate' && (
+            <Field label="Years are counted" hint="Actual days unless the LPA says 30/360">
+              <Choice
+                value={dayCount}
+                onChange={setDayCount}
+                options={[['act/365', 'Actual/365'], ['30/360', '30/360']]}
+              />
+            </Field>
+          )}
+
+          {hasHurdle && frac(catchup) > 0 && frac(catchup) < 1 && (
+            <Field label="The catch-up runs until the GP has" hint="They differ only when the LPs share the catch-up">
+              <Choice
+                value={catchupMeasure}
+                onChange={setCatchupMeasure}
+                options={[['preferred', 'Its share of the preferred return'], ['profit', 'Its share of all profit']]}
+              />
+            </Field>
+          )}
+
+          {hasHurdle && hurdleAs === 'rate' && (
             <Field label="Preferred return accrues on" hint="Most LPAs say unreturned capital">
               <div className="flex flex-wrap gap-1.5">
                 {([
@@ -343,3 +396,22 @@ function Suffix({ suffix, children }: { suffix: string; children: React.ReactNod
     </div>
   )
 }
+
+/** A row of exclusive choices, styled like the other toggles on this page. */
+function Choice<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: [T, string][] }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map(([v, label]) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onChange(v)}
+          className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${ value === v ? 'border-foreground/30 bg-accent font-medium' : 'border-border text-muted-foreground hover:text-foreground' }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+

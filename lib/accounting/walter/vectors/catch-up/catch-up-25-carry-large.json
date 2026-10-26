@@ -1,0 +1,97 @@
+{
+  "id": "catch-up-25-carry-large",
+  "walter": "0.1",
+  "title": "25% carry at fund scale",
+  "description": "2,000,000 of capital, a 1.16 hurdle (320,000 of pref), 25% carry: the catch-up is 0.25 × 320,000 ÷ 0.75 = 106,666.67.",
+  "tags": [
+    "catch-up-full",
+    "rounding"
+  ],
+  "provenance": "ported: Portfolio spec v2, carry-25-large",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "2000000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "multiple": "1.16"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.25"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.25"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "2000000"
+    },
+    {
+      "type": "distributable",
+      "date": "2029-01-01",
+      "amount": "3000000"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2029-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "2000000.00"
+      },
+      {
+        "date": "2029-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "320000.00"
+      },
+      {
+        "date": "2029-01-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "106666.67"
+      },
+      {
+        "date": "2029-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "430000.00"
+      },
+      {
+        "date": "2029-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "143333.33"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

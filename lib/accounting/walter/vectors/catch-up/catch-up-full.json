@@ -1,0 +1,96 @@
+{
+  "id": "catch-up-full",
+  "walter": "0.1",
+  "title": "All four tiers, full catch-up",
+  "description": "1,000 of capital, 80 of pref, a 20 catch-up (the GP reaches 20% of 100), then 80/20. The GP ends with 100, 20% of the 500 of profit.",
+  "tags": [
+    "catch-up-full"
+  ],
+  "provenance": "ported: Portfolio spec v2, european-full-catch-up",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "multiple": "1.08"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-06-30",
+      "amount": "1500"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2025-06-30",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "80.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "20.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "320.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "80.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

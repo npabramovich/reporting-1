@@ -1,0 +1,72 @@
+{
+  "id": "recycling-cap-on-fees",
+  "walter": "0.1",
+  "title": "A cap measured on management fees paid",
+  "description": "The cap is 100% of management fees paid. The LP has paid 50 of fees, so recycling 60 is refused.",
+  "tags": [
+    "recycling",
+    "errors"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "recycling": {
+      "cap": "1",
+      "capBasis": "management-fees"
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "950"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "50",
+      "purpose": "fees"
+    },
+    {
+      "type": "distributable",
+      "date": "2027-01-01",
+      "amount": "600",
+      "recycle": {
+        "amount": "60"
+      }
+    }
+  ],
+  "expected": {
+    "error": "recycle-over-cap"
+  },
+  "tolerance": "0.01"
+}

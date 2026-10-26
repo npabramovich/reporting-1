@@ -1,0 +1,90 @@
+{
+  "id": "roc-excludes-fees",
+  "walter": "0.1",
+  "title": "Fees left out of capital to return",
+  "description": "The same flows with returnOfCapital.includes set to investments only: 900 is returned and the 100 above it splits 80/20.",
+  "tags": [
+    "return-of-capital",
+    "fees-in-capital"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "returnOfCapital": {
+        "includes": [
+          "investments"
+        ]
+      },
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "900",
+      "purpose": "investments"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "100",
+      "purpose": "fees"
+    },
+    {
+      "type": "distributable",
+      "date": "2027-01-01",
+      "amount": "1000"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2027-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "900.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "80.00"
+      },
+      {
+        "date": "2027-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "20.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

@@ -1,0 +1,93 @@
+{
+  "id": "catch-up-runs-out",
+  "walter": "0.1",
+  "title": "A partial catch-up the distribution does not fill",
+  "description": "gpShare 0.8, measure preferred, and only 15 left after the pref: the GP gets 12 and the LPs 3.",
+  "tags": [
+    "catch-up-partial",
+    "catch-up-measure-preferred"
+  ],
+  "provenance": "ported: Portfolio spec v2, partial-catch-up-runs-out",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "multiple": "1.08"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20",
+          "gpShare": "0.8",
+          "measure": "preferred"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-06-30",
+      "amount": "1095"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2025-06-30",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "80.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "catch-up",
+        "partner": "lp-a",
+        "amount": "3.00"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "12.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

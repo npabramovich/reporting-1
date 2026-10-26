@@ -1,0 +1,83 @@
+{
+  "id": "fees-organizational-expense-cap",
+  "walter": "0.1",
+  "title": "Organizational expenses over the cap reduce the fee",
+  "description": "650,000 of organizational expenses against a 500,000 cap: the 150,000 over it comes off the first quarter's fee.",
+  "tags": [
+    "fees",
+    "fees-offsets"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "2000000"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "60000000"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "40000000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "managementFee": {
+      "frequency": "quarterly",
+      "start": "2025-01-01",
+      "end": "2025-07-01",
+      "schedule": [
+        {
+          "from": "2025-01-01",
+          "rate": "0.02",
+          "basis": "commitments"
+        }
+      ],
+      "organizationalExpenseCap": "500000"
+    }
+  },
+  "flows": [
+    {
+      "type": "organizational-expense",
+      "date": "2025-01-15",
+      "amount": "650000"
+    }
+  ],
+  "expected": {
+    "fees": [
+      {
+        "start": "2025-01-01",
+        "gross": "500000.00",
+        "offset": "150000.00",
+        "net": "350000.00"
+      },
+      {
+        "start": "2025-04-01",
+        "gross": "500000.00",
+        "offset": "0.00",
+        "net": "500000.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

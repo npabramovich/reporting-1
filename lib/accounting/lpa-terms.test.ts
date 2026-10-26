@@ -264,8 +264,18 @@ describe('parseWaterfallTermsInput (the shared write path)', () => {
   it('accepts valid terms and defaults catch-up to full and the hurdle to compounding', () => {
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefRate: 0.08, carryRecipients: [{ lpEntityId: 'gp', pct: 100 }] })).toEqual({
       ok: true,
-      value: { kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, catchupSize: 1, prefCompounds: true, prefBase: 'contributed', gpEntityId: null, recipients: [{ lpEntityId: 'gp', pct: 100 }] },
+      value: { kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, catchupSize: 1, prefCompounds: true, prefBase: 'contributed', prefMultiple: null, prefDayCount: 'act/365', catchupMeasure: 'preferred', gpEntityId: null, recipients: [{ lpEntityId: 'gp', pct: 100 }] },
     })
+  })
+
+  it('takes a multiple hurdle, a 30/360 day count and a catch-up measured on profit', () => {
+    expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefMultiple: 1.08, prefDayCount: '30/360', catchupRate: 0.5, catchupMeasure: 'profit', gpEntityId: 'gp' }))
+      .toMatchObject({ ok: true, value: { prefMultiple: 1.08, prefDayCount: '30/360', catchupMeasure: 'profit' } })
+    expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefMultiple: 0.9, gpEntityId: 'gp' })).toEqual({ error: 'A hurdle multiple must be between 1 and 10 (1.08 = 8%).' })
+    expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefDayCount: 'act/360', gpEntityId: 'gp' })).toEqual({ error: 'The day count must be act/365 or 30/360.' })
+    // Measured on profit, a catch-up at or below the GP's target share never catches up.
+    expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, catchupRate: 0.1, catchupMeasure: 'profit', gpEntityId: 'gp' }))
+      .toEqual({ error: 'Measured on profit, the catch-up rate must be above the share of profit the GP catches up to.' })
   })
 
   it('refuses what the settings page refuses, in its words', () => {

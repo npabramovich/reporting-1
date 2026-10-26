@@ -1,0 +1,65 @@
+{
+  "id": "refuse-negative-amount",
+  "walter": "0.1",
+  "title": "A negative amount is refused",
+  "description": "Amounts are never negative; a distribution of -50 is an invalid flow.",
+  "tags": [
+    "errors"
+  ],
+  "provenance": "adapted: Portfolio spec v2, negative-distributable (which distributes nothing instead)",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "multiple": "1.08"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-06-30",
+      "amount": "-50"
+    }
+  ],
+  "expected": {
+    "error": "invalid-flow"
+  },
+  "tolerance": "0.01"
+}

@@ -1,0 +1,147 @@
+{
+  "id": "split-tiered-irr-catch-up",
+  "walter": "0.1",
+  "title": "Carry steps up at a 15% IRR, with a second catch-up",
+  "description": "8% compounding pref, full catch-up to 20%, 80/20 until the LPs reach a 15% IRR, then a catch-up to 25% of profit and 75/25. The test suite checks the LPs' IRR at the first step is 15%.",
+  "tags": [
+    "split-tiered",
+    "split-until-irr",
+    "catch-up-full"
+  ],
+  "provenance": "reference-engine",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "rate": "0.08",
+          "compounding": "annual",
+          "base": "contributed",
+          "dayCount": "act/365"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20",
+          "measure": "profit"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20",
+          "until": {
+            "lpIrr": "0.15"
+          }
+        },
+        {
+          "type": "catch-up",
+          "target": "0.25",
+          "measure": "profit"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.25"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2028-01-01",
+      "amount": "1200"
+    },
+    {
+      "type": "distributable",
+      "date": "2030-01-01",
+      "amount": "2500"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2028-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "1000.00"
+      },
+      {
+        "date": "2028-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "200.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "preferred-return",
+        "partner": "lp-a",
+        "amount": "269.64"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "catch-up",
+        "partner": "gp",
+        "amount": "117.41"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "154.88"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "38.72"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "catch-up-2",
+        "partner": "gp",
+        "amount": "52.04"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split-2",
+        "partner": "lp-a",
+        "amount": "1400.48"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split-2",
+        "partner": "gp",
+        "amount": "466.83"
+      }
+    ],
+    "totals": {
+      "gp": "675.00",
+      "lp-a": "3025.00"
+    }
+  },
+  "tolerance": "0.01"
+}

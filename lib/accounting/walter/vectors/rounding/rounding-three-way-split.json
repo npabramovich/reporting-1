@@ -1,0 +1,93 @@
+{
+  "id": "rounding-three-way-split",
+  "walter": "0.1",
+  "title": "Largest remainder across three equal partners",
+  "description": "100.00 to three LPs with equal capital: 33.34, 33.33, 33.33. The extra cent goes to the first partner listed.",
+  "tags": [
+    "rounding"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "100"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "100"
+      },
+      {
+        "id": "lp-c",
+        "role": "lp",
+        "commitment": "100"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "100"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-b",
+      "amount": "100"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-c",
+      "amount": "100"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-06-30",
+      "amount": "100"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2025-06-30",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "33.34"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "return-of-capital",
+        "partner": "lp-b",
+        "amount": "33.33"
+      },
+      {
+        "date": "2025-06-30",
+        "tier": "return-of-capital",
+        "partner": "lp-c",
+        "amount": "33.33"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

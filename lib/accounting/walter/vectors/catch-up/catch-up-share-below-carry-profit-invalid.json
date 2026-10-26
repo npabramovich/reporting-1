@@ -1,0 +1,68 @@
+{
+  "id": "catch-up-share-below-carry-profit-invalid",
+  "walter": "0.1",
+  "title": "A profit catch-up that can never finish is refused",
+  "description": "gpShare 0.1 with a 0.20 target under measure profit: the GP's share of profit would fall, not rise, so the terms are invalid.",
+  "tags": [
+    "catch-up-measure-profit",
+    "errors"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "0"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "1000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "preferred-return",
+          "multiple": "1.08"
+        },
+        {
+          "type": "catch-up",
+          "target": "0.20",
+          "gpShare": "0.1",
+          "measure": "profit"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "1000"
+    },
+    {
+      "type": "distributable",
+      "date": "2025-06-30",
+      "amount": "1500"
+    }
+  ],
+  "expected": {
+    "error": "invalid-terms"
+  },
+  "tolerance": "0.01"
+}

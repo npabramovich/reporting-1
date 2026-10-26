@@ -45,6 +45,9 @@ agreed to is worse than accruing none.
 | `prefBase` | `pref_base` | `contributed` \| `unreturned` | `contributed` | What the hurdle accrues on (§5). |
 | `catchupRate` | `catchup_rate` | 0 ≤ k ≤ 1 | 1 | The catch-up RATE: the GP's share of each dollar while it catches up; the LPs get the rest. 0 = no catch-up. Ignored by `straight`. |
 | `catchupSize` | `catchup_size` | 0 ≤ s ≤ 1 | 1 | The catch-up SIZE: how much of a full catch-up the GP gets (§3.2). 1 = full. Ignored by `straight`. |
+| `catchupMeasure` | `catchup_measure` | `preferred` \| `profit` | `preferred` | What the catch-up is measured on (§3.2). They differ only when the catch-up rate is below 1. |
+| `prefMultiple` | `pref_multiple` | 1 ≤ m ≤ 10, or null | null | A hurdle set as a multiple of the capital owed, instead of `prefRate` (§5). |
+| `prefDayCount` | `pref_day_count` | `act/365` \| `30/360` | `act/365` | How the rate's years are counted (§5). |
 | `recipients` | `carry_recipients` (jsonb `[{lpEntityId, pct}]`) | pct > 0, total 100 ± 0.01 | `[]` | Who receives the carry, and in what split. |
 | `gpEntityId` | `gp_entity_id` | partner id or null | null | Legacy single recipient. Used as `[{gpEntityId, 100}]` when `carry_recipients` is empty. |
 
@@ -54,6 +57,9 @@ Validation (`parseWaterfallTermsInput`, shared by the settings page and `set_wat
 - Any catch-up rate in range works, including one at or below the carry rate (10% on 20% carry).
 - `catchupSize` must be between 0 and 1. Omitted, it is 1.
 - `prefBase` must be `contributed` or `unreturned`. Omitted, it is `contributed`.
+- `prefMultiple`, when given, is between 1 and 10. `prefDayCount` is `act/365` or `30/360`.
+- `catchupMeasure` is `preferred` or `profit`. Measured on profit, the catch-up rate must be above
+  the share of profit the GP catches up to, or the catch-up would never finish.
 - When carry is on (`kind ≠ none` and `carryRate > 0`), there must be at least one recipient.
 - Recipient percentages must total 100.
 - Every recipient must be a partner (`lp_entities`) of the same fund.
@@ -114,6 +120,12 @@ Let `rem = round(max(0, D))`. Each tier is `take(want) = round(max(0, min(rem, w
    - Flow: `want = round(N / k)`, `gross = take(want)`.
    - `CU = gross = want ? N : round(gross × k)` goes to the GP, and `CUlp = round(gross − CU)` to
      the LPs. Rounding the GP part, not the flow, lands a completed catch-up to the cent.
+   - **Measured on profit** (`catchupMeasure: profit`), the catch-up runs until the GP holds `t` of
+     all the profit distributed, where `t ÷ (1 − t) = s·c ÷ (1 − c)` (`t = c` for a full one). With
+     `Π` the profit so far (the LPs' after return of capital, `P'` included, plus the GP's `G`):
+     `want = round(max(0, (t·Π − G) ÷ (k − t)))`, and a completed catch-up gives the GP
+     `round(t·(Π + want) − G)`. It needs `k > t`. The state carries the LPs' profit so far
+     (`lpProfitPaid`) for it.
 4. **Carry split:** `GPsplit = round(rem × c)`, and `LPsplit = round(rem − GPsplit)`.
 
 Outputs:
@@ -208,6 +220,14 @@ itself (§6), so the hurdle a distribution sees is the one the earlier tiers lea
 `unreturned-compound-pref-paid`, `unreturned-capital-back`, `unreturned-simple`,
 `unreturned-replay-then-split`, `european-unreturned`.
 
+**Day count.** Years are ACTUAL/365 unless `prefDayCount` is `30/360`, the US bond basis: every
+month has 30 days, a 31st counts as the 30th, and an end date on the 31st counts as the 30th only
+when the start was a 30th or 31st.
+
+**A multiple hurdle.** With `prefMultiple` set, `T = (prefMultiple − 1) × C`, flat: the LPs get
+`prefMultiple` × their capital back through the first two tiers, whenever it arrives. The rate,
+compounding, base and day count don't apply. (`hurdleTarget` picks between the two.)
+
 Both bases:
 - A contribution dated on or after `asOf` accrues nothing.
 - A year under ACTUAL/365 is 365 days, so a 366-day leap year accrues slightly more than one year
@@ -223,14 +243,29 @@ Both bases:
      the realized capital, §4.3), and `T` is the hurdle accrued to that date (§5).
    - The final state is then re-based to `asOf`: `C` and `T` are recomputed as of `asOf`.
 2. **Split.** This distribution runs from the replayed state.
-3. **LP lines.** `toLP` is split pro-rata by each non-recipient partner's contributed capital. When
-   no partner has contributed, it falls back to capital balance.
-4. **Carry lines.** `toGP` is split across the recipients by `pct`. The last recipient absorbs the
+3. **The GP's own capital.** A carry recipient that has contributed (the GP's commitment) bears no
+   carry, so before the tiers it takes its pro-rata share of the distribution by contributed
+   capital: its own capital back first, then its profit (`carryFreeLines`). The tiers divide what
+   is left, and the replay's priors leave the recipients' own distributions out, so it only ever
+   sees what the tiers divided.
+4. **LP lines.** `toLP` is split pro-rata by each non-recipient partner's contributed capital. When
+   no partner has contributed, it falls back to capital balance. The carry-free shares are added
+   to the same `lines`.
+5. **Carry lines.** `toGP` is split across the recipients by `pct`. The last recipient absorbs the
    rounding cent.
-5. **Warnings.** The split warns when the replay's implied carry paid differs from the books by
+6. **Warnings.** The split warns when the replay's implied carry paid differs from the books by
    more than 0.01.
-6. **Tax character.** The suggested character is: return-of-capital tier = return of capital, and
-   the rest = gain.
+7. **Tax character.** The suggested character is: the return-of-capital tier and the carry-free
+   capital = return of capital, and the rest = gain.
+
+A carry rate of 0 still runs the tiers when the kind isn't `none`, so the split says what came back
+as capital.
+
+**Clawback at fund end (`clawbackAtFundEnd`).** Return of capital owes only what has been called,
+so an early exit can pay carry the fund's life doesn't support. The fund-end view replays every
+distribution with return of capital owing all the capital contributed to the end date from the
+first one, whole fund, with the hurdle still accruing on each contribution from its own date. The
+GP's carry on that view is its entitlement, and the clawback is `max(0, carry paid − entitlement)`.
 
 **Close accrual.**
 - The close measures each LP **gross of carry**: `NAV = ending capital + carry already charged to
@@ -264,15 +299,22 @@ one it finds under `unsupported`.
 
 | Provision | What the engine does instead |
 |---|---|
-| GP clawback / give-back | Not posted. The close's accrual marks the whole-fund entitlement, so carry paid early under `american` beyond it shows as accrued vs paid on the GP panel. |
+| GP clawback / give-back | Computed (`clawbackAtFundEnd`, §6) but not posted. The close's accrual marks the whole-fund entitlement, so carry paid early under `american` beyond it shows as accrued vs paid on the GP panel. |
 | Carry escrow / holdback | Not modelled. |
 | Management fee offsets (transaction, monitoring or director fees) | Not modelled. The fee is a separate allocation (§2). |
 | Multiple hurdles, or carry rates that step up by IRR or multiple | One hurdle and one carry rate per vehicle. |
+| Return of capital that leaves fee contributions out | Every contribution is capital to return. |
 | Hurdle compounding other than annual (quarterly, daily) | Annual compounding or simple only. |
 | Deal-by-deal on a different capital base (all invested capital, or unrealized write-downs) | Realized deals only, with fees and expenses by cost share (§4.3). |
 | Per-partner carry rates (side letters on carry) | Carry is fund-level. Side-letter *fee* rates are supported (`rate_override`). |
 | Tax distributions | Not modelled. |
 | Fee step-downs as a waterfall term | Belongs to the forecast plan's fee rule, not these terms. |
+
+## 7a. The open spec
+
+[Walter](https://github.com/tdavidson/walter) is an open spec for the same terms with its own
+conformance vectors. `lib/accounting/walter/` runs this engine on them in `npm test`; the
+provisions above are the vectors it can't pass yet.
 
 ## 8. Reading terms from an LPA
 

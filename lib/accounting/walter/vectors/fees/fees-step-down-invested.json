@@ -1,0 +1,104 @@
+{
+  "id": "fees-step-down-invested",
+  "walter": "0.1",
+  "title": "A step-down to invested capital after the investment period",
+  "description": "From the end of the investment period the fee is 1.5% of invested capital, the fee-bearing share of it: 0.015 ÷ 4 × 40,000,000 × 100/102 = 147,058.82 a quarter.",
+  "tags": [
+    "fees",
+    "fees-step-down",
+    "fees-invested"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.1",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD",
+      "investmentPeriodEnd": "2025-07-01"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "2000000"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "60000000"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "40000000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "managementFee": {
+      "frequency": "quarterly",
+      "start": "2025-01-01",
+      "end": "2026-01-01",
+      "schedule": [
+        {
+          "from": "2025-01-01",
+          "rate": "0.02",
+          "basis": "commitments"
+        },
+        {
+          "from": {
+            "event": "investment-period-end"
+          },
+          "rate": "0.015",
+          "basis": "invested"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "investment",
+      "date": "2025-02-15",
+      "deal": "deal-a",
+      "amount": "40000000"
+    }
+  ],
+  "expected": {
+    "fees": [
+      {
+        "start": "2025-01-01",
+        "gross": "500000.00",
+        "offset": "0.00",
+        "net": "500000.00"
+      },
+      {
+        "start": "2025-04-01",
+        "gross": "500000.00",
+        "offset": "0.00",
+        "net": "500000.00"
+      },
+      {
+        "start": "2025-07-01",
+        "gross": "147058.82",
+        "offset": "0.00",
+        "net": "147058.82"
+      },
+      {
+        "start": "2025-10-01",
+        "gross": "147058.82",
+        "offset": "0.00",
+        "net": "147058.82"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

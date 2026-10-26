@@ -267,6 +267,12 @@ export interface ConstructionWaterfallProjection {
   prefCompounds: boolean
   /** What the hurdle accrues on. Absent means 'contributed'. */
   prefBase?: 'contributed' | 'unreturned'
+  /** A hurdle set as a multiple of capital instead of the rate. Absent: the rate. */
+  prefMultiple?: number
+  /** How the rate's years are counted. Absent means ACT/365. */
+  prefDayCount?: '30/360' | 'act/365'
+  /** What the catch-up is measured on. Absent means the preferred return. */
+  catchupMeasure?: 'preferred' | 'profit'
   lpCommitmentShare: number
   lpCalledCapital: number
   lpDistributedCapital: number
