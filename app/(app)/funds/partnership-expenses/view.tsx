@@ -7,6 +7,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { useCurrency, formatCurrencyPrice } from '@/components/currency-context'
 import { useLedgerFetch, useVehicle } from '@/components/accounting-vehicle'
 import { EntryModal } from '../entry-modal'
+import { PeriodPicker } from '@/components/accounting/period-picker'
+import { resolvePeriod, type PeriodPreset } from '@/lib/accounting/statement-period'
 
 interface Entity { id: string | null; name: string; kind: string | null }
 interface ReceivableAccount { id: string; code: string; name: string; counterpartyVehicleId: string | null }
@@ -43,10 +45,14 @@ function PartnershipInvoices() {
   const [to, setTo] = useState('')
   const [year, setYear] = useState(new Date().getFullYear())
   const [quarter, setQuarter] = useState(1)
-  // The expenses to read: from blank = every earlier unbilled one; through follows the quarter's end
-  // until someone changes it.
+  // Which expenses to read, on the app's shared period picker. The default, a custom window with no
+  // start ending on the quarter's last day, is every unbilled expense through the quarter; its end
+  // follows the quarter until someone sets a start.
+  const [preset, setPreset] = useState<PeriodPreset>('custom')
   const [rangeFrom, setRangeFrom] = useState('')
   const [rangeThrough, setRangeThrough] = useState('')
+  const dates = preset === 'custom' ? { start: rangeFrom || null, end: rangeThrough || null } : resolvePeriod(preset)
+  const followQuarter = (y: number, q: number) => { if (preset === 'custom' && !rangeFrom) setRangeThrough(quarterEnd(y, q)) }
   const [preview, setPreview] = useState<Preview | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -79,7 +85,7 @@ function PartnershipInvoices() {
   async function runPreview() {
     if (!to) return
     setBusy(true); setError(null); setNotice(null)
-    const range = `${rangeFrom ? `&from=${rangeFrom}` : ''}${rangeThrough ? `&through=${rangeThrough}` : ''}`
+    const range = `${dates.start ? `&from=${dates.start}` : ''}${dates.end ? `&through=${dates.end}` : ''}`
     const r = await lf(`/api/accounting/partnership-invoices?to=${to}&year=${year}&quarter=${quarter}${range}`)
     const j = await r.json().catch(() => ({}))
     if (!r.ok) setError(j.error ?? 'Could not preview the invoice')
@@ -98,7 +104,7 @@ function PartnershipInvoices() {
   }
 
   async function create() {
-    const j = await post({ action: 'create', to, year, quarter, from: rangeFrom || null, through: rangeThrough || null, exclude: Array.from(excluded), allocations, remember: Array.from(remember) }, 'Could not create the invoice')
+    const j = await post({ action: 'create', to, year, quarter, from: dates.start, through: dates.end, exclude: Array.from(excluded), allocations, remember: Array.from(remember) }, 'Could not create the invoice')
     if (j) {
       const unsaved = Array.isArray(j.basesNotSaved) && j.basesNotSaved.length ? ` The allocation basis for ${j.basesNotSaved.join(', ')} was not saved for next time.` : ''
       setNotice(`Draft invoice ${j.invoiceNumber} created for ${fmt(j.amount)}. Review the PDF, then issue it.${unsaved}`); setPreview(null); await load()
@@ -144,19 +150,23 @@ function PartnershipInvoices() {
           </select>
         </label>
         <label className="text-xs text-muted-foreground">Quarter
-          <select value={quarter} onChange={e => { setQuarter(Number(e.target.value)); setRangeThrough(quarterEnd(year, Number(e.target.value))); setPreview(null) }} className={sel}>
+          <select value={quarter} onChange={e => { setQuarter(Number(e.target.value)); followQuarter(year, Number(e.target.value)); setPreview(null) }} className={sel}>
             {[1, 2, 3, 4].map(q => <option key={q} value={q}>Q{q}</option>)}
           </select>
         </label>
         <label className="text-xs text-muted-foreground">Year
-          <input type="number" value={year} onChange={e => { setYear(Number(e.target.value)); setRangeThrough(quarterEnd(Number(e.target.value), quarter)); setPreview(null) }} className={`${sel} w-24 tabular-nums`} />
+          <input type="number" value={year} onChange={e => { setYear(Number(e.target.value)); followQuarter(Number(e.target.value), quarter); setPreview(null) }} className={`${sel} w-24 tabular-nums`} />
         </label>
-        <label className="text-xs text-muted-foreground" title="Leave blank to pick up every earlier expense not yet invoiced">Expenses from
-          <input type="date" value={rangeFrom} onChange={e => { setRangeFrom(e.target.value); setPreview(null) }} className={`${sel} tabular-nums`} />
-        </label>
-        <label className="text-xs text-muted-foreground">through
-          <input type="date" value={rangeThrough} onChange={e => { setRangeThrough(e.target.value); setPreview(null) }} className={`${sel} tabular-nums`} />
-        </label>
+        <div className="text-xs text-muted-foreground">Expenses dated
+          <div className="mt-0.5">
+            <PeriodPicker
+              preset={preset} onPreset={p => { setPreset(p); setPreview(null) }}
+              start={rangeFrom} end={rangeThrough}
+              onStart={v => { setRangeFrom(v); setPreview(null) }} onEnd={v => { setRangeThrough(v); setPreview(null) }}
+              title="Which expenses to look through. Custom with no From picks up every earlier one not yet invoiced."
+            />
+          </div>
+        </div>
         <Button size="sm" variant="outline" disabled={!to || busy} onClick={() => void runPreview()}>{busy && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}Find expenses</Button>
       </div>
 
@@ -204,7 +214,7 @@ function PartnershipInvoices() {
             <p className="text-sm text-muted-foreground">Pick the account {group ?? 'this entity'} books {preview.to.name}’s expenses to, or add a new one. Nothing can be billed until it has one.</p>
           )}
           {earlier > 0 && (
-            <p className="text-sm text-muted-foreground">{earlier} {earlier === 1 ? 'expense is' : 'expenses are'} dated before {preview.quarter.label} and not on any invoice yet, so {earlier === 1 ? 'it is' : 'they are'} included here. Untick any that should wait, or set a start date.</p>
+            <p className="text-sm text-muted-foreground">{earlier} {earlier === 1 ? 'expense is' : 'expenses are'} dated before {preview.quarter.label} and not on any invoice yet, so {earlier === 1 ? 'it is' : 'they are'} included here. Untick any that should wait, or narrow the dates.</p>
           )}
           <LinesTable
             lines={preview.lines} fmt={fmt} onOpen={setOpenEntry} periodLabel={preview.quarter.label}
