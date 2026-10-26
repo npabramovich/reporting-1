@@ -192,6 +192,10 @@ const rules: Record<string, Rule> = {
     return { result: 'applies', reason: 'Required for all funds that report capital account balances to LPs' }
   },
 
+  'ilpa-reporting-template': (_p) => {
+    return { result: 'needs_review', reason: 'Applies when limited partners ask for ILPA reporting; LPs and the GP agree the timing' }
+  },
+
   'valuations-soi': (_p) => {
     return { result: 'applies', reason: 'Required for all funds that report NAV or FMV to LPs' }
   },

@@ -85,6 +85,7 @@ export const TABLE_RULES: Record<string, TableRule> = {
   company_update_backfill_items: { scope: 'service', note: 'Per-email backfill progress; worker-only.' },
   credit_facilities: { scope: 'service', note: 'A vehicle\'s subscription line or other borrowing; read and written through the LP-capital routes and agent tools (lib/accounting/credit-facility.ts).' },
   credit_facility_events: { scope: 'service', note: 'Draws, repayments, interest and fees on a credit facility; same write path as credit_facilities.' },
+  carry_escrow_events: { scope: 'service', note: 'Carried interest paid into or released from a third-party escrow; read and written through the gp_economics carry-escrow route and read by the ILPA Reporting Template (lib/accounting/carry-escrow.ts).' },
   recycled_proceeds: { scope: 'service', note: 'Recycled exit proceeds, per vehicle; read and written through the LP-capital agent tools and their staged actions (lib/accounting/recycling.ts).' },
   entity_documents: { scope: 'service', note: 'An entity\'s governing documents; served by routes that check the caller can see the entity (lib/entity-documents).' },
   entity_document_chunks: { scope: 'service', note: 'Searchable text of entity_documents; read through the same entity-checked routes and the Analyst tool.' },

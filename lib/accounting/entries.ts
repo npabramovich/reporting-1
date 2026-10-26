@@ -206,11 +206,26 @@ export function buildManagementFeeEntry(
   base: Base,
   fee: FeeResult,
   accts: PnlAccounts,
-  currency = 'USD'
+  currency = 'USD',
+  /**
+   * Offsets the fee schedule applied this period. Booked gross, so the fee's offsets show on the
+   * books and the ILPA Reporting Template, not only in a memo:
+   *   Dr Management fee (gross)   Cr Management fee offsets   Cr Due to GP (net)
+   */
+  offset?: { amount: number; accountId: string },
 ): JournalEntry {
+  const net = roundCents(fee.total)
+  const applied = offset ? roundCents(offset.amount) : 0
+  if (!offset || applied <= 0) {
+    return finalize(base, 'management_fee', [
+      { accountId: accts.pnlAccountId, amount: net, currency, lpEntityId: null },
+      { accountId: accts.offsetAccountId, amount: -net, currency, lpEntityId: null },
+    ])
+  }
   return finalize(base, 'management_fee', [
-    { accountId: accts.pnlAccountId, amount: roundCents(fee.total), currency, lpEntityId: null },
-    { accountId: accts.offsetAccountId, amount: roundCents(-fee.total), currency, lpEntityId: null },
+    { accountId: accts.pnlAccountId, amount: roundCents(net + applied), currency, lpEntityId: null },
+    { accountId: offset.accountId, amount: -applied, currency, lpEntityId: null },
+    { accountId: accts.offsetAccountId, amount: -net, currency, lpEntityId: null },
   ])
 }
 

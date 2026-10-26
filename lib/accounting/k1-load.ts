@@ -38,6 +38,11 @@ const INCOME_CODES = {
 
 const EXPENSE_CODES = {
   managementFee: '5000',
+  // Contras to the fee (credits): a fee booked gross with its offsets, waivers or rebates deducts
+  // only the net.
+  managementFeeOffsets: '5010',
+  managementFeeWaivers: '5020',
+  managementFeeRebates: '5030',
   partnershipExpense: '5100',
   organizational: '5200',
   syndication: '5250',
@@ -175,6 +180,9 @@ export async function loadK1Year(
 
   const deductions = roundCents(
     expenseOn(EXPENSE_CODES.managementFee) +
+      expenseOn(EXPENSE_CODES.managementFeeOffsets) +
+      expenseOn(EXPENSE_CODES.managementFeeWaivers) +
+      expenseOn(EXPENSE_CODES.managementFeeRebates) +
       expenseOn(EXPENSE_CODES.partnershipExpense) +
       expenseOn(EXPENSE_CODES.organizational) +
       expenseOn(EXPENSE_CODES.syndication) +

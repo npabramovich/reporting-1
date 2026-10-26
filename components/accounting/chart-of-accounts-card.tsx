@@ -5,6 +5,7 @@ import { Loader2, Plus, Eye, EyeOff, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useLedgerFetch } from '@/components/accounting-vehicle'
+import { accountCategoryName, categoriesForType, defaultAccountCategory, suggestAccountCategory } from '@/lib/lp-templates/taxonomy'
 
 interface Acct {
   id: string
@@ -14,6 +15,8 @@ interface Acct {
   subtype: string | null
   lp_entity_id: string | null
   is_active: boolean
+  /** The ILPA Reporting Template line the account's postings land on; null follows its subtype. */
+  ilpa_category?: string | null
 }
 
 const TYPES = ['asset', 'liability', 'equity', 'income', 'expense'] as const
@@ -22,7 +25,10 @@ const TYPE_LABEL: Record<string, string> = {
 }
 
 /**
- * Add, rename and hide accounts on this vehicle's chart.
+ * Add, rename and hide accounts on this vehicle's chart, and file income and expense accounts under
+ * the ILPA Reporting Template's categories (lib/lp-templates/taxonomy.ts). An account with no category
+ * reports where its subtype puts it, and a generic expense lands on "Other", which ILPA asks to be
+ * footnoted, so the picker offers the category its name suggests. It never applies one by itself.
  *
  * Three verbs, deliberately — no delete. `journal_postings.account_id` is `on delete restrict`,
  * so an account with any history cannot be deleted anyway, and one without history is harmless
@@ -147,6 +153,7 @@ export function ChartOfAccountsCard() {
                         {a.name}
                       </button>
                       {!a.is_active && <span className="shrink-0 text-xs text-muted-foreground">Hidden</span>}
+                      <IlpaCategoryPicker account={a} disabled={busy === a.id} onChange={c => patch(a.id, { ilpaCategory: c })} />
                       {/* The action, in words. A bare eye icon is ambiguous — it can mean "this
                           is visible" (state) or "make this hidden" (action), and this row shows
                           state as text already, so an Eye beside the word "Hidden" read as a
@@ -173,5 +180,39 @@ export function ChartOfAccountsCard() {
         ))}
       </div>
     </div>
+  )
+}
+
+/** The ILPA line an income or expense account files under. Nothing for the balance sheet or the tax book. */
+function IlpaCategoryPicker({ account, disabled, onChange }: { account: Acct; disabled: boolean; onChange: (category: string | null) => void }) {
+  const fallback = defaultAccountCategory(account)
+  if (!fallback) return null
+  const options = categoriesForType(account.type)
+  const stated = account.ilpa_category ?? ''
+  const suggestion = !stated && fallback === 'ext_other' ? suggestAccountCategory(account.name, account.type) : null
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      <select
+        value={stated}
+        onChange={e => onChange(e.target.value || null)}
+        disabled={disabled}
+        aria-label={`ILPA category for ${account.name}`}
+        title="The ILPA Reporting Template line this account's postings land on"
+        className="h-7 max-w-[14rem] rounded-md border border-input bg-background px-1.5 text-xs text-muted-foreground"
+      >
+        <option value="">ILPA: {accountCategoryName(fallback)} (by type)</option>
+        {options.map(c => <option key={c} value={c}>ILPA: {accountCategoryName(c)}</option>)}
+      </select>
+      {suggestion && (
+        <button
+          onClick={() => onChange(suggestion)}
+          disabled={disabled}
+          title="File this account under the category its name suggests"
+          className="rounded border border-input px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          Use {accountCategoryName(suggestion)}
+        </button>
+      )}
+    </span>
   )
 }

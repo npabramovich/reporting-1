@@ -145,6 +145,7 @@ describe('registers', () => {
       const lines = PORTFOLIO_FEE_LINES[kind]
       expect(REPORTING_LINE[lines.fee].section).toBe('B.1')
       expect(REPORTING_LINE[lines.offset].label).toMatch(/Offset/)
+      expect(lines.fee.startsWith('pc_')).toBe(true)
     }
   })
 
@@ -155,5 +156,22 @@ describe('registers', () => {
     }
     expect(facilityExpenseLine('subscription', 'interest')).toBe('ext_sub_facility_interest')
     expect(facilityExpenseLine('nav', 'fee')).toBe('ext_other_facility_fees')
+  })
+})
+
+describe('the migration', () => {
+  const sql = readFileSync(join(process.cwd(), 'supabase/migrations/20261026160000_lp_reporting_template.sql'), 'utf8')
+  const listIn = (marker: string) => {
+    const start = sql.indexOf(marker)
+    const body = sql.slice(start, sql.indexOf('));', start))
+    return Array.from(body.matchAll(/'([a-z0-9_]+)'/g), m => m[1])
+  }
+
+  it('lets an account carry exactly the categories the taxonomy names', () => {
+    expect(listIn('chart_of_accounts_ilpa_category_check check').sort()).toEqual([...ACCOUNT_CATEGORIES].sort())
+  })
+
+  it('lets the fee register hold exactly the kinds the app records', () => {
+    expect(listIn('portfolio_company_fees_kind_check check').sort()).toEqual([...PORTFOLIO_FEE_KINDS].sort())
   })
 })

@@ -10,6 +10,7 @@ import { VehicleEditModal, type EditableVehicle } from '@/components/vehicle-edi
 import { DealCarryCard } from './deal-carry-card'
 import { BootstrapInvestmentsCard } from './bootstrap-investments'
 import { CarryTerms } from '../allocation-terms/carry-terms'
+import { CarryEscrowList } from '../allocation-terms/carry-escrow'
 import { FeeScheduleCard } from '../allocation-terms/fee-schedule'
 import { useAccess, useCanRead, useIsAdmin } from '@/components/access-context'
 import { QuickActionButtons } from '@/components/quick-action-buttons'
@@ -222,6 +223,7 @@ function EntityStatusView() {
           <CollapsibleSection title="General Partners and carried interest" subtitle="Carried interest and general partner settings">
             <div className="space-y-4">
               <CarryTerms />
+              <CarryEscrowList />
               {/* GP-of links live here — a one-time set-and-done setting next to the carry it drives
                   (many-to-many via vehicle_gp_links; separate from the legacy single-GP capital-accounts panel). */}
               <GeneralPartnersCard />

@@ -56,6 +56,9 @@ export const ILPA_TEMPLATE_VERSIONS = {
  */
 export const ACCOUNT_SUBTYPE_CATEGORY: Readonly<Record<string, AccountCategory>> = {
   management_fee: 'mgmt_fee_gross',
+  management_fee_offset: 'mgmt_fee_offset',
+  management_fee_waiver: 'mgmt_fee_waiver',
+  management_fee_rebate: 'mgmt_fee_rebate',
   partnership_expense: 'ext_other',
   operating_expense: 'ext_other',
   organizational_expense: 'ext_organization',
@@ -199,10 +202,17 @@ export function capitalLine(sourceType: string | null | undefined, amount?: numb
 
 /** Each kind of portfolio-company fee: its B.1 line, and the offset category its offset share counts in. */
 export const PORTFOLIO_FEE_LINES: Record<PortfolioFeeKind, { fee: ReportingLineKey; offset: ReportingLineKey }> = {
+  advisory: { fee: 'pc_advisory', offset: 'offset_advisory' },
+  broken_deal: { fee: 'pc_broken_deal', offset: 'offset_broken_deal' },
   transaction: { fee: 'pc_transaction', offset: 'offset_transaction' },
-  monitoring: { fee: 'pc_monitoring', offset: 'offset_monitoring' },
   directors: { fee: 'pc_directors', offset: 'offset_directors' },
+  monitoring: { fee: 'pc_monitoring', offset: 'offset_monitoring' },
+  capital_markets: { fee: 'pc_capital_markets', offset: 'offset_capital_markets' },
+  arrangement: { fee: 'pc_arrangement', offset: 'offset_arrangement' },
+  origination: { fee: 'pc_origination', offset: 'offset_origination' },
   other: { fee: 'pc_other', offset: 'offset_other' },
+  // The template has no offset row for reimbursements; one an LPA offsets counts as Other.
+  reimbursement: { fee: 'pc_reimbursements', offset: 'offset_other' },
 }
 
 /** The expense line a credit facility's interest or fee lands on. A subscription line has its own; any other facility shares one. */

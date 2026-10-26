@@ -11,7 +11,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { roundCents } from '@portfolio/fund-engine'
 import { vehicleIdByName } from './vehicle-id'
 
-export const PORTFOLIO_FEE_KINDS = ['transaction', 'monitoring', 'directors', 'other'] as const
+// ILPA's list (Reporting Template B.1), in its order: nine kinds of fee, and the reimbursements for
+// travel and administrative expenses the template totals on their own line.
+export const PORTFOLIO_FEE_KINDS = [
+  'advisory', 'broken_deal', 'transaction', 'directors', 'monitoring', 'capital_markets',
+  'arrangement', 'origination', 'other', 'reimbursement',
+] as const
 export type PortfolioFeeKind = (typeof PORTFOLIO_FEE_KINDS)[number]
 
 export interface PortfolioFee {
@@ -20,6 +25,8 @@ export interface PortfolioFee {
   date: string
   kind: PortfolioFeeKind
   amount: number
+  /** The part that belongs to affiliated positions (co-investors the adviser manages), on top of `amount`. */
+  affiliatedAmount: number | null
   companyId: string | null
   memo: string | null
 }
@@ -28,6 +35,7 @@ export interface PortfolioFeeInput {
   date: string
   kind: PortfolioFeeKind
   amount: number
+  affiliatedAmount: number | null
   companyId: string | null
   memo: string | null
 }
@@ -40,13 +48,15 @@ export function parsePortfolioFeeInput(raw: unknown): { ok: true; value: Portfol
   if (!raw || typeof raw !== 'object') return { error: 'The fee must be an object.' }
   const f = raw as Record<string, unknown>
   if (typeof f.date !== 'string' || !DATE.test(f.date)) return { error: 'The fee needs a date (YYYY-MM-DD).' }
-  if (!PORTFOLIO_FEE_KINDS.includes(f.kind as PortfolioFeeKind)) return { error: 'The fee is a transaction, monitoring, directors\' or other fee.' }
+  if (!PORTFOLIO_FEE_KINDS.includes(f.kind as PortfolioFeeKind)) return { error: `The fee's kind is one of ${PORTFOLIO_FEE_KINDS.join(', ')}.` }
   const amount = Number(f.amount)
   if (!(amount > 0) || !Number.isFinite(amount)) return { error: 'The fee needs an amount above zero.' }
+  const affiliatedAmount = f.affiliatedAmount == null || f.affiliatedAmount === '' ? null : Number(f.affiliatedAmount)
+  if (affiliatedAmount !== null && !(affiliatedAmount >= 0 && Number.isFinite(affiliatedAmount))) return { error: "The affiliated positions' share must be zero or more." }
   const companyId = f.companyId == null || f.companyId === '' ? null : String(f.companyId)
   if (companyId && !UUID.test(companyId)) return { error: 'The company is not one of the fund\'s.' }
   const memo = typeof f.memo === 'string' && f.memo.trim() ? f.memo.trim().slice(0, 500) : null
-  return { ok: true, value: { date: f.date, kind: f.kind as PortfolioFeeKind, amount: roundCents(amount), companyId, memo } }
+  return { ok: true, value: { date: f.date, kind: f.kind as PortfolioFeeKind, amount: roundCents(amount), affiliatedAmount: affiliatedAmount === null ? null : roundCents(affiliatedAmount), companyId, memo } }
 }
 
 const fromRow = (r: any): PortfolioFee => ({
@@ -54,6 +64,7 @@ const fromRow = (r: any): PortfolioFee => ({
   date: r.fee_date,
   kind: r.kind,
   amount: Number(r.amount),
+  affiliatedAmount: r.affiliated_amount == null ? null : Number(r.affiliated_amount),
   companyId: r.company_id ?? null,
   memo: r.memo ?? null,
 })
@@ -63,7 +74,7 @@ export async function loadPortfolioFees(admin: SupabaseClient, fundId: string, g
   const vehicleId = await vehicleIdByName(admin, fundId, group)
   if (!vehicleId) return []
   let q = (admin as any).from('portfolio_company_fees')
-    .select('id, fee_date, kind, amount, company_id, memo')
+    .select('*')
     .eq('fund_id', fundId).eq('vehicle_id', vehicleId)
   if (before) q = q.lt('fee_date', before)
   const { data, error } = await q.order('fee_date', { ascending: true })
@@ -89,8 +100,13 @@ export async function addPortfolioFee(
     if (!data) return { error: 'The company is not one of the fund\'s.', status: 400 }
   }
   const { data, error } = await (admin as any).from('portfolio_company_fees')
-    .insert({ fund_id: fundId, vehicle_id: vehicleId, company_id: f.companyId, fee_date: f.date, kind: f.kind, amount: f.amount, memo: f.memo, created_by: userId })
-    .select('id, fee_date, kind, amount, company_id, memo')
+    .insert({
+      fund_id: fundId, vehicle_id: vehicleId, company_id: f.companyId, fee_date: f.date, kind: f.kind, amount: f.amount,
+      // Only when given, so a fee without one still saves before the column is migrated.
+      ...(f.affiliatedAmount !== null ? { affiliated_amount: f.affiliatedAmount } : {}),
+      memo: f.memo, created_by: userId,
+    })
+    .select('*')
     .single()
   if (error) return { error: 'The fee could not be saved.', status: 500, dbError: error }
   return { ok: true, fee: fromRow(data) }

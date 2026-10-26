@@ -86,6 +86,10 @@ const BRIDGE_CODE = '3200'
  */
 const SUBTYPE_TO_SOURCE: Record<string, string> = {
   management_fee: 'management_fee',
+  // Offsets, waivers and rebates reduce the fee, so the partners bear them as they bear the fee.
+  management_fee_offset: 'management_fee',
+  management_fee_waiver: 'management_fee',
+  management_fee_rebate: 'management_fee',
   partnership_expense: 'partnership_expense',
   organizational_expense: 'organizational_expense',
   interest_expense: 'partnership_expense', // an expense of the partnership; same line

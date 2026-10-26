@@ -114,6 +114,14 @@ export const DEFAULT_CHART: ChartAccountSeed[] = [
 
   // Expenses
   { code: '5000', name: 'Management fee', type: 'expense', subtype: 'management_fee' },
+  // What reduces the fee, each on its own contra account (credit balances), so the books state the
+  // gross fee and every reduction the way the ILPA Reporting Template asks: offsets (portfolio-company
+  // fees and organizational expenses over the cap, which the fee schedule books with the fee),
+  // waivers (fee given up, usually for the GP commitment) and rebates (fee refunded). The partners
+  // bear them as they bear the fee: the close and the allocation treat all three as management fee.
+  { code: '5010', name: 'Management fee offsets', type: 'expense', subtype: 'management_fee_offset' },
+  { code: '5020', name: 'Management fee waivers', type: 'expense', subtype: 'management_fee_waiver' },
+  { code: '5030', name: 'Management fee rebates', type: 'expense', subtype: 'management_fee_rebate' },
   { code: '5100', name: 'Partnership expenses', type: 'expense', subtype: 'partnership_expense' },
   { code: '5200', name: 'Organizational expenses', type: 'expense', subtype: 'organizational_expense' },
   // SYNDICATION COSTS ARE NOT ORGANIZATIONAL COSTS, and the difference is permanent.

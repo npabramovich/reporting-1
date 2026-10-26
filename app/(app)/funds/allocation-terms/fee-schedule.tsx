@@ -32,7 +32,7 @@ export function FeeScheduleCard() {
   const [end, setEnd] = useState('')
   const [steps, setSteps] = useState<StepRow[]>([{ from: '', rate: '2', basis: 'commitments' }])
   const [cap, setCap] = useState('')
-  const [offsets, setOffsets] = useState<Record<FeeKind, string>>({ transaction: '', monitoring: '', directors: '', other: '' })
+  const [offsets, setOffsets] = useState<Record<FeeKind, string>>(() => Object.fromEntries(FEE_KINDS.map(k => [k, ''])) as Record<FeeKind, string>)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
