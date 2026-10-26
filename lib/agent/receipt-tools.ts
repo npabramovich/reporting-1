@@ -17,6 +17,7 @@ import {
   listPartnershipInvoices, unbilledByCounterparty, getPartnershipInvoice,
 } from '@/lib/accounting/partnership-invoices'
 import { ACTUAL_BOOK } from '@/lib/accounting/books'
+import { linkIntercompanyAccount } from '@/lib/accounting/intercompany'
 
 const INLINE_MAX = 3 * 1024 * 1024
 
@@ -185,6 +186,10 @@ export const RECEIPT_HANDLERS: Record<string, AgentToolHandler> = {
   create_partnership_invoice: async (ctx, input) => {
     const vehicleId = await here(ctx)
     const to = await otherEntity(ctx, input?.billTo, 'write')
+    if (input?.dueFromAccount) {
+      const linked = await linkIntercompanyAccount(ctx.admin, ctx.fundId, vehicleId, await accountByCode(ctx.admin, ctx.fundId, ctx.portfolioGroup, input.dueFromAccount), to.vehicleId, 'receivable')
+      if ('error' in linked) fail(linked)
+    }
     const res = await createPartnershipInvoice(ctx.admin, ctx.fundId, ctx.userId, {
       fromVehicleId: vehicleId, toVehicleId: to.vehicleId, year: Number(input?.year), quarter: Number(input?.quarter),
       invoiceDate: input?.invoiceDate ?? null, memo: input?.memo ?? null,
