@@ -1,10 +1,10 @@
-import { recordAudit } from '@/lib/audit/events'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertReadAccess, assertWriteAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { postTaxAdjustments } from '@/lib/accounting/book-tax-run'
+import { auditTaxRun, missingAccountsMessage } from '@/lib/accounting/tax-run-audit'
 import { rateLimit } from '@/lib/rate-limit'
 
 // Book-to-tax adjustments for one vehicle and one tax year.
@@ -61,20 +61,7 @@ export async function POST(req: NextRequest) {
     inceptionDate: typeof body?.inceptionDate === 'string' ? body.inceptionDate : undefined,
   })
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 })
-  const passThrough = result.passThrough
-  if (result.entryIds.length > 0 || result.voided > 0 || (passThrough?.entryIds.length ?? 0) > 0 || (passThrough?.voided ?? 0) > 0) {
-    await recordAudit(admin, {
-      fundId: gate.fundId, actorId: user.id, action: 'tax.adjustments', subjectType: 'tax_year', subjectId: `${group}:${taxYear}`,
-      details: {
-        group, taxYear, proposals: result.proposals.map(p => ({ kind: p.kind, amount: p.amount })), entries: result.entryIds.length, voidedPrior: result.voided,
-        // The lower-tier K-1s posted in the same run: which holdings, and the basis each moved.
-        ...(passThrough ? {
-          k1PassThrough: passThrough.holdings.filter(h => !h.skipped).map(h => ({ companyId: h.companyId, basisChange: h.basisChange })),
-          k1Entries: passThrough.entryIds.length, k1VoidedPrior: passThrough.voided,
-        } : {}),
-      },
-    })
-  }
+  await auditTaxRun(admin, { fundId: gate.fundId, userId: user.id }, group, taxYear, result)
 
   // A run blocked on a missing account is not a success. Say which accounts, and say where to
   // get them, rather than returning an empty entry list that reads as "nothing to do".
@@ -82,9 +69,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         ...result,
-        error:
-          `This vehicle's chart is missing ${result.missingAccounts.join(', ')}. ` +
-          "Add them under the entity's Admin → Chart of accounts, then post again.",
+        error: missingAccountsMessage(result.missingAccounts),
       },
       { status: 409 },
     )
