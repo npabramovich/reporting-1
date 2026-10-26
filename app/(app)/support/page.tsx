@@ -813,6 +813,9 @@ export default function SupportPage() {
             fees and expenses, and investment, actual and forecast, over the selected dates) and
             <strong> Financials</strong> (income statement and statement of cash flows on an accrual or cash basis,
             and journal entries). The date range and month/quarter/year apply on every tab.
+            A management company has no portfolio, so it gets Charts, Financials and Capital planning, which there
+            shows its cash: income received, expenses paid, money to and from its funds and owners, ending cash and
+            the lowest point in the range.
           </p>
           <p className="text-muted-foreground mb-2">
             Investments and exits are entered on Investments; fees and expenses are rules on Financials (any month can

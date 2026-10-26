@@ -22,6 +22,8 @@ import { VarianceSection } from './variance'
 import { ForecastEntries } from './entries'
 import { ConstructionView } from '../construction/view'
 import { PlanOverview } from './overview'
+import { MancoCapitalPlanning } from './manco-capital'
+import { mancoCashPlan } from '@/lib/forecast/manco-cash'
 import { onApplied } from '@/lib/pending-actions/applied-event'
 import { NO_ADJUSTMENTS } from '@/lib/forecast/adjustments'
 
@@ -431,6 +433,9 @@ export function ForecastView({ vehicle, vehicleId, kind, initialTab }: { vehicle
     return out
   }, [series, detail, start, end])
 
+  // A management company's Capital planning: its cash over the same range (it has no portfolio).
+  const mancoCash = useMemo(() => (!hasPortfolio && series ? mancoCashPlan(series) : null), [hasPortfolio, series])
+
   // The plan's returns, once per change, with the simulation: the key figures above the tabs and the
   // cash-flow chart's range both read this one response (lib/forecast/plan-returns.ts).
   const returnsPlanId = hasPortfolio ? (detail?.plan.id ?? (planId || null)) : null
@@ -717,6 +722,10 @@ export function ForecastView({ vehicle, vehicleId, kind, initialTab }: { vehicle
             onSaved={onPortfolioSaved}
           />
         </div>
+      )}
+
+      {!hasPortfolio && tab === 'capital' && series && (
+        <MancoCapitalPlanning plan={mancoCash} rangeLabel={`${start} – ${end}`} hasPlan={!!detail} onEntityLinks={() => setLinking(true)} fmt={short} fmtFull={full} />
       )}
 
       {tab === 'financials' && (<>
