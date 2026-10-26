@@ -147,7 +147,7 @@ Effort is a guess: S is a tool wrapping an existing `lib` function, M needs logi
 | Download statement workpaper (.xlsx) | `statements/export(GET)` | gap | - | no reason found; file download | report-link tool like financial_statements_pdf | S |
 | Edit a DRAFT entry (date, memo, lines, payee) | `journal(PUT)` | gap | - | no reason found - likely oversight (agent can only void+recreate, and void is also missing) | update_draft_entry tool; extract PUT body into lib (journal-edit.ts) and call it | M |
 | Export journal as CSV / XLSX / QuickBooks-layout CSV | `journal/export(GET)` | partial | list_journal; export_ledger_text | no file/link; QuickBooks layout not available | report-link style download URL (like financial_statements_pdf) | S |
-| Forecast export CSV / XLSX model | `forecast/export(GET)` | partial | forecast_series (data) | no file/xlsx model | report-link download | S |
+| Forecast export CSV / XLSX model | `forecast/export(GET)` | covered | forecast_workbook (XLSX via signed link); forecast_series (data, incl. balance sheet) | CSV not offered as a file; the JSON is the same data | - | - |
 | Ignore a bank row (voids its entry; reason if posted) | `bank(POST action=ignore)` | gap | - | no reason found - likely oversight (posted-row ignore voids books, could be staged) | ignore_bank_transaction tool; move inline logic into bank-actions.ts | M |
 | LP positions: edit one LP on a date | `positions(PUT)` | gap | - | no reason found | tool porting inline upsert | S |
 | LP positions: paste/import spreadsheet | `positions/import(POST)` | gap | - | no reason found (AI paste route; agent could pass parsed rows) | tool taking rows; logic inline in route - extract | M |
