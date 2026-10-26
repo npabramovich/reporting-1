@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { authServerUser } from '@/lib/supabase/session-user'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { dbError } from '@/lib/api-error'
 import { logLpAccessEvent } from '@/lib/lp-access-log'
@@ -15,7 +16,8 @@ import { logLpAccessEvent } from '@/lib/lp-access-log'
 export async function POST() {
   const supabase = await createClient()
   const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  // Asked of the Auth server: the email-confirmation fields are not in the access token.
+  const { data: { user } } = await authServerUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let { data: account } = await (admin as any)

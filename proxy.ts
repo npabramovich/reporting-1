@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { sessionUser } from '@/lib/supabase/session-user'
 import { NextResponse, type NextRequest } from 'next/server'
 import { matchRoute } from '@/lib/access/match-route'
 import { ROUTE_DOMAINS, UNGATED_ROUTES, requiredLevel } from '@/lib/access/route-domains'
@@ -67,9 +68,12 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // Always call getUser() to refresh the session token.
-  // Do not add logic between createServerClient and getUser().
-  const { data: { user } } = await supabase.auth.getUser()
+  // Always resolve the user first: it refreshes the session token when it has expired.
+  // Do not add logic between createServerClient and this call.
+  //
+  // Verified locally against the project's signing keys, not by a round trip to Supabase Auth on
+  // every request (lib/supabase/session-user.ts says what that trades).
+  const { data: { user } } = await sessionUser(supabase.auth)
 
   const isAuthRoute = pathname.startsWith('/auth')
 
