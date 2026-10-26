@@ -18,7 +18,10 @@ import {
   roundCents,
   splitDistribution,
   clawbackAtFundEnd,
+  feeSchedule,
   type DayCount,
+  type FeeFrequency,
+  type FeeScheduleBasis,
   type DealHistory,
   type RealizedCapital,
   type RecyclingTerms,
@@ -41,6 +44,14 @@ type Purpose = 'investments' | 'fees' | 'expenses' | 'other'
 const PURPOSES: Purpose[] = ['investments', 'fees', 'expenses', 'other']
 
 interface WPartner { id: string; role: 'lp' | 'gp'; commitment: string; carryBearing?: boolean; feeBearing?: boolean }
+interface WFee {
+  frequency: FeeFrequency
+  start: string
+  end?: string
+  schedule: { from: string | { event: string }; rate: string; basis: FeeScheduleBasis }[]
+  offsets?: Record<string, string>
+  organizationalExpenseCap?: string
+}
 interface WTier {
   type: 'return-of-capital' | 'preferred-return' | 'catch-up' | 'split'
   id?: string
@@ -55,6 +66,7 @@ interface WTier {
   until?: unknown
 }
 interface WTerms {
+  fund?: { investmentPeriodEnd?: string }
   partners: WPartner[]
   waterfall: {
     basis?: 'whole-fund' | 'deal-by-deal'
@@ -66,7 +78,7 @@ interface WTerms {
   }
   clawback?: { enabled?: boolean }
   recycling?: { cap: string; capBasis?: 'commitments' | 'management-fees'; until?: string; defaultTreatment?: 'never-distributed' | 'deemed' }
-  managementFee?: unknown
+  managementFee?: WFee
 }
 type WFlow = { type: string; date: string; [k: string]: any }
 
@@ -198,7 +210,6 @@ export function run(termsIn: unknown, flowsIn: unknown) {
     if (!bearing && !recipientIds.has(p.id)) unsupported(`a carry-free partner that isn't a carry recipient (${p.id})`)
     if (bearing && recipientIds.has(p.id)) unsupported(`a carry recipient that also bears carry (${p.id})`)
   }
-  if (terms.managementFee) unsupported('the management fee schedule (the close charges one rate on one basis per period)')
 
   const includes = terms.waterfall.returnOfCapital?.includes ?? PURPOSES
   const flows = (Array.isArray(flowsIn) ? flowsIn : refuse('invalid-flow', 'flows must be an array')) as WFlow[]
@@ -395,6 +406,45 @@ export function run(termsIn: unknown, flowsIn: unknown) {
     }
   }
 
+  // The fee schedule (spec/07-management-fees.md), run by the engine's dated schedule.
+  const fees: { start: string; end: string; gross: string; offset: string; net: string }[] = []
+  const feesByPartner: Record<string, string> = {}
+  const fee = terms.managementFee
+  if (fee) {
+    if (!(fee.frequency in { quarterly: 1, semiannual: 1, annual: 1 })) refuse('invalid-terms', `managementFee.frequency: ${fee.frequency}`)
+    if (!fee.end) unsupported('a management fee with no end')
+    const when = (from: string | { event: string }) =>
+      typeof from === 'string' ? from
+        : from.event === 'investment-period-end' ? terms.fund?.investmentPeriodEnd
+        : flows.find(f => f.type === 'event' && f.name === from.event)?.date
+    const steps = (fee.schedule ?? [])
+      .map(s => ({ from: when(s.from), rate: num(s.rate, 'managementFee rate'), basis: s.basis }))
+      .filter((s): s is { from: string; rate: number; basis: FeeScheduleBasis } => s.from !== undefined)
+    if (steps.length === 0) refuse('invalid-terms', 'managementFee.schedule needs a step that applies')
+    const feeBearing = partners.filter(p => p.feeBearing ?? p.role === 'lp')
+    const periods = feeSchedule({
+      frequency: fee.frequency,
+      start: fee.start,
+      end: fee.end!,
+      steps,
+      ...(fee.offsets ? { offsets: Object.fromEntries(Object.entries(fee.offsets).map(([k, v]) => [k, num(v, `offsets.${k}`)])) } : {}),
+      ...(fee.organizationalExpenseCap !== undefined ? { organizationalExpenseCap: num(fee.organizationalExpenseCap, 'organizationalExpenseCap') } : {}),
+    }, {
+      feeBearingCommitments: feeBearing.reduce((s, p) => s + (commitment.get(p.id) ?? 0), 0),
+      allCommitments: [...commitment.values()].reduce((s, c) => s + c, 0),
+      investments: flows.filter(f => f.type === 'investment').map(f => ({ date: f.date, deal: f.deal, amount: Number(f.amount) })),
+      exits: flows.filter(f => (f.type === 'write-off' || f.type === 'distributable') && f.deal)
+        .map(f => ({ date: f.date, deal: f.deal, ...(f.costExited !== undefined ? { cost: Number(f.costExited) } : {}) })),
+      navs: ordered.filter(f => f.type === 'nav').map(f => ({ date: f.date, amount: Number(f.amount) })),
+      portfolioFees: flows.filter(f => f.type === 'portfolio-fee').map(f => ({ date: f.date, kind: f.kind, amount: Number(f.amount) })),
+      organizationalExpenses: flows.filter(f => f.type === 'organizational-expense').map(f => ({ date: f.date, amount: Number(f.amount) })),
+    })
+    for (const p of periods) fees.push({ start: p.start, end: p.end, gross: money(p.gross), offset: money(p.offset), net: money(p.net) })
+    const net = periods.reduce((s, p) => s + p.net, 0)
+    const shares = allocateAmount(net, feeBearing.map(p => ({ lpEntityId: p.id, commitment: commitment.get(p.id) ?? 0 })))
+    for (const [id, a] of shares) feesByPartner[id] = money(a)
+  }
+
   const totals: Record<string, { contributed: string; distributed: string; net: string }> = {}
   for (const p of partners) {
     const c = contributedTo('9999-12-31', p.id)
@@ -408,8 +458,8 @@ export function run(termsIn: unknown, flowsIn: unknown) {
     recycled: recycledOut,
     ...(clawback ? { clawback } : {}),
     accruedCarry,
-    fees: [],
-    feesByPartner: {},
+    fees,
+    feesByPartner,
     totals,
     warnings: [...new Set(warnings)],
   }

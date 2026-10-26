@@ -17,13 +17,6 @@ const GAPS: Record<string, string> = {
   'roc-excludes-fees': 'contributions are not tagged by purpose, so every one is returned as capital',
   'split-tiered-irr-catch-up': 'one carry rate: no split that steps up at an LP IRR',
   'split-tiered-multiple': 'one carry rate: no split that steps up at an LP multiple',
-  'fees-committed-quarterly': 'the fee schedule: the close charges one rate on one basis for the period it is given',
-  'fees-nav-semiannual': 'the fee schedule',
-  'fees-offsets-carry-forward': 'the fee schedule: no portfolio-fee offsets',
-  'fees-organizational-expense-cap': 'the fee schedule: no organizational expense cap',
-  'fees-step-down-invested': 'the fee schedule: no step-down',
-  'fees-step-mid-period': 'the fee schedule: no step-down',
-  'fees-stub-period': 'the fee schedule: no stub periods',
 }
 
 const root = join(__dirname, 'vectors')
