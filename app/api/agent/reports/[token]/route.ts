@@ -27,6 +27,8 @@ import { renderPdf as renderTemplateDocumentPdf } from '@/lib/document-templates
 import { callNoticePreviewPdf } from '@/lib/accounting/notice-preview'
 import { closeBundleZip, loadCloseBundle } from '@/lib/accounting/close-bundle'
 import { vehicleIdByName } from '@/lib/accounting/vehicle-id'
+import { ForecastError } from '@/lib/forecast/service'
+import { forecastWorkbookDocument } from '@/lib/forecast/workbook-document'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -223,11 +225,26 @@ async function fundDocument(admin: ReturnType<typeof createAdminClient>, claims:
         doc = { body: zip.body, fileName: zip.fileName, contentType: 'application/zip' }
         break
       }
+      // /api/accounting/forecast/export?format=xlsx — accounting; the forecast service re-checks it,
+      // the entity and, for a management company, the Management company grant.
+      case 'forecast_workbook': {
+        if (!hasAccess(access, 'accounting', 'read')) return notFound()
+        const interval = a.interval
+        if (!a.vehicle || !a.start || !a.end || (interval !== 'month' && interval !== 'quarter' && interval !== 'year')) return notFound()
+        doc = await forecastWorkbookDocument({ admin, fundId, userId: claims.userId, access }, {
+          vehicle: a.vehicle, planId: a.plan ?? undefined, versionId: a.version ?? undefined,
+          view: (a.view as 'actual' | 'plan' | 'combined' | null) ?? undefined, start: a.start, end: a.end, interval,
+        })
+        break
+      }
       default:
         return notFound()
     }
   } catch (e) {
     if (e instanceof VehicleResolutionError) return notFound()
+    // The service's refusals (no access, an entity or plan not theirs) read like any other refusal.
+    if (e instanceof ForecastError && (e.status === 403 || e.status === 404)) return notFound()
+    if (e instanceof ForecastError) return NextResponse.json({ error: e.message }, { status: e.status })
     if (e instanceof DocumentBuildError) return NextResponse.json({ error: e.message }, { status: 500 })
     console.error('[agent/reports]', claims.kind, e)
     return NextResponse.json({ error: 'This document could not be generated. Try again, or ask for a new link.' }, { status: 500 })
@@ -240,7 +257,7 @@ function documentResponse(doc: FundDocument) {
   return new NextResponse(new Uint8Array(doc.body), {
     headers: {
       'Content-Type': doc.contentType,
-      // A PDF opens in the tab; a ZIP can only be saved.
+      // A PDF opens in the tab; a ZIP or a workbook can only be saved.
       'Content-Disposition': `${doc.contentType === 'application/pdf' ? 'inline' : 'attachment'}; filename="${doc.fileName.replace(/"/g, '')}"`,
       // A bearer URL: keep it out of shared caches and out of the Referer of anything it links to.
       'Cache-Control': 'private, no-store',

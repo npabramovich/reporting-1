@@ -35,7 +35,12 @@ export const FORECAST_TOOL_MANIFEST: AgentToolMeta[] = [
       'Every period carries a status — actual, actual_unclosed, forecast or mixed — and the result ' +
       'gives actualsThrough, closedThrough, version and warnings: always say which periods are ' +
       'projected, which months are unclosed, and which plan/version the projection is. Quarterly and ' +
-      'annual cash is the opening of the first month and the ending of the last, never a sum.',
+      'annual cash is the opening of the first month and the ending of the last, never a sum. ' +
+      'balanceSheet is every asset, liability and equity balance at each period\'s end (assets, liabilities, ' +
+      'equity with its label, and check = assets − liabilities − equity, zero when it balances). For a management ' +
+      'company, capitalPlanning is its Capital planning tab: opening cash, income received and expenses paid by ' +
+      'account, owner and fund flows, ending cash and the lowest cash in the range, split actual and forecast. ' +
+      'For the Excel model, use forecast_workbook.',
     scope: 'read',
     domain: 'portfolio',
     accessDomain: 'accounting',

@@ -1198,6 +1198,8 @@ export interface SeriesInput {
 
 export interface SeriesResult extends Report {
   vehicle: string
+  /** The entity's kind (lib/vehicle-kinds.ts): a management company's Capital planning is its cash. */
+  vehicleKind?: string
   currency: string
   plan: { id: string; name: string; kind: PlanKind; revision: number } | null
   version: { id: string; versionNo: number; status: string; publishedAt: string } | null
@@ -1332,6 +1334,7 @@ async function seriesDetail(ctx: ForecastServiceContext, v: VehicleCtx, input: S
   const series: SeriesResult = {
     ...report,
     vehicle: v.name,
+    vehicleKind: v.kind,
     currency: v.currency,
     plan,
     version,
