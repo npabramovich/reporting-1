@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseFeeScheduleInput } from './fee-schedule'
+import { chargeScheduledFee, parseFeeScheduleInput, type SchedulePayer, type StoredFeeSchedule } from './fee-schedule'
 
 describe('parseFeeScheduleInput', () => {
   const base = { frequency: 'quarterly', start: '2026-01-01', end: '2036-01-01' }
@@ -38,5 +38,54 @@ describe('parseFeeScheduleInput', () => {
     expect(parseFeeScheduleInput({ ...base, steps, offsets: {} })).toEqual({ ok: true, value: { ...base, steps } })
     expect(parseFeeScheduleInput({ ...base, steps, offsets: { transaction: 1.5 } })).toEqual({ error: 'Each offset is a share between 0 and 1 (1 = 100%).' })
     expect(parseFeeScheduleInput({ ...base, steps, offsets: { closing: 1 } })).toEqual({ error: '"closing" is not a kind of portfolio-company fee.' })
+  })
+})
+
+describe('chargeScheduledFee', () => {
+  const schedule: StoredFeeSchedule = {
+    frequency: 'annual',
+    start: '2026-01-01',
+    end: '2030-01-01',
+    steps: [{ from: '2026-01-01', rate: 0.02, basis: 'commitments' }, { from: '2028-01-01', rate: 0, basis: 'commitments' }],
+  }
+  const facts = { investments: [], exits: [], navs: [], organizationalExpenses: [], portfolioFees: [] }
+  const payer = (lpEntityId: string, commitment: number, rateOverride: number | null = null, exempt = false): SchedulePayer =>
+    ({ lpEntityId, commitment, rateOverride, exempt })
+
+  it('charges a side letter its own rate, which lowers the total', () => {
+    const payers = [payer('lp-a', 600_000), payer('lp-b', 400_000, 0.01)]
+    const r = chargeScheduledFee(schedule, payers, '2026-06-30', facts)!
+    expect(r.fee.total).toBe(16_000)
+    expect(r.fee.lines).toEqual([
+      { lpEntityId: 'lp-a', basisAmount: 600_000, rate: 0.02, fee: 12_000 },
+      { lpEntityId: 'lp-b', basisAmount: 400_000, rate: 0.01, fee: 4_000 },
+    ])
+  })
+
+  it('leaves an exempt partner out and keeps a zero-rate step at zero', () => {
+    const payers = [payer('lp-a', 600_000), payer('lp-b', 400_000, 0.01), payer('gp', 100_000, null, true)]
+    expect(chargeScheduledFee(schedule, payers, '2026-06-30', facts)!.fee.lines.find(l => l.lpEntityId === 'gp')).toEqual(
+      { lpEntityId: 'gp', basisAmount: 100_000, rate: 0, fee: 0 },
+    )
+    const later = chargeScheduledFee(schedule, payers, '2028-06-30', facts)!
+    expect(later.fee.total).toBe(0)
+    expect(later.fee.lines.every(l => l.fee === 0 && l.rate === 0)).toBe(true)
+  })
+
+  it('shares an offset in proportion to each rate group\'s fee, and the lines add up to the net', () => {
+    const payers = [payer('lp-a', 333_333), payer('lp-b', 333_333, 0.01), payer('lp-c', 333_334)]
+    const r = chargeScheduledFee({ ...schedule, offsets: { transaction: 1 } }, payers, '2026-06-30', {
+      ...facts,
+      portfolioFees: [{ date: '2026-03-31', kind: 'transaction', amount: 5_000 }],
+    })!
+    expect(r.fee.total).toBeCloseTo(r.period.net, 2)
+    expect(r.fee.total).toBeCloseTo(16_666.66 - 5_000, 0)
+    const a = r.fee.lines.find(l => l.lpEntityId === 'lp-a')!.fee
+    const b = r.fee.lines.find(l => l.lpEntityId === 'lp-b')!.fee
+    expect(a / b).toBeCloseTo(2, 2)
+  })
+
+  it('is null outside the schedule', () => {
+    expect(chargeScheduledFee(schedule, [payer('lp-a', 100_000)], '2031-01-01', facts)).toBeNull()
   })
 })
