@@ -12,6 +12,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadOwnership } from './load'
 import { accountIdByCode, ensureCapitalAccounts } from './persist'
 import { computeManagementFee } from './fees'
+import { scheduledFee } from './fee-schedule'
 import { loadPartnerTerms } from './terms'
 import {
   buildManagementFeeEntry,
@@ -42,6 +43,8 @@ export interface AllocationBody {
   memo?: string
   annualRate?: number
   periodFraction?: number
+  /** Charge the fee the vehicle's schedule sets for the period `entryDate` falls in (fee-schedule.ts). */
+  fromSchedule?: boolean
   amount?: number
   overrides?: Record<string, { rateOverride?: number; exempt?: boolean }>
   perLp?: Record<string, number>
@@ -84,6 +87,15 @@ export async function buildAllocationEntry(
       }
     }
 
+    if (action === 'management_fee' && body.fromSchedule) {
+      const scheduled = await scheduledFee(admin, fundId, group, entryDate, body.overrides)
+      if (!scheduled) return { error: `${entryDate} is outside ${group}'s fee schedule, so it charges no fee for it.` }
+      if ('error' in scheduled) return { error: scheduled.error }
+      const accts: PnlAccounts = { pnlAccountId: need(CODE.mgmtFeeExpense), offsetAccountId: need(CODE.dueToGp) }
+      const p = scheduled.period
+      const memo = body.memo ?? `Management fee ${p.start} to ${p.end}` + (p.offset > 0 ? ` (${p.gross.toFixed(2)} less ${p.offset.toFixed(2)} of offsets)` : '')
+      return { entry: buildManagementFeeEntry({ ...base, memo }, scheduled.fee, accts) }
+    }
     if (action === 'management_fee') {
       const [owners, terms] = await Promise.all([
         loadOwnership(admin, fundId, group),

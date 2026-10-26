@@ -54,6 +54,7 @@ const ALLOWLIST = new Map<string, string>([
   ['app/api/accounting/investments/route.ts', 'ledger-vs-tracker tie-out covers every position, funds included'],
   ['app/api/accounting/deal-carry/route.ts', 'deal-by-deal carry is computed over every position, funds included'],
   ['lib/accounting/realized-capital.ts', 'the deal-by-deal capital base is every position the vehicle realized, funds included'],
+  ['lib/accounting/fee-schedule.ts', 'a fee on invested capital is charged on every position the vehicle holds, funds included, as the deal-by-deal base reads them'],
   ['lib/accounting/fund-timeseries.ts', 'cost and value over time cover every position, funds included'],
   ['lib/accounting/import-review.ts', 'compares imported books to every investment position, including fund holdings'],
   ['lib/accounting/status.ts', 'the schedule-of-investments tie-out must cover every ledger position'],

@@ -65,7 +65,7 @@ const dayNumber = (date: string) => {
 }
 
 /** `date` plus whole months, clamped to the month's last day. */
-function addMonths(date: string, months: number): string {
+export function addMonths(date: string, months: number): string {
   const [y, m, d] = date.split('-').map(Number)
   const total = y * 12 + (m - 1) + months
   const ny = Math.floor(total / 12)

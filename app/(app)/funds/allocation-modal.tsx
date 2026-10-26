@@ -40,6 +40,9 @@ export function AllocationModal({ action, onClose, onSaved }: { action: Allocati
   const [reference, setReference] = useState('')
   const [annualRate, setAnnualRate] = useState('2')
   const [periodFraction, setPeriodFraction] = useState('0.25')
+  // The vehicle's dated fee schedule, when it has one: the fee then comes from it, not a typed rate.
+  const [hasSchedule, setHasSchedule] = useState(false)
+  const [fromSchedule, setFromSchedule] = useState(false)
   const [amount, setAmount] = useState('')
   const [perLp, setPerLp] = useState<Record<string, string>>({})
   const [partners, setPartners] = useState<Partner[]>([])
@@ -48,19 +51,29 @@ export function AllocationModal({ action, onClose, onSaved }: { action: Allocati
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (action !== 'management_fee') return
+    lf('/api/accounting/fee-schedule').then(r => (r.ok ? r.json() : null)).then(d => {
+      const on = !!d?.schedule
+      setHasSchedule(on)
+      setFromSchedule(on)
+    })
+  }, [lf, action])
+
+  useEffect(() => {
     if (!perPartner) return
     lf('/api/accounting/entities').then(r => (r.ok ? r.json() : [])).then((rows: Partner[]) => setPartners(Array.isArray(rows) ? rows : []))
   }, [lf, perPartner])
 
   const body = () => {
     const b: Record<string, unknown> = { action, entryDate, memo: memo.trim() || undefined, reference: reference.trim() || undefined }
-    if (action === 'management_fee') { b.annualRate = num(annualRate) / 100; b.periodFraction = num(periodFraction) }
+    if (action === 'management_fee' && fromSchedule) b.fromSchedule = true
+    else if (action === 'management_fee') { b.annualRate = num(annualRate) / 100; b.periodFraction = num(periodFraction) }
     if (action === 'expense' || action === 'gain') b.amount = num(amount)
     if (perPartner) b.perLp = Object.fromEntries(Object.entries(perLp).filter(([, v]) => num(v) > 0).map(([k, v]) => [k, num(v)]))
     return b
   }
   const ready = !!entryDate && (
-    action === 'management_fee' ? num(annualRate) > 0 && num(periodFraction) > 0
+    action === 'management_fee' ? fromSchedule || (num(annualRate) > 0 && num(periodFraction) > 0)
     : action === 'expense' || action === 'gain' ? num(amount) > 0
     : Object.values(perLp).some(v => num(v) > 0))
 
@@ -103,7 +116,13 @@ export function AllocationModal({ action, onClose, onSaved }: { action: Allocati
             <label className={label}>Memo<input value={memo} onChange={e => setMemo(e.target.value)} placeholder="Optional" className={field} /></label>
           </div>
 
-          {action === 'management_fee' && (
+          {action === 'management_fee' && hasSchedule && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={fromSchedule} onChange={e => { setFromSchedule(e.target.checked); setPreview(null) }} />
+              Charge the fee schedule&rsquo;s fee for the period this date falls in
+            </label>
+          )}
+          {action === 'management_fee' && !fromSchedule && (
             <div className="grid gap-3 sm:grid-cols-2">
               <label className={label}>Annual rate, % of commitment<input inputMode="decimal" value={annualRate} onChange={e => { setAnnualRate(e.target.value); setPreview(null) }} className={`${field} tabular-nums`} /></label>
               <label className={label}>Period

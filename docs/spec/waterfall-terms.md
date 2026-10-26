@@ -76,10 +76,13 @@ When there is exactly one recipient, the store writes it to `gp_entity_id` as we
 and do not pay it. Their own contributions are excluded from the hurdle, and a split warns when a
 recipient has also contributed capital.
 
-**Management fee is not a waterfall term.** The fee is a per-close input (`annualRate` on the
-`management_fee` allocation, basis `committed`; see `lib/accounting/fees.ts`) and a forecast-plan
-rule (`management_fee`: rate, basis `committed` \| `invested` \| `nav`, term, step-down). Neither is
-stored with these terms. `extract_lpa_terms` reports the LPA's fee rate and basis as information
+**Management fee is not a waterfall term.** The fee is booked by the `management_fee` allocation,
+either from a typed rate on commitments (`annualRate` × `periodFraction`, `lib/accounting/fees.ts`)
+or, with `fromSchedule`, from the vehicle's dated fee schedule (`vehicle_accounting_settings.
+fee_schedule`, `lib/accounting/fee-schedule.ts`): calendar periods, rates that start on a date and
+cut the period they land in, bases of commitments, invested capital or NAV, and an organizational
+expense cap. The forecast plan has its own `management_fee` rule. Neither is stored with these
+terms. `extract_lpa_terms` reports the LPA's fee rate and basis as information
 only. `set_waterfall_terms` does not write them.
 
 **Allocation basis is not a waterfall term either.** `vehicle_accounting_settings.allocation_basis`
@@ -344,7 +347,7 @@ one it finds under `unsupported`.
 |---|---|
 | GP clawback / give-back | Computed (`clawbackAtFundEnd`, §6) but not posted. The close's accrual marks the whole-fund entitlement, so carry paid early under `american` beyond it shows as accrued vs paid on the GP panel. |
 | Carry escrow / holdback | Not modelled. |
-| Management fee offsets (transaction, monitoring or director fees) | Not modelled. The fee is a separate allocation (§2). |
+| Management fee offsets (transaction, monitoring or director fees) | The engine runs them (`feeSchedule`), but the books have no line for portfolio-company fees, so the vehicle's fee schedule can't apply them yet. The organizational expense cap does apply (§2). |
 | Multiple hurdles (a second pref) | One hurdle per vehicle. Carry that steps up at an LP multiple or IRR is supported (§3.3). |
 | Hurdle compounding other than annual (quarterly, daily) | Annual compounding or simple only. |
 | Deal-by-deal on a different capital base (all invested capital, or unrealized write-downs) | Realized deals only, with fees and expenses by cost share (§4.3). |

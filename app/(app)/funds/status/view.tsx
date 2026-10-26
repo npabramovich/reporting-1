@@ -10,6 +10,7 @@ import { VehicleEditModal, type EditableVehicle } from '@/components/vehicle-edi
 import { DealCarryCard } from './deal-carry-card'
 import { BootstrapInvestmentsCard } from './bootstrap-investments'
 import { CarryTerms } from '../allocation-terms/carry-terms'
+import { FeeScheduleCard } from '../allocation-terms/fee-schedule'
 import { useAccess, useCanRead, useIsAdmin } from '@/components/access-context'
 import { QuickActionButtons } from '@/components/quick-action-buttons'
 import { createActions } from '@/lib/start/quick-actions'
@@ -225,6 +226,12 @@ function EntityStatusView() {
                   (many-to-many via vehicle_gp_links; separate from the legacy single-GP capital-accounts panel). */}
               <GeneralPartnersCard />
             </div>
+          </CollapsibleSection>
+        )}
+
+        {!manco && (
+          <CollapsibleSection title="Management fee schedule" subtitle="The fee's rates, step-downs and bases as the LPA states them">
+            <FeeScheduleCard />
           </CollapsibleSection>
         )}
 
