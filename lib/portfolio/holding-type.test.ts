@@ -55,6 +55,7 @@ const ALLOWLIST = new Map<string, string>([
   ['app/api/accounting/deal-carry/route.ts', 'deal-by-deal carry is computed over every position, funds included'],
   ['lib/accounting/realized-capital.ts', 'the deal-by-deal capital base is every position the vehicle realized, funds included'],
   ['lib/accounting/fund-timeseries.ts', 'cost and value over time cover every position, funds included'],
+  ['lib/ilpa/performance-load.ts', "the ILPA portfolio table's gross returns cover every position the vehicle holds, funds included"],
   ['lib/accounting/import-review.ts', 'compares imported books to every investment position, including fund holdings'],
   ['lib/accounting/status.ts', 'the schedule-of-investments tie-out must cover every ledger position'],
   ['lib/accounting/statement-package.ts', 'the SOI needs both kinds to tie to the ledger; it splits them for display by holdingType'],
