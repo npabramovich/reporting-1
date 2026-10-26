@@ -106,8 +106,8 @@ export function categoriesForType(type: string): AccountCategory[] {
 interface AccountLike {
   type: string
   subtype?: string | null
-  /** The category the account states (chart_of_accounts.ilpa_category), if any. */
-  ilpaCategory?: string | null
+  /** The category the account states (chart_of_accounts.reporting_category), if any. */
+  reportingCategory?: string | null
 }
 
 /** The line an account lands on by its subtype alone. Null for balance-sheet and tax-only accounts. */
@@ -128,7 +128,7 @@ export function defaultAccountCategory(account: AccountLike): AccountCategory | 
 export function accountCategory(account: AccountLike): AccountCategory | null {
   const fallback = defaultAccountCategory(account)
   if (!fallback) return null
-  const stated = account.ilpaCategory
+  const stated = account.reportingCategory
   if (isAccountCategory(stated) && categoriesForType(account.type).includes(stated)) return stated
   return fallback
 }

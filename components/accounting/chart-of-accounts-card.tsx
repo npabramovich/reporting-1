@@ -16,7 +16,7 @@ interface Acct {
   lp_entity_id: string | null
   is_active: boolean
   /** The ILPA Reporting Template line the account's postings land on; null follows its subtype. */
-  ilpa_category?: string | null
+  reporting_category?: string | null
 }
 
 const TYPES = ['asset', 'liability', 'equity', 'income', 'expense'] as const
@@ -153,7 +153,7 @@ export function ChartOfAccountsCard() {
                         {a.name}
                       </button>
                       {!a.is_active && <span className="shrink-0 text-xs text-muted-foreground">Hidden</span>}
-                      <IlpaCategoryPicker account={a} disabled={busy === a.id} onChange={c => patch(a.id, { ilpaCategory: c })} />
+                      <ReportingCategoryPicker account={a} disabled={busy === a.id} onChange={c => patch(a.id, { reportingCategory: c })} />
                       {/* The action, in words. A bare eye icon is ambiguous — it can mean "this
                           is visible" (state) or "make this hidden" (action), and this row shows
                           state as text already, so an Eye beside the word "Hidden" read as a
@@ -184,11 +184,11 @@ export function ChartOfAccountsCard() {
 }
 
 /** The ILPA line an income or expense account files under. Nothing for the balance sheet or the tax book. */
-function IlpaCategoryPicker({ account, disabled, onChange }: { account: Acct; disabled: boolean; onChange: (category: string | null) => void }) {
+function ReportingCategoryPicker({ account, disabled, onChange }: { account: Acct; disabled: boolean; onChange: (category: string | null) => void }) {
   const fallback = defaultAccountCategory(account)
   if (!fallback) return null
   const options = categoriesForType(account.type)
-  const stated = account.ilpa_category ?? ''
+  const stated = account.reporting_category ?? ''
   const suggestion = !stated && fallback === 'ext_other' ? suggestAccountCategory(account.name, account.type) : null
   return (
     <span className="flex shrink-0 items-center gap-1">

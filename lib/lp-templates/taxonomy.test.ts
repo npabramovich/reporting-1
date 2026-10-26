@@ -79,12 +79,12 @@ describe('chart accounts', () => {
   })
 
   it("uses the account's stated category when it suits the account's type", () => {
-    expect(accountCategory({ type: 'expense', subtype: 'partnership_expense', ilpaCategory: 'ext_audit' })).toBe('ext_audit')
-    expect(accountCategory({ type: 'expense', subtype: 'management_fee', ilpaCategory: 'mgmt_fee_offset' })).toBe('mgmt_fee_offset')
+    expect(accountCategory({ type: 'expense', subtype: 'partnership_expense', reportingCategory: 'ext_audit' })).toBe('ext_audit')
+    expect(accountCategory({ type: 'expense', subtype: 'management_fee', reportingCategory: 'mgmt_fee_offset' })).toBe('mgmt_fee_offset')
     // An income line on an expense account, or a word that is not a category, is ignored.
-    expect(accountCategory({ type: 'expense', subtype: 'partnership_expense', ilpaCategory: 'dividend_income' })).toBe('ext_other')
-    expect(accountCategory({ type: 'expense', subtype: 'partnership_expense', ilpaCategory: 'legal' })).toBe('ext_other')
-    expect(accountCategory({ type: 'asset', subtype: 'cash', ilpaCategory: 'ext_audit' })).toBeNull()
+    expect(accountCategory({ type: 'expense', subtype: 'partnership_expense', reportingCategory: 'dividend_income' })).toBe('ext_other')
+    expect(accountCategory({ type: 'expense', subtype: 'partnership_expense', reportingCategory: 'legal' })).toBe('ext_other')
+    expect(accountCategory({ type: 'asset', subtype: 'cash', reportingCategory: 'ext_audit' })).toBeNull()
   })
 
   it('offers income categories to income accounts and the rest to expense accounts', () => {
@@ -160,15 +160,15 @@ describe('registers', () => {
 })
 
 describe('the migration', () => {
-  const sql = readFileSync(join(process.cwd(), 'supabase/migrations/20261026160000_lp_reporting_template.sql'), 'utf8')
-  const listIn = (marker: string) => {
+  const read = (name: string) => readFileSync(join(process.cwd(), 'supabase/migrations', name), 'utf8')
+  const listIn = (marker: string, sql = read('20261026160000_lp_reporting_template.sql')) => {
     const start = sql.indexOf(marker)
     const body = sql.slice(start, sql.indexOf('));', start))
     return Array.from(body.matchAll(/'([a-z0-9_]+)'/g), m => m[1])
   }
 
   it('lets an account carry exactly the categories the taxonomy names', () => {
-    expect(listIn('chart_of_accounts_ilpa_category_check check').sort()).toEqual([...ACCOUNT_CATEGORIES].sort())
+    expect(listIn('chart_of_accounts_reporting_category_check check', read('20261026180000_chart_reporting_category.sql')).sort()).toEqual([...ACCOUNT_CATEGORIES].sort())
   })
 
   it('lets the fee register hold exactly the kinds the app records', () => {
