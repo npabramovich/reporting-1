@@ -1,14 +1,5 @@
--- PENDING DEPLOY — do not move into supabase/migrations/ until this release is live:
---
---   The release that reads the company page's AI-key flags with the service-role client
---   (app/(app)/companies/[id]/load.ts) instead of the signed-in member's client.
---
--- Why it must wait: the release before that one selects claude_api_key_encrypted and
--- openai_api_key_encrypted from fund_settings with the member's own client. Once this runs, that
--- select is refused, the page ignores the error, and every company page silently falls back to
--- the default currency, no AI key and no storage provider.
---
--- When moving it: rename to a current timestamp, e.g. supabase/migrations/<now>_fund_settings_member_column_grants.sql.
+-- Moved from supabase/pending-deploy/ once PR #160 was deployed (the company page reads its AI-key
+-- flags with the service role since that release).
 --
 -- What it does: any fund member could read the whole fund_settings row from the browser with the
 -- anon key, which includes every encrypted credential, the wrapped data key, the deal-submission
