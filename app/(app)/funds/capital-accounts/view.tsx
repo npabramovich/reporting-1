@@ -21,7 +21,8 @@ import { ReceiptAction } from '@/components/accounting/receipt-action'
 import { CallActivity } from '@/components/accounting/call-activity'
 import { ReconciliationPanel } from './reconciliation-panel'
 import { GpPanel } from './gp-panel'
-import { useCanRead } from '@/components/access-context'
+import { CreditFacilityPanel } from './credit-facility-panel'
+import { useCanRead, useCanWrite } from '@/components/access-context'
 import { CapitalRollforwardTable, type Row } from '@/components/accounting/capital-rollforward-table'
 import { EmptyState } from '@/components/ui/empty-state'
 
@@ -53,6 +54,7 @@ export function CapitalAccountsView() {
   const lpPortalEnabled = useLpPortalEnabled()
   const isAdmin = useIsAdmin()
   const canReadGpEconomics = useCanRead('gp_economics')
+  const canWriteLpCapital = useCanWrite('lp_capital')
   const currency = useCurrency()
   const fmt = (v: number) => formatCurrencyPrice(v, currency)
   const lf = useLedgerFetch()
@@ -866,6 +868,21 @@ export function CapitalAccountsView() {
           <GpPanel isAdmin={isAdmin} />
         </div>
       )}
+
+      {/* The subscription line or other borrowing: its balance and each draw, repayment and interest
+          payment, which the ILPA performance file reads (lib/accounting/credit-facility.ts). */}
+      <details className="group border rounded-lg mt-6">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium">
+          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
+          Credit facilities
+          <span className="ml-1 text-xs font-normal text-muted-foreground">
+            a subscription line or other borrowing: draws, repayments, interest and fees
+          </span>
+        </summary>
+        <div className="border-t p-3">
+          <CreditFacilityPanel canWrite={canWriteLpCapital} />
+        </div>
+      </details>
 
       {/* Reconciliation is available throughout the life of the entity. */}
       {(

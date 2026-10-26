@@ -110,6 +110,7 @@ const TOOL_LABELS: Record<string, string> = {
   forecast_series: 'Loading actuals and the forecast',
   forecast_explain: 'Reading the plan’s rules and sources',
   forecast_variance: 'Comparing against the plan',
+  forecast_workbook: 'Preparing the forecast workbook',
   forecast_fee_links: 'Looking up fee links',
   create_forecast_plan: 'Drafting the forecast for your approval',
   update_forecast_plan: 'Drafting changes to the forecast for your approval',

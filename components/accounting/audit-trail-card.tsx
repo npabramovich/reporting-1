@@ -23,6 +23,8 @@ const ACTION_LABELS: Record<string, string> = {
   'snapshot.share': 'Shared an LP report', 'snapshot.unshare': 'Unshared an LP report',
   'lp_statement.force_publish': 'Published an interim LP statement',
   'capital_call.issue': 'Issued a capital call', 'distribution.declare': 'Declared a distribution',
+  'credit_facility.save': 'Saved a credit facility', 'credit_facility.remove': 'Removed a credit facility',
+  'credit_facility.record': 'Recorded a credit facility draw or payment', 'credit_facility.remove_row': 'Removed a credit facility row',
   'k1.generate': 'Generated K-1s', 'k1.finalize': 'Issued K-1s', 'k1.amend': 'Amended K-1s', 'tax.adjustments': 'Posted book-to-tax adjustments',
   'pending_action.approve': 'Approved a staged change', 'pending_action.reject': 'Rejected a staged change',
   'pending_action.stage': 'Staged a change for approval', 'pending_action.undo': 'Undid an approved run', 'agent.write': 'Changed through a connected assistant',

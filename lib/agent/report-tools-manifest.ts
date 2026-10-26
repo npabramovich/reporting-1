@@ -52,6 +52,31 @@ export const REPORT_TOOL_MANIFEST: AgentToolMeta[] = [
     },
   },
   {
+    name: 'forecast_workbook',
+    description:
+      'A download link to a forecast as the same Excel model the Forecast page downloads: the income statement, ' +
+      'cash flows and balance sheet by month (with a quarterly or annual sheet on top), and an Assumptions sheet. ' +
+      'Totals, net income, the cash roll-forward and the balance sheet check are formulas, and forecast months a rule ' +
+      'produced are formulas over Assumptions. Defaults to the entity\'s primary plan over this calendar year; pass ' +
+      'planId (forecast_list_plans) for another plan, or view "actual" for actuals only. Works for a management ' +
+      'company with the Management company grant. ' + LINK_NOTE,
+    scope: 'read',
+    domain: 'portfolio',
+    accessDomain: 'accounting',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        vehicle: VEHICLE,
+        planId: { type: 'string', description: 'Plan id from forecast_list_plans. Default: the primary plan, or actuals when there is none.' },
+        versionId: { type: 'string', description: 'A published version of that plan. Omit for the current draft.' },
+        view: { type: 'string', enum: ['actual', 'plan', 'combined'], description: 'Default combined: actuals through the cutoff, then the plan.' },
+        start: { type: 'string', description: 'First month, YYYY-MM. Default January this year.' },
+        end: { type: 'string', description: 'Last month, YYYY-MM (at most 240 months after start). Default December this year.' },
+        interval: { type: 'string', enum: ['month', 'quarter', 'year'], description: 'Adds a quarterly or annual sheet over the monthly one. Default month.' },
+      },
+    },
+  },
+  {
     name: 'tax_package_zip',
     description:
       'A download link to the year\'s tax package as a ZIP, the same bundle the app produces for the preparer: ' +

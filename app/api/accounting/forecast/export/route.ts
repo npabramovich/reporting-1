@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
-import { getSeries, getSeriesWithRules, getVariance } from '@/lib/forecast/service'
+import { getSeries, getVariance } from '@/lib/forecast/service'
 import { forecastRequest } from '@/lib/forecast/http'
 import { seriesCsv, varianceCsv } from '@/lib/forecast/export'
-import { buildForecastWorkbook, buildVarianceWorkbook } from '@/lib/forecast/workbook'
+import { buildVarianceWorkbook } from '@/lib/forecast/workbook'
+import { forecastWorkbookDocument } from '@/lib/forecast/workbook-document'
 import { rateLimit } from '@/lib/rate-limit'
 
 // CSV of exactly what the series route (or, with kind=variance, the variance route) returns for the
@@ -71,10 +72,12 @@ export async function GET(req: NextRequest) {
     if (excel) {
       const interval = (q.get('interval') as any) || 'month'
       if (!['month', 'quarter', 'year'].includes(interval)) return NextResponse.json({ error: "interval must be 'month', 'quarter' or 'year'" }, { status: 400 })
-      // Every formula is written at the monthly grain; quarters and years are SUMs of months.
-      const { series, rules, accounts } = await getSeriesWithRules(ctx, { ...input, interval: 'month' })
-      const wb = buildForecastWorkbook({ monthly: series, rules, accounts, interval, meta: await meta() })
-      return xlsx(wb, `${series.vehicle}-${series.plan?.name ?? 'actuals'}-${q.get('start')}-${q.get('end')}`)
+      // Every formula is written at the monthly grain; quarters and years are SUMs of months. The same
+      // builder serves the assistant's download link (forecast_workbook).
+      const doc = await forecastWorkbookDocument(ctx, { ...input, interval })
+      return new NextResponse(new Uint8Array(doc.body), {
+        headers: { 'Content-Type': doc.contentType, 'Content-Disposition': `attachment; filename="${doc.fileName}"`, 'Cache-Control': 'no-store' },
+      })
     }
     const series = await getSeries(ctx, { ...input, interval: (q.get('interval') as any) || undefined })
     return csv(seriesCsv(series), `${series.vehicle}-${series.plan?.name ?? 'actuals'}-${q.get('start')}-${q.get('end')}`)

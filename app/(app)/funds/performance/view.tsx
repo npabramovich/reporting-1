@@ -11,6 +11,7 @@ import {
   lastQuarterEnd, periodLabel, performanceMoney, performanceMultiple, performancePct,
   type FundPerformanceReport, type PerformanceGrouping,
 } from '@/lib/accounting/fund-performance-format'
+import type { IlpaPerformance } from '@/lib/ilpa/performance'
 
 /** The last `n` calendar quarter ends, newest first. */
 function recentQuarterEnds(n: number): string[] {
@@ -36,6 +37,9 @@ export function FundPerformanceView() {
   const [report, setReport] = useState<FundPerformanceReport | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  // Keyed by its date, so a figure from the previous date is never shown while the next one loads.
+  const [ilpaFor, setIlpaFor] = useState<{ asOf: string; data: IlpaPerformance | null } | null>(null)
+  const ilpa = ilpaFor?.asOf === asOf ? ilpaFor.data : null
 
   useEffect(() => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) return
@@ -50,9 +54,21 @@ export function FundPerformanceView() {
       .finally(() => setLoading(false))
   }, [lf, asOf, grouping])
 
+  // The ILPA Performance Template figures (lib/ilpa/performance.ts): its own request, so a slow or
+  // failed build never holds up the report above.
+  useEffect(() => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) return
+    lf(`/api/accounting/ilpa/performance?${new URLSearchParams({ asOf, format: 'json' })}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => setIlpaFor({ asOf, data }))
+      .catch(() => setIlpaFor({ asOf, data: null }))
+  }, [lf, asOf])
+
   const m = (v: number | null | undefined, dp = 0) => performanceMoney(v, currency, dp)
   const pdfQs = new URLSearchParams({ asOf, groupBy: grouping })
   if (group) pdfQs.set('group', group)
+  const ilpaQs = new URLSearchParams({ asOf })
+  if (group) ilpaQs.set('group', group)
 
   const summary = (label: string, value: string) => (
     <div className="flex items-baseline justify-between gap-4 py-1.5 border-b last:border-b-0">
@@ -92,10 +108,15 @@ export function FundPerformanceView() {
           <option value="quarter">By quarter</option>
           <option value="date">Every date</option>
         </select>
-        <div className="ml-auto">
+        <div className="ml-auto flex gap-2">
           <Button size="sm" variant="outline" asChild disabled={!report}>
             <a href={`/api/accounting/fund-performance/pdf?${pdfQs}`} target="_blank" rel="noreferrer">
               <FileDown className="h-4 w-4 mr-1.5" />PDF
+            </a>
+          </Button>
+          <Button size="sm" variant="outline" asChild disabled={!report}>
+            <a href={`/api/accounting/ilpa/performance?${ilpaQs}`} title="The ILPA Performance Template data (Granular Methodology): returns with and without the subscription line, and every typed cash flow">
+              <FileDown className="h-4 w-4 mr-1.5" />ILPA file (.xlsx)
             </a>
           </Button>
         </div>
@@ -171,6 +192,49 @@ export function FundPerformanceView() {
               {summary('Capital Contributions (LP only)', m(report.metrics.contributions, 2))}
             </div>
           </div>
+
+          {ilpa && (
+            <div className="rounded-card border">
+              <div className="px-4 py-2 border-b">
+                <p className="text-sm font-medium">ILPA returns</p>
+                <p className="text-xs text-muted-foreground">
+                  Fee-paying limited partners, as the ILPA Performance Template states them. &ldquo;Without&rdquo; treats each
+                  subscription line draw as if the partners had been called that day.
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm whitespace-nowrap">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left px-4 py-2 font-medium" />
+                      <th className="text-right px-4 py-2 font-medium">With the subscription line</th>
+                      <th className="text-right px-4 py-2 font-medium">Without it</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {([
+                      ['Net IRR', performancePct(ilpa.series.withNet.irr), performancePct(ilpa.series.withoutNet.irr)],
+                      ['Net TVPI', performanceMultiple(ilpa.series.withNet.multiple), performanceMultiple(ilpa.series.withoutNet.multiple)],
+                      ['Gross IRR', performancePct(ilpa.series.withGross.irr), performancePct(ilpa.series.withoutGross.irr)],
+                      ['Gross MOIC', performanceMultiple(ilpa.series.withGross.multiple), performanceMultiple(ilpa.series.withoutGross.multiple)],
+                    ] as const).map(([label, w, wo]) => (
+                      <tr key={label} className="border-b last:border-b-0">
+                        <td className="px-4 py-2">{label}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{w}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{wo}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <details className="border-t px-4 py-2">
+                <summary className="cursor-pointer text-xs text-muted-foreground">How these were worked out</summary>
+                <ul className="mt-2 list-disc pl-5 space-y-1 text-xs text-muted-foreground">
+                  {ilpa.footnotes.map(n => <li key={n}>{n}</li>)}
+                </ul>
+              </details>
+            </div>
+          )}
 
           <p className="text-xs text-muted-foreground">
             Limited partners only; the general partner&apos;s capital is excluded. Net asset value is the limited

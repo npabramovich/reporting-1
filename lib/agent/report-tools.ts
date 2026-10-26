@@ -13,8 +13,11 @@ import { customPeriod, resolvePeriod, type PeriodPreset } from '@/lib/accounting
 import { reportLinkUrl, signReportLink, type ReportKind } from '@/lib/agent/report-links'
 import { loadIdentities, lpToolScope, resolveLp, resolveSnapshot } from '@/lib/agent/lp-tools'
 import { siteOrigin } from '@/lib/site-links'
+import { listPlans } from '@/lib/forecast/service'
+import { monthDiff } from '@/lib/forecast/months'
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/
 const STATEMENT_PRESETS: PeriodPreset[] = ['this_quarter', 'last_quarter', 'ytd', 'prior_year', 'itd']
 const NOTE = 'Give the user this link. It opens the document for an hour, and only for this member. If they ask again later, call this tool again rather than re-sharing this link.'
 
@@ -73,6 +76,35 @@ export const REPORT_HANDLERS: Record<string, AgentToolHandler> = {
       ...link(ctx, userId, 'financial_statements', {
         vehicle, start: period.start, end: period.end,
         compare: compare > 0 ? String(compare) : null, basis: basis === 'tax' ? 'tax' : null,
+      }),
+    }
+  },
+
+  forecast_workbook: async (ctx: AgentToolContext, input: any) => {
+    const userId = requireUser(ctx.userId)
+    if (typeof input?.vehicle !== 'string' || !input.vehicle.trim()) throw new Error('vehicle is required')
+    const year = new Date().getUTCFullYear()
+    const start = input?.start ? String(input.start) : `${year}-01`
+    const end = input?.end ? String(input.end) : `${year}-12`
+    if (!MONTH.test(start) || !MONTH.test(end)) throw new Error('start and end must be months, YYYY-MM')
+    if (end < start) throw new Error('end is before start')
+    if (monthDiff(start, end) > 240) throw new Error('The range is at most 240 months')
+    const interval = input?.interval ? String(input.interval) : 'month'
+    if (!['month', 'quarter', 'year'].includes(interval)) throw new Error('interval must be month, quarter or year')
+    const view = input?.view ? String(input.view) : null
+    if (view && !['actual', 'plan', 'combined'].includes(view)) throw new Error('view must be actual, plan or combined')
+    // The forecast service's own checks, now: accounting, the entity, a management company's grant.
+    const { vehicle, plans } = await listPlans({ admin: ctx.admin, fundId: ctx.fundId, userId, access: ctx.access }, { vehicle: input.vehicle })
+    const plan = view === 'actual' ? null
+      : input?.planId ? plans.find(p => p.id === String(input.planId)) ?? null
+      : plans.find(p => p.isPrimary) ?? null
+    if (input?.planId && view !== 'actual' && !plan) throw new Error(`No plan ${input.planId} for ${vehicle}; forecast_list_plans lists them.`)
+    if (input?.versionId && !plan?.versions.some(v => v.id === String(input.versionId))) throw new Error('That version is not one of the plan\'s; forecast_list_plans lists them.')
+    return {
+      document: 'Forecast workbook (Excel)', vehicle, plan: plan ? plan.name : 'Actuals only', range: `${start} – ${end}`, interval,
+      ...link(ctx, userId, 'forecast_workbook', {
+        vehicle, plan: plan?.id ?? null, version: plan && input?.versionId ? String(input.versionId) : null,
+        view: plan ? view : 'actual', start, end, interval,
       }),
     }
   },

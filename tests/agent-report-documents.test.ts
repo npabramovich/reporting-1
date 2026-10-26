@@ -41,7 +41,15 @@ const docs = {
   financialStatementsDocument: vi.fn(async () => doc()),
   taxPackageDocument: vi.fn(async () => ({ ...doc('application/zip'), fileName: 'tax.zip' })),
   k1Document: vi.fn(async () => doc()),
+  forecastWorkbookDocument: vi.fn(async () => ({ ...doc('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'), fileName: 'forecast.xlsx' })),
 }
+const plans = vi.fn(async (_ctx: unknown, input: { vehicle: string }) => ({
+  vehicle: input.vehicle, kind: 'manco', closedThrough: null,
+  plans: [
+    { id: 'plan-1', name: 'Budget', isPrimary: false, versions: [{ id: 'ver-1' }] },
+    { id: 'plan-2', name: 'Rolling forecast', isPrimary: true, versions: [] },
+  ],
+}))
 const snapshotPdf = vi.fn(async () => ({ pdf: Buffer.from('%PDF-snap'), fileName: 'Acme - Q2 2026.pdf' }))
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => store.admin }))
@@ -64,6 +72,13 @@ vi.mock('@/lib/reports/documents', async importOriginal => ({
   financialStatementsDocument: (...a: unknown[]) => (docs.financialStatementsDocument as any)(...a),
   taxPackageDocument: (...a: unknown[]) => (docs.taxPackageDocument as any)(...a),
   k1Document: (...a: unknown[]) => (docs.k1Document as any)(...a),
+}))
+vi.mock('@/lib/forecast/workbook-document', () => ({
+  forecastWorkbookDocument: (...a: unknown[]) => (docs.forecastWorkbookDocument as any)(...a),
+}))
+vi.mock('@/lib/forecast/service', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/lib/forecast/service')>()),
+  listPlans: (...a: unknown[]) => (plans as any)(...a),
 }))
 vi.mock('@/lib/lp-report-pdf', () => ({
   generateInvestorReportPdf: (...a: unknown[]) => (snapshotPdf as any)(...a),
@@ -167,6 +182,32 @@ describe('document tools', () => {
     expect(snapshotPdf).toHaveBeenCalledWith(store.admin, { fundId: 'fund-1', snapshotId: 'snap-1', investorIds: ['inv-1'] })
     access = member({ lp_capital: 'read' }, false)
     expect((await open(tokenOf(out))).status).toBe(404)
+  })
+
+  it('hands over a forecast as the Excel model, the primary plan by default, re-checked at the click', async () => {
+    expect(getTool('forecast_workbook')).toMatchObject({ scope: 'read', accessDomain: 'accounting' })
+    const out = await REPORT_HANDLERS.forecast_workbook(ctx(), { vehicle: 'Northwind Management', start: '2026-01', end: '2026-12', interval: 'quarter' }) as any
+    expect(out).toMatchObject({ plan: 'Rolling forecast', range: '2026-01 – 2026-12' })
+    expect(verifyReportLink(tokenOf(out))).toMatchObject({ kind: 'forecast_workbook', args: { vehicle: 'Northwind Management', plan: 'plan-2', interval: 'quarter' } })
+    const res = await open(tokenOf(out))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    expect(res.headers.get('content-disposition')).toMatch(/^attachment/)
+    expect(docs.forecastWorkbookDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ fundId: 'fund-1', userId: 'user-me', access }),
+      { vehicle: 'Northwind Management', planId: 'plan-2', versionId: undefined, view: undefined, start: '2026-01', end: '2026-12', interval: 'quarter' },
+    )
+    access = member({})
+    expect((await open(tokenOf(out))).status).toBe(404)
+  })
+
+  it('checks the forecast request in the conversation', async () => {
+    await expect(REPORT_HANDLERS.forecast_workbook(ctx(), { vehicle: 'Fund I', start: '2026-13' })).rejects.toThrow('YYYY-MM')
+    await expect(REPORT_HANDLERS.forecast_workbook(ctx(), { vehicle: 'Fund I', planId: 'nope' })).rejects.toThrow('No plan')
+    await expect(REPORT_HANDLERS.forecast_workbook(ctx(), { vehicle: 'Fund I', planId: 'plan-2', versionId: 'ver-1' })).rejects.toThrow('version')
+    const actual = await REPORT_HANDLERS.forecast_workbook(ctx(), { vehicle: 'Fund I', view: 'actual' }) as any
+    expect(actual.plan).toBe('Actuals only')
+    expect(verifyReportLink(tokenOf(actual))!.args).toMatchObject({ plan: null, view: 'actual' })
   })
 
   it('needs a signed-in member', async () => {

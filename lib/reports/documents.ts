@@ -28,11 +28,12 @@ import { findFinalK1Package, buildK1WorkbookForPackage } from '@/lib/tax/k1-expo
 import { generateK1Pdf } from '@/lib/tax/k1-pdf'
 import { currentForm, type TaxFormRecord } from '@/lib/tax/forms'
 import { renderHtmlToPdf } from '@/lib/lp-report-pdf'
+import type { XLSX_TYPE } from '@/lib/forecast/workbook-document'
 
 export interface FundDocument {
   body: Buffer
   fileName: string
-  contentType: 'application/pdf' | 'application/zip'
+  contentType: 'application/pdf' | 'application/zip' | typeof XLSX_TYPE
 }
 
 /**
