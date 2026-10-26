@@ -22,6 +22,9 @@ import { VarianceSection } from './variance'
 import { ForecastEntries } from './entries'
 import { ConstructionView } from '../construction/view'
 import { PlanOverview } from './overview'
+import { MancoCapitalPlanning } from './manco-capital'
+import { mancoCashPlan } from '@/lib/forecast/manco-cash'
+import type { ForecastBalanceSheet } from '@/lib/forecast/balance-sheet'
 import { onApplied } from '@/lib/pending-actions/applied-event'
 import { NO_ADJUSTMENTS } from '@/lib/forecast/adjustments'
 
@@ -109,7 +112,7 @@ export function ForecastView({ vehicle, vehicleId, kind, initialTab }: { vehicle
   const [start, setStart] = useState<MonthKey>(`${thisMonth().slice(0, 4)}-01`)
   const [end, setEnd] = useState<MonthKey>(`${thisMonth().slice(0, 4)}-12`)
   const [interval, setIntervalChoice] = useState<Interval>('month')
-  const [statement, setStatement] = useState<'pnl' | 'cash' | 'entries'>('pnl')
+  const [statement, setStatement] = useState<'pnl' | 'cash' | 'balance' | 'entries'>('pnl')
   // Accrual or cash basis, for both statements: the income statement by when income and expenses are
   // earned and incurred, or when their cash moves; the cash-flow statement by the indirect method
   // (from net income) or the direct one.
@@ -431,6 +434,9 @@ export function ForecastView({ vehicle, vehicleId, kind, initialTab }: { vehicle
     return out
   }, [series, detail, start, end])
 
+  // A management company's Capital planning: its cash over the same range (it has no portfolio).
+  const mancoCash = useMemo(() => (!hasPortfolio && series ? mancoCashPlan(series) : null), [hasPortfolio, series])
+
   // The plan's returns, once per change, with the simulation: the key figures above the tabs and the
   // cash-flow chart's range both read this one response (lib/forecast/plan-returns.ts).
   const returnsPlanId = hasPortfolio ? (detail?.plan.id ?? (planId || null)) : null
@@ -719,6 +725,10 @@ export function ForecastView({ vehicle, vehicleId, kind, initialTab }: { vehicle
         </div>
       )}
 
+      {!hasPortfolio && tab === 'capital' && series && (
+        <MancoCapitalPlanning plan={mancoCash} rangeLabel={`${start} – ${end}`} hasPlan={!!detail} onEntityLinks={() => setLinking(true)} fmt={short} fmtFull={full} />
+      )}
+
       {tab === 'financials' && (<>
       {tab === 'financials' && view === 'variance' && variance && (
         <VarianceSection
@@ -745,14 +755,14 @@ export function ForecastView({ vehicle, vehicleId, kind, initialTab }: { vehicle
           </p>
           <div className="mb-2 flex items-center gap-2">
             <div className="inline-flex shrink-0 rounded-md border border-input p-0.5" role="group" aria-label="Statement">
-              {(detail ? (['pnl', 'cash', 'entries'] as const) : (['pnl', 'cash'] as const)).map(s => (
+              {(detail ? (['pnl', 'cash', 'balance', 'entries'] as const) : (['pnl', 'cash', 'balance'] as const)).map(s => (
                 <button key={s} type="button" onClick={() => { setStatement(s); if (s !== 'entries') setEntryMonths(null) }}
                   className={cn('h-8 whitespace-nowrap rounded-sm px-3 text-sm', statement === s ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground')}>
-                  {s === 'pnl' ? 'Income Statement' : s === 'cash' ? 'Statement of Cash Flows' : 'Journal Entries'}
+                  {s === 'pnl' ? 'Income Statement' : s === 'cash' ? 'Statement of Cash Flows' : s === 'balance' ? 'Balance Sheet' : 'Journal Entries'}
                 </button>
               ))}
             </div>
-            {statement !== 'entries' && (
+            {statement !== 'entries' && statement !== 'balance' && (
               <select className={cn(toolbarSelectCls, "h-9")} value={basis} onChange={e => setBasis(e.target.value as 'accrual' | 'cash')} aria-label="Basis">
                 <option value="accrual">Accrual basis</option>
                 <option value="cash">Cash basis</option>
@@ -792,7 +802,11 @@ export function ForecastView({ vehicle, vehicleId, kind, initialTab }: { vehicle
                 </tr>
               </thead>
               <tbody>
-                {statement === 'pnl' && basis === 'cash' && series.cashBasis ? (
+                {statement === 'balance' ? (
+                  series.balanceSheet ? <BalanceSheetRows sheet={series.balanceSheet} span={series.periods.length} fmt={full} /> : (
+                    <tr><td colSpan={series.periods.length + 1} className="px-3 py-3 text-muted-foreground">No balance sheet for this view.</td></tr>
+                  )
+                ) : statement === 'pnl' && basis === 'cash' && series.cashBasis ? (
                   // Cash basis: each line as the cash it moved, when it moved. Read-only — rules and
                   // overrides set the accrual figures, and the cash follows from their timing.
                   <>
@@ -941,6 +955,31 @@ function PlainRow({ label, code, values, fmt, title }: { label: string; code?: s
       <td className="sticky left-0 z-10 bg-card px-3 py-2">{code && <span className="mr-1.5 font-mono text-xs text-muted-foreground">{code}</span>}{label}</td>
       {values.map((v, i) => <td key={i} className="px-3 py-2 text-right tabular-nums">{fmt(v)}</td>)}
     </tr>
+  )
+}
+
+/**
+ * The balance sheet at the end of each period: assets, then liabilities and equity, from the same
+ * entries as the other two statements (lib/forecast/balance-sheet.ts). A period that does not
+ * balance says so — it never should, as every forecast entry balances.
+ */
+function BalanceSheetRows({ sheet, span, fmt }: { sheet: ForecastBalanceSheet; span: number; fmt: (v: number | null) => string }) {
+  const liabilitiesAndEquity = sheet.liabilities.total.map((v, i) => (v == null ? null : v + (sheet.equity.total[i] ?? 0)))
+  const off = sheet.check.some(v => v != null && Math.abs(v) >= 0.01)
+  return (
+    <>
+      <SectionRow label="Assets" span={span} />
+      {sheet.assets.rows.map(r => <PlainRow key={r.key} label={r.name} code={r.code ?? undefined} values={r.values} fmt={fmt} />)}
+      <TotalRow label="Total assets" values={sheet.assets.total} fmt={fmt} strong />
+      <SectionRow label="Liabilities" span={span} />
+      {sheet.liabilities.rows.map(r => <PlainRow key={r.key} label={r.name} code={r.code ?? undefined} values={r.values} fmt={fmt} />)}
+      <TotalRow label="Total liabilities" values={sheet.liabilities.total} fmt={fmt} />
+      <SectionRow label={sheet.equity.label} span={span} />
+      {sheet.equity.rows.map(r => <PlainRow key={r.key} label={r.name} code={r.code ?? undefined} values={r.values} fmt={fmt} />)}
+      <TotalRow label={`Total ${sheet.equity.label.toLowerCase()}`} values={sheet.equity.total} fmt={fmt} />
+      <TotalRow label={`Total liabilities and ${sheet.equity.label.toLowerCase()}`} values={liabilitiesAndEquity} fmt={fmt} strong />
+      {off && <PlainRow label="Out of balance" values={sheet.check} fmt={fmt} title="Assets less liabilities and equity. Every entry balances, so this points at an entry posted to an account outside the chart." />}
+    </>
   )
 }
 

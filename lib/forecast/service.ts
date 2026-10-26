@@ -41,7 +41,8 @@ import { buildReport, type FlowEntry, type Report, type ReportView } from './rep
 import { computeVariance, largestVariances, type VarianceResult } from './variance'
 import { cycleLabel, loadFeeLinks, loadLinkedDrivers, seesCarry, seesFund, seesManco } from './linked'
 import { historyWindow, MAX_HISTORY_MONTHS, MIN_HISTORY_MONTHS, suggestRule, type RuleSuggestion } from './suggest'
-import { isManagementCompany } from '@/lib/vehicle-kinds'
+import { closesToOwnerEquity, isManagementCompany } from '@/lib/vehicle-kinds'
+import { equityLabel } from '@/lib/accounting/vocab'
 
 export interface ForecastServiceContext {
   admin: SupabaseClient
@@ -1325,6 +1326,7 @@ async function seriesDetail(ctx: ForecastServiceContext, v: VehicleCtx, input: S
     actualsAvailableThrough, closedThrough: v.closedThrough, start: input.start, end: input.end, interval,
     actualEntries: actualFlowEntries(ledger.sourcedPostings), planEntries,
     gpEntityIds: await gpPartnerIds(ctx),
+    equityLabel: equityLabel(v.kind), itemizeEquity: closesToOwnerEquity(v.kind),
   })
 
   const series: SeriesResult = {
