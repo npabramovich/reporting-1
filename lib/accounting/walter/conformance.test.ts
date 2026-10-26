@@ -14,6 +14,8 @@ import { compare, type Vector } from './compare'
 import { ENGINE, run } from './adapter'
 
 const GAPS: Record<string, string> = {
+  // A carry recipient's own capital is carry-free in the fund engine (distribution-waterfall.ts).
+  'reporting-carry-recipient-bears-carry': 'a carry recipient whose own commit bears carry',
 }
 
 const root = join(__dirname, 'vectors')

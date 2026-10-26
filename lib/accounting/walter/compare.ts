@@ -19,7 +19,8 @@ export interface Expected {
   totals?: Record<string, string>
   clawback?: { amount: string; entitlement?: string } | null
   accruedCarry?: { date: string; entitlement: string }[]
-  fees?: { start: string; gross: string; offset: string; net: string }[]
+  fees?: { start: string; gross: string; offset: string; net: string; recognized?: Record<string, string>; unapplied?: string }[]
+  carry?: { date: string; partner: string; amount: string }[]
   feesByPartner?: Record<string, string>
   recontributions?: { date: string; partner: string; amount: string }[]
   error?: string
@@ -87,9 +88,21 @@ export function compare(v: Vector, run: () => any): Outcome {
     for (const f of e.fees) {
       const g = got.find((x: any) => x.start === f.start)
       for (const k of ['gross', 'offset', 'net'] as const) near(`fee ${k} from ${f.start}`, f[k], g?.[k])
+      if (f.recognized) {
+        const got: Record<string, string> = g?.recognized ?? {}
+        for (const k of new Set([...Object.keys(f.recognized), ...Object.keys(got)])) {
+          near(`offset recognized from ${k} from ${f.start}`, f.recognized[k], got[k])
+        }
+      }
+      if (f.unapplied !== undefined) near(`unapplied offset after ${f.start}`, f.unapplied, g?.unapplied)
     }
   }
   for (const [p, a] of Object.entries(e.feesByPartner ?? {})) near(`fee paid by ${p}`, a, res.feesByPartner?.[p])
+  if (e.carry) {
+    const want = aggregate(e.carry.map((r) => ({ ...r, tier: 'carry' })))
+    const got = aggregate((res.carry ?? []).map((r: any) => ({ ...r, tier: 'carry' })))
+    for (const k of new Set([...want.keys(), ...got.keys()])) near(k, String(want.get(k) ?? 0), String(got.get(k) ?? 0))
+  }
   if (e.recontributions) {
     const want = aggregate(e.recontributions.map((r) => ({ ...r, tier: 'recontribution' })))
     const got = aggregate((res.recontributions ?? []).map((r: any) => ({ ...r, tier: 'recontribution' })))

@@ -83,7 +83,7 @@ interface WClass {
   subordinated?: boolean
 }
 interface WTerms {
-  walter?: '0.1' | '0.2'
+  walter?: '0.1' | '0.2' | '0.3'
   fund?: { investmentPeriodEnd?: string }
   classes?: WClass[]
   partners: WPartner[]
@@ -245,6 +245,12 @@ export function run(termsIn: unknown, flowsIn: unknown) {
   // LP classes (spec/11-lp-classes.md).
   const defined = terms.classes ?? []
   if (terms.classes && terms.walter === '0.1') refuse('invalid-terms', 'LP classes need walter "0.2"')
+  // 0.3 widened the kinds of portfolio-company fee to ILPA's; 0.1 and 0.2 have four.
+  for (const kind of Object.keys(terms.managementFee?.offsets ?? {})) {
+    if (terms.walter !== '0.3' && !['transaction', 'monitoring', 'directors', 'other'].includes(kind)) {
+      refuse('invalid-terms', `managementFee.offsets.${kind} needs walter "0.3"`)
+    }
+  }
   const classIds = new Set<string>()
   for (const c of defined) {
     if (typeof c?.id !== 'string' || c.id === '' || classIds.has(c.id)) refuse('invalid-terms', `class ids must be unique and not empty: ${c?.id}`)
@@ -323,6 +329,9 @@ export function run(termsIn: unknown, flowsIn: unknown) {
   let gpPaid = 0
 
   const dealOf = (key: string) => deals.get(key) ?? (deals.set(key, { companyId: key, investments: [], realizations: [] }), deals.get(key)!)
+  // Carry from both sides (Walter spec/12-reporting.md): credited to each recipient, charged to the
+  // LPs whose tiers paid it, by the weights their own lines were split by.
+  const carryLines: { date: string; partner: string; amount: string }[] = []
   const add = (date: string, tier: string, partner: string, amount: number, isCarry = false) => {
     if (amount === 0) return
     allocations.push({ date, tier, partner, amount: money(amount) })
@@ -439,8 +448,25 @@ export function run(termsIn: unknown, flowsIn: unknown) {
           const weights = members ? allWeights.filter(w => members.includes(w.lpEntityId)) : allWeights
           if (amount > 0) for (const [id, a] of allocateAmount(amount, weights)) add(f.date, tier, id, a)
         }
-        const gpTier = (tier: string, amount: number) => {
-          if (amount > 0) for (const [id, a] of allocateAmount(amount, recipients.map(r => ({ lpEntityId: r.lpEntityId, commitment: r.pct })))) add(f.date, tier, id, a, true)
+        const carryNet = new Map<string, number>()
+        const carryBy = new Map<string[] | undefined, number>()
+        const gpTier = (tier: string, amount: number, members?: string[]) => {
+          if (amount <= 0) return
+          for (const [id, a] of allocateAmount(amount, recipients.map(r => ({ lpEntityId: r.lpEntityId, commitment: r.pct })))) {
+            add(f.date, tier, id, a, true)
+            carryNet.set(id, roundCents((carryNet.get(id) ?? 0) + a))
+            carryBy.set(members, roundCents((carryBy.get(members) ?? 0) + a))
+          }
+        }
+        const bookCarry = () => {
+          for (const [members, amount] of carryBy) {
+            const weights = members ? allWeights.filter(w => members.includes(w.lpEntityId)) : allWeights
+            for (const [id, a] of allocateAmount(amount, weights)) carryNet.set(id, roundCents((carryNet.get(id) ?? 0) - a))
+          }
+          for (const p of partners) {
+            const x = carryNet.get(p.id) ?? 0
+            if (x !== 0) carryLines.push({ date: f.date, partner: p.id, amount: money(x) })
+          }
         }
         for (const l of split.carryFreeLines ?? []) {
           add(f.date, ids.roc, l.lpEntityId, l.capital)
@@ -454,19 +480,20 @@ export function run(termsIn: unknown, flowsIn: unknown) {
             lpTier(gi.roc, t.returnOfCapital, g.lpEntityIds)
             lpTier(gi.pref, t.preferred, g.lpEntityIds)
             lpTier(gi.catchUp, t.catchUpToLP ?? 0, g.lpEntityIds)
-            gpTier(gi.catchUp, t.catchUp)
+            gpTier(gi.catchUp, t.catchUp, g.lpEntityIds)
             if (t.bands) {
               t.bands.forEach((b, i) => {
                 lpTier(gi.bands[i].catchUp, b.catchUpToLP, g.lpEntityIds)
-                gpTier(gi.bands[i].catchUp, b.catchUp)
+                gpTier(gi.bands[i].catchUp, b.catchUp, g.lpEntityIds)
                 lpTier(gi.bands[i].split, b.toLP, g.lpEntityIds)
-                gpTier(gi.bands[i].split, b.toGP)
+                gpTier(gi.bands[i].split, b.toGP, g.lpEntityIds)
               })
             } else {
               lpTier(gi.split, t.profitToLP, g.lpEntityIds)
-              gpTier(gi.split, t.carry)
+              gpTier(gi.split, t.carry, g.lpEntityIds)
             }
           }
+          bookCarry()
           break
         }
         lpTier(ids.roc, split.tiers.returnOfCapital)
@@ -484,6 +511,7 @@ export function run(termsIn: unknown, flowsIn: unknown) {
           lpTier(ids.split, split.tiers.profitToLP)
           gpTier(ids.split, split.tiers.carry)
         }
+        bookCarry()
         break
       }
       case 'nav': {
@@ -547,7 +575,7 @@ export function run(termsIn: unknown, flowsIn: unknown) {
   }
 
   // The fee schedule (spec/07-management-fees.md), run by the engine's dated schedule.
-  const fees: { start: string; end: string; gross: string; offset: string; net: string }[] = []
+  const fees: { start: string; end: string; gross: string; offset: string; net: string; recognized: Record<string, string>; unapplied: string }[] = []
   const feesByPartner: Record<string, string> = {}
   const fee = terms.managementFee
   if (fee) {
@@ -598,7 +626,13 @@ export function run(termsIn: unknown, flowsIn: unknown) {
       portfolioFees: flows.filter(f => f.type === 'portfolio-fee').map(f => ({ date: f.date, kind: f.kind, amount: Number(f.amount) })),
       organizationalExpenses: flows.filter(f => f.type === 'organizational-expense').map(f => ({ date: f.date, amount: Number(f.amount) })),
     })
-    for (const p of periods) fees.push({ start: p.start, end: p.end, gross: money(p.gross), offset: money(p.offset), net: money(p.net) })
+    for (const p of periods) {
+      fees.push({
+        start: p.start, end: p.end, gross: money(p.gross), offset: money(p.offset), net: money(p.net),
+        recognized: Object.fromEntries(Object.entries(p.recognized).map(([k, v]) => [k, money(v)])),
+        unapplied: money(p.unapplied),
+      })
+    }
     // Each partner pays its group's net by commitment.
     const owed = new Map<string, number>()
     for (const p of periods) {
@@ -621,12 +655,13 @@ export function run(termsIn: unknown, flowsIn: unknown) {
     totals[p.id] = { contributed: money(c), distributed: money(d), net: money(d - c) }
   }
   return {
-    walter: terms.walter === '0.2' ? '0.2' : '0.1',
+    walter: terms.walter === '0.3' || terms.walter === '0.2' ? terms.walter : '0.1',
     allocations,
     recontributions,
     recycled: recycledOut,
     ...(clawback ? { clawback } : {}),
     accruedCarry,
+    carry: carryLines,
     fees,
     feesByPartner,
     totals,
