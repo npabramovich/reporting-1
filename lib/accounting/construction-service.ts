@@ -25,6 +25,7 @@ import {
 } from './construction'
 import { applyLpWaterfall, constructionBaseline, dealTimelines, forecastSchedule, type ForecastSchedule, type ForecastBaseline } from './construction-forecast'
 import { simulateFund, type SimulationResult } from './construction-simulation'
+import { dealByDealBasis, dealHistories } from './realized-capital'
 import type { Account } from './types'
 import type { InvestmentTransaction } from '@/lib/types/database'
 import type { AccessContext } from '@/lib/access/effective'
@@ -407,6 +408,7 @@ async function loadConstructionActuals(
     return excess > 0 ? Math.round((excess * carryTerms.carryRate / (1 - carryTerms.carryRate)) * 100) / 100 : 0
   }
   const carryPaidToDate = () => carryPaidOnBooks + carryInferred()
+  const today = new Date().toISOString().slice(0, 10)
 
   return {
     vintageYear: economics?.vintageYear ?? null,
@@ -419,7 +421,7 @@ async function loadConstructionActuals(
       uncalledCapital: Math.max(0, Math.round(((economics?.fund.uncalled ?? 0) - unfundedCalls) * 100) / 100),
       distributedCapital: economics?.fund.distributions ?? 0,
       waterfall: economics && economics.fund.paidIn != null && economics.fund.distributions != null && economics.fund.nav != null ? {
-        asOf: new Date().toISOString().slice(0, 10),
+        asOf: today,
         kind: carryTerms.kind,
         carryRate: carryTerms.carryRate,
         prefRate: carryTerms.prefRate,
@@ -447,6 +449,13 @@ async function loadConstructionActuals(
           ? economics.fund.distributions
           : (economics.fund.distributions as number) * (1 - gpStakeShare) + carryPaidToDate(),
         ...(carryInferred() > 0 ? { carryPaidInferred: carryInferred() } : {}),
+        // Deal by deal, the forecast measures the same realized base a booked distribution would.
+        ...(carryTerms.kind === 'american' ? {
+          dealByDeal: {
+            deals: dealHistories(allTransactions as any[], (companyResult.data ?? []) as { id: string; status: string | null }[], vehicle, today),
+            ...dealByDealBasis(ledger?.capitalPostings ?? [], recipientIds, today),
+          },
+        } : {}),
         contributions: lpContributions,
         distributions: lpDistributions,
       } : undefined,

@@ -16,6 +16,7 @@ import { irrOf, type TimedFlow } from '@/lib/accounting/construction-forecast'
 import type { ConstructionWaterfallProjection } from '@/lib/accounting/construction'
 import { computeCapital, runMonthlyWaterfall, type CapitalSettings } from './capital'
 import { monthDiff, type MonthKey } from './months'
+import type { ProjectedDeals } from '@/lib/accounting/forward-waterfall'
 
 export interface ReturnsInput {
   months: MonthKey[]
@@ -35,6 +36,8 @@ export interface ReturnsInput {
   /** The fund's NAV (gross, holdings at value) at the end of the window, plus its cash then. */
   terminalNav: number
   waterfall?: ConstructionWaterfallProjection
+  /** The deals' projected checks and exits, for a deal-by-deal waterfall (construction-adapter.ts). */
+  deals?: ProjectedDeals
 }
 
 export interface YearRow { calendarYear: number; called: number; distributed: number; carry: number; toLp: number; invested: number; proceeds: number; lpCalled: number; endingCash: number }
@@ -66,7 +69,7 @@ export function planReturns(input: ReturnsInput): PlanReturns {
     months: input.months, openingCash: input.openingCash, cashFlows, proceeds: input.proceeds,
     recycled: input.recycled, recycledDeemed: input.recycledDeemed, uncalled: input.uncalled, settings: input.settings,
   })
-  const wf = runMonthlyWaterfall(cap.distributions, cap.calls, input.months, input.waterfall)
+  const wf = runMonthlyWaterfall(cap.distributions, cap.calls, input.months, input.waterfall, input.deals)
   const carryOn = !!wf.state
   const share = wf.lpShare
 

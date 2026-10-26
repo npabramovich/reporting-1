@@ -7,22 +7,32 @@
 // what the accounting engine would book. This keeps them on the same terms as `runWaterfall` and
 // `preferredTarget` in the fund engine.
 //
-// Deal by deal. The forecasts project the fund's cash, not each deal's cost and realization, so an
-// American waterfall runs whole fund here and `wholeFundFallback` says so. The ultimate carry is the
-// same (the close accrues the whole-fund target for American terms too, carry.ts); what differs is
-// when it is paid.
+// Deal by deal. An American waterfall owes the LPs back only the capital in deals realized so far
+// (sold or written off, with their share of fees and expenses), and the hurdle accrues only on that
+// capital, so the GP can be paid carry on an early winner before the whole fund is returned. The
+// forecasts know each deal's checks and exit, so with the deals on the books (`dealByDeal` on the
+// projection) and the projected ones (`ProjectedDeals`) the base is the same one the accounting
+// measures (realized-capital.ts, `realizedCapitalFromDeals`). Without them an American waterfall
+// still runs whole fund, and `wholeFundFallback` says so.
+//
+// A hypothetical liquidation realizes every deal, so the value of what's left (`liquidationStateAt`)
+// is measured whole fund under either kind, as the close accrues it (carry.ts).
 
 import {
   preferredTarget,
+  realizedCapitalFromDeals,
   runWaterfall,
   type DatedContribution,
+  type DealHistory,
   type HurdleReduction,
   type WaterfallResult,
   type WaterfallState,
   type WaterfallTerms,
 } from '@portfolio/fund-engine'
 import { roundCents } from './ledger'
+import { factorOf } from './realized-capital'
 import type { ConstructionWaterfallProjection } from './construction'
+import type { DealTimeline } from './construction-forecast'
 
 export interface ForwardWaterfall {
   terms: WaterfallTerms
@@ -34,10 +44,45 @@ export interface ForwardWaterfall {
   distribute(date: string, amount: number): WaterfallResult
   /** The state on `date`: capital contributed so far and the hurdle accrued to then. */
   stateAt(date: string): WaterfallState
+  /** The state a liquidation on `date` would run from: every deal realized, so whole fund. */
+  liquidationStateAt(date: string): WaterfallState
+}
+
+/** What the forecast says the deals will do, for an American waterfall. Dates are bucket ends. */
+export interface ProjectedDeals {
+  /** Checks still to write. `deal` is the company id for a company already held. */
+  investments: { deal: string; date: string; amount: number }[]
+  /** Exits and write-offs: what is left of the deal's cost is realized on `date`. */
+  exits: { deal: string; date: string }[]
+  /** Fees and expenses still to come, which the realized base carries by cost share. */
+  expenses: { date: string; amount: number }[]
+}
+
+/**
+ * The deals' projected checks and exits, placed by `dateOf` (the end of the bucket a time from
+ * today falls in, or null to leave it out). Only flows after today are projected; what's already
+ * happened is on the books. A deal that exits for nothing is a write-off, and realizes all the same.
+ */
+export function projectedDeals(
+  deals: DealTimeline[],
+  horizonYears: number,
+  dateOf: (t: number) => string,
+  expenses: { date: string; amount: number }[] = [],
+): ProjectedDeals {
+  const out: ProjectedDeals = { investments: [], exits: [], expenses }
+  for (const d of deals) {
+    const place = (t: number, amount: number) => {
+      if (amount > 0 && t > 0) out.investments.push({ deal: d.key, date: dateOf(Math.min(t, horizonYears)), amount })
+    }
+    place(d.initialAt, d.initialCheck)
+    place(d.followOnAt, d.followOn)
+    if (d.proceeds != null && d.exitAt > 0 && d.exitAt <= horizonYears + 1e-9) out.exits.push({ deal: d.key, date: dateOf(d.exitAt) })
+  }
+  return out
 }
 
 /** A waterfall to run forward, or null when the projection carries no carry. */
-export function forwardWaterfall(p: ConstructionWaterfallProjection): ForwardWaterfall | null {
+export function forwardWaterfall(p: ConstructionWaterfallProjection, projected?: ProjectedDeals): ForwardWaterfall | null {
   if (p.kind === 'none' || !(p.carryRate > 0)) return null
   const straight = p.kind === 'straight'
   const terms: WaterfallTerms = {
@@ -53,6 +98,9 @@ export function forwardWaterfall(p: ConstructionWaterfallProjection): ForwardWat
   const target = (date: string) => prefOn
     ? preferredTarget(contributions, date, p.prefRate, p.prefCompounds, unreturned ? reductions : undefined)
     : 0
+  const calledTo = (date: string) => roundCents(contributions.filter(c => c.date <= date && c.amount > 0).reduce((s, c) => s + c.amount, 0))
+
+  if (p.kind === 'american' && p.dealByDeal && projected) return dealByDealWaterfall(p, projected, terms, contributions, calledTo)
 
   // On the unreturned basis the hurdle stops on capital already returned and pref already paid, so
   // the history has to say what each past distribution returned. The capital and pref tiers go
@@ -97,9 +145,103 @@ export function forwardWaterfall(p: ConstructionWaterfallProjection): ForwardWat
       return result
     },
     stateAt,
+    liquidationStateAt: stateAt,
   }
 }
 
-/** The warning a forecast shows when deal-by-deal terms run whole fund. */
+/**
+ * The American waterfall run forward on the realized base. The deals are the books' plus the
+ * forecast's; the base on any date counts only what was invested and realized by then.
+ */
+function dealByDealWaterfall(
+  p: ConstructionWaterfallProjection,
+  projected: ProjectedDeals,
+  terms: WaterfallTerms,
+  contributions: DatedContribution[],
+  calledTo: (date: string) => number,
+): ForwardWaterfall {
+  const basis = p.dealByDeal!
+  const deals = new Map<string, DealHistory>()
+  for (const d of basis.deals) {
+    deals.set(d.companyId, { ...d, investments: [...d.investments], realizations: [...d.realizations] })
+  }
+  const dealOf = (key: string) => deals.get(key) ?? (deals.set(key, { companyId: key, investments: [], realizations: [] }), deals.get(key)!)
+  for (const i of projected.investments) if (i.amount > 0) dealOf(i.deal).investments.push({ date: i.date, amount: i.amount })
+  for (const x of projected.exits) dealOf(x.deal).realizations.push({ date: x.date, costExited: null })
+  const expenses = projected.expenses.filter(e => e.amount > 0)
+
+  const prefOn = p.prefRate > 0
+  const unreturned = p.prefBase === 'unreturned'
+  const reductions: HurdleReduction[] = []
+
+  // The realized base on a date, from the deals as they stood then.
+  const baseCache = new Map<string, DatedContribution[]>()
+  const realizedTo = (date: string): DatedContribution[] => {
+    const hit = baseCache.get(date)
+    if (hit) return hit
+    const asOfDate = [...deals.values()].map(d => ({
+      companyId: d.companyId,
+      investments: d.investments.filter(i => i.date <= date),
+      realizations: d.realizations.filter(r => r.date <= date),
+      closedOn: d.closedOn && d.closedOn <= date ? d.closedOn : null,
+    }))
+    const cost = asOfDate.reduce((s, d) => s + d.investments.reduce((t, i) => t + i.amount, 0), 0)
+    const spent = basis.expenses + expenses.filter(e => e.date <= date).reduce((s, e) => s + e.amount, 0)
+    const out = realizedCapitalFromDeals(asOfDate, { factor: factorOf(basis.lpShare, spent, cost) })
+      .filter(c => c.realizedOn <= date && c.amount > 0)
+      .map(c => ({ date: c.date, amount: c.amount }))
+    baseCache.set(date, out)
+    return out
+  }
+  // Never more capital owed back than the LPs have put in (replay.ts).
+  const capitalTo = (date: string) => Math.min(roundCents(realizedTo(date).reduce((s, c) => s + c.amount, 0)), calledTo(date))
+  const target = (date: string) => prefOn
+    ? preferredTarget(realizedTo(date), date, p.prefRate, p.prefCompounds, unreturned ? reductions : undefined)
+    : 0
+  const wholeTarget = (date: string) => prefOn
+    ? preferredTarget(contributions, date, p.prefRate, p.prefCompounds, unreturned ? reductions : undefined)
+    : 0
+
+  // Where the tiers stand today: the books' distributions replayed on the base as it stood at each.
+  // They're the LPs' net figures, which the capital and pref tiers pay in full, so the replay gives
+  // returned capital and pref paid exactly. Carry paid comes from the books.
+  let state: WaterfallState = { contributedCapital: 0, returnedCapital: 0, preferredPaid: 0, preferredTarget: 0, gpCarryPaid: 0 }
+  const priors = [...(p.distributions ?? [])].filter(d => d.amount > 0 && d.date <= p.asOf).sort((a, b) => a.date.localeCompare(b.date))
+  for (const d of priors) {
+    const step = runWaterfall(d.amount, terms, { ...state, contributedCapital: capitalTo(d.date), preferredTarget: target(d.date) })
+    reductions.push({ date: d.date, capital: step.toReturnOfCapital, preferred: step.toPreferred })
+    state = { ...step.state }
+  }
+  state = {
+    contributedCapital: capitalTo(p.asOf),
+    returnedCapital: state.returnedCapital,
+    preferredPaid: state.preferredPaid,
+    preferredTarget: target(p.asOf),
+    gpCarryPaid: Math.max(0, p.fundDistributedCapital - p.lpDistributedCapital),
+  }
+
+  const stateAt = (date: string): WaterfallState => ({ ...state, contributedCapital: capitalTo(date), preferredTarget: target(date) })
+
+  return {
+    terms,
+    wholeFundFallback: false,
+    contribute(date, amount) {
+      if (!(amount > 0)) return
+      contributions.push({ date, amount })
+    },
+    distribute(date, amount) {
+      const result = runWaterfall(amount, terms, stateAt(date))
+      state = result.state
+      if (result.toReturnOfCapital > 0 || result.toPreferred > 0) {
+        reductions.push({ date, capital: result.toReturnOfCapital, preferred: result.toPreferred })
+      }
+      return result
+    },
+    stateAt,
+    liquidationStateAt: (date: string) => ({ ...state, contributedCapital: calledTo(date), preferredTarget: wholeTarget(date) }),
+  }
+}
+
+/** The warning a forecast shows when deal-by-deal terms run whole fund, for want of the deals. */
 export const WHOLE_FUND_FALLBACK_WARNING =
-  'The waterfall is deal by deal, but the forecast projects the fund\'s cash rather than each deal, so it runs the waterfall whole fund. The total carry is the same, but deal by deal the GP may be paid some of it earlier than the forecast shows.'
+  'The waterfall is deal by deal, but this forecast has no deal-level timing to measure it on, so it runs the waterfall whole fund. The total carry is the same, but deal by deal the GP may be paid some of it earlier than the forecast shows.'

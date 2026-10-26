@@ -17,7 +17,7 @@
 // is asking for a forecast balance sheet here — so it is deliberately built apart from it.
 
 import type { FeeBasis } from './fees'
-import type { RecyclingTreatment } from '@portfolio/fund-engine'
+import type { DealHistory, RecyclingTreatment } from '@portfolio/fund-engine'
 
 const r = (n: number) => Math.round(n * 100) / 100
 
@@ -280,6 +280,12 @@ export interface ConstructionWaterfallProjection {
    * fundDistributedCapital − lpDistributedCapital.
    */
   carryPaidInferred?: number
+  /**
+   * American terms: the deals as the books show them (cost, dates, realizations), the LPs' share of
+   * contributions and the fees and expenses to date, which together give the realized base the
+   * accounting splits a distribution on (realized-capital.ts). Absent for other kinds.
+   */
+  dealByDeal?: { deals: DealHistory[]; lpShare: number; expenses: number }
 }
 
 /**

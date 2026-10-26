@@ -21,7 +21,7 @@
 import type { ConstructionActuals, ConstructionAssumptions, ConstructionResult, ConstructionWaterfallProjection, PacingAssumptions } from './construction'
 import { projectFeesForYear, DEFAULT_PACING } from './construction'
 import { runWaterfall } from './waterfall'
-import { forwardWaterfall } from './forward-waterfall'
+import { forwardWaterfall, projectedDeals } from './forward-waterfall'
 import { allocateRecycling, type RecyclingTreatment } from '@portfolio/fund-engine'
 
 /** One forecast baseline for the page, API, and agent. No invented historical flow dates. */
@@ -466,8 +466,16 @@ export function forecastSchedule(
 export function applyLpWaterfall(schedule: ForecastSchedule, projection?: ConstructionWaterfallProjection): ForecastSchedule {
   if (!projection) return schedule
   const share = Math.min(1, Math.max(0, projection.lpCommitmentShare))
+  // Each year's flows land on its last day, so the deals' do too (deal by deal, forward-waterfall.ts).
+  const firstYear = schedule.years[0]?.calendarYear ?? Number(projection.asOf.slice(0, 4))
+  const yearEndOf = (t: number) => `${firstYear + yearOf(t)}-12-31`
+  const deals = projection.kind === 'american'
+    ? projectedDeals(schedule.deals, schedule.horizonYears, yearEndOf, schedule.years
+      .filter(y => y.year > 0)
+      .map(y => ({ date: `${y.calendarYear}-12-31`, amount: y.fees + y.expenses })))
+    : undefined
   // Null when there is no carry: the LPs keep their share of everything.
-  const waterfall = forwardWaterfall(projection)
+  const waterfall = forwardWaterfall(projection, deals)
   const history: TimedFlow[] = [
     ...projection.contributions.map(flow => ({ t: yearsBetween(projection.asOf, flow.date), amount: -flow.amount })),
     ...(projection.distributions ?? []).map(flow => ({ t: yearsBetween(projection.asOf, flow.date), amount: flow.amount })),
@@ -499,7 +507,7 @@ export function applyLpWaterfall(schedule: ForecastSchedule, projection?: Constr
     const split = waterfall ? waterfall.distribute(yearEnd, lpDistributable) : { toLP: lpDistributable, toGP: 0 }
     distributed += split.toLP
     // Hypothetical liquidation of remaining NAV at this year end, without mutating the state.
-    const netNav = waterfall ? runWaterfall(year.nav * share, waterfall.terms, waterfall.stateAt(yearEnd)).toLP : year.nav * share
+    const netNav = waterfall ? runWaterfall(year.nav * share, waterfall.terms, waterfall.liquidationStateAt(yearEnd)).toLP : year.nav * share
     if (lpCall > 0) forward.push({ t: year.year, amount: -lpCall })
     if (split.toLP > 0) forward.push({ t: year.year, amount: split.toLP })
     const netIrr = irrOf([...history, ...forward, { t: year.year, amount: netNav }])

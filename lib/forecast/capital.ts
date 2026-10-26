@@ -16,7 +16,7 @@
 
 import { roundCents } from '@/lib/accounting/ledger'
 import type { WaterfallState, WaterfallTerms } from '@/lib/accounting/waterfall'
-import { forwardWaterfall, WHOLE_FUND_FALLBACK_WARNING } from '@/lib/accounting/forward-waterfall'
+import { forwardWaterfall, WHOLE_FUND_FALLBACK_WARNING, type ProjectedDeals } from '@/lib/accounting/forward-waterfall'
 import type { ConstructionWaterfallProjection } from '@/lib/accounting/construction'
 import { isMonthKey, lastDay, type MonthKey } from './months'
 import { MAX_AMOUNT, MAX_RULE_ITEMS } from './rules'
@@ -183,19 +183,25 @@ export function splitDistributions(
   calls: Map<MonthKey, number>,
   months: MonthKey[],
   wf: ConstructionWaterfallProjection | undefined,
+  deals?: ProjectedDeals,
 ): Map<MonthKey, MonthlySplit> {
-  return runMonthlyWaterfall(distributions, calls, months, wf).byMonth
+  return runMonthlyWaterfall(distributions, calls, months, wf, deals).byMonth
 }
 
-/** As splitDistributions, also returning the waterfall's state at the end (for a liquidation value). */
+/**
+ * As splitDistributions, also returning the waterfall's state at the end, as a liquidation would
+ * run from it (for the value of what's left). `deals` are the projected checks and exits a
+ * deal-by-deal waterfall measures its base on.
+ */
 export function runMonthlyWaterfall(
   distributions: Map<MonthKey, number>,
   calls: Map<MonthKey, number>,
   months: MonthKey[],
   wf: ConstructionWaterfallProjection | undefined,
+  deals?: ProjectedDeals,
 ): { byMonth: Map<MonthKey, MonthlySplit>; state: WaterfallState | null; terms: WaterfallTerms | null; lpShare: number; warnings: string[] } {
   const out = new Map<MonthKey, MonthlySplit>()
-  const forward = wf ? forwardWaterfall(wf) : null
+  const forward = wf ? forwardWaterfall(wf, deals) : null
   const share = wf ? Math.min(1, Math.max(0, wf.lpCommitmentShare)) : 1
   if (!forward) {
     for (const [m, d] of distributions) out.set(m, { toLp: d, carry: 0, toGpStake: 0 })
@@ -213,7 +219,7 @@ export function runMonthlyWaterfall(
   const last = months[months.length - 1]
   return {
     byMonth: out,
-    state: last ? forward.stateAt(lastDay(last)) : forward.stateAt(wf!.asOf),
+    state: last ? forward.liquidationStateAt(lastDay(last)) : forward.liquidationStateAt(wf!.asOf),
     terms: forward.terms,
     lpShare: share,
     warnings: forward.wholeFundFallback ? [WHOLE_FUND_FALLBACK_WARNING] : [],
