@@ -1,7 +1,7 @@
 // Handlers for the ILPA tools (ilpa-tools-manifest.ts).
 
 import type { AgentToolContext, AgentToolHandler } from '@/lib/accounting/agent-tools'
-import { loadCcdNotices } from '@/lib/ilpa/ccd-load'
+import { loadCcdNotices } from '@/lib/lp-templates/ccd-load'
 
 export const ILPA_HANDLERS: Record<string, AgentToolHandler> = {
   ilpa_notice_data: async ({ admin, fundId, portfolioGroup }: AgentToolContext, input: { kind?: string; id?: string; lpEntityId?: string }) => {

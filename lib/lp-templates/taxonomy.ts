@@ -14,7 +14,7 @@
 //   credit facilities   → the expense line a facility's interest or fee lands on (facilityExpenseLine).
 //
 // The CC&D and Performance types are mapped where their notices and flows are built
-// (lib/ilpa/ccd.ts, lib/ilpa/performance-load.ts); their type lists live with them and are
+// (lib/lp-templates/ccd.ts, lib/lp-templates/performance-load.ts); their type lists live with them and are
 // re-exported below.
 
 import { bucketForSourceType, type RollForwardBucket } from '@/lib/accounting/capital-account'

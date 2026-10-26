@@ -3,7 +3,7 @@
 //
 // The names are ILPA's, spelled exactly as the template's dropdown spells them, because an LP's
 // system matches on the string. They are the vocabulary, not ILPA's workbook: the file this app
-// produces is its own layout, carrying the template's fields (lib/ilpa/ccd.ts).
+// produces is its own layout, carrying the template's fields (lib/lp-templates/ccd.ts).
 //
 // Two rules from the template's formulas live here so nothing else re-derives them:
 //

@@ -7,7 +7,7 @@
 //   ilpa_notice_data  → an issued call or declared distribution as the ILPA Capital Call &
 //                       Distribution Template (v. 2.0) data, per partner; writes nothing
 //
-// The mechanics are in lib/ilpa/ccd-load.ts, the same data the notice's .xlsx download carries.
+// The mechanics are in lib/lp-templates/ccd-load.ts, the same data the notice's .xlsx download carries.
 
 import type { AgentToolMeta } from '@/lib/accounting/agent-tools-manifest'
 

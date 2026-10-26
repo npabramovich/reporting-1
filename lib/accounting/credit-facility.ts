@@ -16,7 +16,7 @@
 //
 // What the register adds over the ledger is what the ILPA Performance Template needs: which
 // borrowing a movement was on, what a draw paid for, and which call paid a repayment or interest.
-// lib/ilpa/performance-load.ts reads it.
+// lib/lp-templates/performance-load.ts reads it.
 
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'

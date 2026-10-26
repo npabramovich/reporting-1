@@ -7,8 +7,8 @@ import { assertReadAccess } from '@/lib/api-helpers'
 import { resolveGroupOr400 } from '@/lib/accounting/http-vehicle'
 import { lastQuarterEnd } from '@/lib/accounting/fund-performance'
 import { rateLimit } from '@/lib/rate-limit'
-import { loadIlpaPerformance } from '@/lib/ilpa/performance-load'
-import { performanceSheetRows } from '@/lib/ilpa/performance'
+import { loadIlpaPerformance } from '@/lib/lp-templates/performance-load'
+import { performanceSheetRows } from '@/lib/lp-templates/performance'
 
 export const runtime = 'nodejs'
 
