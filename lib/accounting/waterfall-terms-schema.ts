@@ -38,6 +38,10 @@ export const SET_WATERFALL_TERMS_SCHEMA = {
       items: { type: 'string', enum: ['investments', 'fees', 'expenses', 'other'] },
       description: 'What the first tier returns as capital, and the preferred return accrues on. Omit for all contributions, the usual reading. ["investments"] is an LPA that returns only capital used for investments before carry, so fees and expenses are not returned first. The books tag what each contribution paid for first in, first out.',
     },
+    gpCommitBearsCarry: {
+      type: 'boolean',
+      description: "Whether the carry recipients' own commitments (the GP commit) bear carry like an LP's. Omit or false for the usual reading, where the GP commit is carry-free and takes its pro-rata share beside the tiers.",
+    },
     carryRecipients: {
       type: 'array',
       description: 'Who receives the carry, with percentages that total 100. Required when carry is on, unless gpEntityId is given.',

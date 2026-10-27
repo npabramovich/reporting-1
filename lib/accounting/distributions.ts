@@ -34,7 +34,7 @@ import { vehicleIdByName } from './vehicle-id'
 import { loadCarryTerms } from './carry'
 import { loadRealizedCapital } from './realized-capital'
 import type { RealizedCapital } from '@portfolio/fund-engine'
-import { distributionSplitInputs } from '@portfolio/fund-engine'
+import { carryFreeIds, distributionSplitInputs } from '@portfolio/fund-engine'
 import { reconcileSettlements, registerStatus, type LineStatus, type RegisterStatus, type Settlement } from './settlement'
 import { loadSettlements } from './capital-calls'
 import {
@@ -130,16 +130,17 @@ export async function previewDistribution(
   const effectiveTerms = method === 'pro_rata' ? { ...terms, kind: 'none' as const } : terms
   const recipientIds = new Set(terms.recipients.map(r => r.lpEntityId))
 
-  // Partner economics at the date, the hurdle's dated contributions (recipients excluded, as the
-  // close excludes them) and every prior distribution as a fund-wide total per date — from the
-  // capital postings, in the fund engine (distributionSplitInputs).
-  const { partners, contributions, priors, carryPaidToDate } = distributionSplitInputs(capitalPostings, terms.recipients, asOf)
+  // Partner economics at the date, the hurdle's dated contributions (carry-free capital excluded,
+  // as the close excludes it) and every prior distribution as a fund-wide total per date — from
+  // the capital postings, in the fund engine (distributionSplitInputs). A GP commit that bears
+  // carry runs through the tiers with the LPs.
+  const { partners, contributions, priors, carryPaidToDate } = distributionSplitInputs(capitalPostings, terms.recipients, asOf, terms.gpCommitBearsCarry)
 
   // American terms split on the deals realized so far, not the whole fund (lib/accounting/realized-capital.ts).
   let realizedCapital: RealizedCapital[] | undefined
   const extraWarnings: string[] = []
   if (effectiveTerms.kind === 'american') {
-    const base = await loadRealizedCapital(admin, fundId, group, capitalPostings, recipientIds, asOf)
+    const base = await loadRealizedCapital(admin, fundId, group, capitalPostings, carryFreeIds(terms), asOf)
     if ('error' in base) extraWarnings.push(base.error)
     else realizedCapital = base
   }

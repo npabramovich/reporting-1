@@ -134,6 +134,8 @@ export function priorDistributions(
   capitalPostings: CapitalPosting[],
   recipientIds: Set<string>,
   asOf: string,
+  /** The partners whose own capital is outside the tiers. Defaults to the recipients. */
+  carryFree: Set<string> = recipientIds,
 ): { priors: PriorDistribution[]; carryPaidToDate: number } {
   const priorByDate = new Map<string, number>()
   let carryPaidToDate = 0
@@ -143,8 +145,9 @@ export function priorDistributions(
     const isCarry = p.sourceType === 'carry_distribution'
     if (!isDist && !isCarry) continue
     // A recipient's own distributions are its carry-free share, taken outside the tiers, so only
-    // its carry is in what the waterfall has paid out (distribution-waterfall.ts).
-    if (!isCarry && recipientIds.has(p.lpEntityId)) continue
+    // its carry is in what the waterfall has paid out (distribution-waterfall.ts). When its commit
+    // bears carry its distributions went through the tiers like an LP's.
+    if (!isCarry && carryFree.has(p.lpEntityId)) continue
     const date = p.entryDate ?? asOf
     if (date > asOf) continue
     priorByDate.set(date, roundCents((priorByDate.get(date) ?? 0) + p.amount))
@@ -173,8 +176,11 @@ export function distributionSplitInputs(
   capitalPostings: CapitalPosting[],
   recipients: CarryRecipient[],
   asOf: string,
+  /** The GP commit bears carry (VehicleCarryTerms.gpCommitBearsCarry): the recipients run through the tiers. */
+  gpCommitBearsCarry = false,
 ): DistributionSplitInputs {
   const recipientIds = new Set(recipients.map(r => r.lpEntityId))
+  const carryFree = gpCommitBearsCarry ? new Set<string>() : recipientIds
 
   const accounts = computeCapitalAccounts(capitalPostings, { end: asOf })
   const partners: PartnerEconomics[] = Array.from(accounts.entries()).map(([lpEntityId, a]) => ({
@@ -182,12 +188,13 @@ export function distributionSplitInputs(
     contributed: roundCents(a.contributions),
     distributed: roundCents(-a.distributions),
     ending: roundCents(a.ending),
+    ...(gpCommitBearsCarry && recipientIds.has(lpEntityId) ? { carryBearing: true } : {}),
   }))
 
-  // Dated LP contributions for the hurdle — recipients excluded, as the close excludes them.
-  const contributions = datedContributions(capitalPostings, recipientIds, asOf)
+  // Dated contributions for the hurdle: carry-free capital excluded, as the close excludes it.
+  const contributions = datedContributions(capitalPostings, carryFree, asOf)
 
-  const { priors, carryPaidToDate } = priorDistributions(capitalPostings, recipientIds, asOf)
+  const { priors, carryPaidToDate } = priorDistributions(capitalPostings, recipientIds, asOf, carryFree)
 
   return { partners, contributions, priors, carryPaidToDate }
 }

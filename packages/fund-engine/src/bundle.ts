@@ -93,6 +93,7 @@ export function termsFileFrom(input: {
       ...(c.catchupMeasure === 'profit' ? { catchupMeasure: c.catchupMeasure } : {}),
       ...(c.carrySteps?.length ? { carrySteps: c.carrySteps } : {}),
       ...(c.capitalIncludes ? { capitalIncludes: c.capitalIncludes } : {}),
+      ...(c.gpCommitBearsCarry ? { gpCommitBearsCarry: true } : {}),
       gpEntityId: c.gpEntityId,
       recipients: c.recipients.map(r => ({ partner: r.lpEntityId, pct: r.pct })),
     },
