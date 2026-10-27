@@ -1,4 +1,5 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "functions": {
     "app/api/inbound-email/route.ts": {
@@ -90,5 +91,14 @@
       "path": "/api/cron/access-expiry",
       "schedule": "15 * * * *"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "claude/**": false,
+      "ai-review-fix/**": false
+    }
+  },
+  "github": {
+    "autoJobCancelation": true
+  }
 }
