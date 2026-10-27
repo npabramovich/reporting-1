@@ -94,8 +94,8 @@
   ],
   "git": {
     "deploymentEnabled": {
-      "claude/**": false,
-      "ai-review-fix/**": false
+      "**": false,
+      "main": true
     }
   },
   "github": {
