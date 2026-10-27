@@ -24,6 +24,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { roundCents } from './ledger'
 import { persistEntry } from './persist'
 import { vehicleIdByName } from './vehicle-id'
+import { amountDue } from './receipts-core'
 import {
   INTERCOMPANY_RECEIVABLE_CODE, INTERCOMPANY_PAYABLE_CODE,
   INTERCOMPANY_RECEIVABLE_SUBTYPE, INTERCOMPANY_PAYABLE_SUBTYPE,
@@ -526,6 +527,11 @@ export async function postIntercompanyCharge(
 /**
  * Settle an accrued charge: post the cash on both sides and mark the row settled.
  *
+ * The cash is the charge's amount, except for a partnership invoice with adjustments: the charge
+ * booked the expenses, and the fund pays the invoice's amount due (expenses plus credits and
+ * charges typed on it), which is what clears the intercompany balances an earlier over- or
+ * under-payment left. An amount due of zero moves no cash and posts no entries.
+ *
  * Refuses a charge that is already settled or void rather than posting a second pair of cash
  * entries, which would clear a balance that was already clear and leave the counterparty holding a
  * receivable that has now been paid twice on our books and once on theirs.
@@ -557,9 +563,19 @@ export async function settleIntercompanyCharge(
   if ('error' in payeeAccts) return payeeAccts
   if ('error' in payerAccts) return payerAccts
 
+  const { data: invoice } = await admin
+    .from('partnership_invoices' as any)
+    .select('adjustment_total')
+    .eq('fund_id', fundId).eq('intercompany_transaction_id', chargeId).eq('status', 'issued').maybeSingle()
+  const cash = invoice ? amountDue(Number(charge.amount), Number((invoice as any).adjustment_total ?? 0)) : Number(charge.amount)
+  if (!(cash > 0)) {
+    await admin.from('intercompany_transactions' as any).update({ status: 'settled', settled_date: settledDate }).eq('id', chargeId)
+    return { ok: true }
+  }
+
   const input = {
     fundId, kind: charge.kind as IntercompanyKind, chargeDate: charge.charge_date,
-    amount: Number(charge.amount), memo: charge.memo, chargeId, settledDate,
+    amount: cash, memo: charge.memo, chargeId, settledDate,
   }
 
   const payeeRes = await persistEntry(admin, fundId, payee, userId, buildPayeeSettlementEntry(input, payeeAccts))
