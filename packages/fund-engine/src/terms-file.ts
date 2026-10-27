@@ -86,6 +86,7 @@ export function parseVehicleTerms(raw: unknown): VehicleTerms {
     ...(prefMultiple !== undefined ? { prefMultiple } : {}),
     ...(dayCountRaw === '30/360' ? { prefDayCount: '30/360' as const } : {}),
     ...(measureRaw === 'profit' ? { catchupMeasure: 'profit' as const } : {}),
+    ...((c.gpCommitBearsCarry ?? c.gp_commit_bears_carry) === true ? { gpCommitBearsCarry: true } : {}),
   }
   const gpEntityId = typeof (c.gpEntityId ?? c.gp_entity_id) === 'string' ? (c.gpEntityId ?? c.gp_entity_id) : null
   const recipientsRaw = Array.isArray(c.recipients)

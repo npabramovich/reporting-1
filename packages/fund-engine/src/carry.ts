@@ -59,6 +59,17 @@ export interface VehicleCarryTerms {
   /** Who receives the carry and in what split. Resolved from `carry_recipients`, or
    *  `[{ gpEntityId, 100 }]` when only the legacy field is set, else []. */
   recipients: CarryRecipient[]
+  /**
+   * The recipients' own commitments (the GP commit) bear carry like an LP's: their capital runs
+   * through the tiers instead of taking a carry-free share beside them. Absent: carry-free, the
+   * usual convention.
+   */
+  gpCommitBearsCarry?: boolean
+}
+
+/** The partners whose own capital is carry-free: the recipients, unless the GP commit bears carry. */
+export function carryFreeIds(terms: Pick<VehicleCarryTerms, 'recipients' | 'gpCommitBearsCarry'>): Set<string> {
+  return terms.gpCommitBearsCarry ? new Set() : new Set(terms.recipients.map(r => r.lpEntityId))
 }
 
 export const NO_CARRY: VehicleCarryTerms = {
@@ -199,6 +210,7 @@ export function carryTermsFromRow(row: {
   capital_includes?: unknown
   gp_entity_id?: unknown
   carry_recipients?: unknown
+  gp_commit_bears_carry?: unknown
 } | null | undefined): VehicleCarryTerms {
   if (!row) return NO_CARRY
   const kind: CarryKind =
@@ -220,6 +232,7 @@ export function carryTermsFromRow(row: {
     ...(capitalIncludesFromRow(row.capital_includes)),
     gpEntityId,
     recipients: resolveCarryRecipients(row.carry_recipients, gpEntityId),
+    ...(row.gp_commit_bears_carry === true ? { gpCommitBearsCarry: true } : {}),
   }
 }
 

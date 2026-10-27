@@ -1,0 +1,72 @@
+{
+  "id": "reporting-new-kinds-need-0-3",
+  "walter": "0.2",
+  "title": "An ILPA fee kind in 0.2 terms is refused",
+  "description": "Advisory fees are a 0.3 kind of portfolio-company fee. Terms that say walter 0.2 and offset them are refused, so an engine that only knows 0.2 never silently ignores the offset.",
+  "tags": [
+    "reporting",
+    "errors"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.2",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "2000000"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "60000000"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "40000000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "managementFee": {
+      "frequency": "quarterly",
+      "start": "2025-01-01",
+      "end": "2025-04-01",
+      "schedule": [
+        {
+          "from": "2025-01-01",
+          "rate": "0.02",
+          "basis": "commitments"
+        }
+      ],
+      "offsets": {
+        "advisory": "1"
+      }
+    }
+  },
+  "flows": [
+    {
+      "type": "portfolio-fee",
+      "date": "2025-02-01",
+      "kind": "advisory",
+      "amount": "100000"
+    }
+  ],
+  "expected": {
+    "error": "invalid-terms"
+  }
+}

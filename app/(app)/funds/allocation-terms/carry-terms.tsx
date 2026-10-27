@@ -32,6 +32,7 @@ interface Terms {
   catchupMeasure?: 'preferred' | 'profit'
   carrySteps?: Step[]
   capitalIncludes?: string[]
+  gpCommitBearsCarry?: boolean
   recipients: Recipient[]
 }
 
@@ -63,6 +64,7 @@ export function CarryTerms() {
   const [catchupMeasure, setCatchupMeasure] = useState<'preferred' | 'profit'>('preferred')
   const [steps, setSteps] = useState<StepRow[]>([])
   const [investedOnly, setInvestedOnly] = useState(false)
+  const [gpCommitBearsCarry, setGpCommitBearsCarry] = useState(false)
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [vehicleName, setVehicleName] = useState('')
@@ -92,6 +94,7 @@ export function CarryTerms() {
       catchUp: st.catchUpRate ? pct(st.catchUpRate) : '',
     })))
     setInvestedOnly(Array.isArray(t.capitalIncludes) && t.capitalIncludes.length === 1 && t.capitalIncludes[0] === 'investments')
+    setGpCommitBearsCarry(t.gpCommitBearsCarry === true)
     setRecipients(t.recipients ?? [])
     setCandidates(d.candidates ?? [])
     setVehicleName(d.group ?? '')
@@ -135,6 +138,7 @@ export function CarryTerms() {
           ...(st.catchUp.trim() !== '' && frac(st.catchUp) > 0 ? { catchUpRate: frac(st.catchUp) } : {}),
         })),
         capitalIncludes: investedOnly ? ['investments'] : ['investments', 'fees', 'expenses', 'other'],
+        gpCommitBearsCarry,
         carryRecipients: recipients,
       }),
     })
@@ -356,6 +360,22 @@ export function CarryTerms() {
                 ))}
               </div>
             </Field>
+          )}
+
+          <Field label="GP commit pays carry" hint="Most LPAs leave the GP's own commitment carry-free">
+            <Choice
+              value={gpCommitBearsCarry ? 'yes' : 'no'}
+              onChange={v => setGpCommitBearsCarry(v === 'yes')}
+              options={[['no', 'No'], ['yes', 'Yes']]}
+            />
+          </Field>
+          {gpCommitBearsCarry && (
+            <p className="text-xs text-muted-foreground max-w-3xl">
+              The carry recipients&rsquo; own capital runs through the waterfall with the LPs&rsquo;
+              when a distribution is split, instead of taking its share beside it, and the carry it
+              pays goes to the recipients. The close&rsquo;s carry accrual still measures the
+              LPs&rsquo; carry only.
+            </p>
           )}
 
           <Field label="Capital returned before carry" hint="Most LPAs return fees and expenses too">

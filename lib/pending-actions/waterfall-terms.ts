@@ -36,12 +36,14 @@ export function describeTerms(t: Pick<ValidWaterfallTerms, 'kind' | 'carryRate' 
   catchupMeasure?: ValidWaterfallTerms['catchupMeasure']
   carrySteps?: ValidWaterfallTerms['carrySteps']
   capitalIncludes?: ValidWaterfallTerms['capitalIncludes']
+  gpCommitBearsCarry?: boolean
 }): string {
   if (t.kind === 'none' || t.carryRate <= 0) return 'no carry'
   const label = { straight: 'straight', american: 'American (deal-by-deal)', european: 'European (whole-fund)', none: 'no' }[t.kind]
   const steps = (t.carrySteps ?? []).map(s =>
     `, ${pct(s.carryRate)} once the LPs reach ${s.lpMultiple != null ? `${s.lpMultiple}×` : `a ${pct(s.lpIrr!)} IRR`}${s.catchUpRate ? ` (${pct(s.catchUpRate)} catch-up)` : ''}`).join('')
-  const capital = t.capitalIncludes && t.capitalIncludes.length < 4 ? `, returning only ${t.capitalIncludes.join(' and ')} as capital` : ''
+  const capital = (t.capitalIncludes && t.capitalIncludes.length < 4 ? `, returning only ${t.capitalIncludes.join(' and ')} as capital` : '')
+    + (t.gpCommitBearsCarry ? ', the GP commit bearing carry' : '')
   if (t.kind === 'straight') return `${label} ${pct(t.carryRate)} carry, no hurdle${steps}${capital}`
   const base = t.prefBase === 'unreturned' ? ' on unreturned capital' : ''
   const days = t.prefDayCount === '30/360' ? ' (30/360)' : ''
@@ -53,7 +55,7 @@ export function describeTerms(t: Pick<ValidWaterfallTerms, 'kind' | 'carryRate' 
 }
 
 function currentAsValid(c: VehicleCarryTerms): ValidWaterfallTerms {
-  return { kind: c.kind, carryRate: c.carryRate, prefRate: c.prefRate, catchupRate: c.catchupRate, catchupSize: c.catchupSize ?? 1, prefCompounds: c.prefCompounds, prefBase: c.prefBase ?? 'contributed', prefMultiple: c.prefMultiple ?? null, prefDayCount: c.prefDayCount ?? 'act/365', catchupMeasure: c.catchupMeasure ?? 'preferred', carrySteps: c.carrySteps ?? [], capitalIncludes: c.capitalIncludes ?? ['investments', 'fees', 'expenses', 'other'], gpEntityId: c.gpEntityId, recipients: c.recipients }
+  return { kind: c.kind, carryRate: c.carryRate, prefRate: c.prefRate, catchupRate: c.catchupRate, catchupSize: c.catchupSize ?? 1, prefCompounds: c.prefCompounds, prefBase: c.prefBase ?? 'contributed', prefMultiple: c.prefMultiple ?? null, prefDayCount: c.prefDayCount ?? 'act/365', catchupMeasure: c.catchupMeasure ?? 'preferred', carrySteps: c.carrySteps ?? [], capitalIncludes: c.capitalIncludes ?? ['investments', 'fees', 'expenses', 'other'], gpCommitBearsCarry: c.gpCommitBearsCarry === true, gpEntityId: c.gpEntityId, recipients: c.recipients }
 }
 
 async function resolve(deps: ActionDeps, input: SetWaterfallTermsInput) {
@@ -80,7 +82,7 @@ export async function previewSetWaterfallTerms(deps: ActionDeps, input: SetWater
     (t.recipients.length ? t.recipients : t.gpEntityId ? [{ lpEntityId: t.gpEntityId, pct: 100 }] : [])
       .map(r => ({ lpEntityId: r.lpEntityId, name: names.get(r.lpEntityId) ?? r.lpEntityId, pct: r.pct }))
 
-  const changes = (['kind', 'carryRate', 'prefRate', 'catchupRate', 'catchupSize', 'prefCompounds', 'prefBase', 'prefMultiple', 'prefDayCount', 'catchupMeasure'] as const)
+  const changes = (['kind', 'carryRate', 'prefRate', 'catchupRate', 'catchupSize', 'prefCompounds', 'prefBase', 'prefMultiple', 'prefDayCount', 'catchupMeasure', 'gpCommitBearsCarry'] as const)
     .filter(k => before[k] !== terms[k])
     .map(k => ({ field: k as string, before: before[k] as unknown, after: terms[k] as unknown }))
   for (const k of ['carrySteps', 'capitalIncludes'] as const) {

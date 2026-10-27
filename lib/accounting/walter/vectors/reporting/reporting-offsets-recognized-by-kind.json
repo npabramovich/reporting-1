@@ -1,0 +1,125 @@
+{
+  "id": "reporting-offsets-recognized-by-kind",
+  "walter": "0.3",
+  "title": "Offsets recognized by kind, applied, and the unapplied balance",
+  "description": "The fee is 500,000 a quarter (2% of 100,000,000). Q1 recognizes 400,000 from a transaction fee at 100%, 25,000 from a 50,000 directors fee at 50% and 50,000 of organizational expenses over the 100,000 cap: 475,000, all applied, net 25,000. Q2 recognizes 600,000 from an advisory fee at 100%: 500,000 applied, net 0, 100,000 unapplied. Q3 recognizes nothing and applies the 100,000 carried in: net 400,000, nothing left over. These are the ILPA Reporting Template's offset categories, the recognized and applied totals, and the unapplied roll-forward.",
+  "tags": [
+    "reporting",
+    "reporting-offsets",
+    "fees-offsets"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.3",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "2000000"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "60000000"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "40000000"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    },
+    "managementFee": {
+      "frequency": "quarterly",
+      "start": "2025-01-01",
+      "end": "2025-10-01",
+      "schedule": [
+        {
+          "from": "2025-01-01",
+          "rate": "0.02",
+          "basis": "commitments"
+        }
+      ],
+      "offsets": {
+        "advisory": "1",
+        "transaction": "1",
+        "directors": "0.5"
+      },
+      "organizationalExpenseCap": "100000"
+    }
+  },
+  "flows": [
+    {
+      "type": "organizational-expense",
+      "date": "2025-01-15",
+      "amount": "150000"
+    },
+    {
+      "type": "portfolio-fee",
+      "date": "2025-02-01",
+      "kind": "transaction",
+      "amount": "400000"
+    },
+    {
+      "type": "portfolio-fee",
+      "date": "2025-03-01",
+      "kind": "directors",
+      "amount": "50000"
+    },
+    {
+      "type": "portfolio-fee",
+      "date": "2025-05-01",
+      "kind": "advisory",
+      "amount": "600000"
+    }
+  ],
+  "expected": {
+    "fees": [
+      {
+        "start": "2025-01-01",
+        "gross": "500000.00",
+        "offset": "475000.00",
+        "net": "25000.00",
+        "recognized": {
+          "transaction": "400000.00",
+          "directors": "25000.00",
+          "organizational": "50000.00"
+        },
+        "unapplied": "0.00"
+      },
+      {
+        "start": "2025-04-01",
+        "gross": "500000.00",
+        "offset": "500000.00",
+        "net": "0.00",
+        "recognized": {
+          "advisory": "600000.00"
+        },
+        "unapplied": "100000.00"
+      },
+      {
+        "start": "2025-07-01",
+        "gross": "500000.00",
+        "offset": "100000.00",
+        "net": "400000.00",
+        "recognized": {},
+        "unapplied": "0.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

@@ -264,7 +264,7 @@ describe('parseWaterfallTermsInput (the shared write path)', () => {
   it('accepts valid terms and defaults catch-up to full and the hurdle to compounding', () => {
     expect(parseWaterfallTermsInput({ kind: 'european', carryRate: 0.2, prefRate: 0.08, carryRecipients: [{ lpEntityId: 'gp', pct: 100 }] })).toEqual({
       ok: true,
-      value: { kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, catchupSize: 1, prefCompounds: true, prefBase: 'contributed', prefMultiple: null, prefDayCount: 'act/365', catchupMeasure: 'preferred', carrySteps: [], capitalIncludes: ['investments', 'fees', 'expenses', 'other'], gpEntityId: null, recipients: [{ lpEntityId: 'gp', pct: 100 }] },
+      value: { kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, catchupSize: 1, prefCompounds: true, prefBase: 'contributed', prefMultiple: null, prefDayCount: 'act/365', catchupMeasure: 'preferred', carrySteps: [], capitalIncludes: ['investments', 'fees', 'expenses', 'other'], gpCommitBearsCarry: false, gpEntityId: null, recipients: [{ lpEntityId: 'gp', pct: 100 }] },
     })
   })
 
@@ -322,5 +322,13 @@ describe('parseWaterfallTermsInput (the shared write path)', () => {
     expect(describeTerms({ kind: 'straight', carryRate: 0.2, prefRate: 0, catchupRate: 1, prefCompounds: true })).toBe('straight 20% carry, no hurdle')
     expect(describeTerms({ kind: 'european', carryRate: 0.2, prefRate: 0.08, catchupRate: 1, prefCompounds: true, prefBase: 'unreturned' })).toMatch(/preferred return on unreturned capital/)
     expect(describeTerms({ kind: 'none', carryRate: 0, prefRate: 0, catchupRate: 1, prefCompounds: true })).toBe('no carry')
+    expect(describeTerms({ kind: 'straight', carryRate: 0.2, prefRate: 0, catchupRate: 1, prefCompounds: true, gpCommitBearsCarry: true })).toBe('straight 20% carry, no hurdle, the GP commit bearing carry')
+  })
+
+  it('reads whether the GP commit bears carry, false unless it says true', () => {
+    const base = { kind: 'european', carryRate: 0.2, carryRecipients: [{ lpEntityId: 'gp', pct: 100 }] }
+    expect(parseWaterfallTermsInput({ ...base, gpCommitBearsCarry: true })).toMatchObject({ ok: true, value: { gpCommitBearsCarry: true } })
+    expect(parseWaterfallTermsInput(base)).toMatchObject({ ok: true, value: { gpCommitBearsCarry: false } })
+    expect(parseWaterfallTermsInput({ ...base, gpCommitBearsCarry: 'yes' })).toMatchObject({ ok: true, value: { gpCommitBearsCarry: false } })
   })
 })

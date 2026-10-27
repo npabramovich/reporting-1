@@ -126,6 +126,10 @@ describe('terms.json', () => {
     const t = parseVehicleTerms({ carry: { kind: 'american', carry_rate: 0.25, pref_rate: 0.06, catchup_rate: 0.8, pref_compounds: false, gp_entity_id: 'gp' } })
     expect(t.carry).toEqual({ kind: 'american', carryRate: 0.25, prefRate: 0.06, catchupRate: 0.8, prefCompounds: false, prefBase: 'contributed', catchupSize: 1, gpEntityId: 'gp', recipients: [{ lpEntityId: 'gp', pct: 100 }] })
   })
+  it('reads whether the GP commit bears carry', () => {
+    expect(parseVehicleTerms({ carry: { kind: 'european', carryRate: 0.2, gp_entity_id: 'gp', gp_commit_bears_carry: true } }).carry.gpCommitBearsCarry).toBe(true)
+    expect(parseVehicleTerms({ carry: { kind: 'european', carryRate: 0.2, gp_entity_id: 'gp' } }).carry.gpCommitBearsCarry).toBeUndefined()
+  })
 })
 
 describe('economics', () => {
@@ -155,6 +159,21 @@ describe('economics', () => {
     expect(i.carryPaidToDate).toBe(4)
     expect(i.partners.map(p => p.lpEntityId).sort()).toEqual(['gp', 'lp'])
     expect(distributionSplitInputs(postings, recipients, '2025-01-01').priors).toEqual([])
+  })
+
+  it('distributionSplitInputs puts a GP commit that bears carry in the hurdle and the priors', () => {
+    const withOwn: CapitalPosting[] = [...postings, { lpEntityId: 'gp', amount: 3, sourceType: 'distribution', entryDate: '2025-01-15' }]
+    const off = distributionSplitInputs(withOwn, recipients, '2025-06-30')
+    expect(off.contributions.map(c => c.amount)).toEqual([100])
+    expect(off.priors).toEqual([{ date: '2025-01-15', amount: 34 }])
+    expect(off.partners.find(p => p.lpEntityId === 'gp')?.carryBearing).toBeUndefined()
+
+    const on = distributionSplitInputs(withOwn, recipients, '2025-06-30', true)
+    expect(on.contributions.map(c => c.amount).sort((a, b) => a - b)).toEqual([10, 100])
+    expect(on.priors).toEqual([{ date: '2025-01-15', amount: 37 }])
+    expect(on.carryPaidToDate).toBe(4)
+    expect(on.partners.find(p => p.lpEntityId === 'gp')?.carryBearing).toBe(true)
+    expect(on.partners.find(p => p.lpEntityId === 'lp')?.carryBearing).toBeUndefined()
   })
 })
 

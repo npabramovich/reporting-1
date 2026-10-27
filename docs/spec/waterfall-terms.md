@@ -50,6 +50,7 @@ agreed to is worse than accruing none.
 | `prefDayCount` | `pref_day_count` | `act/365` \| `30/360` | `act/365` | How the rate's years are counted (§5). |
 | `carrySteps` | `carry_steps` (jsonb `[{lpMultiple \| lpIrr, carryRate, catchUpRate?}]`) | rates rise; thresholds rise | null | Where the carry steps up (§3.3). Null: one carry rate. |
 | `capitalIncludes` | `capital_includes` (text[]) | any of `investments`, `fees`, `expenses`, `other`; must include `investments` | null (all four) | What the first tier returns as capital and the hurdle accrues on (§5.1). |
+| `gpCommitBearsCarry` | `gp_commit_bears_carry` (boolean) | | false | The recipients' own commitments (the GP commit) bear carry like an LP's (§6, step 3). |
 | `recipients` | `carry_recipients` (jsonb `[{lpEntityId, pct}]`) | pct > 0, total 100 ± 0.01 | `[]` | Who receives the carry, and in what split. |
 | `gpEntityId` | `gp_entity_id` | partner id or null | null | Legacy single recipient. Used as `[{gpEntityId, 100}]` when `carry_recipients` is empty. |
 
@@ -74,7 +75,11 @@ When there is exactly one recipient, the store writes it to `gp_entity_id` as we
 
 **Who pays carry.** Carry recipients are outside the LP economics everywhere. They receive carry
 and do not pay it. Their own contributions are excluded from the hurdle, and a split warns when a
-recipient has also contributed capital.
+recipient has also contributed capital. `gpCommitBearsCarry` is the exception, for an LPA that
+charges carry on the GP commit too: a distribution's split then runs the recipients' capital
+through the tiers with the LPs' (§6), and its contributions are in the hurdle. The close's carry
+accrual still measures the LPs' carry only, and the forecast still treats the GP's stake as
+carry-free.
 
 **Management fee is not a waterfall term.** The fee is booked by the `management_fee` allocation,
 either from a typed rate on commitments (`annualRate` × `periodFraction`, `lib/accounting/fees.ts`)
@@ -297,7 +302,9 @@ A forecast can't tag a projected call, so the forecasts count future calls in fu
    carry, so before the tiers it takes its pro-rata share of the distribution by contributed
    capital: its own capital back first, then its profit (`carryFreeLines`). The tiers divide what
    is left, and the replay's priors leave the recipients' own distributions out, so it only ever
-   sees what the tiers divided.
+   sees what the tiers divided. With `gpCommitBearsCarry` there is no carry-free share: the
+   recipients are partners in the LP tiers (`PartnerEconomics.carryBearing`), their contributions
+   are in the hurdle, and their own distributions are in the priors.
 4. **LP lines.** `toLP` is split pro-rata by each non-recipient partner's contributed capital. When
    no partner has contributed, it falls back to capital balance. The carry-free shares are added
    to the same `lines`.

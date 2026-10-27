@@ -14,7 +14,7 @@ import {
   totalNav,
   type CapitalAccount,
 } from './capital-account.ts'
-import { carryAccrual } from './carry.ts'
+import { carryAccrual, carryFreeIds } from './carry.ts'
 import { carryAccrualInputs, distributionSplitInputs } from './economics.ts'
 import { splitDistribution, suggestedCharacter } from './distribution-waterfall.ts'
 import { runWaterfall, type CarryStep, type WaterfallState } from './waterfall.ts'
@@ -252,7 +252,7 @@ export function waterfallReport(
     const accountNames = new Map(Array.from(books.partnerByAccount.entries()).map(([code, id]) => [id, books.accountNames.get(code) ?? id]))
     const label = (id: string) => terms.partners.find(p => p.id === id)?.name ?? accountNames.get(id) ?? id
 
-    const inputs = distributionSplitInputs(books.capitalPostings, terms.carry.recipients, asOf)
+    const inputs = distributionSplitInputs(books.capitalPostings, terms.carry.recipients, asOf, terms.carry.gpCommitBearsCarry)
     const split = splitDistribution({
       total,
       terms: terms.carry,
@@ -301,9 +301,10 @@ export function waterfallReport(
     toGP: result.toGP,
   }
 
-  // LP lines pro-rata by commitment — the only basis a terms file has.
-  const recipientIds = new Set(t.recipients.map(r => r.lpEntityId))
-  const lps = terms.partners.filter(p => !recipientIds.has(p.id) && (p.commitment ?? 0) > 0)
+  // LP lines pro-rata by commitment — the only basis a terms file has. A GP commit that bears
+  // carry is one of them.
+  const carryFree = carryFreeIds(t)
+  const lps = terms.partners.filter(p => !carryFree.has(p.id) && (p.commitment ?? 0) > 0)
   if (lps.length === 0 && tiers.toLP > 0) warnings.push('No partner with a commitment in the terms file, so the LP share is not split by partner.')
   const lines = lps.length === 0 || tiers.toLP <= 0 ? [] : Array.from(
     allocateAmount(tiers.toLP, lps.map(p => ({ lpEntityId: p.id, commitment: p.commitment ?? 0 }))).entries(),

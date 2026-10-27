@@ -66,6 +66,10 @@ export interface FeeSchedulePeriod {
   net: number
   /** Each group's share of `net`, unrounded, when the terms have groups. */
   groupNet?: number[]
+  /** The offset earned in the period, before any is applied: by kind of portfolio-company fee, and `organizational` for expenses over the cap. Cents. */
+  recognized: Record<string, number>
+  /** Offset earned but not yet applied at the period's end, carried to the next. Cents. */
+  unapplied: number
 }
 
 const MONTHS: Record<FeeFrequency, number> = { quarterly: 3, semiannual: 6, annual: 12 }
@@ -131,13 +135,18 @@ export function feeSchedule(terms: FeeScheduleTerms, facts: FeeScheduleFacts): F
 
   const orgBefore = (day: string) =>
     (facts.organizationalExpenses ?? []).filter((o) => o.date < day).reduce((s, o) => s + o.amount, 0)
-  const offsetsIn = (from: string, to: string): number => {
-    let o = 0
+  /** The offset a period earns, by what it was earned from. */
+  const offsetsIn = (from: string, to: string): Map<string, number> => {
+    const o = new Map<string, number>()
     for (const f of facts.portfolioFees ?? []) {
-      if (f.date >= from && f.date < to) o += f.amount * (terms.offsets?.[f.kind] ?? 0)
+      const share = terms.offsets?.[f.kind] ?? 0
+      if (f.date >= from && f.date < to && share > 0) o.set(f.kind, (o.get(f.kind) ?? 0) + f.amount * share)
     }
     const cap = terms.organizationalExpenseCap
-    if (cap !== undefined) o += Math.max(0, orgBefore(to) - cap) - Math.max(0, orgBefore(from) - cap)
+    if (cap !== undefined) {
+      const over = Math.max(0, orgBefore(to) - cap) - Math.max(0, orgBefore(from) - cap)
+      if (over > 0) o.set('organizational', over)
+    }
     return o
   }
 
@@ -159,12 +168,15 @@ export function feeSchedule(terms: FeeScheduleTerms, facts: FeeScheduleFacts): F
     })
     const exact = groupGross.reduce((a, b) => a + b, 0)
     const gross = cents(exact)
-    const available = carried + offsetsIn(start, stop)
+    const earned = offsetsIn(start, stop)
+    const available = carried + [...earned.values()].reduce((a, b) => a + b, 0)
     const offset = cents(Math.min(gross, available))
     carried = available - offset
     const net = cents(gross - offset)
     periods.push({
       start, end: stop, gross, offset, net,
+      recognized: Object.fromEntries([...earned].map(([k, v]) => [k, cents(v)])),
+      unapplied: cents(carried),
       ...(terms.groups ? { groupNet: groupGross.map((g) => (exact > 0 ? (net * g) / exact : 0)) } : {}),
     })
   }

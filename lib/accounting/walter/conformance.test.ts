@@ -13,8 +13,7 @@ import { join } from 'node:path'
 import { compare, type Vector } from './compare'
 import { ENGINE, run } from './adapter'
 
-const GAPS: Record<string, string> = {
-}
+const GAPS: Record<string, string> = {}
 
 const root = join(__dirname, 'vectors')
 const vectors: (Vector & { file: string })[] = readdirSync(root).flatMap(group =>

@@ -1,0 +1,135 @@
+{
+  "id": "reporting-carry-paid-and-borne",
+  "walter": "0.3",
+  "title": "Carry paid, and who bore it",
+  "description": "The GP commits 2 carry-free, lp-a 60 and lp-b 40, all called. 204 comes back. The GP's carry-free slice is 2/102 of it, 4.00. The other 200 returns 100 of capital and splits 100 of profit 80/20, so the GP is paid 20 of carry. lp-a bore 12 of it and lp-b 8, by the capital their own lines were split by. The carry lines add up to zero, which is how the Reporting Template's fund column shows carry.",
+  "tags": [
+    "reporting",
+    "reporting-carry"
+  ],
+  "provenance": "hand-computed",
+  "terms": {
+    "walter": "0.3",
+    "fund": {
+      "id": "example-fund-i",
+      "currency": "USD"
+    },
+    "partners": [
+      {
+        "id": "gp",
+        "role": "gp",
+        "commitment": "2"
+      },
+      {
+        "id": "lp-a",
+        "role": "lp",
+        "commitment": "60"
+      },
+      {
+        "id": "lp-b",
+        "role": "lp",
+        "commitment": "40"
+      }
+    ],
+    "waterfall": {
+      "tiers": [
+        {
+          "type": "return-of-capital"
+        },
+        {
+          "type": "split",
+          "gpShare": "0.20"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "gp",
+      "amount": "2"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-a",
+      "amount": "60"
+    },
+    {
+      "type": "contribution",
+      "date": "2025-01-01",
+      "partner": "lp-b",
+      "amount": "40"
+    },
+    {
+      "type": "distributable",
+      "date": "2030-01-01",
+      "amount": "204"
+    }
+  ],
+  "expected": {
+    "allocations": [
+      {
+        "date": "2030-01-01",
+        "tier": "return-of-capital",
+        "partner": "gp",
+        "amount": "2.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "carry-free",
+        "partner": "gp",
+        "amount": "2.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-a",
+        "amount": "60.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "return-of-capital",
+        "partner": "lp-b",
+        "amount": "40.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split",
+        "partner": "lp-a",
+        "amount": "48.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split",
+        "partner": "lp-b",
+        "amount": "32.00"
+      },
+      {
+        "date": "2030-01-01",
+        "tier": "split",
+        "partner": "gp",
+        "amount": "20.00"
+      }
+    ],
+    "carry": [
+      {
+        "date": "2030-01-01",
+        "partner": "gp",
+        "amount": "20.00"
+      },
+      {
+        "date": "2030-01-01",
+        "partner": "lp-a",
+        "amount": "-12.00"
+      },
+      {
+        "date": "2030-01-01",
+        "partner": "lp-b",
+        "amount": "-8.00"
+      }
+    ]
+  },
+  "tolerance": "0.01"
+}

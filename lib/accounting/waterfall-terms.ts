@@ -28,6 +28,7 @@ export interface WaterfallTermsInput {
   catchupMeasure?: unknown
   carrySteps?: unknown
   capitalIncludes?: unknown
+  gpCommitBearsCarry?: unknown
   gpEntityId?: unknown
   carryRecipients?: unknown
 }
@@ -53,6 +54,8 @@ export interface ValidWaterfallTerms {
   carrySteps: CarryStep[]
   /** What contributions are returned as capital and accrued on. All four is the default. */
   capitalIncludes: ContributionPurpose[]
+  /** The recipients' own commitments (the GP commit) bear carry like an LP's. False: carry-free. */
+  gpCommitBearsCarry: boolean
   gpEntityId: string | null
   recipients: CarryRecipient[]
 }
@@ -161,6 +164,7 @@ export function parseWaterfallTermsInput(body: WaterfallTermsInput): { ok: true;
       catchupMeasure: catchupMeasure as 'preferred' | 'profit',
       carrySteps,
       capitalIncludes,
+      gpCommitBearsCarry: body?.gpCommitBearsCarry === true,
       gpEntityId,
       recipients,
     },
@@ -220,6 +224,7 @@ export async function saveWaterfallTerms(
         catchup_measure: terms.catchupMeasure,
         carry_steps: terms.carrySteps.length > 0 ? terms.carrySteps : null,
         capital_includes: terms.capitalIncludes.length < CONTRIBUTION_PURPOSES.length ? terms.capitalIncludes : null,
+        gp_commit_bears_carry: terms.gpCommitBearsCarry,
         gp_entity_id: singleGp,
         carry_recipients: recipients.length > 0 ? recipients : null,
         updated_at: new Date().toISOString(),
