@@ -62,7 +62,7 @@ export async function loadIlpaReporting(
   ] = await Promise.all([
     loadReportingCapital(admin, fundId, group, quarterEnd),
     loadPostedLedger(admin, fundId, group, quarterEnd),
-    fetchAllRows<any>((f, t) => admin.from('chart_of_accounts' as any).select('id, ilpa_category')
+    fetchAllRows<any>((f, t) => admin.from('chart_of_accounts' as any).select('id, reporting_category')
       .eq('fund_id', fundId).eq('vehicle_id', vehicleId).order('id').range(f, t)),
     fetchAllRows<any>((f, t) => admin.from('journal_entries' as any).select('id, source_ref')
       .eq('book', ACTUAL_BOOK).eq('fund_id', fundId).eq('vehicle_id', vehicleId).eq('status', 'posted')
@@ -97,13 +97,13 @@ export async function loadIlpaReporting(
   if (!ids.has(lpEntityId)) return { error: 'That partner has no commitment or capital in this entity.' }
 
   // ── Profit and loss ───────────────────────────────────────────────────────
-  const stated = new Map<string, string | null>(categoryRows.map(r => [r.id as string, (r.ilpa_category ?? null) as string | null]))
+  const stated = new Map<string, string | null>(categoryRows.map(r => [r.id as string, (r.reporting_category ?? null) as string | null]))
   const accountById = new Map(ledger.accounts.map(a => [a.id, a]))
   const pnl: ReportingPnlLine[] = []
   for (const p of ledger.sourcedPostings) {
     const a = accountById.get(p.accountId)
     if (!a || !p.entryDate) continue
-    const category = accountCategory({ type: a.type, subtype: a.subtype, ilpaCategory: stated.get(a.id) })
+    const category = accountCategory({ type: a.type, subtype: a.subtype, reportingCategory: stated.get(a.id) })
     if (!category) continue
     pnl.push({
       entryId: p.entryId, entryDate: p.entryDate, amount: p.amount, category,

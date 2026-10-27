@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
 }
 
 // PATCH — rename an account, hide/show it, or file it under an ILPA category. Body:
-// { id, name?, isActive?, ilpaCategory? } (ilpaCategory null returns it to its subtype's line).
+// { id, name?, isActive?, reportingCategory? } (reportingCategory null returns it to its subtype's line).
 //
 // The CODE is never editable. Code is how the rest of the system finds an account —
 // `codes.get('1000')`, RECEIVABLE_CODE '1300', BRIDGE_CODE '3200', DISTRIBUTION_PAYABLE_CODE
@@ -140,9 +140,9 @@ export async function PATCH(req: NextRequest) {
   }
   if (typeof body?.isActive === 'boolean') patch.is_active = body.isActive
   // The ILPA Reporting Template line the account's postings land on (lib/lp-templates/taxonomy.ts).
-  if (body && 'ilpaCategory' in body) {
-    const category = body.ilpaCategory
-    if (category === null || category === '') patch.ilpa_category = null
+  if (body && 'reportingCategory' in body) {
+    const category = body.reportingCategory
+    if (category === null || category === '') patch.reporting_category = null
     else if (!isAccountCategory(category) || !categoriesForType((acct as any).type).includes(category)) {
       const allowed = categoriesForType((acct as any).type)
       return NextResponse.json({
@@ -150,7 +150,7 @@ export async function PATCH(req: NextRequest) {
           ? `A ${(acct as any).type} account files under one of: ${allowed.map(accountCategoryName).join(', ')}.`
           : 'Only income and expense accounts have an ILPA category.',
       }, { status: 400 })
-    } else patch.ilpa_category = category
+    } else patch.reporting_category = category
   }
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
 
